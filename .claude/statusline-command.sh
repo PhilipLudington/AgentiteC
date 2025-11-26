@@ -27,21 +27,21 @@ time=$(date +%H:%M)
 
 # Directory name - show as ProjectName/relative/path if in subdirectory
 dir=''
+project_name="Carbon"
 if [ "$cwd" != "$project_dir" ] && [ "$project_dir" != 'null' ]; then
     rel_path=$(python3 -c "import os.path; print(os.path.relpath('$cwd', '$project_dir'))" 2>/dev/null)
     if [ $? -ne 0 ]; then
         debug_log "Failed to calculate relative path from '$cwd' to '$project_dir'"
         dir=$(basename "$cwd")
     elif [ "$rel_path" != '.' ]; then
-        project_name=$(basename "$project_dir")
         dir="${project_name}/${rel_path}"
     else
         # At project root
-        dir=$(basename "$project_dir")
+        dir="$project_name"
     fi
 else
     # No project dir or at project root
-    dir=$(basename "$cwd")
+    dir="$project_name"
 fi
 
 # Git branch and status
