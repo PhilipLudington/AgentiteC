@@ -1,0 +1,56 @@
+#ifndef CARBON_H
+#define CARBON_H
+
+#include <SDL3/SDL.h>
+#include <stdbool.h>
+#include <stdint.h>
+
+// Version info
+#define CARBON_VERSION_MAJOR 0
+#define CARBON_VERSION_MINOR 1
+#define CARBON_VERSION_PATCH 0
+
+// Forward declarations
+typedef struct Carbon_Engine Carbon_Engine;
+typedef struct Carbon_Config Carbon_Config;
+
+// Engine configuration
+struct Carbon_Config {
+    const char *window_title;
+    int window_width;
+    int window_height;
+    bool fullscreen;
+    bool vsync;
+};
+
+// Default configuration
+#define CARBON_DEFAULT_CONFIG { \
+    .window_title = "Carbon Engine", \
+    .window_width = 1280, \
+    .window_height = 720, \
+    .fullscreen = false, \
+    .vsync = true \
+}
+
+// Core engine functions
+Carbon_Engine *carbon_init(const Carbon_Config *config);
+void carbon_shutdown(Carbon_Engine *engine);
+bool carbon_is_running(Carbon_Engine *engine);
+void carbon_quit(Carbon_Engine *engine);
+
+// Main loop functions
+void carbon_begin_frame(Carbon_Engine *engine);
+void carbon_end_frame(Carbon_Engine *engine);
+float carbon_get_delta_time(Carbon_Engine *engine);
+uint64_t carbon_get_frame_count(Carbon_Engine *engine);
+
+// Event handling
+void carbon_poll_events(Carbon_Engine *engine);
+
+// Graphics (SDL_GPU)
+SDL_GPUDevice *carbon_get_gpu_device(Carbon_Engine *engine);
+SDL_Window *carbon_get_window(Carbon_Engine *engine);
+bool carbon_begin_render_pass(Carbon_Engine *engine, float r, float g, float b, float a);
+void carbon_end_render_pass(Carbon_Engine *engine);
+
+#endif // CARBON_H
