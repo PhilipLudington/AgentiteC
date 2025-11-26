@@ -179,6 +179,14 @@ typedef struct CUI_Context {
     /* Dropdown/popup state */
     CUI_Id open_popup;
     CUI_Rect popup_rect;
+    int *popup_selected;            /* Pointer to selection value */
+    const char **popup_items;       /* Popup items array */
+    int popup_count;                /* Number of popup items */
+    bool popup_changed;             /* Whether selection changed */
+
+    /* Text input tracking */
+    CUI_Id prev_focused;            /* Previous frame's focused widget */
+    SDL_Window *window;             /* Window for text input control */
 } CUI_Context;
 
 /* Panel flags */
@@ -194,7 +202,7 @@ typedef struct CUI_Context {
  * ============================================================================ */
 
 /* Initialize UI system */
-CUI_Context *cui_init(SDL_GPUDevice *gpu, int width, int height,
+CUI_Context *cui_init(SDL_GPUDevice *gpu, SDL_Window *window, int width, int height,
                       const char *font_path, float font_size);
 
 /* Shutdown UI system */

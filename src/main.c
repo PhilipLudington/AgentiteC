@@ -25,6 +25,7 @@ int main(int argc, char *argv[]) {
     /* Initialize UI system */
     CUI_Context *ui = cui_init(
         carbon_get_gpu_device(engine),
+        carbon_get_window(engine),
         config.window_width,
         config.window_height,
         "assets/fonts/Roboto-Regular.ttf",  /* Font path */

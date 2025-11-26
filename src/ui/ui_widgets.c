@@ -362,6 +362,9 @@ bool cui_textbox_ex(CUI_Context *ctx, const char *label, char *buffer,
         rect.h
     };
 
+    /* Available width for text (minus padding on both sides) */
+    float available_w = input_w - ctx->theme.padding * 2;
+
     /* Handle interaction */
     bool hovered = cui_rect_contains(input_rect, ctx->input.mouse_x, ctx->input.mouse_y);
     bool changed = false;
@@ -372,16 +375,32 @@ bool cui_textbox_ex(CUI_Context *ctx, const char *label, char *buffer,
 
     /* Handle text input when focused */
     if (ctx->focused == id) {
-        /* Append text input */
+        /* Append text input - check both buffer size and visual width */
         if (ctx->input.text_input_len > 0) {
             int current_len = (int)strlen(buffer);
             int space = buffer_size - current_len - 1;
             if (space > 0) {
+                /* Try adding text and check if it fits visually */
+                char test_buffer[256];
                 int to_copy = ctx->input.text_input_len;
                 if (to_copy > space) to_copy = space;
-                memcpy(buffer + current_len, ctx->input.text_input, to_copy);
-                buffer[current_len + to_copy] = '\0';
-                changed = true;
+
+                /* Build test string */
+                int test_len = current_len + to_copy;
+                if (test_len < (int)sizeof(test_buffer) - 1) {
+                    memcpy(test_buffer, buffer, current_len);
+                    memcpy(test_buffer + current_len, ctx->input.text_input, to_copy);
+                    test_buffer[test_len] = '\0';
+
+                    /* Check if text fits visually */
+                    float new_text_w = cui_text_width(ctx, test_buffer);
+                    if (new_text_w <= available_w) {
+                        /* Text fits - apply the change */
+                        memcpy(buffer, test_buffer, test_len + 1);
+                        changed = true;
+                    }
+                    /* If text doesn't fit visually, don't add it */
+                }
             }
         }
 
@@ -418,15 +437,19 @@ bool cui_textbox_ex(CUI_Context *ctx, const char *label, char *buffer,
                               ctx->theme.accent, 2.0f);
     }
 
-    /* Draw text content */
+    /* Draw text content (clipped to input area) */
     float text_x = input_rect.x + ctx->theme.padding;
-    cui_push_scissor(ctx, input_rect.x, input_rect.y, input_rect.w, input_rect.h);
+    cui_push_scissor(ctx, input_rect.x + ctx->theme.padding, input_rect.y,
+                     input_rect.w - ctx->theme.padding * 2, input_rect.h);
     cui_draw_text(ctx, buffer, text_x, text_y, ctx->theme.text);
     cui_pop_scissor(ctx);
 
     /* Draw cursor when focused */
     if (focused) {
         float cursor_x = text_x + cui_text_width(ctx, buffer);
+        /* Clamp cursor to visible area */
+        float max_cursor_x = input_rect.x + input_rect.w - ctx->theme.padding;
+        if (cursor_x > max_cursor_x) cursor_x = max_cursor_x;
         cui_draw_rect(ctx, cursor_x, input_rect.y + 4, 2, input_rect.h - 8,
                       ctx->theme.text);
     }
@@ -462,17 +485,30 @@ bool cui_dropdown(CUI_Context *ctx, const char *label, int *selected,
     /* Handle interaction */
     bool hovered, held;
     bool pressed = cui_widget_behavior(ctx, id, btn_rect, &hovered, &held);
+
+    /* Check if this dropdown's popup changed selection last frame */
     bool changed = false;
+    if (ctx->popup_changed && ctx->popup_selected == selected) {
+        changed = true;
+        ctx->popup_changed = false;
+    }
 
     if (pressed) {
         if (ctx->open_popup == id) {
             ctx->open_popup = CUI_ID_NONE;
+            ctx->popup_items = NULL;
+            ctx->popup_selected = NULL;
         } else {
             ctx->open_popup = id;
             ctx->popup_rect.x = btn_rect.x;
             ctx->popup_rect.y = btn_rect.y + btn_rect.h;
             ctx->popup_rect.w = btn_rect.w;
             ctx->popup_rect.h = count * ctx->theme.widget_height;
+            /* Store popup data for deferred rendering */
+            ctx->popup_selected = selected;
+            ctx->popup_items = items;
+            ctx->popup_count = count;
+            ctx->popup_changed = false;
         }
     }
 
@@ -495,43 +531,7 @@ bool cui_dropdown(CUI_Context *ctx, const char *label, int *selected,
     float arrow_x = btn_rect.x + btn_rect.w - 20;
     cui_draw_text(ctx, "v", arrow_x, text_y, ctx->theme.text_dim);
 
-    /* Draw popup if open */
-    if (ctx->open_popup == id) {
-        cui_draw_rect(ctx, ctx->popup_rect.x, ctx->popup_rect.y,
-                      ctx->popup_rect.w, ctx->popup_rect.h,
-                      ctx->theme.bg_panel);
-        cui_draw_rect_outline(ctx, ctx->popup_rect.x, ctx->popup_rect.y,
-                              ctx->popup_rect.w, ctx->popup_rect.h,
-                              ctx->theme.border, 1.0f);
-
-        for (int i = 0; i < count; i++) {
-            CUI_Rect item_rect = {
-                ctx->popup_rect.x,
-                ctx->popup_rect.y + i * ctx->theme.widget_height,
-                ctx->popup_rect.w,
-                ctx->theme.widget_height
-            };
-
-            bool item_hovered = cui_rect_contains(item_rect,
-                                                   ctx->input.mouse_x,
-                                                   ctx->input.mouse_y);
-
-            if (item_hovered) {
-                cui_draw_rect(ctx, item_rect.x, item_rect.y, item_rect.w, item_rect.h,
-                              ctx->theme.bg_widget_hover);
-
-                if (ctx->input.mouse_pressed[0]) {
-                    *selected = i;
-                    ctx->open_popup = CUI_ID_NONE;
-                    changed = true;
-                }
-            }
-
-            float item_text_y = item_rect.y + (item_rect.h - cui_text_height(ctx)) * 0.5f;
-            cui_draw_text(ctx, items[i], item_rect.x + ctx->theme.padding,
-                          item_text_y, ctx->theme.text);
-        }
-    }
+    /* Popup is now drawn in cui_end_frame() for proper z-ordering */
 
     return changed;
 }
@@ -546,39 +546,140 @@ bool cui_listbox(CUI_Context *ctx, const char *label, int *selected,
     if (!ctx || !label || !selected || !items) return false;
 
     CUI_Id id = cui_make_id(ctx, label);
+    CUI_Id scrollbar_id = cui_make_id_int(ctx, label, 0x5C801L);  /* Unique ID for scrollbar */
 
     /* Draw label */
     float label_h = cui_text_height(ctx) + ctx->theme.spacing;
     CUI_Rect label_rect = cui_allocate_rect(ctx, 0, label_h);
     cui_draw_text(ctx, label, label_rect.x, label_rect.y, ctx->theme.text);
 
-    /* List area */
+    /* List area (full width) */
     float list_h = height > 0 ? height : 150.0f;
-    CUI_Rect list_rect = cui_allocate_rect(ctx, 0, list_h);
+    CUI_Rect full_rect = cui_allocate_rect(ctx, 0, list_h);
+
+    /* Calculate content height and whether scrollbar is needed */
+    float content_h = count * ctx->theme.widget_height;
+    float scrollbar_w = ctx->theme.scrollbar_width;
+    bool needs_scrollbar = content_h > list_h;
+
+    /* Content area (minus scrollbar if needed) */
+    CUI_Rect list_rect = full_rect;
+    if (needs_scrollbar) {
+        list_rect.w -= scrollbar_w;
+    }
 
     /* Draw background */
-    cui_draw_rect(ctx, list_rect.x, list_rect.y, list_rect.w, list_rect.h,
+    cui_draw_rect(ctx, full_rect.x, full_rect.y, full_rect.w, full_rect.h,
                   ctx->theme.bg_widget);
-    cui_draw_rect_outline(ctx, list_rect.x, list_rect.y, list_rect.w, list_rect.h,
+    cui_draw_rect_outline(ctx, full_rect.x, full_rect.y, full_rect.w, full_rect.h,
                           ctx->theme.border, 1.0f);
 
     /* Get scroll state */
     CUI_WidgetState *state = cui_get_state(ctx, id);
     float scroll_y = state ? state->scroll_y : 0;
+    float max_scroll = content_h - list_h;
+    if (max_scroll < 0) max_scroll = 0;
+
+    /* Clamp scroll */
+    if (state) {
+        if (state->scroll_y < 0) state->scroll_y = 0;
+        if (state->scroll_y > max_scroll) state->scroll_y = max_scroll;
+        scroll_y = state->scroll_y;
+    }
 
     /* Handle scroll wheel */
-    if (cui_rect_contains(list_rect, ctx->input.mouse_x, ctx->input.mouse_y)) {
-        if (state && ctx->input.scroll_y != 0) {
-            state->scroll_y -= ctx->input.scroll_y * ctx->theme.widget_height;
-            float max_scroll = count * ctx->theme.widget_height - list_h;
-            if (max_scroll < 0) max_scroll = 0;
+    bool list_hovered = cui_rect_contains(full_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+    if (list_hovered) {
+        ctx->hot = id;
+        if (state && ctx->input.scroll_y != 0.0f && needs_scrollbar) {
+            float scroll_speed = ctx->theme.widget_height * 2.0f;
+            state->scroll_y -= ctx->input.scroll_y * scroll_speed;
             if (state->scroll_y < 0) state->scroll_y = 0;
             if (state->scroll_y > max_scroll) state->scroll_y = max_scroll;
             scroll_y = state->scroll_y;
         }
     }
 
-    /* Draw items */
+    /* Scrollbar handling */
+    if (needs_scrollbar && state) {
+        CUI_Rect scrollbar_rect = {
+            full_rect.x + full_rect.w - scrollbar_w,
+            full_rect.y,
+            scrollbar_w,
+            full_rect.h
+        };
+
+        /* Draw scrollbar track */
+        cui_draw_rect(ctx, scrollbar_rect.x, scrollbar_rect.y,
+                      scrollbar_rect.w, scrollbar_rect.h,
+                      ctx->theme.scrollbar);
+
+        /* Calculate thumb size and position */
+        float visible_ratio = list_h / content_h;
+        float thumb_h = scrollbar_rect.h * visible_ratio;
+        if (thumb_h < 20.0f) thumb_h = 20.0f;  /* Minimum thumb size */
+
+        float thumb_travel = scrollbar_rect.h - thumb_h;
+        float scroll_ratio = (max_scroll > 0) ? (scroll_y / max_scroll) : 0;
+        float thumb_y = scrollbar_rect.y + thumb_travel * scroll_ratio;
+
+        CUI_Rect thumb_rect = {
+            scrollbar_rect.x + 2,
+            thumb_y,
+            scrollbar_rect.w - 4,
+            thumb_h
+        };
+
+        /* Handle scrollbar interaction */
+        bool thumb_hovered = cui_rect_contains(thumb_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+        bool track_hovered = cui_rect_contains(scrollbar_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+
+        if (thumb_hovered || track_hovered) {
+            ctx->hot = scrollbar_id;
+        }
+
+        /* Start dragging or clicking on scrollbar */
+        if (track_hovered && ctx->input.mouse_pressed[0]) {
+            ctx->active = scrollbar_id;
+            /* Store the offset from thumb center for smooth dragging */
+            if (thumb_hovered) {
+                /* Clicked on thumb - store offset from thumb top */
+                state->cursor_pos = (int)(ctx->input.mouse_y - thumb_y);
+            } else {
+                /* Clicked on track - center thumb on click position */
+                state->cursor_pos = (int)(thumb_h * 0.5f);
+            }
+        }
+
+        /* Handle active scrollbar (dragging) */
+        if (ctx->active == scrollbar_id) {
+            if (ctx->input.mouse_down[0]) {
+                /* Calculate scroll based on absolute mouse position */
+                float target_thumb_y = ctx->input.mouse_y - (float)state->cursor_pos;
+                float new_ratio = (target_thumb_y - scrollbar_rect.y) / thumb_travel;
+                if (new_ratio < 0) new_ratio = 0;
+                if (new_ratio > 1) new_ratio = 1;
+                state->scroll_y = new_ratio * max_scroll;
+                scroll_y = state->scroll_y;
+            } else {
+                ctx->active = CUI_ID_NONE;
+            }
+        }
+
+        /* Recalculate thumb position after potential scroll change */
+        scroll_ratio = (max_scroll > 0) ? (scroll_y / max_scroll) : 0;
+        thumb_y = scrollbar_rect.y + thumb_travel * scroll_ratio;
+        thumb_rect.y = thumb_y;
+
+        /* Draw thumb */
+        bool thumb_active = (ctx->active == scrollbar_id);
+        uint32_t thumb_color = thumb_active ? ctx->theme.accent :
+                               (thumb_hovered ? ctx->theme.bg_widget_hover : ctx->theme.scrollbar_grab);
+        cui_draw_rect_rounded(ctx, thumb_rect.x, thumb_rect.y, thumb_rect.w, thumb_rect.h,
+                              thumb_color, ctx->theme.corner_radius);
+    }
+
+    /* Draw items (clipped to content area) */
     cui_push_scissor(ctx, list_rect.x, list_rect.y, list_rect.w, list_rect.h);
 
     bool changed = false;

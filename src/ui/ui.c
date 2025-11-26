@@ -46,7 +46,7 @@ static void cui_init_theme(CUI_Context *ctx)
  * Lifecycle
  * ============================================================================ */
 
-CUI_Context *cui_init(SDL_GPUDevice *gpu, int width, int height,
+CUI_Context *cui_init(SDL_GPUDevice *gpu, SDL_Window *window, int width, int height,
                       const char *font_path, float font_size)
 {
     CUI_Context *ctx = (CUI_Context *)calloc(1, sizeof(CUI_Context));
@@ -56,6 +56,7 @@ CUI_Context *cui_init(SDL_GPUDevice *gpu, int width, int height,
     }
 
     ctx->gpu = gpu;
+    ctx->window = window;
     ctx->width = width;
     ctx->height = height;
 
@@ -135,21 +136,6 @@ void cui_begin_frame(CUI_Context *ctx, float delta_time)
     /* Reset scissor stack */
     ctx->scissor_depth = 0;
 
-    /* Clear text input */
-    ctx->input.text_input[0] = '\0';
-    ctx->input.text_input_len = 0;
-
-    /* Update pressed/released states */
-    for (int i = 0; i < 3; i++) {
-        ctx->input.mouse_pressed[i] = false;
-        ctx->input.mouse_released[i] = false;
-    }
-    memset(ctx->input.keys_pressed, 0, sizeof(ctx->input.keys_pressed));
-
-    /* Reset scroll */
-    ctx->input.scroll_x = 0;
-    ctx->input.scroll_y = 0;
-
     /* Clear hot widget (will be set during widget processing) */
     ctx->hot = CUI_ID_NONE;
 
@@ -159,6 +145,12 @@ void cui_begin_frame(CUI_Context *ctx, float delta_time)
     }
 }
 
+/* Forward declaration for deferred popup rendering */
+extern void cui_draw_rect(CUI_Context *ctx, float x, float y, float w, float h, uint32_t color);
+extern void cui_draw_rect_outline(CUI_Context *ctx, float x, float y, float w, float h, uint32_t color, float thickness);
+extern float cui_draw_text(CUI_Context *ctx, const char *text, float x, float y, uint32_t color);
+extern float cui_text_height(CUI_Context *ctx);
+
 void cui_end_frame(CUI_Context *ctx)
 {
     if (!ctx) return;
@@ -167,6 +159,58 @@ void cui_end_frame(CUI_Context *ctx)
     ctx->input.mouse_prev_x = ctx->input.mouse_x;
     ctx->input.mouse_prev_y = ctx->input.mouse_y;
 
+    /* Handle text input start/stop based on focus changes */
+    if (ctx->focused != ctx->prev_focused) {
+        if (ctx->focused != CUI_ID_NONE && ctx->window) {
+            /* A widget gained focus - start text input */
+            SDL_StartTextInput(ctx->window);
+        } else if (ctx->prev_focused != CUI_ID_NONE && ctx->window) {
+            /* Focus was lost - stop text input */
+            SDL_StopTextInput(ctx->window);
+        }
+        ctx->prev_focused = ctx->focused;
+    }
+
+    /* Draw deferred popup (renders on top of everything) */
+    if (ctx->open_popup != CUI_ID_NONE && ctx->popup_items && ctx->popup_selected) {
+        /* Draw popup background */
+        cui_draw_rect(ctx, ctx->popup_rect.x, ctx->popup_rect.y,
+                      ctx->popup_rect.w, ctx->popup_rect.h,
+                      ctx->theme.bg_panel);
+        cui_draw_rect_outline(ctx, ctx->popup_rect.x, ctx->popup_rect.y,
+                              ctx->popup_rect.w, ctx->popup_rect.h,
+                              ctx->theme.border, 1.0f);
+
+        /* Draw popup items */
+        for (int i = 0; i < ctx->popup_count; i++) {
+            CUI_Rect item_rect = {
+                ctx->popup_rect.x,
+                ctx->popup_rect.y + i * ctx->theme.widget_height,
+                ctx->popup_rect.w,
+                ctx->theme.widget_height
+            };
+
+            bool item_hovered = cui_rect_contains(item_rect,
+                                                   ctx->input.mouse_x,
+                                                   ctx->input.mouse_y);
+
+            if (item_hovered) {
+                cui_draw_rect(ctx, item_rect.x, item_rect.y, item_rect.w, item_rect.h,
+                              ctx->theme.bg_widget_hover);
+
+                if (ctx->input.mouse_pressed[0]) {
+                    *ctx->popup_selected = i;
+                    ctx->open_popup = CUI_ID_NONE;
+                    ctx->popup_changed = true;
+                }
+            }
+
+            float item_text_y = item_rect.y + (item_rect.h - cui_text_height(ctx)) * 0.5f;
+            cui_draw_text(ctx, ctx->popup_items[i], item_rect.x + ctx->theme.padding,
+                          item_text_y, ctx->theme.text);
+        }
+    }
+
     /* Close popup if clicked outside */
     if (ctx->open_popup != CUI_ID_NONE && ctx->input.mouse_pressed[0]) {
         if (!cui_rect_contains(ctx->popup_rect,
@@ -174,6 +218,21 @@ void cui_end_frame(CUI_Context *ctx)
             ctx->open_popup = CUI_ID_NONE;
         }
     }
+
+    /* Clear per-frame input state (pressed/released are one-shot) */
+    for (int i = 0; i < 3; i++) {
+        ctx->input.mouse_pressed[i] = false;
+        ctx->input.mouse_released[i] = false;
+    }
+    memset(ctx->input.keys_pressed, 0, sizeof(ctx->input.keys_pressed));
+
+    /* Clear text input */
+    ctx->input.text_input[0] = '\0';
+    ctx->input.text_input_len = 0;
+
+    /* Reset scroll (consumed this frame) */
+    ctx->input.scroll_x = 0;
+    ctx->input.scroll_y = 0;
 }
 
 void cui_set_screen_size(CUI_Context *ctx, int width, int height)

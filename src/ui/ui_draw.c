@@ -312,12 +312,58 @@ static bool cui_reserve(CUI_Context *ctx, uint32_t vert_count, uint32_t idx_coun
     return true;
 }
 
-/* Add a quad (4 vertices, 6 indices) */
+/* Add a quad (4 vertices, 6 indices) with optional scissor clipping */
 static void cui_add_quad(CUI_Context *ctx,
                          float x0, float y0, float x1, float y1,
                          float u0, float v0, float u1, float v1,
                          uint32_t color)
 {
+    /* Apply scissor clipping if active */
+    if (ctx->scissor_depth > 0) {
+        CUI_Rect scissor = ctx->scissor_stack[ctx->scissor_depth - 1];
+        float sx0 = scissor.x;
+        float sy0 = scissor.y;
+        float sx1 = scissor.x + scissor.w;
+        float sy1 = scissor.y + scissor.h;
+
+        /* Check if completely outside scissor */
+        if (x1 <= sx0 || x0 >= sx1 || y1 <= sy0 || y0 >= sy1) {
+            return;  /* Quad is fully clipped */
+        }
+
+        /* Clip quad to scissor rect and adjust UVs proportionally */
+        float orig_w = x1 - x0;
+        float orig_h = y1 - y0;
+        float uv_w = u1 - u0;
+        float uv_h = v1 - v0;
+
+        if (x0 < sx0) {
+            float t = (sx0 - x0) / orig_w;
+            u0 += uv_w * t;
+            x0 = sx0;
+        }
+        if (x1 > sx1) {
+            float t = (x1 - sx1) / orig_w;
+            u1 -= uv_w * t;
+            x1 = sx1;
+        }
+        if (y0 < sy0) {
+            float t = (sy0 - y0) / orig_h;
+            v0 += uv_h * t;
+            y0 = sy0;
+        }
+        if (y1 > sy1) {
+            float t = (y1 - sy1) / orig_h;
+            v1 -= uv_h * t;
+            y1 = sy1;
+        }
+
+        /* Check if quad collapsed to zero */
+        if (x1 <= x0 || y1 <= y0) {
+            return;
+        }
+    }
+
     uint32_t base;
     if (!cui_reserve(ctx, 4, 6, &base)) return;
 
