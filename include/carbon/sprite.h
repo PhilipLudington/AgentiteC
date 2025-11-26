@@ -153,6 +153,19 @@ void carbon_sprite_upload(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd);
 void carbon_sprite_render(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
                           SDL_GPURenderPass *pass);
 
+/* ============================================================================
+ * Camera Integration
+ * ============================================================================ */
+
+/* Forward declaration */
+typedef struct Carbon_Camera Carbon_Camera;
+
+/* Set camera for sprite rendering (NULL for screen-space mode) */
+void carbon_sprite_set_camera(Carbon_SpriteRenderer *sr, Carbon_Camera *camera);
+
+/* Get current camera */
+Carbon_Camera *carbon_sprite_get_camera(Carbon_SpriteRenderer *sr);
+
 #ifdef __cplusplus
 }
 #endif

@@ -39,7 +39,8 @@ src/
 │   └── ecs.c           # ECS wrapper around Flecs
 ├── platform/           # Platform-specific code (future)
 ├── graphics/
-│   └── sprite.c        # Sprite/texture rendering with batching
+│   ├── sprite.c        # Sprite/texture rendering with batching
+│   └── camera.c        # 2D camera with pan, zoom, rotation
 ├── audio/              # Sound system (future)
 ├── input/              # Input handling (future)
 ├── ui/                 # Immediate-mode GUI system
@@ -49,7 +50,8 @@ include/carbon/
 ├── carbon.h            # Public API header
 ├── ecs.h               # ECS API and component definitions
 ├── ui.h                # UI system header
-└── sprite.h            # Sprite/texture API
+├── sprite.h            # Sprite/texture API
+└── camera.h            # 2D camera API
 
 lib/
 ├── flecs.h/.c          # Flecs ECS library (v4.0.0)
@@ -126,6 +128,42 @@ carbon_sprite_shutdown(sr);
 ```
 
 **Note:** Current limitation - all sprites in a batch must use the same texture. Multiple textures require separate batches or texture atlas.
+
+## Camera System
+
+2D camera with pan, zoom, and rotation support. Uses view-projection matrix in the GPU shader:
+
+```c
+#include "carbon/camera.h"
+
+// Create camera
+Carbon_Camera *camera = carbon_camera_create(1280.0f, 720.0f);
+
+// Connect to sprite renderer
+carbon_sprite_set_camera(sprites, camera);
+
+// Control camera
+carbon_camera_set_position(camera, 500.0f, 300.0f);  // Center on world position
+carbon_camera_move(camera, dx, dy);                   // Pan by delta
+carbon_camera_set_zoom(camera, 2.0f);                 // 2x magnification
+carbon_camera_set_rotation(camera, 45.0f);            // Rotate 45 degrees
+
+// Update each frame (recomputes matrices if dirty)
+carbon_camera_update(camera);
+
+// Coordinate conversion (for mouse picking)
+float world_x, world_y;
+carbon_camera_screen_to_world(camera, mouse_x, mouse_y, &world_x, &world_y);
+
+// Get visible world bounds
+float left, right, top, bottom;
+carbon_camera_get_bounds(camera, &left, &right, &top, &bottom);
+
+// Cleanup
+carbon_camera_destroy(camera);
+```
+
+**Note:** When no camera is set (`carbon_sprite_set_camera(sr, NULL)`), sprites render in screen-space coordinates for UI elements.
 
 ## Development Notes
 

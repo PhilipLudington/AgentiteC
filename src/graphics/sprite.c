@@ -3,6 +3,8 @@
  */
 
 #include "carbon/sprite.h"
+#include "carbon/camera.h"
+#include <cglm/cglm.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -34,6 +36,7 @@ static const char sprite_shader_msl[] =
 "using namespace metal;\n"
 "\n"
 "struct Uniforms {\n"
+"    float4x4 view_projection;\n"
 "    float2 screen_size;\n"
 "    float2 padding;\n"
 "};\n"
@@ -55,10 +58,8 @@ static const char sprite_shader_msl[] =
 "    constant Uniforms& uniforms [[buffer(0)]]\n"
 ") {\n"
 "    VertexOut out;\n"
-"    float2 ndc;\n"
-"    ndc.x = (in.position.x / uniforms.screen_size.x) * 2.0 - 1.0;\n"
-"    ndc.y = 1.0 - (in.position.y / uniforms.screen_size.y) * 2.0;\n"
-"    out.position = float4(ndc, 0.0, 1.0);\n"
+"    float4 world_pos = float4(in.position, 0.0, 1.0);\n"
+"    out.position = uniforms.view_projection * world_pos;\n"
 "    out.texcoord = in.texcoord;\n"
 "    out.color = in.color;\n"
 "    return out;\n"
@@ -105,6 +106,9 @@ struct Carbon_SpriteRenderer {
     /* Current batch state */
     Carbon_Texture *current_texture;
     bool batch_started;
+
+    /* Camera (optional - NULL = screen-space mode) */
+    Carbon_Camera *camera;
 };
 
 /* ============================================================================
@@ -858,9 +862,30 @@ void carbon_sprite_end(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
             };
             SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
 
-            /* Push uniforms */
-            float uniforms[4] = {(float)sr->screen_width, (float)sr->screen_height, 0, 0};
-            SDL_PushGPUVertexUniformData(cmd, 0, uniforms, sizeof(uniforms));
+            /* Build uniforms: mat4 view_projection + vec2 screen_size + vec2 padding */
+            struct {
+                float view_projection[16];
+                float screen_size[2];
+                float padding[2];
+            } uniforms;
+
+            if (sr->camera) {
+                const float *vp = carbon_camera_get_vp_matrix(sr->camera);
+                memcpy(uniforms.view_projection, vp, sizeof(float) * 16);
+            } else {
+                mat4 ortho;
+                glm_ortho(0.0f, (float)sr->screen_width,
+                          (float)sr->screen_height, 0.0f,
+                          -1.0f, 1.0f, ortho);
+                memcpy(uniforms.view_projection, ortho, sizeof(float) * 16);
+            }
+
+            uniforms.screen_size[0] = (float)sr->screen_width;
+            uniforms.screen_size[1] = (float)sr->screen_height;
+            uniforms.padding[0] = 0.0f;
+            uniforms.padding[1] = 0.0f;
+
+            SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(uniforms));
 
             /* Bind texture */
             SDL_GPUTextureSamplerBinding tex_binding = {
@@ -956,9 +981,32 @@ void carbon_sprite_render(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
     };
     SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
 
-    /* Push uniforms */
-    float uniforms[4] = {(float)sr->screen_width, (float)sr->screen_height, 0, 0};
-    SDL_PushGPUVertexUniformData(cmd, 0, uniforms, sizeof(uniforms));
+    /* Build uniforms: mat4 view_projection + vec2 screen_size + vec2 padding */
+    struct {
+        float view_projection[16];
+        float screen_size[2];
+        float padding[2];
+    } uniforms;
+
+    if (sr->camera) {
+        /* Use camera's view-projection matrix */
+        const float *vp = carbon_camera_get_vp_matrix(sr->camera);
+        memcpy(uniforms.view_projection, vp, sizeof(float) * 16);
+    } else {
+        /* Fallback: identity ortho projection for screen-space rendering */
+        mat4 ortho;
+        glm_ortho(0.0f, (float)sr->screen_width,
+                  (float)sr->screen_height, 0.0f,
+                  -1.0f, 1.0f, ortho);
+        memcpy(uniforms.view_projection, ortho, sizeof(float) * 16);
+    }
+
+    uniforms.screen_size[0] = (float)sr->screen_width;
+    uniforms.screen_size[1] = (float)sr->screen_height;
+    uniforms.padding[0] = 0.0f;
+    uniforms.padding[1] = 0.0f;
+
+    SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(uniforms));
 
     /* Bind texture */
     SDL_GPUTextureSamplerBinding tex_binding = {
@@ -969,4 +1017,18 @@ void carbon_sprite_render(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
 
     /* Draw */
     SDL_DrawGPUIndexedPrimitives(pass, sr->index_count, 1, 0, 0, 0);
+}
+
+/* Set camera for sprite rendering (NULL for screen-space mode) */
+void carbon_sprite_set_camera(Carbon_SpriteRenderer *sr, Carbon_Camera *camera)
+{
+    if (sr) {
+        sr->camera = camera;
+    }
+}
+
+/* Get current camera */
+Carbon_Camera *carbon_sprite_get_camera(Carbon_SpriteRenderer *sr)
+{
+    return sr ? sr->camera : NULL;
 }

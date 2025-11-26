@@ -2,6 +2,7 @@
 #include "carbon/ui.h"
 #include "carbon/ecs.h"
 #include "carbon/sprite.h"
+#include "carbon/camera.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -87,6 +88,27 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    /* Initialize camera */
+    Carbon_Camera *camera = carbon_camera_create(
+        (float)config.window_width,
+        (float)config.window_height
+    );
+    if (!camera) {
+        fprintf(stderr, "Failed to create camera\n");
+        carbon_sprite_shutdown(sprites);
+        cui_shutdown(ui);
+        carbon_shutdown(engine);
+        return 1;
+    }
+
+    /* Connect camera to sprite renderer */
+    carbon_sprite_set_camera(sprites, camera);
+
+    /* Center camera on the sprite demo area */
+    carbon_camera_set_position(camera, 900.0f, 500.0f);
+
+    SDL_Log("Camera initialized at (900, 500)");
+
     /* Create test texture */
     Carbon_Texture *tex_checker = create_test_texture(sprites, 64, 8);
 
@@ -146,6 +168,10 @@ int main(int argc, char *argv[]) {
     float sprite_rotation = 0.0f;
     float sprite_time = 0.0f;
 
+    /* Camera control state */
+    float target_zoom = 1.0f;
+    float mouse_world_x = 0.0f, mouse_world_y = 0.0f;
+
     /* Main game loop */
     while (carbon_is_running(engine)) {
         carbon_begin_frame(engine);
@@ -168,11 +194,58 @@ int main(int argc, char *argv[]) {
                     carbon_quit(engine);
                 }
                 break;
+            case SDL_EVENT_MOUSE_WHEEL:
+                /* Zoom with mouse wheel */
+                if (event.wheel.y > 0) {
+                    target_zoom *= 1.15f;
+                } else if (event.wheel.y < 0) {
+                    target_zoom /= 1.15f;
+                }
+                /* Clamp zoom */
+                if (target_zoom < 0.1f) target_zoom = 0.1f;
+                if (target_zoom > 10.0f) target_zoom = 10.0f;
+                break;
             }
         }
 
         /* Get delta time */
         float dt = carbon_get_delta_time(engine);
+
+        /* Camera controls - WASD to pan, Q/E to rotate */
+        const bool *keys = SDL_GetKeyboardState(NULL);
+        float cam_speed = 300.0f / carbon_camera_get_zoom(camera);  /* Faster when zoomed out */
+
+        if (keys[SDL_SCANCODE_W]) carbon_camera_move(camera, 0, -cam_speed * dt);
+        if (keys[SDL_SCANCODE_S]) carbon_camera_move(camera, 0, cam_speed * dt);
+        if (keys[SDL_SCANCODE_A]) carbon_camera_move(camera, -cam_speed * dt, 0);
+        if (keys[SDL_SCANCODE_D]) carbon_camera_move(camera, cam_speed * dt, 0);
+        if (keys[SDL_SCANCODE_Q]) {
+            float rot = carbon_camera_get_rotation(camera);
+            carbon_camera_set_rotation(camera, rot - 60.0f * dt);
+        }
+        if (keys[SDL_SCANCODE_E]) {
+            float rot = carbon_camera_get_rotation(camera);
+            carbon_camera_set_rotation(camera, rot + 60.0f * dt);
+        }
+        if (keys[SDL_SCANCODE_R]) {
+            /* Reset camera */
+            carbon_camera_set_position(camera, 900.0f, 500.0f);
+            carbon_camera_set_rotation(camera, 0.0f);
+            target_zoom = 1.0f;
+        }
+
+        /* Smooth zoom interpolation */
+        float current_zoom = carbon_camera_get_zoom(camera);
+        float new_zoom = current_zoom + (target_zoom - current_zoom) * 5.0f * dt;
+        carbon_camera_set_zoom(camera, new_zoom);
+
+        /* Update camera matrices */
+        carbon_camera_update(camera);
+
+        /* Get mouse position in world coordinates */
+        float mouse_x, mouse_y;
+        SDL_GetMouseState(&mouse_x, &mouse_y);
+        carbon_camera_screen_to_world(camera, mouse_x, mouse_y, &mouse_world_x, &mouse_world_y);
 
         /* Update sprite animation */
         sprite_time += dt;
@@ -286,6 +359,35 @@ int main(int argc, char *argv[]) {
             cui_end_panel(ui);
         }
 
+        /* Draw Camera controls panel */
+        if (cui_begin_panel(ui, "Camera", 700, 260, 280, 180,
+                           CUI_PANEL_TITLE_BAR | CUI_PANEL_BORDER)) {
+
+            float cam_x, cam_y;
+            carbon_camera_get_position(camera, &cam_x, &cam_y);
+            float cam_zoom = carbon_camera_get_zoom(camera);
+            float cam_rot = carbon_camera_get_rotation(camera);
+
+            char buf[64];
+            snprintf(buf, sizeof(buf), "Position: (%.0f, %.0f)", cam_x, cam_y);
+            cui_label(ui, buf);
+            snprintf(buf, sizeof(buf), "Zoom: %.2fx", cam_zoom);
+            cui_label(ui, buf);
+            snprintf(buf, sizeof(buf), "Rotation: %.1f deg", cam_rot);
+            cui_label(ui, buf);
+
+            cui_separator(ui);
+
+            snprintf(buf, sizeof(buf), "Mouse World: (%.0f, %.0f)", mouse_world_x, mouse_world_y);
+            cui_label(ui, buf);
+
+            cui_spacing(ui, 5);
+            cui_label(ui, "WASD: Pan | Wheel: Zoom");
+            cui_label(ui, "Q/E: Rotate | R: Reset");
+
+            cui_end_panel(ui);
+        }
+
         /* Draw some standalone widgets */
         cui_progress_bar(ui, slider_value, 0.0f, 1.0f);
 
@@ -355,6 +457,7 @@ int main(int argc, char *argv[]) {
     /* Cleanup */
     carbon_ecs_shutdown(ecs_world);
     carbon_texture_destroy(sprites, tex_checker);
+    carbon_camera_destroy(camera);
     carbon_sprite_shutdown(sprites);
     cui_shutdown(ui);
     carbon_shutdown(engine);
