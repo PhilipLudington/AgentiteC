@@ -60,7 +60,12 @@ SRCS := $(wildcard $(SRC_DIR)/*.c) \
         $(wildcard $(SRC_DIR)/audio/*.c) \
         $(wildcard $(SRC_DIR)/input/*.c) \
         $(wildcard $(SRC_DIR)/ui/*.c) \
+        $(wildcard $(SRC_DIR)/ecs/*.c) \
         $(wildcard $(SRC_DIR)/game/*.c)
+
+# Flecs ECS library (compiled as separate object)
+FLECS_SRC := $(LIB_DIR)/flecs.c
+FLECS_OBJ := $(BUILD_DIR)/flecs.o
 
 # Object files
 OBJS := $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
@@ -76,11 +81,16 @@ dirs:
 	@mkdir -p $(BUILD_DIR)/audio
 	@mkdir -p $(BUILD_DIR)/input
 	@mkdir -p $(BUILD_DIR)/ui
+	@mkdir -p $(BUILD_DIR)/ecs
 	@mkdir -p $(BUILD_DIR)/game
 
-# Link executable
-$(BUILD_DIR)/$(EXECUTABLE): $(OBJS)
-	$(CC) $(OBJS) -o $@ $(LDFLAGS)
+# Link executable (include Flecs object)
+$(BUILD_DIR)/$(EXECUTABLE): $(OBJS) $(FLECS_OBJ)
+	$(CC) $(OBJS) $(FLECS_OBJ) -o $@ $(LDFLAGS)
+
+# Compile Flecs (with relaxed warnings due to third-party code)
+$(FLECS_OBJ): $(FLECS_SRC)
+	$(CC) -std=c11 -O2 -I$(LIB_DIR) -c $< -o $@
 
 # Compile source files
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
