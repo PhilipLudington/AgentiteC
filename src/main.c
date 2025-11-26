@@ -1,7 +1,42 @@
 #include "carbon/carbon.h"
 #include "carbon/ui.h"
 #include "carbon/ecs.h"
+#include "carbon/sprite.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+
+/* Helper: Create a procedural checkerboard texture */
+static Carbon_Texture *create_test_texture(Carbon_SpriteRenderer *sr, int size, int tile_size)
+{
+    unsigned char *pixels = malloc(size * size * 4);
+    if (!pixels) return NULL;
+
+    for (int y = 0; y < size; y++) {
+        for (int x = 0; x < size; x++) {
+            int tx = x / tile_size;
+            int ty = y / tile_size;
+            bool white = ((tx + ty) % 2) == 0;
+
+            int idx = (y * size + x) * 4;
+            if (white) {
+                pixels[idx + 0] = 255;  /* R */
+                pixels[idx + 1] = 200;  /* G */
+                pixels[idx + 2] = 100;  /* B */
+                pixels[idx + 3] = 255;  /* A */
+            } else {
+                pixels[idx + 0] = 100;  /* R */
+                pixels[idx + 1] = 150;  /* G */
+                pixels[idx + 2] = 255;  /* B */
+                pixels[idx + 3] = 255;  /* A */
+            }
+        }
+    }
+
+    Carbon_Texture *tex = carbon_texture_create(sr, size, size, pixels);
+    free(pixels);
+    return tex;
+}
 
 int main(int argc, char *argv[]) {
     (void)argc;
@@ -9,7 +44,7 @@ int main(int argc, char *argv[]) {
 
     /* Configure engine */
     Carbon_Config config = {
-        .window_title = "Carbon Engine - UI Demo",
+        .window_title = "Carbon Engine - Sprite Demo",
         .window_width = 1280,
         .window_height = 720,
         .fullscreen = false,
@@ -39,10 +74,41 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    /* Initialize sprite renderer */
+    Carbon_SpriteRenderer *sprites = carbon_sprite_init(
+        carbon_get_gpu_device(engine),
+        carbon_get_window(engine)
+    );
+
+    if (!sprites) {
+        fprintf(stderr, "Failed to initialize sprite renderer\n");
+        cui_shutdown(ui);
+        carbon_shutdown(engine);
+        return 1;
+    }
+
+    /* Create test texture */
+    Carbon_Texture *tex_checker = create_test_texture(sprites, 64, 8);
+
+    if (!tex_checker) {
+        fprintf(stderr, "Failed to create test texture\n");
+        carbon_sprite_shutdown(sprites);
+        cui_shutdown(ui);
+        carbon_shutdown(engine);
+        return 1;
+    }
+
+    /* Create sprite from texture */
+    Carbon_Sprite sprite_checker = carbon_sprite_from_texture(tex_checker);
+
+    SDL_Log("Sprite system initialized with test textures");
+
     /* Initialize ECS world */
     Carbon_World *ecs_world = carbon_ecs_init();
     if (!ecs_world) {
         fprintf(stderr, "Failed to initialize ECS world\n");
+        carbon_texture_destroy(sprites, tex_checker);
+        carbon_sprite_shutdown(sprites);
         cui_shutdown(ui);
         carbon_shutdown(engine);
         return 1;
@@ -76,6 +142,10 @@ int main(int argc, char *argv[]) {
         "Navy", "Air Force", "Special Ops"
     };
 
+    /* Sprite demo state */
+    float sprite_rotation = 0.0f;
+    float sprite_time = 0.0f;
+
     /* Main game loop */
     while (carbon_is_running(engine)) {
         carbon_begin_frame(engine);
@@ -103,6 +173,11 @@ int main(int argc, char *argv[]) {
 
         /* Get delta time */
         float dt = carbon_get_delta_time(engine);
+
+        /* Update sprite animation */
+        sprite_time += dt;
+        sprite_rotation += 45.0f * dt;  /* Rotate 45 degrees per second */
+        if (sprite_rotation > 360.0f) sprite_rotation -= 360.0f;
 
         /* Progress ECS systems */
         carbon_ecs_progress(ecs_world, dt);
@@ -217,26 +292,70 @@ int main(int argc, char *argv[]) {
         /* End UI frame */
         cui_end_frame(ui);
 
+        /* Build sprite batch */
+        carbon_sprite_begin(sprites, NULL);
+
+        /* Draw some demo sprites in the background area */
+        /* Row of static checkerboard sprites */
+        for (int i = 0; i < 8; i++) {
+            carbon_sprite_draw(sprites, &sprite_checker,
+                               700.0f + i * 70.0f, 400.0f);
+        }
+
+        /* Rotating sprite */
+        carbon_sprite_draw_ex(sprites, &sprite_checker,
+                              800.0f, 500.0f,
+                              2.0f, 2.0f,
+                              sprite_rotation,
+                              0.5f, 0.5f);
+
+        /* Bouncing/pulsing sprite */
+        float pulse = 1.0f + 0.3f * sinf(sprite_time * 3.0f);
+        carbon_sprite_draw_scaled(sprites, &sprite_checker,
+                                  950.0f, 500.0f,
+                                  pulse, pulse);
+
+        /* Tinted sprites - using same texture for consistent batching */
+        carbon_sprite_draw_tinted(sprites, &sprite_checker,
+                                  1050.0f, 450.0f,
+                                  1.0f, 0.3f, 0.3f, 1.0f);  /* Red tint */
+        carbon_sprite_draw_tinted(sprites, &sprite_checker,
+                                  1050.0f, 550.0f,
+                                  0.3f, 1.0f, 0.3f, 1.0f);  /* Green tint */
+
         /* Acquire command buffer for GPU operations */
         SDL_GPUCommandBuffer *cmd = carbon_acquire_command_buffer(engine);
         if (cmd) {
+            /* Upload sprite data to GPU (must be done BEFORE render pass) */
+            carbon_sprite_upload(sprites, cmd);
+
             /* Upload UI data to GPU (must be done BEFORE render pass) */
             cui_upload(ui, cmd);
 
             /* Begin render pass */
             if (carbon_begin_render_pass(engine, 0.1f, 0.1f, 0.15f, 1.0f)) {
-                /* Render UI */
-                cui_render(ui, cmd, carbon_get_render_pass(engine));
+                SDL_GPURenderPass *pass = carbon_get_render_pass(engine);
+
+                /* Render sprites first (background) */
+                carbon_sprite_render(sprites, cmd, pass);
+
+                /* Render UI on top */
+                cui_render(ui, cmd, pass);
 
                 carbon_end_render_pass(engine);
             }
         }
+
+        /* End sprite batch (cleanup state) */
+        carbon_sprite_end(sprites, NULL, NULL);
 
         carbon_end_frame(engine);
     }
 
     /* Cleanup */
     carbon_ecs_shutdown(ecs_world);
+    carbon_texture_destroy(sprites, tex_checker);
+    carbon_sprite_shutdown(sprites);
     cui_shutdown(ui);
     carbon_shutdown(engine);
 
