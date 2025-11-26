@@ -40,7 +40,8 @@ src/
 ├── platform/           # Platform-specific code (future)
 ├── graphics/
 │   ├── sprite.c        # Sprite/texture rendering with batching
-│   └── camera.c        # 2D camera with pan, zoom, rotation
+│   ├── camera.c        # 2D camera with pan, zoom, rotation
+│   └── tilemap.c       # Chunk-based tilemap rendering
 ├── audio/
 │   └── audio.c         # Audio system with mixing
 ├── input/
@@ -54,6 +55,7 @@ include/carbon/
 ├── ui.h                # UI system header
 ├── sprite.h            # Sprite/texture API
 ├── camera.h            # 2D camera API
+├── tilemap.h           # Tilemap system API
 ├── input.h             # Input system with action mapping
 └── audio.h             # Audio system API
 
@@ -168,6 +170,59 @@ carbon_camera_destroy(camera);
 ```
 
 **Note:** When no camera is set (`carbon_sprite_set_camera(sr, NULL)`), sprites render in screen-space coordinates for UI elements.
+
+## Tilemap System
+
+Chunk-based tilemap for large maps with multiple layers and efficient frustum culling:
+
+```c
+#include "carbon/tilemap.h"
+
+// Create tileset from texture (e.g., 4x4 grid of 32px tiles = 128x128 texture)
+Carbon_Texture *tex = carbon_texture_load(sr, "assets/tileset.png");
+Carbon_Tileset *tileset = carbon_tileset_create(tex, 32, 32);  // tile_width, tile_height
+
+// Create tilemap (100x100 tiles = 3200x3200 world units)
+Carbon_Tilemap *tilemap = carbon_tilemap_create(tileset, 100, 100);
+
+// Add layers (rendered back to front)
+int ground = carbon_tilemap_add_layer(tilemap, "ground");
+int objects = carbon_tilemap_add_layer(tilemap, "objects");
+
+// Set tiles (tile ID 0 = empty, 1+ = valid tile from tileset)
+carbon_tilemap_fill(tilemap, ground, 0, 0, 100, 100, 1);      // Fill with grass
+carbon_tilemap_set_tile(tilemap, objects, 50, 50, 5);          // Place tree
+
+// Layer properties
+carbon_tilemap_set_layer_visible(tilemap, objects, true);
+carbon_tilemap_set_layer_opacity(tilemap, objects, 0.8f);
+
+// In render loop (during sprite batch, before upload):
+carbon_sprite_begin(sr, NULL);
+carbon_tilemap_render(tilemap, sr, camera);  // Renders with frustum culling
+// ... other sprites ...
+carbon_sprite_upload(sr, cmd);
+// ... render pass ...
+carbon_sprite_render(sr, cmd, pass);
+
+// Coordinate conversion (for mouse picking)
+int tile_x, tile_y;
+carbon_tilemap_world_to_tile(tilemap, world_x, world_y, &tile_x, &tile_y);
+Carbon_TileID tile = carbon_tilemap_get_tile(tilemap, ground, tile_x, tile_y);
+
+// Cleanup
+carbon_tilemap_destroy(tilemap);
+carbon_tileset_destroy(tileset);
+```
+
+**Key features:**
+- Chunk-based storage (32x32 tiles per chunk) for efficient large maps
+- Automatic frustum culling - only visible tiles are rendered
+- Multiple layers with per-layer visibility and opacity
+- Uses existing sprite renderer batching (single tileset = single batch)
+- Coordinate conversion for world/tile position mapping
+
+**Note:** All tiles in a tilemap must use the same tileset texture. For multiple tilesets, use a texture atlas or render separate tilemaps.
 
 ## Input System
 

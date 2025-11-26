@@ -5,6 +5,7 @@
 #include "carbon/camera.h"
 #include "carbon/input.h"
 #include "carbon/audio.h"
+#include "carbon/tilemap.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -69,6 +70,65 @@ static void *create_test_beep_wav(int frequency, float duration, float volume, s
     return wav;
 }
 
+/* Helper: Create a procedural tileset texture (4x4 grid of different colored tiles) */
+static Carbon_Texture *create_tileset_texture(Carbon_SpriteRenderer *sr, int tile_size)
+{
+    int cols = 4, rows = 4;
+    int size = tile_size * cols;
+    unsigned char *pixels = malloc(size * size * 4);
+    if (!pixels) return NULL;
+
+    /* Define 16 different tile colors */
+    unsigned char colors[16][3] = {
+        {34, 139, 34},    /* 0: Forest green (grass) */
+        {50, 205, 50},    /* 1: Lime green (light grass) */
+        {107, 142, 35},   /* 2: Olive drab (dark grass) */
+        {144, 238, 144},  /* 3: Light green (meadow) */
+        {64, 64, 64},     /* 4: Dark gray (stone) */
+        {128, 128, 128},  /* 5: Gray (cobblestone) */
+        {169, 169, 169},  /* 6: Dark gray (gravel) */
+        {192, 192, 192},  /* 7: Silver (marble) */
+        {139, 69, 19},    /* 8: Saddle brown (dirt) */
+        {160, 82, 45},    /* 9: Sienna (path) */
+        {210, 180, 140},  /* 10: Tan (sand) */
+        {244, 164, 96},   /* 11: Sandy brown (desert) */
+        {65, 105, 225},   /* 12: Royal blue (water) */
+        {30, 144, 255},   /* 13: Dodger blue (shallow water) */
+        {139, 0, 0},      /* 14: Dark red (lava) */
+        {255, 215, 0}     /* 15: Gold (treasure) */
+    };
+
+    for (int ty = 0; ty < rows; ty++) {
+        for (int tx = 0; tx < cols; tx++) {
+            int tile_idx = ty * cols + tx;
+            unsigned char r = colors[tile_idx][0];
+            unsigned char g = colors[tile_idx][1];
+            unsigned char b = colors[tile_idx][2];
+
+            /* Fill this tile with solid color + subtle variation */
+            for (int py = 0; py < tile_size; py++) {
+                for (int px = 0; px < tile_size; px++) {
+                    int x = tx * tile_size + px;
+                    int y = ty * tile_size + py;
+                    int idx = (y * size + x) * 4;
+
+                    /* Add subtle noise/pattern */
+                    int noise = ((px ^ py) & 1) * 8;
+
+                    pixels[idx + 0] = (unsigned char)(r + noise > 255 ? 255 : r + noise);
+                    pixels[idx + 1] = (unsigned char)(g + noise > 255 ? 255 : g + noise);
+                    pixels[idx + 2] = (unsigned char)(b + noise > 255 ? 255 : b + noise);
+                    pixels[idx + 3] = 255;
+                }
+            }
+        }
+    }
+
+    Carbon_Texture *tex = carbon_texture_create(sr, size, size, pixels);
+    free(pixels);
+    return tex;
+}
+
 /* Helper: Create a procedural checkerboard texture */
 static Carbon_Texture *create_test_texture(Carbon_SpriteRenderer *sr, int size, int tile_size)
 {
@@ -107,7 +167,7 @@ int main(int argc, char *argv[]) {
 
     /* Configure engine */
     Carbon_Config config = {
-        .window_title = "Carbon Engine - Sprite Demo",
+        .window_title = "Carbon Engine - Tilemap Demo",
         .window_width = 1280,
         .window_height = 720,
         .fullscreen = false,
@@ -166,10 +226,10 @@ int main(int argc, char *argv[]) {
     /* Connect camera to sprite renderer */
     carbon_sprite_set_camera(sprites, camera);
 
-    /* Center camera on the sprite demo area */
-    carbon_camera_set_position(camera, 900.0f, 500.0f);
+    /* Center camera on the tilemap (50x50 tiles * 48px = 2400x2400, center at 1200,1200) */
+    carbon_camera_set_position(camera, 1200.0f, 1200.0f);
 
-    SDL_Log("Camera initialized at (900, 500)");
+    SDL_Log("Camera initialized at (1200, 1200)");
 
     /* Create test texture */
     Carbon_Texture *tex_checker = create_test_texture(sprites, 64, 8);
@@ -297,6 +357,64 @@ int main(int argc, char *argv[]) {
 
     SDL_Log("Audio system initialized with test sounds");
 
+    /* Initialize tilemap system */
+    Carbon_Texture *tileset_tex = create_tileset_texture(sprites, 48);  /* 48x48 pixel tiles */
+    if (!tileset_tex) {
+        fprintf(stderr, "Failed to create tileset texture\n");
+    }
+
+    Carbon_Tileset *tileset = tileset_tex ? carbon_tileset_create(tileset_tex, 48, 48) : NULL;
+    Carbon_Tilemap *tilemap = NULL;
+
+    if (tileset) {
+        /* Create a 50x50 tile map with 48px tiles (2400x2400 pixels in world space)
+         * At 1280x720 viewport, ~27x15 tiles visible at zoom 1.0 (~400 tiles)
+         * With 2 layers that's ~800 sprites, well under the 4096 batch limit */
+        tilemap = carbon_tilemap_create(tileset, 50, 50);
+        if (tilemap) {
+            /* Add layers */
+            int ground_layer = carbon_tilemap_add_layer(tilemap, "ground");
+            int decor_layer = carbon_tilemap_add_layer(tilemap, "decorations");
+
+            /* Fill ground with grass (tile ID 1 = forest green) */
+            carbon_tilemap_fill(tilemap, ground_layer, 0, 0, 50, 50, 1);
+
+            /* Add some terrain variety */
+            /* Water (tile 13 = blue) in a lake pattern */
+            carbon_tilemap_fill(tilemap, ground_layer, 12, 12, 10, 7, 13);
+            carbon_tilemap_fill(tilemap, ground_layer, 15, 19, 5, 3, 13);
+
+            /* Sand beach around water (tile 11 = sandy) */
+            carbon_tilemap_fill(tilemap, ground_layer, 11, 11, 12, 1, 11);
+            carbon_tilemap_fill(tilemap, ground_layer, 11, 19, 12, 1, 11);
+            carbon_tilemap_fill(tilemap, ground_layer, 11, 11, 1, 9, 11);
+            carbon_tilemap_fill(tilemap, ground_layer, 22, 11, 1, 9, 11);
+
+            /* Stone path (tile 6 = gray) */
+            carbon_tilemap_fill(tilemap, ground_layer, 25, 0, 2, 50, 6);
+
+            /* Dirt patches (tile 9 = brown) */
+            carbon_tilemap_fill(tilemap, ground_layer, 32, 20, 6, 6, 9);
+            carbon_tilemap_fill(tilemap, ground_layer, 40, 35, 5, 5, 9);
+
+            /* Dark grass variation (tile 3 = olive) */
+            carbon_tilemap_fill(tilemap, ground_layer, 4, 35, 8, 8, 3);
+
+            /* Light grass patches (tile 2 = lime) */
+            carbon_tilemap_fill(tilemap, ground_layer, 35, 4, 6, 6, 2);
+
+            /* Add some decorations (tile 16 = gold, used as decoration markers) */
+            carbon_tilemap_set_tile(tilemap, decor_layer, 25, 25, 16);
+            carbon_tilemap_set_tile(tilemap, decor_layer, 40, 12, 16);
+            carbon_tilemap_set_tile(tilemap, decor_layer, 7, 40, 16);
+
+            /* Set decorations layer to slightly transparent */
+            carbon_tilemap_set_layer_opacity(tilemap, decor_layer, 0.8f);
+
+            SDL_Log("Tilemap initialized: 50x50 tiles @ 48px (2400x2400 world units)");
+        }
+    }
+
     /* Register audio test action */
     int action_play_sound = carbon_input_register_action(input, "play_sound");
     carbon_input_bind_key(input, action_play_sound, SDL_SCANCODE_SPACE);
@@ -410,8 +528,8 @@ int main(int argc, char *argv[]) {
             carbon_camera_set_rotation(camera, rot + 60.0f * dt);
         }
         if (carbon_input_action_just_pressed(input, action_cam_reset)) {
-            /* Reset camera */
-            carbon_camera_set_position(camera, 900.0f, 500.0f);
+            /* Reset camera to tilemap center */
+            carbon_camera_set_position(camera, 1200.0f, 1200.0f);
             carbon_camera_set_rotation(camera, 0.0f);
             target_zoom = 1.0f;
         }
@@ -614,6 +732,11 @@ int main(int argc, char *argv[]) {
         /* Build sprite batch */
         carbon_sprite_begin(sprites, NULL);
 
+        /* Render tilemap first (background) */
+        if (tilemap) {
+            carbon_tilemap_render(tilemap, sprites, camera);
+        }
+
         /* Draw some demo sprites in the background area */
         /* Row of static checkerboard sprites */
         for (int i = 0; i < 8; i++) {
@@ -672,6 +795,9 @@ int main(int argc, char *argv[]) {
     }
 
     /* Cleanup */
+    if (tilemap) carbon_tilemap_destroy(tilemap);
+    if (tileset) carbon_tileset_destroy(tileset);
+    if (tileset_tex) carbon_texture_destroy(sprites, tileset_tex);
     if (sound_beep) carbon_sound_destroy(audio, sound_beep);
     if (sound_click) carbon_sound_destroy(audio, sound_click);
     if (sound_ping) carbon_sound_destroy(audio, sound_ping);
