@@ -50,7 +50,16 @@ void carbon_poll_events(Carbon_Engine *engine);
 // Graphics (SDL_GPU)
 SDL_GPUDevice *carbon_get_gpu_device(Carbon_Engine *engine);
 SDL_Window *carbon_get_window(Carbon_Engine *engine);
+
+// Acquire command buffer for the frame (call before render pass for copy operations)
+SDL_GPUCommandBuffer *carbon_acquire_command_buffer(Carbon_Engine *engine);
+
+// Render pass management
 bool carbon_begin_render_pass(Carbon_Engine *engine, float r, float g, float b, float a);
 void carbon_end_render_pass(Carbon_Engine *engine);
+
+// Get current render pass and command buffer (for UI rendering)
+SDL_GPURenderPass *carbon_get_render_pass(Carbon_Engine *engine);
+SDL_GPUCommandBuffer *carbon_get_command_buffer(Carbon_Engine *engine);
 
 #endif // CARBON_H

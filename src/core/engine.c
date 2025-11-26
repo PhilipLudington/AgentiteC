@@ -181,14 +181,30 @@ SDL_Window *carbon_get_window(Carbon_Engine *engine) {
     return engine ? engine->window : NULL;
 }
 
+SDL_GPUCommandBuffer *carbon_acquire_command_buffer(Carbon_Engine *engine) {
+    if (!engine || !engine->gpu_device) return NULL;
+
+    // Only acquire if we don't already have one
+    if (!engine->cmd_buffer) {
+        engine->cmd_buffer = SDL_AcquireGPUCommandBuffer(engine->gpu_device);
+        if (!engine->cmd_buffer) {
+            SDL_Log("Failed to acquire command buffer: %s", SDL_GetError());
+            return NULL;
+        }
+    }
+    return engine->cmd_buffer;
+}
+
 bool carbon_begin_render_pass(Carbon_Engine *engine, float r, float g, float b, float a) {
     if (!engine || !engine->gpu_device) return false;
 
-    // Acquire command buffer
-    engine->cmd_buffer = SDL_AcquireGPUCommandBuffer(engine->gpu_device);
+    // Acquire command buffer if not already acquired
     if (!engine->cmd_buffer) {
-        SDL_Log("Failed to acquire command buffer: %s", SDL_GetError());
-        return false;
+        engine->cmd_buffer = SDL_AcquireGPUCommandBuffer(engine->gpu_device);
+        if (!engine->cmd_buffer) {
+            SDL_Log("Failed to acquire command buffer: %s", SDL_GetError());
+            return false;
+        }
     }
 
     // Acquire swapchain texture
@@ -250,4 +266,12 @@ void carbon_end_render_pass(Carbon_Engine *engine) {
         SDL_SubmitGPUCommandBuffer(engine->cmd_buffer);
         engine->cmd_buffer = NULL;
     }
+}
+
+SDL_GPURenderPass *carbon_get_render_pass(Carbon_Engine *engine) {
+    return engine ? engine->render_pass : NULL;
+}
+
+SDL_GPUCommandBuffer *carbon_get_command_buffer(Carbon_Engine *engine) {
+    return engine ? engine->cmd_buffer : NULL;
 }
