@@ -41,7 +41,8 @@ src/
 ├── graphics/
 │   ├── sprite.c        # Sprite/texture rendering with batching
 │   └── camera.c        # 2D camera with pan, zoom, rotation
-├── audio/              # Sound system (future)
+├── audio/
+│   └── audio.c         # Audio system with mixing
 ├── input/
 │   └── input.c         # Input abstraction with action mapping
 ├── ui/                 # Immediate-mode GUI system
@@ -53,7 +54,8 @@ include/carbon/
 ├── ui.h                # UI system header
 ├── sprite.h            # Sprite/texture API
 ├── camera.h            # 2D camera API
-└── input.h             # Input system with action mapping
+├── input.h             # Input system with action mapping
+└── audio.h             # Audio system API
 
 lib/
 ├── flecs.h/.c          # Flecs ECS library (v4.0.0)
@@ -230,6 +232,63 @@ carbon_input_shutdown(input);
 - Analog values from gamepad axes and triggers
 - Automatic gamepad hot-plug support
 - Direct input queries when needed
+
+## Audio System
+
+Sound effects and music playback with mixing support:
+
+```c
+#include "carbon/audio.h"
+
+// Initialize
+Carbon_Audio *audio = carbon_audio_init();
+
+// Load sounds (WAV files, fully loaded in memory)
+Carbon_Sound *sound_shoot = carbon_sound_load(audio, "assets/sounds/shoot.wav");
+Carbon_Sound *sound_jump = carbon_sound_load(audio, "assets/sounds/jump.wav");
+
+// Load music (WAV files, for background music)
+Carbon_Music *music_bg = carbon_music_load(audio, "assets/music/background.wav");
+
+// Play sounds (returns handle for control)
+Carbon_SoundHandle h = carbon_sound_play(audio, sound_shoot);
+
+// Play with options: volume (0-1), pan (-1 to +1), loop
+carbon_sound_play_ex(audio, sound_shoot, 0.8f, 0.0f, false);
+
+// Control playing sounds
+carbon_sound_set_volume(audio, h, 0.5f);
+carbon_sound_set_pan(audio, h, -0.5f);  // Pan left
+carbon_sound_stop(audio, h);
+if (carbon_sound_is_playing(audio, h)) { }
+
+// Play music (only one track at a time)
+carbon_music_play(audio, music_bg);                    // Loop by default
+carbon_music_play_ex(audio, music_bg, 0.7f, true);     // Volume + loop
+carbon_music_pause(audio);
+carbon_music_resume(audio);
+carbon_music_stop(audio);
+
+// Volume controls
+carbon_audio_set_master_volume(audio, 0.8f);  // Affects all audio
+carbon_audio_set_sound_volume(audio, 1.0f);   // Affects all sounds
+carbon_audio_set_music_volume(audio, 0.5f);   // Affects music
+
+// In game loop (for streaming, currently no-op)
+carbon_audio_update(audio);
+
+// Cleanup
+carbon_sound_destroy(audio, sound_shoot);
+carbon_music_destroy(audio, music_bg);
+carbon_audio_shutdown(audio);
+```
+
+**Key features:**
+- Up to 32 simultaneous sound channels
+- Automatic audio format conversion (any WAV → float32 stereo)
+- Per-sound volume and stereo panning
+- Separate volume controls for master, sounds, and music
+- Sound handles for runtime control of playing sounds
 
 ## Development Notes
 

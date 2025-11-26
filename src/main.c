@@ -4,9 +4,70 @@
 #include "carbon/sprite.h"
 #include "carbon/camera.h"
 #include "carbon/input.h"
+#include "carbon/audio.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+
+/* Helper: Generate a procedural WAV beep sound in memory */
+static void *create_test_beep_wav(int frequency, float duration, float volume, size_t *out_size)
+{
+    int sample_rate = 48000;
+    int num_samples = (int)(sample_rate * duration);
+    int num_channels = 2;  /* stereo */
+    int bits_per_sample = 16;
+    int bytes_per_sample = bits_per_sample / 8;
+    int data_size = num_samples * num_channels * bytes_per_sample;
+
+    /* WAV header is 44 bytes */
+    int wav_size = 44 + data_size;
+    unsigned char *wav = malloc(wav_size);
+    if (!wav) return NULL;
+
+    /* Write WAV header */
+    memcpy(wav, "RIFF", 4);
+    *(int *)(wav + 4) = wav_size - 8;
+    memcpy(wav + 8, "WAVE", 4);
+    memcpy(wav + 12, "fmt ", 4);
+    *(int *)(wav + 16) = 16;  /* fmt chunk size */
+    *(short *)(wav + 20) = 1;  /* PCM format */
+    *(short *)(wav + 22) = num_channels;
+    *(int *)(wav + 24) = sample_rate;
+    *(int *)(wav + 28) = sample_rate * num_channels * bytes_per_sample;  /* byte rate */
+    *(short *)(wav + 32) = num_channels * bytes_per_sample;  /* block align */
+    *(short *)(wav + 34) = bits_per_sample;
+    memcpy(wav + 36, "data", 4);
+    *(int *)(wav + 40) = data_size;
+
+    /* Generate sine wave with fade in/out */
+    short *samples = (short *)(wav + 44);
+    float fade_samples = sample_rate * 0.02f;  /* 20ms fade */
+
+    for (int i = 0; i < num_samples; i++) {
+        float t = (float)i / sample_rate;
+        float sample = sinf(2.0f * 3.14159265f * frequency * t);
+
+        /* Apply volume */
+        sample *= volume;
+
+        /* Apply fade in/out envelope */
+        float envelope = 1.0f;
+        if (i < fade_samples) {
+            envelope = (float)i / fade_samples;
+        } else if (i > num_samples - fade_samples) {
+            envelope = (float)(num_samples - i) / fade_samples;
+        }
+        sample *= envelope;
+
+        /* Convert to 16-bit */
+        short s = (short)(sample * 32767);
+        samples[i * 2] = s;      /* left */
+        samples[i * 2 + 1] = s;  /* right */
+    }
+
+    *out_size = wav_size;
+    return wav;
+}
 
 /* Helper: Create a procedural checkerboard texture */
 static Carbon_Texture *create_test_texture(Carbon_SpriteRenderer *sr, int size, int tile_size)
@@ -206,6 +267,41 @@ int main(int argc, char *argv[]) {
 
     SDL_Log("Input system initialized with action bindings");
 
+    /* Initialize audio system */
+    Carbon_Audio *audio = carbon_audio_init();
+    if (!audio) {
+        fprintf(stderr, "Failed to initialize audio system\n");
+        carbon_input_shutdown(input);
+        carbon_ecs_shutdown(ecs_world);
+        carbon_texture_destroy(sprites, tex_checker);
+        carbon_camera_destroy(camera);
+        carbon_sprite_shutdown(sprites);
+        cui_shutdown(ui);
+        carbon_shutdown(engine);
+        return 1;
+    }
+
+    /* Create procedural test sounds */
+    size_t beep_size, click_size, ping_size;
+    void *beep_wav = create_test_beep_wav(440, 0.15f, 0.5f, &beep_size);   /* A4 note, short */
+    void *click_wav = create_test_beep_wav(880, 0.05f, 0.3f, &click_size); /* A5 note, click */
+    void *ping_wav = create_test_beep_wav(1760, 0.3f, 0.4f, &ping_size);   /* A6 note, ping */
+
+    Carbon_Sound *sound_beep = beep_wav ? carbon_sound_load_wav_memory(audio, beep_wav, beep_size) : NULL;
+    Carbon_Sound *sound_click = click_wav ? carbon_sound_load_wav_memory(audio, click_wav, click_size) : NULL;
+    Carbon_Sound *sound_ping = ping_wav ? carbon_sound_load_wav_memory(audio, ping_wav, ping_size) : NULL;
+
+    free(beep_wav);
+    free(click_wav);
+    free(ping_wav);
+
+    SDL_Log("Audio system initialized with test sounds");
+
+    /* Register audio test action */
+    int action_play_sound = carbon_input_register_action(input, "play_sound");
+    carbon_input_bind_key(input, action_play_sound, SDL_SCANCODE_SPACE);
+    carbon_input_bind_gamepad_button(input, action_play_sound, SDL_GAMEPAD_BUTTON_SOUTH);
+
     /* Demo state */
     bool checkbox_value = false;
     float slider_value = 0.5f;
@@ -260,6 +356,16 @@ int main(int argc, char *argv[]) {
         if (carbon_input_action_just_pressed(input, action_quit)) {
             carbon_quit(engine);
         }
+
+        /* Play test sound on spacebar */
+        if (carbon_input_action_just_pressed(input, action_play_sound)) {
+            if (sound_beep) {
+                carbon_sound_play(audio, sound_beep);
+            }
+        }
+
+        /* Update audio system */
+        carbon_audio_update(audio);
 
         /* Handle mouse wheel zoom */
         float scroll_x, scroll_y;
@@ -464,6 +570,41 @@ int main(int argc, char *argv[]) {
             cui_end_panel(ui);
         }
 
+        /* Draw Audio panel */
+        if (cui_begin_panel(ui, "Audio", 700, 450, 280, 200,
+                           CUI_PANEL_TITLE_BAR | CUI_PANEL_BORDER)) {
+
+            /* Master volume slider */
+            float master_vol = carbon_audio_get_master_volume(audio);
+            if (cui_slider_float(ui, "Master", &master_vol, 0.0f, 1.0f)) {
+                carbon_audio_set_master_volume(audio, master_vol);
+            }
+
+            /* Sound volume slider */
+            float sound_vol = carbon_audio_get_sound_volume(audio);
+            if (cui_slider_float(ui, "Sounds", &sound_vol, 0.0f, 1.0f)) {
+                carbon_audio_set_sound_volume(audio, sound_vol);
+            }
+
+            cui_separator(ui);
+
+            /* Sound test buttons */
+            if (cui_button(ui, "Beep (440Hz)") && sound_beep) {
+                carbon_sound_play(audio, sound_beep);
+            }
+            if (cui_button(ui, "Click (880Hz)") && sound_click) {
+                carbon_sound_play(audio, sound_click);
+            }
+            if (cui_button(ui, "Ping (1760Hz)") && sound_ping) {
+                carbon_sound_play(audio, sound_ping);
+            }
+
+            cui_spacing(ui, 5);
+            cui_label(ui, "Space: Play beep");
+
+            cui_end_panel(ui);
+        }
+
         /* Draw some standalone widgets */
         cui_progress_bar(ui, slider_value, 0.0f, 1.0f);
 
@@ -531,6 +672,10 @@ int main(int argc, char *argv[]) {
     }
 
     /* Cleanup */
+    if (sound_beep) carbon_sound_destroy(audio, sound_beep);
+    if (sound_click) carbon_sound_destroy(audio, sound_click);
+    if (sound_ping) carbon_sound_destroy(audio, sound_ping);
+    carbon_audio_shutdown(audio);
     carbon_input_shutdown(input);
     carbon_ecs_shutdown(ecs_world);
     carbon_texture_destroy(sprites, tex_checker);
