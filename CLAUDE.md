@@ -42,7 +42,8 @@ src/
 │   ├── sprite.c        # Sprite/texture rendering with batching
 │   └── camera.c        # 2D camera with pan, zoom, rotation
 ├── audio/              # Sound system (future)
-├── input/              # Input handling (future)
+├── input/
+│   └── input.c         # Input abstraction with action mapping
 ├── ui/                 # Immediate-mode GUI system
 └── game/               # Game-specific logic (future)
 
@@ -51,7 +52,8 @@ include/carbon/
 ├── ecs.h               # ECS API and component definitions
 ├── ui.h                # UI system header
 ├── sprite.h            # Sprite/texture API
-└── camera.h            # 2D camera API
+├── camera.h            # 2D camera API
+└── input.h             # Input system with action mapping
 
 lib/
 ├── flecs.h/.c          # Flecs ECS library (v4.0.0)
@@ -164,6 +166,70 @@ carbon_camera_destroy(camera);
 ```
 
 **Note:** When no camera is set (`carbon_sprite_set_camera(sr, NULL)`), sprites render in screen-space coordinates for UI elements.
+
+## Input System
+
+Action-based input abstraction supporting keyboard, mouse, and gamepad. Define named actions and bind multiple inputs to each:
+
+```c
+#include "carbon/input.h"
+
+// Initialize
+Carbon_Input *input = carbon_input_init();
+
+// Register actions
+int action_jump = carbon_input_register_action(input, "jump");
+int action_fire = carbon_input_register_action(input, "fire");
+int action_move_left = carbon_input_register_action(input, "move_left");
+
+// Bind keys (up to 4 bindings per action)
+carbon_input_bind_key(input, action_jump, SDL_SCANCODE_SPACE);
+carbon_input_bind_key(input, action_jump, SDL_SCANCODE_W);           // Alternative key
+carbon_input_bind_mouse(input, action_fire, 1);                       // Left mouse button
+carbon_input_bind_gamepad_button(input, action_jump, SDL_GAMEPAD_BUTTON_SOUTH);
+carbon_input_bind_gamepad_axis(input, action_move_left, SDL_GAMEPAD_AXIS_LEFTX, 0.3f, false);
+
+// In game loop:
+carbon_input_begin_frame(input);  // Reset per-frame state
+
+while (SDL_PollEvent(&event)) {
+    if (cui_process_event(ui, &event)) continue;  // UI first
+    carbon_input_process_event(input, &event);     // Then input
+    if (event.type == SDL_EVENT_QUIT) carbon_quit(engine);
+}
+
+carbon_input_update(input);  // Compute just_pressed/released
+
+// Query actions (works for any bound input)
+if (carbon_input_action_pressed(input, action_jump)) { /* held down */ }
+if (carbon_input_action_just_pressed(input, action_jump)) { /* this frame */ }
+if (carbon_input_action_just_released(input, action_jump)) { /* released */ }
+float val = carbon_input_action_value(input, action_move_left);  // Analog: -1.0 to 1.0
+
+// Convenience name-based queries (slightly slower)
+if (carbon_input_pressed(input, "jump")) { }
+
+// Direct input queries
+float mx, my;
+carbon_input_get_mouse_position(input, &mx, &my);
+carbon_input_get_scroll(input, &scroll_x, &scroll_y);
+if (carbon_input_key_just_pressed(input, SDL_SCANCODE_F1)) { }
+if (carbon_input_mouse_button(input, 0)) { }  // 0=left, 1=mid, 2=right
+
+// Gamepad support
+int gamepad_count = carbon_input_get_gamepad_count(input);
+const Carbon_GamepadState *pad = carbon_input_get_gamepad(input, 0);
+
+// Cleanup
+carbon_input_shutdown(input);
+```
+
+**Key features:**
+- Action mapping: One action → multiple inputs (keyboard, mouse, gamepad)
+- Just pressed/released detection for frame-perfect input
+- Analog values from gamepad axes and triggers
+- Automatic gamepad hot-plug support
+- Direct input queries when needed
 
 ## Development Notes
 

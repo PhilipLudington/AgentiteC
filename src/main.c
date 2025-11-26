@@ -3,6 +3,7 @@
 #include "carbon/ecs.h"
 #include "carbon/sprite.h"
 #include "carbon/camera.h"
+#include "carbon/input.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -152,6 +153,59 @@ int main(int argc, char *argv[]) {
     SDL_Log("Created player entity: %llu", (unsigned long long)player);
     SDL_Log("Created enemy entity: %llu", (unsigned long long)enemy);
 
+    /* Initialize input system */
+    Carbon_Input *input = carbon_input_init();
+    if (!input) {
+        fprintf(stderr, "Failed to initialize input system\n");
+        carbon_ecs_shutdown(ecs_world);
+        carbon_texture_destroy(sprites, tex_checker);
+        carbon_camera_destroy(camera);
+        carbon_sprite_shutdown(sprites);
+        cui_shutdown(ui);
+        carbon_shutdown(engine);
+        return 1;
+    }
+
+    /* Register input actions and bind keys */
+    int action_cam_up = carbon_input_register_action(input, "cam_up");
+    int action_cam_down = carbon_input_register_action(input, "cam_down");
+    int action_cam_left = carbon_input_register_action(input, "cam_left");
+    int action_cam_right = carbon_input_register_action(input, "cam_right");
+    int action_cam_rot_left = carbon_input_register_action(input, "cam_rot_left");
+    int action_cam_rot_right = carbon_input_register_action(input, "cam_rot_right");
+    int action_cam_reset = carbon_input_register_action(input, "cam_reset");
+    int action_zoom_in = carbon_input_register_action(input, "zoom_in");
+    int action_zoom_out = carbon_input_register_action(input, "zoom_out");
+    int action_quit = carbon_input_register_action(input, "quit");
+
+    /* Bind keyboard keys */
+    carbon_input_bind_key(input, action_cam_up, SDL_SCANCODE_W);
+    carbon_input_bind_key(input, action_cam_up, SDL_SCANCODE_UP);
+    carbon_input_bind_key(input, action_cam_down, SDL_SCANCODE_S);
+    carbon_input_bind_key(input, action_cam_down, SDL_SCANCODE_DOWN);
+    carbon_input_bind_key(input, action_cam_left, SDL_SCANCODE_A);
+    carbon_input_bind_key(input, action_cam_left, SDL_SCANCODE_LEFT);
+    carbon_input_bind_key(input, action_cam_right, SDL_SCANCODE_D);
+    carbon_input_bind_key(input, action_cam_right, SDL_SCANCODE_RIGHT);
+    carbon_input_bind_key(input, action_cam_rot_left, SDL_SCANCODE_Q);
+    carbon_input_bind_key(input, action_cam_rot_right, SDL_SCANCODE_E);
+    carbon_input_bind_key(input, action_cam_reset, SDL_SCANCODE_R);
+    carbon_input_bind_key(input, action_quit, SDL_SCANCODE_ESCAPE);
+
+    /* Bind gamepad (if connected) */
+    carbon_input_bind_gamepad_axis(input, action_cam_left, SDL_GAMEPAD_AXIS_LEFTX, 0.3f, false);
+    carbon_input_bind_gamepad_axis(input, action_cam_right, SDL_GAMEPAD_AXIS_LEFTX, 0.3f, true);
+    carbon_input_bind_gamepad_axis(input, action_cam_up, SDL_GAMEPAD_AXIS_LEFTY, 0.3f, false);
+    carbon_input_bind_gamepad_axis(input, action_cam_down, SDL_GAMEPAD_AXIS_LEFTY, 0.3f, true);
+    carbon_input_bind_gamepad_button(input, action_cam_rot_left, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+    carbon_input_bind_gamepad_button(input, action_cam_rot_right, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+    carbon_input_bind_gamepad_button(input, action_cam_reset, SDL_GAMEPAD_BUTTON_SOUTH);
+    carbon_input_bind_gamepad_axis(input, action_zoom_in, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, 0.1f, true);
+    carbon_input_bind_gamepad_axis(input, action_zoom_out, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, 0.1f, true);
+    carbon_input_bind_gamepad_button(input, action_quit, SDL_GAMEPAD_BUTTON_BACK);
+
+    SDL_Log("Input system initialized with action bindings");
+
     /* Demo state */
     bool checkbox_value = false;
     float slider_value = 0.5f;
@@ -176,7 +230,10 @@ int main(int argc, char *argv[]) {
     while (carbon_is_running(engine)) {
         carbon_begin_frame(engine);
 
-        /* Process events - UI gets first chance */
+        /* Begin input frame (reset per-frame state) */
+        carbon_input_begin_frame(input);
+
+        /* Process events - UI gets first chance, then input system */
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             /* Let UI process the event first */
@@ -184,50 +241,69 @@ int main(int argc, char *argv[]) {
                 continue;  /* UI consumed the event */
             }
 
-            /* Handle remaining events */
-            switch (event.type) {
-            case SDL_EVENT_QUIT:
+            /* Let input system process the event */
+            carbon_input_process_event(input, &event);
+
+            /* Handle quit event */
+            if (event.type == SDL_EVENT_QUIT) {
                 carbon_quit(engine);
-                break;
-            case SDL_EVENT_KEY_DOWN:
-                if (event.key.key == SDLK_ESCAPE) {
-                    carbon_quit(engine);
-                }
-                break;
-            case SDL_EVENT_MOUSE_WHEEL:
-                /* Zoom with mouse wheel */
-                if (event.wheel.y > 0) {
-                    target_zoom *= 1.15f;
-                } else if (event.wheel.y < 0) {
-                    target_zoom /= 1.15f;
-                }
-                /* Clamp zoom */
-                if (target_zoom < 0.1f) target_zoom = 0.1f;
-                if (target_zoom > 10.0f) target_zoom = 10.0f;
-                break;
             }
         }
+
+        /* Update input state (compute just_pressed/released) */
+        carbon_input_update(input);
 
         /* Get delta time */
         float dt = carbon_get_delta_time(engine);
 
-        /* Camera controls - WASD to pan, Q/E to rotate */
-        const bool *keys = SDL_GetKeyboardState(NULL);
+        /* Handle quit action */
+        if (carbon_input_action_just_pressed(input, action_quit)) {
+            carbon_quit(engine);
+        }
+
+        /* Handle mouse wheel zoom */
+        float scroll_x, scroll_y;
+        carbon_input_get_scroll(input, &scroll_x, &scroll_y);
+        if (scroll_y > 0) {
+            target_zoom *= 1.15f;
+        } else if (scroll_y < 0) {
+            target_zoom /= 1.15f;
+        }
+
+        /* Handle gamepad trigger zoom */
+        if (carbon_input_action_pressed(input, action_zoom_in)) {
+            float val = carbon_input_action_value(input, action_zoom_in);
+            target_zoom *= 1.0f + 0.5f * val * dt;
+        }
+        if (carbon_input_action_pressed(input, action_zoom_out)) {
+            float val = carbon_input_action_value(input, action_zoom_out);
+            target_zoom /= 1.0f + 0.5f * val * dt;
+        }
+
+        /* Clamp zoom */
+        if (target_zoom < 0.1f) target_zoom = 0.1f;
+        if (target_zoom > 10.0f) target_zoom = 10.0f;
+
+        /* Camera controls - using actions (supports keyboard + gamepad) */
         float cam_speed = 300.0f / carbon_camera_get_zoom(camera);  /* Faster when zoomed out */
 
-        if (keys[SDL_SCANCODE_W]) carbon_camera_move(camera, 0, -cam_speed * dt);
-        if (keys[SDL_SCANCODE_S]) carbon_camera_move(camera, 0, cam_speed * dt);
-        if (keys[SDL_SCANCODE_A]) carbon_camera_move(camera, -cam_speed * dt, 0);
-        if (keys[SDL_SCANCODE_D]) carbon_camera_move(camera, cam_speed * dt, 0);
-        if (keys[SDL_SCANCODE_Q]) {
+        if (carbon_input_action_pressed(input, action_cam_up))
+            carbon_camera_move(camera, 0, -cam_speed * dt);
+        if (carbon_input_action_pressed(input, action_cam_down))
+            carbon_camera_move(camera, 0, cam_speed * dt);
+        if (carbon_input_action_pressed(input, action_cam_left))
+            carbon_camera_move(camera, -cam_speed * dt, 0);
+        if (carbon_input_action_pressed(input, action_cam_right))
+            carbon_camera_move(camera, cam_speed * dt, 0);
+        if (carbon_input_action_pressed(input, action_cam_rot_left)) {
             float rot = carbon_camera_get_rotation(camera);
             carbon_camera_set_rotation(camera, rot - 60.0f * dt);
         }
-        if (keys[SDL_SCANCODE_E]) {
+        if (carbon_input_action_pressed(input, action_cam_rot_right)) {
             float rot = carbon_camera_get_rotation(camera);
             carbon_camera_set_rotation(camera, rot + 60.0f * dt);
         }
-        if (keys[SDL_SCANCODE_R]) {
+        if (carbon_input_action_just_pressed(input, action_cam_reset)) {
             /* Reset camera */
             carbon_camera_set_position(camera, 900.0f, 500.0f);
             carbon_camera_set_rotation(camera, 0.0f);
@@ -244,7 +320,7 @@ int main(int argc, char *argv[]) {
 
         /* Get mouse position in world coordinates */
         float mouse_x, mouse_y;
-        SDL_GetMouseState(&mouse_x, &mouse_y);
+        carbon_input_get_mouse_position(input, &mouse_x, &mouse_y);
         carbon_camera_screen_to_world(camera, mouse_x, mouse_y, &mouse_world_x, &mouse_world_y);
 
         /* Update sprite animation */
@@ -455,6 +531,7 @@ int main(int argc, char *argv[]) {
     }
 
     /* Cleanup */
+    carbon_input_shutdown(input);
     carbon_ecs_shutdown(ecs_world);
     carbon_texture_destroy(sprites, tex_checker);
     carbon_camera_destroy(camera);
