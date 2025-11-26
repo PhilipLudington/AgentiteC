@@ -240,9 +240,24 @@ bool cui_slider_float(CUI_Context *ctx, const char *label, float *value,
         track_h
     };
 
-    /* Handle interaction */
-    bool hovered = cui_rect_contains(track_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+    /* Calculate grab handle position for hit testing */
+    float grab_size = 16.0f;
+    float t_current = (*value - min) / (max - min);
+    if (t_current < 0) t_current = 0;
+    if (t_current > 1) t_current = 1;
+    float grab_x = track_rect.x + track_rect.w * t_current - grab_size * 0.5f;
+    float grab_y = rect.y + (rect.h - grab_size) * 0.5f;
+    CUI_Rect grab_rect = { grab_x, grab_y, grab_size, grab_size };
+
+    /* Handle interaction - check both track and grab handle */
+    bool track_hovered = cui_rect_contains(track_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+    bool grab_hovered = cui_rect_contains(grab_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+    bool hovered = track_hovered || grab_hovered;
     bool changed = false;
+
+    if (hovered) {
+        ctx->hot = id;
+    }
 
     if (hovered && ctx->input.mouse_pressed[0]) {
         ctx->active = id;
@@ -273,22 +288,16 @@ bool cui_slider_float(CUI_Context *ctx, const char *label, float *value,
                           ctx->theme.slider_track, track_h * 0.5f);
 
     /* Draw filled portion */
-    float t = (*value - min) / (max - min);
-    if (t < 0) t = 0;
-    if (t > 1) t = 1;
-    float filled_w = track_rect.w * t;
+    float filled_w = track_rect.w * t_current;
     if (filled_w > 0) {
         cui_draw_rect_rounded(ctx, track_rect.x, track_rect.y, filled_w, track_rect.h,
                               ctx->theme.accent, track_h * 0.5f);
     }
 
-    /* Draw grab handle */
-    float grab_size = 16.0f;
-    float grab_x = track_rect.x + filled_w - grab_size * 0.5f;
-    float grab_y = rect.y + (rect.h - grab_size) * 0.5f;
+    /* Draw grab handle (using pre-calculated position) */
     uint32_t grab_color = (ctx->active == id || hovered) ?
         ctx->theme.bg_widget_hover : ctx->theme.slider_grab;
-    cui_draw_rect_rounded(ctx, grab_x, grab_y, grab_size, grab_size,
+    cui_draw_rect_rounded(ctx, grab_rect.x, grab_rect.y, grab_rect.w, grab_rect.h,
                           grab_color, grab_size * 0.5f);
 
     return changed;
