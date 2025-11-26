@@ -41,7 +41,8 @@ src/
 ├── graphics/
 │   ├── sprite.c        # Sprite/texture rendering with batching
 │   ├── camera.c        # 2D camera with pan, zoom, rotation
-│   └── tilemap.c       # Chunk-based tilemap rendering
+│   ├── tilemap.c       # Chunk-based tilemap rendering
+│   └── text.c          # TrueType font rendering
 ├── audio/
 │   └── audio.c         # Audio system with mixing
 ├── input/
@@ -56,6 +57,7 @@ include/carbon/
 ├── sprite.h            # Sprite/texture API
 ├── camera.h            # 2D camera API
 ├── tilemap.h           # Tilemap system API
+├── text.h              # Text rendering API
 ├── input.h             # Input system with action mapping
 └── audio.h             # Audio system API
 
@@ -134,6 +136,72 @@ carbon_sprite_shutdown(sr);
 ```
 
 **Note:** Current limitation - all sprites in a batch must use the same texture. Multiple textures require separate batches or texture atlas.
+
+## Text Rendering System
+
+TrueType font rendering with batched glyphs. Uses stb_truetype for font atlas generation:
+
+```c
+#include "carbon/text.h"
+
+// Initialize text renderer
+Carbon_TextRenderer *text = carbon_text_init(gpu, window);
+
+// Load fonts (each size creates a separate atlas)
+Carbon_Font *font = carbon_font_load(text, "assets/fonts/Roboto.ttf", 24.0f);
+
+// In game loop:
+carbon_text_begin(text);
+
+// Simple text (white)
+carbon_text_draw(text, font, "Hello World!", 100.0f, 200.0f);
+
+// Colored text
+carbon_text_draw_colored(text, font, "Red text", x, y, 1.0f, 0.3f, 0.3f, 1.0f);
+
+// Scaled text
+carbon_text_draw_scaled(text, font, "Big text", x, y, 2.0f);
+
+// With alignment
+carbon_text_draw_ex(text, font, "Centered", x, y, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+                    CARBON_TEXT_ALIGN_CENTER);
+
+// Printf-style formatting
+carbon_text_printf(text, font, x, y, "FPS: %.0f", fps);
+carbon_text_printf_colored(text, font, x, y, 0.8f, 0.8f, 0.8f, 1.0f,
+                           "Score: %d", score);
+
+carbon_text_end(text);
+
+// Upload before render pass
+carbon_text_upload(text, cmd);
+
+// During render pass
+carbon_text_render(text, cmd, pass);
+
+// Measure text width
+float width = carbon_text_measure(font, "Hello");
+float text_width, text_height;
+carbon_text_measure_bounds(font, "Hello", &text_width, &text_height);
+
+// Font metrics
+float line_height = carbon_font_get_line_height(font);
+float ascent = carbon_font_get_ascent(font);
+
+// Cleanup
+carbon_font_destroy(text, font);
+carbon_text_shutdown(text);
+```
+
+**Key features:**
+- Batched glyph rendering (up to 2048 glyphs per batch)
+- Color tinting and scaling per draw call
+- Printf-style formatted text
+- Text alignment (left, center, right)
+- Newline support (`\n`)
+- Text measurement for layout
+
+**Note:** All text in a batch must use the same font. Different font sizes require separate fonts (each with its own atlas texture).
 
 ## Camera System
 

@@ -6,6 +6,7 @@
 #include "carbon/input.h"
 #include "carbon/audio.h"
 #include "carbon/tilemap.h"
+#include "carbon/text.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -246,6 +247,31 @@ int main(int argc, char *argv[]) {
     Carbon_Sprite sprite_checker = carbon_sprite_from_texture(tex_checker);
 
     SDL_Log("Sprite system initialized with test textures");
+
+    /* Initialize text renderer */
+    Carbon_TextRenderer *text = carbon_text_init(
+        carbon_get_gpu_device(engine),
+        carbon_get_window(engine)
+    );
+    if (!text) {
+        fprintf(stderr, "Failed to initialize text renderer\n");
+        carbon_texture_destroy(sprites, tex_checker);
+        carbon_camera_destroy(camera);
+        carbon_sprite_shutdown(sprites);
+        cui_shutdown(ui);
+        carbon_shutdown(engine);
+        return 1;
+    }
+
+    /* Load fonts */
+    Carbon_Font *font_large = carbon_font_load(text, "assets/fonts/Roboto-Regular.ttf", 32.0f);
+    Carbon_Font *font_small = carbon_font_load(text, "assets/fonts/Roboto-Regular.ttf", 18.0f);
+
+    if (!font_large || !font_small) {
+        SDL_Log("Warning: Could not load fonts, text rendering will be skipped");
+    } else {
+        SDL_Log("Text system initialized with fonts");
+    }
 
     /* Initialize ECS world */
     Carbon_World *ecs_world = carbon_ecs_init();
@@ -729,6 +755,37 @@ int main(int argc, char *argv[]) {
         /* End UI frame */
         cui_end_frame(ui);
 
+        /* Build text batch - using single font per batch for efficiency */
+        if (font_small) {
+            carbon_text_begin(text);
+
+            /* Title text (scaled up) */
+            carbon_text_draw_scaled(text, font_small, "Carbon Engine - Text Demo", 50.0f, 680.0f, 1.5f);
+
+            /* FPS counter */
+            carbon_text_printf(text, font_small, 1100.0f, 20.0f, "FPS: %.0f", 1.0f / dt);
+
+            /* Colored text examples */
+            carbon_text_draw_colored(text, font_small, "Red Text", 50.0f, 620.0f,
+                                     1.0f, 0.3f, 0.3f, 1.0f);
+            carbon_text_draw_colored(text, font_small, "Green Text", 150.0f, 620.0f,
+                                     0.3f, 1.0f, 0.3f, 1.0f);
+            carbon_text_draw_colored(text, font_small, "Blue Text", 270.0f, 620.0f,
+                                     0.3f, 0.5f, 1.0f, 1.0f);
+
+            /* Scaled text */
+            float text_scale = 1.0f + 0.2f * sinf(sprite_time * 2.0f);
+            carbon_text_draw_scaled(text, font_small, "Pulsing!", 400.0f, 620.0f, text_scale);
+
+            /* Mouse coordinates using printf */
+            carbon_text_printf_colored(text, font_small, 50.0f, 650.0f,
+                                       0.8f, 0.8f, 0.8f, 1.0f,
+                                       "Mouse: (%.0f, %.0f) World: (%.0f, %.0f)",
+                                       mouse_x, mouse_y, mouse_world_x, mouse_world_y);
+
+            carbon_text_end(text);
+        }
+
         /* Build sprite batch */
         carbon_sprite_begin(sprites, NULL);
 
@@ -774,6 +831,11 @@ int main(int argc, char *argv[]) {
             /* Upload UI data to GPU (must be done BEFORE render pass) */
             cui_upload(ui, cmd);
 
+            /* Upload text data to GPU (must be done BEFORE render pass) */
+            if (font_small) {
+                carbon_text_upload(text, cmd);
+            }
+
             /* Begin render pass */
             if (carbon_begin_render_pass(engine, 0.1f, 0.1f, 0.15f, 1.0f)) {
                 SDL_GPURenderPass *pass = carbon_get_render_pass(engine);
@@ -783,6 +845,11 @@ int main(int argc, char *argv[]) {
 
                 /* Render UI on top */
                 cui_render(ui, cmd, pass);
+
+                /* Render text on top of everything */
+                if (font_small) {
+                    carbon_text_render(text, cmd, pass);
+                }
 
                 carbon_end_render_pass(engine);
             }
@@ -804,6 +871,9 @@ int main(int argc, char *argv[]) {
     carbon_audio_shutdown(audio);
     carbon_input_shutdown(input);
     carbon_ecs_shutdown(ecs_world);
+    if (font_large) carbon_font_destroy(text, font_large);
+    if (font_small) carbon_font_destroy(text, font_small);
+    carbon_text_shutdown(text);
     carbon_texture_destroy(sprites, tex_checker);
     carbon_camera_destroy(camera);
     carbon_sprite_shutdown(sprites);
