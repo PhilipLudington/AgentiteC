@@ -273,6 +273,18 @@ int main(int argc, char *argv[]) {
         SDL_Log("Text system initialized with fonts");
     }
 
+    /* Load MSDF font for sharp text at any scale */
+    Carbon_SDFFont *msdf_font = carbon_sdf_font_load(text,
+        "assets/fonts/Roboto-Regular-msdf.png",
+        "assets/fonts/Roboto-Regular-msdf.json");
+
+    if (!msdf_font) {
+        SDL_Log("Warning: Could not load MSDF font, SDF text rendering will be skipped");
+    } else {
+        SDL_Log("MSDF font loaded successfully (type: %s)",
+                carbon_sdf_font_get_type(msdf_font) == CARBON_SDF_TYPE_MSDF ? "MSDF" : "SDF");
+    }
+
     /* Initialize ECS world */
     Carbon_World *ecs_world = carbon_ecs_init();
     if (!ecs_world) {
@@ -755,36 +767,8 @@ int main(int argc, char *argv[]) {
         /* End UI frame */
         cui_end_frame(ui);
 
-        /* Build text batch - using single font per batch for efficiency */
-        if (font_small) {
-            carbon_text_begin(text);
-
-            /* Title text (scaled up) */
-            carbon_text_draw_scaled(text, font_small, "Carbon Engine - Text Demo", 50.0f, 680.0f, 1.5f);
-
-            /* FPS counter */
-            carbon_text_printf(text, font_small, 1100.0f, 20.0f, "FPS: %.0f", 1.0f / dt);
-
-            /* Colored text examples */
-            carbon_text_draw_colored(text, font_small, "Red Text", 50.0f, 620.0f,
-                                     1.0f, 0.3f, 0.3f, 1.0f);
-            carbon_text_draw_colored(text, font_small, "Green Text", 150.0f, 620.0f,
-                                     0.3f, 1.0f, 0.3f, 1.0f);
-            carbon_text_draw_colored(text, font_small, "Blue Text", 270.0f, 620.0f,
-                                     0.3f, 0.5f, 1.0f, 1.0f);
-
-            /* Scaled text */
-            float text_scale = 1.0f + 0.2f * sinf(sprite_time * 2.0f);
-            carbon_text_draw_scaled(text, font_small, "Pulsing!", 400.0f, 620.0f, text_scale);
-
-            /* Mouse coordinates using printf */
-            carbon_text_printf_colored(text, font_small, 50.0f, 650.0f,
-                                       0.8f, 0.8f, 0.8f, 1.0f,
-                                       "Mouse: (%.0f, %.0f) World: (%.0f, %.0f)",
-                                       mouse_x, mouse_y, mouse_world_x, mouse_world_y);
-
-            carbon_text_end(text);
-        }
+        /* MSDF text scale for pulsing effect */
+        float msdf_scale = 0.8f + 0.3f * sinf(sprite_time * 2.5f);
 
         /* Build sprite batch */
         carbon_sprite_begin(sprites, NULL);
@@ -831,10 +815,40 @@ int main(int argc, char *argv[]) {
             /* Upload UI data to GPU (must be done BEFORE render pass) */
             cui_upload(ui, cmd);
 
-            /* Upload text data to GPU (must be done BEFORE render pass) */
+            /* Build text batches - can now queue multiple batches before render */
+
+            /* Batch 1: Bitmap font text */
             if (font_small) {
-                carbon_text_upload(text, cmd);
+                carbon_text_begin(text);
+                carbon_text_printf(text, font_small, 1100.0f, 20.0f, "FPS: %.0f", 1.0f / dt);
+                carbon_text_draw_colored(text, font_small, "Bitmap Font:", 550.0f, 520.0f, 0.8f, 0.8f, 0.8f, 1.0f);
+                carbon_text_draw_colored(text, font_small, "Red Text", 550.0f, 540.0f, 1.0f, 0.3f, 0.3f, 1.0f);
+                carbon_text_draw_colored(text, font_small, "Green Text", 550.0f, 560.0f, 0.3f, 1.0f, 0.3f, 1.0f);
+                carbon_text_draw_colored(text, font_small, "Blue Text", 550.0f, 580.0f, 0.3f, 0.5f, 1.0f, 1.0f);
+                float text_scale = 1.0f + 0.2f * sinf(sprite_time * 2.0f);
+                carbon_text_draw_scaled(text, font_small, "Pulsing!", 550.0f, 605.0f, text_scale);
+                carbon_text_end(text);
             }
+
+            /* Batch 2: MSDF font with outline effect */
+            if (msdf_font) {
+                carbon_text_begin(text);
+                carbon_sdf_text_set_outline(text, 0.2f, 0.1f, 0.1f, 0.1f, 1.0f);
+                carbon_sdf_text_draw_colored(text, msdf_font, "MSDF Text Demo", 450.0f, 50.0f, 1.2f,
+                                             1.0f, 0.9f, 0.4f, 1.0f);
+                carbon_sdf_text_draw_colored(text, msdf_font, "MSDF Font:", 120.0f, 520.0f, 0.8f,
+                                             0.8f, 0.8f, 0.8f, 1.0f);
+                carbon_sdf_text_draw_colored(text, msdf_font, "Outlined", 120.0f, 550.0f, 1.0f,
+                                             1.0f, 1.0f, 1.0f, 1.0f);
+                carbon_sdf_text_draw_colored(text, msdf_font, "Sharp!", 280.0f, 550.0f, msdf_scale,
+                                             0.4f, 1.0f, 0.6f, 1.0f);
+                carbon_sdf_text_draw_colored(text, msdf_font, "With Outline!", 120.0f, 590.0f, 1.0f,
+                                             0.5f, 0.8f, 1.0f, 1.0f);
+                carbon_text_end(text);
+            }
+
+            /* Upload all queued batches at once */
+            carbon_text_upload(text, cmd);
 
             /* Begin render pass */
             if (carbon_begin_render_pass(engine, 0.1f, 0.1f, 0.15f, 1.0f)) {
@@ -846,10 +860,8 @@ int main(int argc, char *argv[]) {
                 /* Render UI on top */
                 cui_render(ui, cmd, pass);
 
-                /* Render text on top of everything */
-                if (font_small) {
-                    carbon_text_render(text, cmd, pass);
-                }
+                /* Render all queued text batches (bitmap and MSDF) */
+                carbon_text_render(text, cmd, pass);
 
                 carbon_end_render_pass(engine);
             }
@@ -873,6 +885,7 @@ int main(int argc, char *argv[]) {
     carbon_ecs_shutdown(ecs_world);
     if (font_large) carbon_font_destroy(text, font_large);
     if (font_small) carbon_font_destroy(text, font_small);
+    if (msdf_font) carbon_sdf_font_destroy(text, msdf_font);
     carbon_text_shutdown(text);
     carbon_texture_destroy(sprites, tex_checker);
     carbon_camera_destroy(camera);

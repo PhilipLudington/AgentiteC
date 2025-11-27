@@ -203,6 +203,91 @@ carbon_text_shutdown(text);
 
 **Note:** All text in a batch must use the same font. Different font sizes require separate fonts (each with its own atlas texture).
 
+## SDF/MSDF Text Rendering
+
+Signed Distance Field (SDF) and Multi-channel Signed Distance Field (MSDF) text rendering for sharp text at any scale with effects like outlines, glow, and shadows:
+
+```c
+#include "carbon/text.h"
+
+// Load SDF or MSDF font from pre-generated atlas (msdf-atlas-gen format)
+Carbon_SDFFont *sdf_font = carbon_sdf_font_load(text,
+    "assets/fonts/Roboto-msdf.png",   // PNG atlas
+    "assets/fonts/Roboto-msdf.json"); // JSON metrics
+
+// In game loop:
+carbon_text_begin(text);
+
+// Basic SDF text (scale parameter instead of font size)
+carbon_sdf_text_draw(text, sdf_font, "Sharp at any size!", 100.0f, 200.0f, 1.0f);
+
+// Colored SDF text
+carbon_sdf_text_draw_colored(text, sdf_font, "Blue text", x, y, 2.0f,
+                              0.2f, 0.5f, 1.0f, 1.0f);
+
+// With alignment
+carbon_sdf_text_draw_ex(text, sdf_font, "Centered", x, y, 1.5f,
+                         1.0f, 1.0f, 1.0f, 1.0f, CARBON_TEXT_ALIGN_CENTER);
+
+// Text effects (apply before drawing)
+carbon_sdf_text_set_outline(text, 0.1f, 0.0f, 0.0f, 0.0f, 1.0f);  // Black outline
+carbon_sdf_text_draw(text, sdf_font, "Outlined Text", x, y, 2.0f);
+
+carbon_sdf_text_set_glow(text, 0.15f, 1.0f, 0.8f, 0.0f, 0.8f);    // Golden glow
+carbon_sdf_text_draw(text, sdf_font, "Glowing Text", x, y, 2.0f);
+
+carbon_sdf_text_set_weight(text, 0.1f);  // Bolder text (-0.5 to 0.5)
+carbon_sdf_text_draw(text, sdf_font, "Bold Text", x, y, 1.0f);
+
+carbon_sdf_text_clear_effects(text);  // Reset effects
+
+// Printf-style formatting
+carbon_sdf_text_printf(text, sdf_font, x, y, 1.5f, "Score: %d", score);
+
+carbon_text_end(text);
+
+// Upload and render (same as bitmap text)
+carbon_text_upload(text, cmd);
+carbon_text_render(text, cmd, pass);
+
+// Measurement
+float width = carbon_sdf_text_measure(sdf_font, "Hello", 1.5f);
+float w, h;
+carbon_sdf_text_measure_bounds(sdf_font, "Hello", 1.5f, &w, &h);
+
+// Font info
+float font_size = carbon_sdf_font_get_size(sdf_font);
+float line_height = carbon_sdf_font_get_line_height(sdf_font);
+Carbon_SDFFontType type = carbon_sdf_font_get_type(sdf_font);  // SDF or MSDF
+
+// Cleanup
+carbon_sdf_font_destroy(text, sdf_font);
+```
+
+**Generating SDF/MSDF Atlases:**
+
+Use [msdf-atlas-gen](https://github.com/Chlumsky/msdf-atlas-gen) to create atlas files:
+```bash
+# MSDF (best quality, sharp corners)
+msdf-atlas-gen -font Roboto.ttf -type msdf -format png \
+    -imageout Roboto-msdf.png -json Roboto-msdf.json \
+    -size 48 -pxrange 4
+
+# SDF (simpler, slight rounding on corners)
+msdf-atlas-gen -font Roboto.ttf -type sdf -format png \
+    -imageout Roboto-sdf.png -json Roboto-sdf.json \
+    -size 48 -pxrange 4
+```
+
+**Key features:**
+- Sharp text at any scale (no blurring when zoomed)
+- Text effects: outline, glow, weight adjustment
+- MSDF for sharp corners, SDF for simpler use cases
+- Uses same batch system as bitmap text
+- Compatible with msdf-atlas-gen JSON + PNG output
+
+**Note:** SDF and bitmap fonts cannot be mixed in the same batch. Use separate `carbon_text_begin()`/`carbon_text_render()` calls.
+
 ## Camera System
 
 2D camera with pan, zoom, and rotation support. Uses view-projection matrix in the GPU shader:
