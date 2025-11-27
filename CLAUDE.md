@@ -47,6 +47,8 @@ src/
 │   └── audio.c         # Audio system with mixing
 ├── input/
 │   └── input.c         # Input abstraction with action mapping
+├── ai/
+│   └── pathfinding.c   # A* pathfinding for tile-based maps
 ├── ui/                 # Immediate-mode GUI system
 └── game/               # Game-specific logic (future)
 
@@ -59,7 +61,8 @@ include/carbon/
 ├── tilemap.h           # Tilemap system API
 ├── text.h              # Text rendering API
 ├── input.h             # Input system with action mapping
-└── audio.h             # Audio system API
+├── audio.h             # Audio system API
+└── pathfinding.h       # A* pathfinding API
 
 lib/
 ├── flecs.h/.c          # Flecs ECS library (v4.0.0)
@@ -497,6 +500,90 @@ carbon_audio_shutdown(audio);
 - Per-sound volume and stereo panning
 - Separate volume controls for master, sounds, and music
 - Sound handles for runtime control of playing sounds
+
+## Pathfinding System
+
+A* pathfinding for tile-based maps with diagonal movement, weighted costs, and tilemap integration:
+
+```c
+#include "carbon/pathfinding.h"
+
+// Create pathfinder matching your tilemap dimensions
+Carbon_Pathfinder *pf = carbon_pathfinder_create(100, 100);
+
+// Option 1: Manual obstacle setup
+carbon_pathfinder_set_walkable(pf, 10, 10, false);           // Block single tile
+carbon_pathfinder_fill_walkable(pf, 20, 20, 5, 5, false);    // Block 5x5 region
+carbon_pathfinder_set_cost(pf, 5, 5, 2.0f);                  // Rough terrain (slower)
+
+// Option 2: Sync with tilemap layer (recommended)
+uint16_t blocked[] = { 2, 3, 4 };  // Tile IDs that are walls/obstacles
+carbon_pathfinder_sync_tilemap(pf, tilemap, collision_layer, blocked, 3);
+
+// Option 3: Custom cost function for terrain types
+float terrain_cost(uint16_t tile_id, void *userdata) {
+    switch (tile_id) {
+        case 1: return 1.0f;   // Grass - normal speed
+        case 2: return 0.0f;   // Water - blocked
+        case 3: return 2.0f;   // Mud - half speed
+        case 4: return 1.5f;   // Forest - slower
+        default: return 1.0f;
+    }
+}
+carbon_pathfinder_sync_tilemap_ex(pf, tilemap, ground_layer, terrain_cost, NULL);
+
+// Find a path
+Carbon_Path *path = carbon_pathfinder_find(pf, start_x, start_y, end_x, end_y);
+if (path) {
+    // Follow the path
+    for (int i = 0; i < path->length; i++) {
+        int tx = path->points[i].x;
+        int ty = path->points[i].y;
+        // Move unit to tile (tx, ty)...
+    }
+    printf("Path cost: %.2f\n", path->total_cost);
+    carbon_path_destroy(path);
+} else {
+    printf("No path found!\n");
+}
+
+// Pathfinding with options
+Carbon_PathOptions opts = CARBON_PATH_OPTIONS_DEFAULT;
+opts.allow_diagonal = false;       // 4-directional only
+opts.max_iterations = 1000;        // Limit search (0 = unlimited)
+opts.cut_corners = true;           // Allow diagonal past corners
+Carbon_Path *path2 = carbon_pathfinder_find_ex(pf, x1, y1, x2, y2, &opts);
+
+// Quick path checks (no path allocation)
+if (carbon_pathfinder_has_path(pf, x1, y1, x2, y2)) { }     // Path exists?
+if (carbon_pathfinder_line_clear(pf, x1, y1, x2, y2)) { }   // Direct line clear?
+
+// Simplify path (remove redundant waypoints on straight lines)
+path = carbon_path_simplify(path);  // Returns simplified, frees original
+
+// Distance utilities
+int manhattan = carbon_pathfinder_distance_manhattan(x1, y1, x2, y2);
+float euclidean = carbon_pathfinder_distance_euclidean(x1, y1, x2, y2);
+int chebyshev = carbon_pathfinder_distance_chebyshev(x1, y1, x2, y2);
+
+// Cleanup
+carbon_pathfinder_destroy(pf);
+```
+
+**Key features:**
+- A* algorithm with binary heap for efficient search
+- 4-directional or 8-directional (diagonal) movement
+- Per-tile movement costs for terrain variation
+- Tilemap integration with blocked tile lists or custom cost functions
+- Corner-cutting prevention (configurable)
+- Path simplification to reduce waypoints
+- Line-of-sight checking with Bresenham's algorithm
+
+**Performance notes:**
+- Pathfinder reuses memory between searches (create once, use many times)
+- Use `max_iterations` to limit search on very large maps
+- `carbon_pathfinder_has_path()` is equivalent to full pathfinding (future: early exit)
+- For dynamic obstacles, update with `set_walkable()` or re-sync tilemap
 
 ## Development Notes
 

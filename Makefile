@@ -61,6 +61,7 @@ SRCS := $(wildcard $(SRC_DIR)/*.c) \
         $(wildcard $(SRC_DIR)/input/*.c) \
         $(wildcard $(SRC_DIR)/ui/*.c) \
         $(wildcard $(SRC_DIR)/ecs/*.c) \
+        $(wildcard $(SRC_DIR)/ai/*.c) \
         $(wildcard $(SRC_DIR)/game/*.c)
 
 # Flecs ECS library (compiled as separate object)
@@ -82,6 +83,7 @@ dirs:
 	@mkdir -p $(BUILD_DIR)/input
 	@mkdir -p $(BUILD_DIR)/ui
 	@mkdir -p $(BUILD_DIR)/ecs
+	@mkdir -p $(BUILD_DIR)/ai
 	@mkdir -p $(BUILD_DIR)/game
 
 # Link executable (include Flecs object)
