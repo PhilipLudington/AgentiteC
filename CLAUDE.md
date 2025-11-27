@@ -40,6 +40,7 @@ src/
 ├── platform/           # Platform-specific code (future)
 ├── graphics/
 │   ├── sprite.c        # Sprite/texture rendering with batching
+│   ├── animation.c     # Sprite-based animation system
 │   ├── camera.c        # 2D camera with pan, zoom, rotation
 │   ├── tilemap.c       # Chunk-based tilemap rendering
 │   └── text.c          # TrueType font rendering
@@ -57,6 +58,7 @@ include/carbon/
 ├── ecs.h               # ECS API and component definitions
 ├── ui.h                # UI system header
 ├── sprite.h            # Sprite/texture API
+├── animation.h         # Sprite animation API
 ├── camera.h            # 2D camera API
 ├── tilemap.h           # Tilemap system API
 ├── text.h              # Text rendering API
@@ -139,6 +141,95 @@ carbon_sprite_shutdown(sr);
 ```
 
 **Note:** Current limitation - all sprites in a batch must use the same texture. Multiple textures require separate batches or texture atlas.
+
+## Animation System
+
+Sprite-based animation with support for sprite sheets, multiple playback modes, and variable frame timing:
+
+```c
+#include "carbon/animation.h"
+
+// Load sprite sheet texture
+Carbon_Texture *sheet = carbon_texture_load(sr, "assets/player_walk.png");
+
+// Create animation from sprite sheet grid (8 frames in a row, 64x64 each)
+Carbon_Animation *walk = carbon_animation_from_strip(sheet, 0, 0, 64, 64, 8);
+carbon_animation_set_fps(walk, 12.0f);  // 12 frames per second
+
+// Or from a grid (4 columns x 2 rows)
+Carbon_Animation *idle = carbon_animation_from_grid(sheet, 0, 64, 64, 64, 4, 2);
+
+// Create player to track playback state
+Carbon_AnimationPlayer player;
+carbon_animation_player_init(&player, walk);
+carbon_animation_player_play(&player);
+
+// Set playback mode
+carbon_animation_player_set_mode(&player, CARBON_ANIM_LOOP);       // Loop (default)
+carbon_animation_player_set_mode(&player, CARBON_ANIM_ONCE);       // Play once, stop on last frame
+carbon_animation_player_set_mode(&player, CARBON_ANIM_PING_PONG);  // Reverse at ends
+carbon_animation_player_set_mode(&player, CARBON_ANIM_ONCE_RESET); // Play once, reset to first frame
+
+// In game loop:
+carbon_animation_player_update(&player, delta_time);
+
+// Draw current frame (during sprite batch)
+carbon_sprite_begin(sr, NULL);
+carbon_animation_draw(sr, &player, x, y);                          // Simple
+carbon_animation_draw_scaled(sr, &player, x, y, 2.0f, 2.0f);       // Scaled
+carbon_animation_draw_ex(sr, &player, x, y, sx, sy, rotation, ox, oy); // Full transform
+carbon_animation_draw_tinted(sr, &player, x, y, 1.0f, 0.5f, 0.5f, 1.0f); // Tinted
+carbon_sprite_upload(sr, cmd);
+// ... render pass ...
+carbon_sprite_render(sr, cmd, pass);
+
+// Playback control
+carbon_animation_player_pause(&player);
+carbon_animation_player_play(&player);
+carbon_animation_player_stop(&player);      // Stop and reset to frame 0
+carbon_animation_player_restart(&player);   // Restart from beginning
+carbon_animation_player_set_speed(&player, 2.0f);  // Double speed
+carbon_animation_player_set_frame(&player, 3);     // Jump to frame 3
+
+// Switch animations (e.g., walk -> idle)
+carbon_animation_player_set_animation(&player, idle);
+
+// Query state
+bool playing = carbon_animation_player_is_playing(&player);
+bool finished = carbon_animation_player_is_finished(&player);  // For ONCE mode
+uint32_t frame = carbon_animation_player_get_current_frame(&player);
+float progress = carbon_animation_player_get_progress(&player);  // 0.0 to 1.0
+
+// Completion callback (for one-shot animations or each loop)
+void on_attack_done(void *userdata) {
+    // Switch back to idle animation
+}
+carbon_animation_player_set_callback(&player, on_attack_done, NULL);
+
+// Variable frame timing (e.g., hold last frame longer)
+carbon_animation_set_frame_duration(walk, 7, 0.2f);  // Frame 7 = 0.2 seconds
+
+// Animation info
+uint32_t frame_count = carbon_animation_get_frame_count(walk);
+float duration = carbon_animation_get_duration(walk);  // Total seconds
+Carbon_Sprite *frame = carbon_animation_get_frame(walk, 0);  // Get specific frame
+
+// Set origin for all frames (for rotation)
+carbon_animation_set_origin(walk, 0.5f, 1.0f);  // Bottom-center
+
+// Cleanup
+carbon_animation_destroy(walk);
+carbon_animation_destroy(idle);
+```
+
+**Key features:**
+- Create animations from sprite sheet grids or horizontal strips
+- Playback modes: loop, once, ping-pong, once-reset
+- Variable speed and per-frame duration
+- Completion callbacks for state machine integration
+- Draws through existing sprite renderer (same batching rules)
+
+**Note:** All frames in an animation share the same texture, so they batch efficiently with the sprite renderer.
 
 ## Text Rendering System
 
