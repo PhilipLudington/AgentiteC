@@ -463,10 +463,9 @@ double damage = carbon_formula_eval(ctx, "base_damage + strength * 0.5 + level *
 
 ---
 
-### 9. Command Queue System
+### 9. Command Queue System ✓
 
-**Priority:** Medium
-**Complexity:** Low
+**Status:** COMPLETED
 **Files:** `include/carbon/command.h`, `src/core/command.c`
 
 Validated, atomic command execution for player actions.
@@ -576,10 +575,10 @@ void carbon_query_invalidate_all(Carbon_QuerySystem *sys);
 2. **Shared Blackboard** ✓ - `include/carbon/blackboard.h`, `src/ai/blackboard.c`
 3. **Trade/Supply Line System** ✓ - `include/carbon/trade.h`, `src/strategy/trade.c`
 
-### Phase 2 - Strategic Layer (In Progress)
+### Phase 2 - Strategic Layer ✓ COMPLETED
 4. **Multi-Track AI Decisions** ✓ - `include/carbon/ai_tracks.h`, `src/ai/ai_tracks.c`
 5. **Strategic Coordinator** ✓ - `include/carbon/strategy.h`, `src/ai/strategy.c`
-6. **Command Queue** - Clean action validation
+6. **Command Queue** ✓ - `include/carbon/command.h`, `src/core/command.c`
 
 ### Phase 3 - Content Systems
 7. **Anomaly/Discovery System** - Points of interest

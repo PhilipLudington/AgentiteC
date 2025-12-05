@@ -72,6 +72,7 @@ SDL_GPUCommandBuffer *carbon_get_command_buffer(Carbon_Engine *engine);
 #include "carbon/containers.h"
 
 // Strategy game systems
+#include "carbon/command.h"
 #include "carbon/turn.h"
 #include "carbon/resource.h"
 #include "carbon/condition.h"

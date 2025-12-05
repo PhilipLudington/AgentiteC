@@ -37,6 +37,7 @@ src/
 │   ├── engine.c        # Engine initialization, SDL3/GPU setup, frame management
 │   ├── error.c         # Error handling system
 │   ├── event.c         # Pub-sub event dispatcher
+│   ├── command.c       # Command queue system for validated actions
 │   ├── containers.c    # Container utilities (random, shuffle)
 │   └── game_context.c  # Unified system container
 ├── ecs/
@@ -107,6 +108,7 @@ include/carbon/
 ├── blackboard.h        # Shared blackboard for AI coordination
 ├── htn.h               # HTN AI planner API
 ├── task.h              # Task queue system API
+├── command.h           # Command queue system API
 ├── turn.h              # Turn/phase system API
 ├── resource.h          # Resource economy API
 ├── tech.h              # Technology tree API
@@ -3576,6 +3578,221 @@ void setup_strategy_with_tracks(void) {
     // Economy track gets budget from "economy" option
     // Military track gets budget from "military" option
     // etc.
+}
+```
+
+## Command Queue System
+
+Validated, atomic command execution for player actions. Provides command registration, pre-execution validation, queued execution during turn processing, and command history for undo/replay:
+
+```c
+#include "carbon/command.h"
+
+// Create command system
+Carbon_CommandSystem *sys = carbon_command_create();
+
+// Define validators and executors
+bool validate_move(const Carbon_Command *cmd, void *game_state,
+                   char *error, size_t error_size) {
+    Game *game = game_state;
+    uint32_t unit = carbon_command_get_entity(cmd, "unit");
+    int dest_x = carbon_command_get_int(cmd, "dest_x");
+    int dest_y = carbon_command_get_int(cmd, "dest_y");
+
+    if (!unit_exists(game, unit)) {
+        snprintf(error, error_size, "Unit does not exist");
+        return false;
+    }
+    if (!is_tile_walkable(game, dest_x, dest_y)) {
+        snprintf(error, error_size, "Destination is not walkable");
+        return false;
+    }
+    return true;
+}
+
+bool execute_move(const Carbon_Command *cmd, void *game_state) {
+    Game *game = game_state;
+    uint32_t unit = carbon_command_get_entity(cmd, "unit");
+    int dest_x = carbon_command_get_int(cmd, "dest_x");
+    int dest_y = carbon_command_get_int(cmd, "dest_y");
+    return move_unit(game, unit, dest_x, dest_y);
+}
+
+// Register command types
+carbon_command_register(sys, CMD_MOVE_UNIT, validate_move, execute_move);
+carbon_command_register_named(sys, CMD_BUILD, "Build Structure",
+                               validate_build, execute_build);
+
+// Create command with parameters
+Carbon_Command *cmd = carbon_command_new(CMD_MOVE_UNIT);
+carbon_command_set_entity(cmd, "unit", player_unit);
+carbon_command_set_int(cmd, "dest_x", 10);
+carbon_command_set_int(cmd, "dest_y", 20);
+
+// Or with faction
+Carbon_Command *cmd2 = carbon_command_new_ex(CMD_BUILD, player_faction);
+carbon_command_set_int(cmd2, "x", 5);
+carbon_command_set_int(cmd2, "y", 5);
+carbon_command_set_int(cmd2, "type", BUILDING_BARRACKS);
+
+// Validate before queuing
+Carbon_CommandResult result = carbon_command_validate(sys, cmd, game);
+if (result.success) {
+    carbon_command_queue(sys, cmd);
+} else {
+    printf("Invalid command: %s\n", result.error);
+}
+
+// Or validate and queue in one call
+Carbon_CommandResult result2 = carbon_command_queue_validated(sys, cmd2, game);
+
+// Execute all queued commands at end of turn
+Carbon_CommandResult results[32];
+int executed = carbon_command_execute_all(sys, game, results, 32);
+for (int i = 0; i < executed; i++) {
+    if (!results[i].success) {
+        printf("Command %d failed: %s\n", results[i].command_type, results[i].error);
+    }
+}
+
+// Or execute one at a time
+while (carbon_command_queue_count(sys) > 0) {
+    Carbon_CommandResult r = carbon_command_execute_next(sys, game);
+    if (!r.success) {
+        handle_error(r.error);
+    }
+}
+
+// Execute immediately (not from queue)
+Carbon_CommandResult immediate = carbon_command_execute(sys, cmd, game);
+
+// Query parameters
+int32_t x = carbon_command_get_int(cmd, "x");
+int32_t x_or_default = carbon_command_get_int_or(cmd, "x", 0);
+float speed = carbon_command_get_float(cmd, "speed");
+uint32_t target = carbon_command_get_entity(cmd, "target");
+const char *name = carbon_command_get_string(cmd, "name");
+bool enabled = carbon_command_get_bool(cmd, "enabled");
+
+if (carbon_command_has_param(cmd, "optional")) {
+    // Parameter exists
+}
+Carbon_CommandParamType type = carbon_command_get_param_type(cmd, "value");
+
+// Command cleanup
+carbon_command_free(cmd);
+carbon_command_free(cmd2);
+
+// Cleanup
+carbon_command_destroy(sys);
+```
+
+**Queue management:**
+
+```c
+// Queue operations
+int count = carbon_command_queue_count(sys);
+const Carbon_Command *queued = carbon_command_queue_get(sys, 0);
+carbon_command_queue_remove(sys, 0);  // Remove by index
+carbon_command_queue_clear(sys);       // Clear all queued
+
+// Clone command (for modification)
+Carbon_Command *copy = carbon_command_clone(cmd);
+```
+
+**Command history (for undo/replay):**
+
+```c
+// Enable history tracking
+carbon_command_enable_history(sys, 100);  // Keep last 100 commands
+
+// Get history
+const Carbon_Command *history[32];
+int count = carbon_command_get_history(sys, history, 32);  // Newest first
+
+// Replay command from history
+Carbon_CommandResult r = carbon_command_replay(sys, 0, game);  // Replay most recent
+
+// History info
+int history_count = carbon_command_get_history_count(sys);
+carbon_command_clear_history(sys);
+```
+
+**Execution callback:**
+
+```c
+void on_command_executed(Carbon_CommandSystem *sys,
+                         const Carbon_Command *cmd,
+                         const Carbon_CommandResult *result,
+                         void *userdata) {
+    if (result->success) {
+        printf("Command %d executed successfully\n", cmd->type);
+    } else {
+        printf("Command failed: %s\n", result->error);
+    }
+}
+carbon_command_set_callback(sys, on_command_executed, NULL);
+```
+
+**Statistics:**
+
+```c
+Carbon_CommandStats stats;
+carbon_command_get_stats(sys, &stats);
+printf("Total: %d executed, %d succeeded, %d failed, %d invalid\n",
+       stats.total_executed, stats.total_succeeded,
+       stats.total_failed, stats.total_invalid);
+
+// Per-type counts
+printf("Move commands: %d\n", stats.commands_by_type[CMD_MOVE_UNIT]);
+
+carbon_command_reset_stats(sys);
+```
+
+**Parameter types:**
+- `CARBON_CMD_PARAM_INT` - 32-bit integer
+- `CARBON_CMD_PARAM_INT64` - 64-bit integer
+- `CARBON_CMD_PARAM_FLOAT` - Single precision float
+- `CARBON_CMD_PARAM_DOUBLE` - Double precision float
+- `CARBON_CMD_PARAM_BOOL` - Boolean
+- `CARBON_CMD_PARAM_ENTITY` - Entity ID (uint32_t)
+- `CARBON_CMD_PARAM_STRING` - String (max 32 chars)
+- `CARBON_CMD_PARAM_PTR` - Void pointer (not owned)
+
+**Key features:**
+- Command type registration with validators and executors
+- Pre-execution validation with detailed error messages
+- Queued execution for batch processing
+- Command history for undo/replay functionality
+- Per-command faction tracking
+- Execution callbacks for logging/debugging
+- Statistics tracking for monitoring
+
+**Common patterns:**
+
+```c
+// Turn-based game: queue commands, validate at turn start, execute
+void on_player_input(Game *game, int cmd_type, ...) {
+    Carbon_Command *cmd = carbon_command_new_ex(cmd_type, game->current_faction);
+    // ... set parameters ...
+
+    Carbon_CommandResult r = carbon_command_queue_validated(game->commands, cmd, game);
+    if (!r.success) {
+        show_error_message(r.error);
+    }
+    carbon_command_free(cmd);
+}
+
+void on_turn_end(Game *game) {
+    carbon_command_execute_all(game->commands, game, NULL, 0);
+}
+
+// Real-time game: execute immediately with validation
+void handle_action(Game *game, Carbon_Command *cmd) {
+    Carbon_CommandResult r = carbon_command_execute(game->commands, cmd, game);
+    if (!r.success) {
+        show_error_toast(r.error);
+    }
 }
 ```
 
