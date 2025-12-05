@@ -411,10 +411,9 @@ void carbon_siege_set_damage_callback(Carbon_SiegeManager *mgr,
 
 ---
 
-### 8. Formula Engine
+### 8. Formula Engine ✓
 
-**Priority:** Low
-**Complexity:** Low
+**Status:** COMPLETED
 **Files:** `include/carbon/formula.h`, `src/core/formula.c`
 
 Runtime-configurable game balance through expression evaluation.
@@ -581,8 +580,8 @@ void carbon_query_invalidate_all(Carbon_QuerySystem *sys);
 
 ### Phase 3 - Content Systems (In Progress)
 7. **Anomaly/Discovery System** ✓ - `include/carbon/anomaly.h`, `src/strategy/anomaly.c`
-8. **Siege/Bombardment System** - Extended combat
-9. **Formula Engine** - Data-driven balance
+8. **Formula Engine** ✓ - `include/carbon/formula.h`, `src/core/formula.c`
+9. **Siege/Bombardment System** - Extended combat
 10. **Game Query API** - UI integration helper
 
 ---

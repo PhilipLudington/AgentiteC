@@ -39,6 +39,7 @@ src/
 │   ├── event.c         # Pub-sub event dispatcher
 │   ├── command.c       # Command queue system for validated actions
 │   ├── containers.c    # Container utilities (random, shuffle)
+│   ├── formula.c       # Expression evaluation engine
 │   └── game_context.c  # Unified system container
 ├── ecs/
 │   └── ecs.c           # ECS wrapper around Flecs
@@ -110,6 +111,7 @@ include/carbon/
 ├── htn.h               # HTN AI planner API
 ├── task.h              # Task queue system API
 ├── command.h           # Command queue system API
+├── formula.h           # Expression evaluation API
 ├── turn.h              # Turn/phase system API
 ├── resource.h          # Resource economy API
 ├── tech.h              # Technology tree API
@@ -4818,6 +4820,189 @@ uint32_t diff = carbon_safe_subtract_u32(a, b);  // Clamps to 0
 // Disable overflow warnings if needed
 carbon_safe_math_set_warnings(false);
 ```
+
+## Formula Engine
+
+Runtime-configurable expression evaluation for data-driven game balance. Supports mathematical expressions with variables, functions, and compiled formulas for performance:
+
+```c
+#include "carbon/formula.h"
+
+// Create formula context
+Carbon_FormulaContext *ctx = carbon_formula_create();
+
+// Set variables
+carbon_formula_set_var(ctx, "base_damage", 10.0);
+carbon_formula_set_var(ctx, "strength", 15.0);
+carbon_formula_set_var(ctx, "level", 5.0);
+carbon_formula_set_var(ctx, "crit_mult", 1.5);
+
+// Evaluate expression
+double damage = carbon_formula_eval(ctx, "base_damage + strength * 0.5 + level * 2");
+// damage = 10 + 7.5 + 10 = 27.5
+
+// Complex expressions with operators
+double result = carbon_formula_eval(ctx, "(base_damage * crit_mult) + level ^ 2");
+
+// Comparison operators (return 1.0 or 0.0)
+double is_strong = carbon_formula_eval(ctx, "strength > 10");  // 1.0
+
+// Logical operators
+double can_crit = carbon_formula_eval(ctx, "level >= 5 && strength > 10");  // 1.0
+
+// Ternary operator
+double bonus = carbon_formula_eval(ctx, "level > 10 ? 50 : 25");  // 25.0
+
+// Built-in functions
+double clamped = carbon_formula_eval(ctx, "clamp(damage, 0, 100)");
+double scaled = carbon_formula_eval(ctx, "lerp(0, 100, level / 20)");  // 25.0
+double floored = carbon_formula_eval(ctx, "floor(damage / 3)");
+double root = carbon_formula_eval(ctx, "sqrt(strength * 4)");
+
+// Error handling
+double bad = carbon_formula_eval(ctx, "unknown_var + 5");
+if (carbon_formula_is_nan(bad)) {
+    printf("Error: %s\n", carbon_formula_get_error(ctx));
+}
+
+// Check validity without evaluating
+if (carbon_formula_valid(ctx, "base_damage * 2")) {
+    // Expression is syntactically valid
+}
+
+// Cleanup
+carbon_formula_destroy(ctx);
+```
+
+**Compiled formulas (faster for repeated evaluation):**
+
+```c
+// Compile once
+Carbon_Formula *f = carbon_formula_compile(ctx, "base_damage + strength * level_mult");
+
+// Use many times with different variable values
+for (int i = 0; i < 1000; i++) {
+    carbon_formula_set_var(ctx, "level_mult", enemies[i].level * 0.1);
+    double dmg = carbon_formula_exec(f, ctx);
+    apply_damage(enemies[i], dmg);
+}
+
+// Get variables used in formula
+const char *vars[16];
+int var_count = carbon_formula_get_vars(f, vars, 16);
+
+// Get original expression
+const char *expr = carbon_formula_get_expr(f);
+
+carbon_formula_free(f);
+```
+
+**Custom functions:**
+
+```c
+// Define custom function
+double roll_dice(const double *args, int argc, void *userdata) {
+    int sides = (int)args[0];
+    int count = argc > 1 ? (int)args[1] : 1;
+    int total = 0;
+    for (int i = 0; i < count; i++) {
+        total += (rand() % sides) + 1;
+    }
+    return (double)total;
+}
+
+// Register function (min 1 arg, max 2 args)
+carbon_formula_register_func(ctx, "roll", roll_dice, 1, 2, NULL);
+
+// Use in expressions
+double attack = carbon_formula_eval(ctx, "base_damage + roll(6, 2)");  // 2d6 damage
+
+// Unregister when done
+carbon_formula_unregister_func(ctx, "roll");
+```
+
+**Convenience functions:**
+
+```c
+// One-shot evaluation with inline variables
+double result = carbon_formula_eval_simple("x * 2 + y", "x", 10.0, "y", 5.0, NULL);
+// result = 25.0
+
+// Set common math constants (pi, e, tau, phi)
+carbon_formula_set_constants(ctx);
+double circle_area = carbon_formula_eval(ctx, "pi * radius ^ 2");
+
+// Format result as string
+char buf[32];
+carbon_formula_format(result, buf, sizeof(buf), 2);  // "25.00"
+carbon_formula_format(result, buf, sizeof(buf), -1); // "25" (auto precision)
+
+// Variable iteration
+int count = carbon_formula_var_count(ctx);
+for (int i = 0; i < count; i++) {
+    const char *name = carbon_formula_var_name(ctx, i);
+    double value = carbon_formula_var_value(ctx, i);
+    printf("%s = %.2f\n", name, value);
+}
+
+// Clone context
+Carbon_FormulaContext *copy = carbon_formula_clone(ctx);
+```
+
+**Supported operators:**
+- Arithmetic: `+`, `-`, `*`, `/`, `%` (modulo), `^` (power)
+- Comparison: `==`, `!=`, `<`, `<=`, `>`, `>=` (return 1.0 or 0.0)
+- Logical: `&&` (and), `||` (or), `!` (not)
+- Ternary: `condition ? true_value : false_value`
+- Parentheses: `(` `)`
+
+**Built-in functions:**
+- Math: `min`, `max`, `clamp`, `abs`, `sign`, `floor`, `ceil`, `round`, `trunc`
+- Power/Log: `sqrt`, `pow`, `exp`, `log`, `log10`, `log2`
+- Trigonometry: `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`
+- Interpolation: `lerp`, `step`, `smoothstep`
+- Conditional: `if(cond, true_val, false_val)`
+
+**Common patterns:**
+
+```c
+// Damage formula with modifiers
+carbon_formula_set_var(ctx, "base", weapon->damage);
+carbon_formula_set_var(ctx, "str_bonus", player->strength * 0.5);
+carbon_formula_set_var(ctx, "level_mult", 1.0 + player->level * 0.1);
+carbon_formula_set_var(ctx, "crit", is_critical ? 2.0 : 1.0);
+double final_damage = carbon_formula_eval(ctx,
+    "(base + str_bonus) * level_mult * crit");
+
+// Experience curve
+carbon_formula_set_var(ctx, "level", player_level);
+double xp_required = carbon_formula_eval(ctx,
+    "floor(100 * (level ^ 1.5))");
+
+// Difficulty scaling
+carbon_formula_set_var(ctx, "base_hp", 100);
+carbon_formula_set_var(ctx, "difficulty", game_difficulty);  // 0.5, 1.0, 1.5, 2.0
+carbon_formula_set_var(ctx, "wave", current_wave);
+double enemy_hp = carbon_formula_eval(ctx,
+    "base_hp * difficulty * (1 + wave * 0.1)");
+
+// Load formulas from data files
+// data/balance.toml:
+// [damage]
+// formula = "(base + str * 0.5) * crit_mult"
+char *formula_str = load_from_config("damage.formula");
+Carbon_Formula *damage_formula = carbon_formula_compile(ctx, formula_str);
+```
+
+**Key features:**
+- Full expression parser with operator precedence
+- Named variables with runtime substitution
+- 20+ built-in math functions
+- Custom function registration
+- Compiled formulas for repeated evaluation
+- Ternary operator for conditional logic
+- Error reporting with position information
+- Mathematical constants (pi, e, tau, phi)
 
 ## Notification/Toast System
 
