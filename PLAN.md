@@ -354,10 +354,9 @@ int carbon_anomaly_get_by_status(Carbon_AnomalyManager *mgr, Carbon_AnomalyStatu
 
 ---
 
-### 7. Siege / Bombardment System
+### 7. Siege / Bombardment System ✓
 
-**Priority:** Low
-**Complexity:** Medium
+**Status:** COMPLETED
 **Files:** `include/carbon/siege.h`, `src/strategy/siege.c`
 
 Sustained attack mechanics over multiple rounds for location assault.
@@ -581,7 +580,7 @@ void carbon_query_invalidate_all(Carbon_QuerySystem *sys);
 ### Phase 3 - Content Systems (In Progress)
 7. **Anomaly/Discovery System** ✓ - `include/carbon/anomaly.h`, `src/strategy/anomaly.c`
 8. **Formula Engine** ✓ - `include/carbon/formula.h`, `src/core/formula.c`
-9. **Siege/Bombardment System** - Extended combat
+9. **Siege/Bombardment System** ✓ - `include/carbon/siege.h`, `src/strategy/siege.c`
 10. **Game Query API** - UI integration helper
 
 ---

@@ -83,7 +83,8 @@ src/
 │   ├── game_speed.c    # Variable simulation speed control
 │   ├── crafting.c      # Crafting state machine
 │   ├── biome.c         # Biome/terrain system
-│   └── anomaly.c       # Anomaly/discovery system
+│   ├── anomaly.c       # Anomaly/discovery system
+│   └── siege.c         # Siege/bombardment system
 ├── ui/                 # Immediate-mode GUI system
 │   └── viewmodel.c     # Observable values for UI data binding
 └── game/               # Game-specific logic
@@ -134,6 +135,7 @@ include/carbon/
 ├── crafting.h          # Crafting state machine API
 ├── biome.h             # Biome/terrain system API
 ├── anomaly.h           # Anomaly/discovery system API
+├── siege.h             # Siege/bombardment system API
 ├── blackboard.h        # Shared blackboard for AI coordination
 ├── htn.h               # HTN AI planner API
 └── trade.h             # Trade route / supply line API
@@ -2702,6 +2704,308 @@ void render_anomaly(Game *game, uint32_t anomaly_id, float x, float y) {
     }
 }
 ```
+
+## Siege / Bombardment System
+
+Sustained attack mechanics over multiple rounds for location assault. Supports progressive damage, building destruction, force attrition, and configurable siege parameters:
+
+```c
+#include "carbon/siege.h"
+
+// Create siege manager
+Carbon_SiegeManager *siege = carbon_siege_create();
+
+// Configure game integration callbacks
+int32_t get_defense(uint32_t location, void *ud) {
+    return get_location_defense_value(location);
+}
+uint32_t get_defender(uint32_t location, void *ud) {
+    return get_location_owner(location);
+}
+carbon_siege_set_defense_callback(siege, get_defense, game);
+carbon_siege_set_defender_callback(siege, get_defender, game);
+
+// Check if siege can begin (validates force ratio)
+if (carbon_siege_can_begin(siege, attacker_faction, target_location, attacking_force)) {
+    uint32_t siege_id = carbon_siege_begin(siege, attacker_faction,
+                                            target_location, attacking_force);
+}
+
+// Or with extended options
+uint32_t siege_id = carbon_siege_begin_ex(siege, attacker_faction,
+                                           target_location, attacking_force,
+                                           15,     // Max rounds
+                                           0);     // Metadata
+
+// Add buildings to track during siege
+carbon_siege_add_building(siege, siege_id, wall_id, 100, 20);   // health, defense contribution
+carbon_siege_add_building(siege, siege_id, tower_id, 50, 30);
+
+// Each turn, process the siege round
+Carbon_SiegeRoundResult result;
+if (carbon_siege_process_round(siege, siege_id, &result)) {
+    printf("Round %d: Dealt %d damage, %d buildings damaged\n",
+           result.round_number, result.damage_dealt, result.buildings_damaged);
+
+    if (result.target_captured) {
+        printf("Location captured!\n");
+        transfer_ownership(target_location, attacker_faction);
+    } else if (result.siege_broken) {
+        printf("Siege failed - defenders won!\n");
+    } else if (result.siege_ended) {
+        printf("Siege ended: %s\n", carbon_siege_status_name(result.end_status));
+    }
+}
+
+// Query siege state
+float progress = carbon_siege_get_progress(siege, siege_id);        // 0.0-1.0
+int32_t round = carbon_siege_get_round(siege, siege_id);
+int32_t remaining = carbon_siege_get_remaining_rounds(siege, siege_id);
+float force_ratio = carbon_siege_get_force_ratio(siege, siege_id);
+
+// Reinforce during siege
+carbon_siege_reinforce_attacker(siege, siege_id, 50);
+carbon_siege_reinforce_defender(siege, siege_id, 30);
+
+// Apply external casualties
+carbon_siege_attacker_casualties(siege, siege_id, 10);
+carbon_siege_defender_casualties(siege, siege_id, 5);
+
+// Modify siege effectiveness (buffs/debuffs)
+carbon_siege_set_attack_modifier(siege, siege_id, 1.2f);   // +20% attack
+carbon_siege_set_defense_modifier(siege, siege_id, 0.8f);  // -20% defense
+carbon_siege_set_damage_modifier(siege, siege_id, 1.5f);   // +50% damage
+
+// Attacker can retreat
+if (carbon_siege_get_force_ratio(siege, siege_id) < 0.5f) {
+    carbon_siege_retreat(siege, siege_id);
+}
+
+// Cleanup
+carbon_siege_destroy(siege);
+```
+
+**Configuration:**
+
+```c
+// Get default configuration
+Carbon_SiegeConfig config = carbon_siege_default_config();
+
+// Customize
+config.default_max_rounds = 30;          // Rounds before timeout
+config.min_force_ratio = 0.5f;           // Minimum attacker/defender ratio to begin
+config.base_damage_per_round = 15;       // Base damage dealt each round
+config.capture_threshold = 0.1f;         // Defense remaining to trigger capture
+config.building_damage_chance = 0.4f;    // Chance to damage a building per round
+config.population_casualty_rate = 0.02f; // Civilian casualty rate
+config.attacker_attrition_rate = 0.03f;  // Attacker losses per round
+config.defender_attrition_rate = 0.01f;  // Defender losses per round
+config.allow_retreat = true;             // Can attacker retreat
+config.destroy_on_capture = false;       // Destroy buildings on capture
+
+carbon_siege_set_config(siege, &config);
+```
+
+**Custom damage calculation:**
+
+```c
+// Custom damage callback for complex formulas
+int32_t calculate_siege_damage(const Carbon_Siege *siege, void *userdata) {
+    Game *game = userdata;
+
+    // Base damage from siege weapons
+    int32_t base = count_siege_weapons(game, siege->attacker_faction) * 5;
+
+    // Modified by force ratio
+    float ratio = (float)siege->current_attack_force / (float)siege->current_defense_force;
+    int32_t damage = (int32_t)(base * ratio * siege->attack_modifier);
+
+    // Weather effects
+    if (is_raining(game)) damage *= 0.7f;
+
+    return damage > 0 ? damage : 1;
+}
+carbon_siege_set_damage_callback(siege, calculate_siege_damage, game);
+```
+
+**Building management:**
+
+```c
+// Populate buildings via callback
+int populate_buildings(uint32_t location, Carbon_SiegeBuilding *out,
+                       int max, void *userdata) {
+    Game *game = userdata;
+    Building *buildings = get_buildings_at(game, location);
+    int count = 0;
+
+    for (int i = 0; i < get_building_count(game, location) && count < max; i++) {
+        out[count].building_id = buildings[i].id;
+        out[count].max_health = buildings[i].max_health;
+        out[count].current_health = buildings[i].current_health;
+        out[count].defense_contribution = buildings[i].defense_value;
+        out[count].destroyed = false;
+        count++;
+    }
+    return count;
+}
+carbon_siege_set_buildings_callback(siege, populate_buildings, game);
+
+// Query building state during siege
+int building_count = carbon_siege_get_building_count(siege, siege_id);
+int destroyed_count = carbon_siege_get_destroyed_building_count(siege, siege_id);
+
+for (int i = 0; i < building_count; i++) {
+    const Carbon_SiegeBuilding *bldg = carbon_siege_get_building(siege, siege_id, i);
+    Carbon_BuildingDamageLevel level = carbon_siege_get_building_damage_level(bldg);
+    printf("Building %u: %s\n", bldg->building_id,
+           carbon_siege_damage_level_name(level));
+}
+```
+
+**Event callbacks:**
+
+```c
+// Siege event callback for notifications, sounds, etc.
+void on_siege_event(Carbon_SiegeManager *mgr, uint32_t siege_id,
+                    Carbon_SiegeEvent event, const Carbon_SiegeRoundResult *result,
+                    void *userdata) {
+    switch (event) {
+        case CARBON_SIEGE_EVENT_STARTED:
+            play_sound(SOUND_SIEGE_BEGIN);
+            show_notification("Siege begun!");
+            break;
+        case CARBON_SIEGE_EVENT_BUILDING_DESTROYED:
+            play_sound(SOUND_BUILDING_COLLAPSE);
+            break;
+        case CARBON_SIEGE_EVENT_CAPTURED:
+            play_sound(SOUND_VICTORY);
+            show_notification("Location captured!");
+            break;
+        case CARBON_SIEGE_EVENT_BROKEN:
+            play_sound(SOUND_DEFEAT);
+            show_notification("Siege broken!");
+            break;
+        case CARBON_SIEGE_EVENT_ROUND_PROCESSED:
+            // Update UI
+            break;
+    }
+}
+carbon_siege_set_event_callback(siege, on_siege_event, game);
+
+// Custom validation for siege start
+bool can_begin_siege(uint32_t attacker, uint32_t location,
+                     int32_t force, void *userdata) {
+    Game *game = userdata;
+    // Check if at war
+    if (!is_at_war(game, attacker, get_owner(game, location))) {
+        return false;
+    }
+    // Check if attacker has siege equipment
+    if (!has_siege_weapons(game, attacker)) {
+        return false;
+    }
+    return true;
+}
+carbon_siege_set_can_begin_callback(siege, can_begin_siege, game);
+```
+
+**Queries:**
+
+```c
+// Get all active sieges
+uint32_t ids[64];
+int count = carbon_siege_get_all_active(siege, ids, 64);
+
+// Get sieges by faction
+int my_sieges = carbon_siege_get_by_attacker(siege, player_faction, ids, 64);
+int defending = carbon_siege_get_by_defender(siege, player_faction, ids, 64);
+
+// Check if location is under siege
+if (carbon_siege_has_siege_at(siege, location)) {
+    uint32_t siege_id = carbon_siege_get_at_location(siege, location);
+    const Carbon_Siege *s = carbon_siege_get(siege, siege_id);
+    // Show siege UI
+}
+
+// Get sieges by status
+int active = carbon_siege_get_by_status(siege, CARBON_SIEGE_ACTIVE, ids, 64);
+
+// Estimate rounds to capture
+int estimated = carbon_siege_estimate_rounds(siege, siege_id);
+if (estimated < 0) {
+    printf("Capture unlikely\n");
+} else {
+    printf("Estimated %d rounds to capture\n", estimated);
+}
+```
+
+**Turn integration:**
+
+```c
+// Set current turn for timing tracking
+carbon_siege_set_turn(siege, current_turn);
+
+// Process all active sieges at once
+Carbon_SiegeRoundResult results[32];
+int processed = carbon_siege_process_all(siege, results, 32);
+for (int i = 0; i < processed; i++) {
+    handle_siege_result(&results[i]);
+}
+```
+
+**Statistics:**
+
+```c
+Carbon_SiegeStats stats;
+carbon_siege_get_stats(siege, &stats);
+printf("Total: %d sieges, %d captured, %d broken, %d timeout\n",
+       stats.total_sieges, stats.captured_count,
+       stats.broken_count, stats.timeout_count);
+printf("Active: %d, Total casualties: %d\n",
+       stats.active_sieges, stats.total_casualties);
+
+// Reset stats
+carbon_siege_reset_stats(siege);
+```
+
+**Siege statuses:**
+- `CARBON_SIEGE_INACTIVE` - Slot not in use
+- `CARBON_SIEGE_PREPARING` - Siege being set up
+- `CARBON_SIEGE_ACTIVE` - Siege in progress
+- `CARBON_SIEGE_CAPTURED` - Target captured by attacker
+- `CARBON_SIEGE_BROKEN` - Siege broken by defenders
+- `CARBON_SIEGE_RETREATED` - Attacker retreated
+- `CARBON_SIEGE_TIMEOUT` - Max rounds exceeded
+
+**Siege events:**
+- `CARBON_SIEGE_EVENT_STARTED` - Siege begun
+- `CARBON_SIEGE_EVENT_ROUND_PROCESSED` - Round completed
+- `CARBON_SIEGE_EVENT_BUILDING_DAMAGED` - Building took damage
+- `CARBON_SIEGE_EVENT_BUILDING_DESTROYED` - Building destroyed
+- `CARBON_SIEGE_EVENT_DEFENSE_REDUCED` - Defense value reduced
+- `CARBON_SIEGE_EVENT_CAPTURED` - Location captured
+- `CARBON_SIEGE_EVENT_BROKEN` - Siege broken
+- `CARBON_SIEGE_EVENT_RETREATED` - Attacker retreated
+- `CARBON_SIEGE_EVENT_TIMEOUT` - Max rounds reached
+
+**Building damage levels:**
+- `CARBON_BUILDING_INTACT` (≥75% health)
+- `CARBON_BUILDING_LIGHT_DAMAGE` (≥50% health)
+- `CARBON_BUILDING_MODERATE_DAMAGE` (≥25% health)
+- `CARBON_BUILDING_HEAVY_DAMAGE` (<25% health)
+- `CARBON_BUILDING_DESTROYED` (0% health)
+
+**Key features:**
+- Progressive damage over multiple rounds
+- Building destruction tracking with defense contribution
+- Force attrition for both attacker and defender
+- Population casualty calculation
+- Reinforcement and external casualty support
+- Attack/defense/damage modifiers for buffs
+- Configurable siege parameters
+- Event callbacks for game integration
+- Estimated rounds to capture prediction
+- Statistics tracking
 
 ## Event Dispatcher System
 
