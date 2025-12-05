@@ -1,0 +1,70 @@
+# Example event definitions for strategy-sim demo
+# Events trigger based on game state and offer player choices
+
+[[event]]
+id = "industrial_accident"
+name = "Industrial Accident"
+description = "A factory explosion has caused a spike in local pollution. The public demands action."
+trigger = "turn >= 3 && emissions > 0.5"
+one_shot = true
+priority = 10
+
+[[event.choice]]
+label = "Pay for cleanup"
+description = "Spend resources to clean up the damage immediately."
+effects = [
+    { type = 1, value = -30 },  # Lose money
+    { type = 2, value = 0.05 }  # Gain approval
+]
+
+[[event.choice]]
+label = "Ignore it"
+description = "Let the market handle it. Some voters won't be happy."
+effects = [
+    { type = 0, value = 0.1 },  # More emissions
+    { type = 2, value = -0.10 } # Lose approval
+]
+
+[[event]]
+id = "tech_breakthrough"
+name = "Clean Energy Breakthrough"
+description = "Scientists have developed a new efficient solar cell. Should we invest?"
+trigger = "turn >= 5 && research_points > 20"
+one_shot = true
+priority = 5
+
+[[event.choice]]
+label = "Fund research"
+description = "Invest in scaling up the technology."
+effects = [
+    { type = 1, value = -50 },   # Costs money
+    { type = 0, value = -0.20 }  # Big emissions reduction
+]
+
+[[event.choice]]
+label = "Wait and see"
+description = "Let the private sector handle commercialization."
+effects = []
+
+[[event]]
+id = "public_unrest"
+name = "Public Protests"
+description = "Citizens are protesting environmental policy. They want faster action."
+trigger = "approval < 0.3"
+one_shot = false
+cooldown = 5
+priority = 8
+
+[[event.choice]]
+label = "Address concerns"
+description = "Hold a town hall and promise reforms."
+effects = [
+    { type = 2, value = 0.15 }  # Approval boost
+]
+
+[[event.choice]]
+label = "Crack down"
+description = "Disperse the protests and maintain order."
+effects = [
+    { type = 2, value = -0.05 } # Small approval loss
+]

@@ -1,0 +1,47 @@
+# Example policy definitions for strategy-sim demo
+# Each policy affects resource generation and game metrics
+
+[[policy]]
+id = "renewable_energy"
+name = "Renewable Energy Initiative"
+description = "Invest in solar and wind power to reduce emissions"
+cost = 50
+category = "environment"
+effect_type = 0  # EFFECT_EMISSIONS
+effect_value = -0.15
+
+[[policy]]
+id = "public_transit"
+name = "Public Transit Expansion"
+description = "Build new bus and train lines to reduce car usage"
+cost = 75
+category = "transport"
+effect_type = 0  # EFFECT_EMISSIONS
+effect_value = -0.10
+
+[[policy]]
+id = "carbon_tax"
+name = "Carbon Tax"
+description = "Tax carbon emissions to fund green initiatives"
+cost = 25
+category = "economy"
+effect_type = 1  # EFFECT_INCOME
+effect_value = 0.20
+
+[[policy]]
+id = "green_subsidies"
+name = "Green Technology Subsidies"
+description = "Subsidize electric vehicles and solar panels"
+cost = 60
+category = "economy"
+effect_type = 2  # EFFECT_APPROVAL
+effect_value = 0.05
+
+[[policy]]
+id = "reforestation"
+name = "Reforestation Program"
+description = "Plant trees to absorb CO2 from the atmosphere"
+cost = 40
+category = "environment"
+effect_type = 0  # EFFECT_EMISSIONS
+effect_value = -0.08

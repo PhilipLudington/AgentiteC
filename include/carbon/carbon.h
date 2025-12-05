@@ -62,4 +62,15 @@ void carbon_end_render_pass(Carbon_Engine *engine);
 SDL_GPURenderPass *carbon_get_render_pass(Carbon_Engine *engine);
 SDL_GPUCommandBuffer *carbon_get_command_buffer(Carbon_Engine *engine);
 
+// Strategy game systems
+#include "carbon/turn.h"
+#include "carbon/resource.h"
+#include "carbon/modifier.h"
+#include "carbon/threshold.h"
+#include "carbon/history.h"
+#include "carbon/data_config.h"
+#include "carbon/save.h"
+#include "carbon/game_event.h"
+#include "carbon/unlock.h"
+
 #endif // CARBON_H

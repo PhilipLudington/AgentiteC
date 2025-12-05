@@ -1,0 +1,72 @@
+# Example tech tree definitions for strategy-sim demo
+# Technologies unlock new capabilities and provide bonuses
+
+[[tech]]
+id = "basic_research"
+name = "Basic Research"
+description = "Establish research facilities for environmental science"
+category = "science"
+prerequisites = []
+cost = 10
+effect_type = 3  # EFFECT_RESEARCH_RATE
+effect_value = 0.10
+
+[[tech]]
+id = "solar_panels"
+name = "Solar Panel Technology"
+description = "Develop efficient solar power generation"
+category = "energy"
+prerequisites = ["basic_research"]
+cost = 25
+effect_type = 0  # EFFECT_EMISSIONS
+effect_value = -0.05
+
+[[tech]]
+id = "wind_turbines"
+name = "Wind Turbine Technology"
+description = "Harness wind power for clean electricity"
+category = "energy"
+prerequisites = ["basic_research"]
+cost = 30
+effect_type = 0
+effect_value = -0.05
+
+[[tech]]
+id = "electric_vehicles"
+name = "Electric Vehicles"
+description = "Develop affordable electric cars and trucks"
+category = "transport"
+prerequisites = ["solar_panels"]
+cost = 50
+effect_type = 0
+effect_value = -0.10
+
+[[tech]]
+id = "smart_grid"
+name = "Smart Grid"
+description = "Intelligent power distribution system"
+category = "energy"
+prerequisites = ["solar_panels", "wind_turbines"]
+cost = 75
+effect_type = 0
+effect_value = -0.15
+
+[[tech]]
+id = "carbon_capture"
+name = "Carbon Capture"
+description = "Technology to remove CO2 from the atmosphere"
+category = "science"
+prerequisites = ["smart_grid"]
+cost = 100
+effect_type = 0
+effect_value = -0.25
+
+[[tech]]
+id = "fusion_power"
+name = "Fusion Power"
+description = "Unlimited clean energy from nuclear fusion"
+category = "energy"
+prerequisites = ["smart_grid", "carbon_capture"]
+cost = 200
+effect_type = 0
+effect_value = -0.50

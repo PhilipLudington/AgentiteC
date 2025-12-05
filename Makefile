@@ -61,7 +61,8 @@ ENGINE_SRCS := $(wildcard $(SRC_DIR)/core/*.c) \
                $(wildcard $(SRC_DIR)/input/*.c) \
                $(wildcard $(SRC_DIR)/ui/*.c) \
                $(wildcard $(SRC_DIR)/ecs/*.c) \
-               $(wildcard $(SRC_DIR)/ai/*.c)
+               $(wildcard $(SRC_DIR)/ai/*.c) \
+               $(wildcard $(SRC_DIR)/strategy/*.c)
 
 # Game template source files
 GAME_SRCS := $(wildcard $(SRC_DIR)/game/*.c) \
@@ -78,6 +79,10 @@ SRCS := $(MAIN_SRC) $(ENGINE_SRCS) $(GAME_SRCS)
 # Flecs ECS library (compiled as separate object)
 FLECS_SRC := $(LIB_DIR)/flecs.c
 FLECS_OBJ := $(BUILD_DIR)/flecs.o
+
+# TOML parser library (compiled as separate object)
+TOML_SRC := $(LIB_DIR)/toml.c
+TOML_OBJ := $(BUILD_DIR)/toml.o
 
 # Object files
 OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
@@ -99,6 +104,7 @@ dirs:
 	@mkdir -p $(BUILD_DIR)/ui
 	@mkdir -p $(BUILD_DIR)/ecs
 	@mkdir -p $(BUILD_DIR)/ai
+	@mkdir -p $(BUILD_DIR)/strategy
 	@mkdir -p $(BUILD_DIR)/game
 	@mkdir -p $(BUILD_DIR)/game/systems
 	@mkdir -p $(BUILD_DIR)/game/states
@@ -110,17 +116,22 @@ dirs:
 	@mkdir -p $(BUILD_DIR)/examples/tilemap
 	@mkdir -p $(BUILD_DIR)/examples/ui
 	@mkdir -p $(BUILD_DIR)/examples/strategy
+	@mkdir -p $(BUILD_DIR)/examples/strategy-sim
 
 # Link main executable (game template)
-$(BUILD_DIR)/$(EXECUTABLE): $(OBJS) $(FLECS_OBJ)
-	$(CC) $(OBJS) $(FLECS_OBJ) -o $@ $(LDFLAGS)
+$(BUILD_DIR)/$(EXECUTABLE): $(OBJS) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CC) $(OBJS) $(FLECS_OBJ) $(TOML_OBJ) -o $@ $(LDFLAGS)
 
 # Link demo executable
-$(BUILD_DIR)/demo: $(DEMO_OBJS) $(FLECS_OBJ)
-	$(CC) $(DEMO_OBJS) $(FLECS_OBJ) -o $@ $(LDFLAGS)
+$(BUILD_DIR)/demo: $(DEMO_OBJS) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CC) $(DEMO_OBJS) $(FLECS_OBJ) $(TOML_OBJ) -o $@ $(LDFLAGS)
 
 # Compile Flecs (with relaxed warnings due to third-party code)
 $(FLECS_OBJ): $(FLECS_SRC)
+	$(CC) -std=c11 -O2 -I$(LIB_DIR) -c $< -o $@
+
+# Compile TOML parser (with relaxed warnings due to third-party code)
+$(TOML_OBJ): $(TOML_SRC)
 	$(CC) -std=c11 -O2 -I$(LIB_DIR) -c $< -o $@
 
 # Compile source files
@@ -148,34 +159,39 @@ run-demo: dirs $(BUILD_DIR)/demo
 #============================================================================
 
 # Build and run minimal example
-example-minimal: dirs $(BUILD_DIR)/examples/minimal/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ)
-	$(CC) $(BUILD_DIR)/examples/minimal/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) -o $(BUILD_DIR)/example-minimal $(LDFLAGS)
+example-minimal: dirs $(BUILD_DIR)/examples/minimal/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CC) $(BUILD_DIR)/examples/minimal/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-minimal $(LDFLAGS)
 	./$(BUILD_DIR)/example-minimal
 
 # Build and run sprites example
-example-sprites: dirs $(BUILD_DIR)/examples/sprites/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ)
-	$(CC) $(BUILD_DIR)/examples/sprites/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) -o $(BUILD_DIR)/example-sprites $(LDFLAGS)
+example-sprites: dirs $(BUILD_DIR)/examples/sprites/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CC) $(BUILD_DIR)/examples/sprites/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-sprites $(LDFLAGS)
 	./$(BUILD_DIR)/example-sprites
 
 # Build and run animation example
-example-animation: dirs $(BUILD_DIR)/examples/animation/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ)
-	$(CC) $(BUILD_DIR)/examples/animation/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) -o $(BUILD_DIR)/example-animation $(LDFLAGS)
+example-animation: dirs $(BUILD_DIR)/examples/animation/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CC) $(BUILD_DIR)/examples/animation/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-animation $(LDFLAGS)
 	./$(BUILD_DIR)/example-animation
 
 # Build and run tilemap example
-example-tilemap: dirs $(BUILD_DIR)/examples/tilemap/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ)
-	$(CC) $(BUILD_DIR)/examples/tilemap/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) -o $(BUILD_DIR)/example-tilemap $(LDFLAGS)
+example-tilemap: dirs $(BUILD_DIR)/examples/tilemap/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CC) $(BUILD_DIR)/examples/tilemap/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-tilemap $(LDFLAGS)
 	./$(BUILD_DIR)/example-tilemap
 
 # Build and run UI example
-example-ui: dirs $(BUILD_DIR)/examples/ui/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ)
-	$(CC) $(BUILD_DIR)/examples/ui/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) -o $(BUILD_DIR)/example-ui $(LDFLAGS)
+example-ui: dirs $(BUILD_DIR)/examples/ui/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CC) $(BUILD_DIR)/examples/ui/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-ui $(LDFLAGS)
 	./$(BUILD_DIR)/example-ui
 
 # Build and run strategy example
-example-strategy: dirs $(BUILD_DIR)/examples/strategy/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ)
-	$(CC) $(BUILD_DIR)/examples/strategy/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) -o $(BUILD_DIR)/example-strategy $(LDFLAGS)
+example-strategy: dirs $(BUILD_DIR)/examples/strategy/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CC) $(BUILD_DIR)/examples/strategy/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-strategy $(LDFLAGS)
 	./$(BUILD_DIR)/example-strategy
+
+# Build and run strategy-sim example (demonstrates new strategy systems)
+example-strategy-sim: dirs $(BUILD_DIR)/examples/strategy-sim/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CC) $(BUILD_DIR)/examples/strategy-sim/main.o $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-strategy-sim $(LDFLAGS)
+	./$(BUILD_DIR)/example-strategy-sim
 
 #============================================================================
 # Utility targets
@@ -223,6 +239,7 @@ help:
 	@echo "  make example-tilemap   - Tilemap rendering demo"
 	@echo "  make example-ui        - UI system demo"
 	@echo "  make example-strategy  - Strategy game patterns"
+	@echo "  make example-strategy-sim - Strategy systems demo"
 	@echo ""
 	@echo "Utilities:"
 	@echo "  make clean        - Remove build files"
@@ -230,4 +247,4 @@ help:
 	@echo "  make DEBUG=1      - Build with debug symbols"
 
 .PHONY: all dirs run run-demo clean install-deps-macos install-deps-linux info help
-.PHONY: example-minimal example-sprites example-animation example-tilemap example-ui example-strategy
+.PHONY: example-minimal example-sprites example-animation example-tilemap example-ui example-strategy example-strategy-sim
