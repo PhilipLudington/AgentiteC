@@ -58,6 +58,7 @@ src/
 │   ├── turn.c          # Turn/phase management
 │   ├── resource.c      # Resource economy
 │   ├── tech.c          # Technology tree with prerequisites
+│   ├── victory.c       # Victory condition tracking
 │   ├── modifier.c      # Value modifier stacks
 │   ├── threshold.c     # Value threshold callbacks
 │   ├── history.c       # Metrics history tracking
@@ -86,6 +87,7 @@ include/carbon/
 ├── turn.h              # Turn/phase system API
 ├── resource.h          # Resource economy API
 ├── tech.h              # Technology tree API
+├── victory.h           # Victory condition API
 ├── modifier.h          # Modifier stack API
 ├── threshold.h         # Threshold tracker API
 ├── history.h           # History tracking API
@@ -1036,6 +1038,135 @@ carbon_tech_destroy(tree);
 **Events emitted:**
 - `CARBON_EVENT_TECH_STARTED` - When research begins
 - `CARBON_EVENT_TECH_RESEARCHED` - When research completes
+
+## Victory Condition System
+
+Multi-condition victory tracking with progress monitoring, score calculation, and event integration:
+
+```c
+#include "carbon/victory.h"
+
+// Create victory manager (optionally with event dispatcher)
+Carbon_VictoryManager *victory = carbon_victory_create_with_events(events);
+
+// Register victory conditions
+Carbon_VictoryCondition domination = {
+    .id = "domination",
+    .name = "World Domination",
+    .description = "Control 75% of the map",
+    .type = CARBON_VICTORY_DOMINATION,
+    .threshold = 0.75f,
+    .enabled = true,
+};
+carbon_victory_register(victory, &domination);
+
+Carbon_VictoryCondition elimination = {
+    .id = "elimination",
+    .name = "Last Standing",
+    .description = "Eliminate all opponents",
+    .type = CARBON_VICTORY_ELIMINATION,
+    .threshold = 1.0f,
+    .enabled = true,
+};
+carbon_victory_register(victory, &elimination);
+
+Carbon_VictoryCondition score_victory = {
+    .id = "score",
+    .name = "High Score",
+    .description = "Highest score after 100 turns",
+    .type = CARBON_VICTORY_SCORE,
+    .target_turn = 100,
+    .enabled = true,
+};
+carbon_victory_register(victory, &score_victory);
+
+// Initialize faction tracking
+carbon_victory_init_faction(victory, 0);  // Player
+carbon_victory_init_faction(victory, 1);  // AI 1
+carbon_victory_init_faction(victory, 2);  // AI 2
+
+// Each turn, update progress
+float territory_control = calculate_territory_percent(faction_id);
+carbon_victory_update_progress(victory, faction_id, CARBON_VICTORY_DOMINATION, territory_control);
+
+// For score-based conditions
+carbon_victory_add_score(victory, faction_id, CARBON_VICTORY_SCORE, points_earned);
+
+// Check for victory (call at end of turn)
+carbon_victory_set_turn(victory, current_turn);
+if (carbon_victory_check(victory)) {
+    int winner = carbon_victory_get_winner(victory);
+    int type = carbon_victory_get_winning_type(victory);
+    const Carbon_VictoryState *state = carbon_victory_get_state(victory);
+    printf("Victory! %s won via %s: %s\n",
+           faction_names[winner],
+           carbon_victory_type_name(type),
+           state->message);
+}
+
+// Eliminate a faction
+carbon_victory_eliminate_faction(victory, defeated_faction);
+
+// Query progress for UI
+float progress = carbon_victory_get_progress(victory, faction_id, CARBON_VICTORY_DOMINATION);
+char progress_str[32];
+carbon_victory_format_progress(victory, faction_id, CARBON_VICTORY_DOMINATION,
+                                progress_str, sizeof(progress_str));
+
+// Get score leader
+int leader = carbon_victory_get_score_leader(victory);
+int32_t total_score = carbon_victory_calculate_score(victory, faction_id);
+
+// Custom victory checker for complex conditions
+bool check_tech_victory(int faction_id, int type, float *out_progress, void *userdata) {
+    GameState *game = userdata;
+    int researched = count_researched_techs(game, faction_id);
+    int total = total_tech_count(game);
+    *out_progress = (float)researched / (float)total;
+    return researched >= total;  // Win when all techs researched
+}
+carbon_victory_set_checker(victory, CARBON_VICTORY_TECHNOLOGY, check_tech_victory, game);
+
+// Victory callback (alternative to events)
+void on_victory(int faction_id, int type, const Carbon_VictoryCondition *cond, void *userdata) {
+    printf("Faction %d won via %s!\n", faction_id, cond->name);
+}
+carbon_victory_set_callback(victory, on_victory, NULL);
+
+// Enable/disable conditions mid-game
+carbon_victory_set_enabled(victory, CARBON_VICTORY_SCORE, false);
+
+// Reset for new game
+carbon_victory_reset(victory);
+
+// Cleanup
+carbon_victory_destroy(victory);
+```
+
+**Built-in victory types:**
+- `CARBON_VICTORY_DOMINATION` - Control percentage of territory
+- `CARBON_VICTORY_ELIMINATION` - Last faction standing
+- `CARBON_VICTORY_TECHNOLOGY` - Research all/specific techs
+- `CARBON_VICTORY_ECONOMIC` - Accumulate resources
+- `CARBON_VICTORY_SCORE` - Highest score after N turns
+- `CARBON_VICTORY_TIME` - Survive for N turns
+- `CARBON_VICTORY_OBJECTIVE` - Complete specific objectives
+- `CARBON_VICTORY_WONDER` - Build a wonder structure
+- `CARBON_VICTORY_DIPLOMATIC` - Achieve diplomatic status
+- `CARBON_VICTORY_CULTURAL` - Achieve cultural dominance
+- `CARBON_VICTORY_USER` (100+) - Game-defined victory types
+
+**Events emitted:**
+- `CARBON_EVENT_VICTORY_PROGRESS` - When progress changes significantly
+- `CARBON_EVENT_VICTORY_ACHIEVED` - When a faction wins
+
+**Key features:**
+- Multiple simultaneous victory conditions
+- Per-faction progress and score tracking
+- Custom victory checkers for complex logic
+- Automatic elimination victory detection
+- Score-based victory with turn limits
+- Event integration for UI updates
 
 ## Quick Start (New Game)
 
