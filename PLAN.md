@@ -289,10 +289,9 @@ int carbon_trade_get_routes_to(Carbon_TradeSystem *trade, uint32_t dest,
 
 ---
 
-### 6. Anomaly / Discovery System
+### 6. Anomaly / Discovery System ✓
 
-**Priority:** Medium
-**Complexity:** Low
+**Status:** COMPLETED
 **Files:** `include/carbon/anomaly.h`, `src/strategy/anomaly.c`
 
 Discoverable points of interest with research/investigation mechanics.
@@ -580,8 +579,8 @@ void carbon_query_invalidate_all(Carbon_QuerySystem *sys);
 5. **Strategic Coordinator** ✓ - `include/carbon/strategy.h`, `src/ai/strategy.c`
 6. **Command Queue** ✓ - `include/carbon/command.h`, `src/core/command.c`
 
-### Phase 3 - Content Systems
-7. **Anomaly/Discovery System** - Points of interest
+### Phase 3 - Content Systems (In Progress)
+7. **Anomaly/Discovery System** ✓ - `include/carbon/anomaly.h`, `src/strategy/anomaly.c`
 8. **Siege/Bombardment System** - Extended combat
 9. **Formula Engine** - Data-driven balance
 10. **Game Query API** - UI integration helper

@@ -81,7 +81,8 @@ src/
 │   ├── dialog.c        # Dialog / narrative system
 │   ├── game_speed.c    # Variable simulation speed control
 │   ├── crafting.c      # Crafting state machine
-│   └── biome.c         # Biome/terrain system
+│   ├── biome.c         # Biome/terrain system
+│   └── anomaly.c       # Anomaly/discovery system
 ├── ui/                 # Immediate-mode GUI system
 │   └── viewmodel.c     # Observable values for UI data binding
 └── game/               # Game-specific logic
@@ -130,6 +131,7 @@ include/carbon/
 ├── game_speed.h        # Variable simulation speed API
 ├── crafting.h          # Crafting state machine API
 ├── biome.h             # Biome/terrain system API
+├── anomaly.h           # Anomaly/discovery system API
 ├── blackboard.h        # Shared blackboard for AI coordination
 ├── htn.h               # HTN AI planner API
 └── trade.h             # Trade route / supply line API
@@ -2387,6 +2389,314 @@ void render_minimap(Carbon_BiomeMap *map) {
                 draw_pixel(x, y, def->color);
             }
         }
+    }
+}
+```
+
+## Anomaly / Discovery System
+
+Discoverable points of interest with research/investigation mechanics. Supports anomaly type registry with rarity tiers, discovery and research status tracking, research progress over time, and reward distribution:
+
+```c
+#include "carbon/anomaly.h"
+
+// Create registry for anomaly types
+Carbon_AnomalyRegistry *registry = carbon_anomaly_registry_create();
+
+// Define anomaly types
+Carbon_AnomalyTypeDef ruins = carbon_anomaly_type_default();
+strcpy(ruins.id, "ancient_ruins");
+strcpy(ruins.name, "Ancient Ruins");
+strcpy(ruins.description, "Mysterious structures from a forgotten era");
+ruins.rarity = CARBON_ANOMALY_UNCOMMON;
+ruins.research_time = 10.0f;  // Base time to research
+ruins.reward_count = 1;
+ruins.rewards[0] = (Carbon_AnomalyReward){
+    .type = CARBON_ANOMALY_REWARD_TECH,
+    .amount = 50,  // Research points
+};
+int ruins_type = carbon_anomaly_register_type(registry, &ruins);
+
+Carbon_AnomalyTypeDef artifact = carbon_anomaly_type_default();
+strcpy(artifact.id, "rare_artifact");
+strcpy(artifact.name, "Rare Artifact");
+artifact.rarity = CARBON_ANOMALY_RARE;
+artifact.research_time = 20.0f;
+artifact.dangerous = true;  // Can have negative outcomes
+artifact.reward_count = 2;
+artifact.rewards[0] = (Carbon_AnomalyReward){
+    .type = CARBON_ANOMALY_REWARD_ARTIFACT,
+    .amount = 1,
+};
+artifact.rewards[1] = (Carbon_AnomalyReward){
+    .type = CARBON_ANOMALY_REWARD_RESOURCES,
+    .resource_type = RESOURCE_GOLD,
+    .amount = 500,
+};
+int artifact_type = carbon_anomaly_register_type(registry, &artifact);
+
+// Create manager
+Carbon_AnomalyManager *anomalies = carbon_anomaly_manager_create(registry);
+
+// Spawn anomalies
+uint32_t ruins_id = carbon_anomaly_spawn(anomalies, ruins_type, 50, 50, 0);
+
+// Spawn random anomaly (based on rarity weights)
+uint32_t random_id = carbon_anomaly_spawn_random(anomalies, 100, 100,
+                                                  CARBON_ANOMALY_RARE);
+
+// Spawn with extended options
+Carbon_AnomalySpawnParams params = {
+    .type_id = -1,  // -1 = random type
+    .x = 75, .y = 75,
+    .max_rarity = CARBON_ANOMALY_LEGENDARY,
+    .pre_discovered = true,
+    .discovered_by = player_faction,
+};
+uint32_t spawned = carbon_anomaly_spawn_ex(anomalies, &params);
+
+// Discovery - happens when unit explores the tile
+carbon_anomaly_discover(anomalies, ruins_id, player_faction);
+
+// Start research (requires discovery first)
+carbon_anomaly_start_research(anomalies, ruins_id, player_faction, scientist_entity);
+
+// In game loop - add research progress
+carbon_anomaly_update(anomalies, delta_time);  // Auto-updates all researching
+
+// Or add progress manually
+if (carbon_anomaly_add_progress(anomalies, ruins_id, 1.0f)) {
+    printf("Research complete!\n");
+}
+
+// Check status
+Carbon_AnomalyStatus status = carbon_anomaly_get_status(anomalies, ruins_id);
+float progress = carbon_anomaly_get_progress(anomalies, ruins_id);
+float remaining = carbon_anomaly_get_remaining_time(anomalies, ruins_id);
+
+// Collect rewards when complete
+if (carbon_anomaly_is_complete(anomalies, ruins_id)) {
+    Carbon_AnomalyResult result = carbon_anomaly_collect_rewards(anomalies, ruins_id);
+    for (int i = 0; i < result.reward_count; i++) {
+        apply_reward(&result.rewards[i]);
+    }
+}
+
+// Stop/pause research
+carbon_anomaly_stop_research(anomalies, ruins_id);
+
+// Research speed modifiers (upgrades, bonuses)
+carbon_anomaly_set_research_speed(anomalies, ruins_id, 1.5f);  // 50% faster
+
+// Check if faction can research
+if (carbon_anomaly_can_research(anomalies, ruins_id, player_faction)) {
+    // Show research button
+}
+
+// Cleanup
+carbon_anomaly_manager_destroy(anomalies);
+carbon_anomaly_registry_destroy(registry);
+```
+
+**Queries:**
+
+```c
+// Find anomalies at position
+uint32_t ids[16];
+int count = carbon_anomaly_get_at(anomalies, tile_x, tile_y, ids, 16);
+
+// Find by status
+int discovered = carbon_anomaly_get_by_status(anomalies, CARBON_ANOMALY_DISCOVERED,
+                                               ids, 16);
+int researching = carbon_anomaly_get_by_status(anomalies, CARBON_ANOMALY_RESEARCHING,
+                                                ids, 16);
+
+// Find by type
+int ruins_count = carbon_anomaly_get_by_type(anomalies, ruins_type, ids, 16);
+
+// Find by faction (who discovered)
+int faction_anomalies = carbon_anomaly_get_by_faction(anomalies, player_faction,
+                                                       ids, 16);
+
+// Region queries
+int in_rect = carbon_anomaly_get_in_rect(anomalies, 0, 0, 100, 100, ids, 16);
+int in_radius = carbon_anomaly_get_in_radius(anomalies, center_x, center_y, 10,
+                                              ids, 16);
+
+// Find nearest undiscovered anomaly
+uint32_t nearest = carbon_anomaly_find_nearest(anomalies, unit_x, unit_y,
+                                                50,  // Max distance
+                                                CARBON_ANOMALY_UNDISCOVERED);
+
+// Check if position has anomaly
+if (carbon_anomaly_has_at(anomalies, x, y)) {
+    // Show anomaly indicator
+}
+```
+
+**Callbacks:**
+
+```c
+// Reward callback - apply rewards to game state
+void on_reward(Carbon_AnomalyManager *mgr, const Carbon_Anomaly *anomaly,
+               Carbon_AnomalyResult *result, void *userdata) {
+    Game *game = userdata;
+    for (int i = 0; i < result->reward_count; i++) {
+        Carbon_AnomalyReward *r = &result->rewards[i];
+        switch (r->type) {
+            case CARBON_ANOMALY_REWARD_RESOURCES:
+                add_resources(game, anomaly->researching_faction,
+                              r->resource_type, r->amount);
+                break;
+            case CARBON_ANOMALY_REWARD_TECH:
+                add_research_points(game, anomaly->researching_faction,
+                                    r->amount);
+                break;
+            // ... handle other reward types
+        }
+    }
+    show_notification("Research complete: %s", result->message);
+}
+carbon_anomaly_set_reward_callback(anomalies, on_reward, game);
+
+// Discovery callback
+void on_discovery(Carbon_AnomalyManager *mgr, const Carbon_Anomaly *anomaly,
+                  int32_t faction_id, void *userdata) {
+    const Carbon_AnomalyTypeDef *type = carbon_anomaly_get_type(
+        carbon_anomaly_manager_get_registry(mgr), anomaly->type_id);
+    show_notification("Discovered: %s (%s)",
+                       type->name, carbon_anomaly_rarity_name(type->rarity));
+}
+carbon_anomaly_set_discovery_callback(anomalies, on_discovery, NULL);
+
+// Custom research validation
+bool can_research_check(const Carbon_AnomalyManager *mgr,
+                        const Carbon_Anomaly *anomaly,
+                        int32_t faction_id, void *userdata) {
+    const Carbon_AnomalyTypeDef *type = carbon_anomaly_get_type(
+        carbon_anomaly_manager_get_registry((Carbon_AnomalyManager *)mgr),
+        anomaly->type_id);
+    // Check tech requirements
+    if (type->required_tech >= 0 &&
+        !has_tech(faction_id, type->required_tech)) {
+        return false;
+    }
+    return true;
+}
+carbon_anomaly_set_can_research_callback(anomalies, can_research_check, NULL);
+```
+
+**Random generation:**
+
+```c
+// Set random seed for deterministic spawning
+carbon_anomaly_set_seed(anomalies, game_seed);
+
+// Custom rarity weights (default: 60%, 25%, 12%, 3%)
+float weights[CARBON_ANOMALY_RARITY_COUNT] = {
+    0.50f,   // Common
+    0.30f,   // Uncommon
+    0.15f,   // Rare
+    0.05f,   // Legendary
+};
+carbon_anomaly_set_rarity_weights(anomalies, weights);
+
+// Spawn multiple random anomalies
+for (int i = 0; i < 20; i++) {
+    int x = rand() % map_width;
+    int y = rand() % map_height;
+    if (carbon_anomaly_can_spawn_at(anomalies, x, y)) {
+        carbon_anomaly_spawn_random(anomalies, x, y, CARBON_ANOMALY_RARE);
+    }
+}
+```
+
+**Statistics:**
+
+```c
+Carbon_AnomalyStats stats;
+carbon_anomaly_get_stats(anomalies, &stats);
+printf("Total: %d, Undiscovered: %d, Researching: %d\n",
+       stats.total_count, stats.undiscovered_count, stats.researching_count);
+printf("By rarity - Common: %d, Uncommon: %d, Rare: %d, Legendary: %d\n",
+       stats.by_rarity[CARBON_ANOMALY_COMMON],
+       stats.by_rarity[CARBON_ANOMALY_UNCOMMON],
+       stats.by_rarity[CARBON_ANOMALY_RARE],
+       stats.by_rarity[CARBON_ANOMALY_LEGENDARY]);
+
+int total = carbon_anomaly_count(anomalies);
+```
+
+**Rarity tiers:**
+- `CARBON_ANOMALY_COMMON` - ~60% of spawns
+- `CARBON_ANOMALY_UNCOMMON` - ~25% of spawns
+- `CARBON_ANOMALY_RARE` - ~12% of spawns
+- `CARBON_ANOMALY_LEGENDARY` - ~3% of spawns
+
+**Anomaly statuses:**
+- `CARBON_ANOMALY_UNDISCOVERED` - Not yet found
+- `CARBON_ANOMALY_DISCOVERED` - Found but not researched
+- `CARBON_ANOMALY_RESEARCHING` - Currently being researched
+- `CARBON_ANOMALY_COMPLETED` - Research complete
+- `CARBON_ANOMALY_DEPLETED` - Rewards collected, no further use
+
+**Reward types:**
+- `CARBON_ANOMALY_REWARD_RESOURCES` - Resource bonus
+- `CARBON_ANOMALY_REWARD_TECH` - Technology unlock/progress
+- `CARBON_ANOMALY_REWARD_UNIT` - Free unit(s)
+- `CARBON_ANOMALY_REWARD_MODIFIER` - Temporary/permanent modifier
+- `CARBON_ANOMALY_REWARD_ARTIFACT` - Special item
+- `CARBON_ANOMALY_REWARD_MAP` - Reveal map area
+- `CARBON_ANOMALY_REWARD_CUSTOM` - Game-defined reward
+
+**Key features:**
+- Type registry with rarity tiers
+- Discovery and research status tracking
+- Progress-based research with time duration
+- Research speed modifiers for upgrades/bonuses
+- Reward callbacks for game integration
+- Random spawning with configurable rarity weights
+- Repeatable anomalies for replayable content
+- Dangerous anomalies with potential negative outcomes
+- Region and distance queries
+
+**Common patterns:**
+
+```c
+// Scout unit discovers anomaly on move
+void on_unit_move(Game *game, Unit *unit, int new_x, int new_y) {
+    uint32_t ids[4];
+    int count = carbon_anomaly_get_at(game->anomalies, new_x, new_y, ids, 4);
+    for (int i = 0; i < count; i++) {
+        Carbon_AnomalyStatus status = carbon_anomaly_get_status(game->anomalies, ids[i]);
+        if (status == CARBON_ANOMALY_UNDISCOVERED) {
+            carbon_anomaly_discover(game->anomalies, ids[i], unit->faction);
+        }
+    }
+}
+
+// Science ship researches anomaly
+void assign_research(Game *game, Unit *science_ship, uint32_t anomaly_id) {
+    if (carbon_anomaly_can_research(game->anomalies, anomaly_id, science_ship->faction)) {
+        carbon_anomaly_start_research(game->anomalies, anomaly_id,
+                                       science_ship->faction, science_ship->id);
+        science_ship->assigned_task = anomaly_id;
+    }
+}
+
+// Render anomaly on map
+void render_anomaly(Game *game, uint32_t anomaly_id, float x, float y) {
+    const Carbon_Anomaly *a = carbon_anomaly_get(game->anomalies, anomaly_id);
+    const Carbon_AnomalyTypeDef *type = carbon_anomaly_get_type(
+        carbon_anomaly_manager_get_registry(game->anomalies), a->type_id);
+
+    // Choose sprite based on rarity
+    Carbon_Sprite *sprite = get_anomaly_sprite(type->rarity);
+    carbon_sprite_draw(sprites, sprite, x, y);
+
+    // Show progress bar if researching
+    if (a->status == CARBON_ANOMALY_RESEARCHING) {
+        draw_progress_bar(x, y - 10, a->progress);
     }
 }
 ```
