@@ -20,6 +20,7 @@ Features extracted from Machinae codebase for potential addition to Carbon game 
 - Spatial hash index (O(1) entity lookup by grid cell)
 - Fog of war / exploration system
 - Rate tracking (rolling window metrics)
+- Task queue system (sequential task execution for AI agents)
 
 ---
 
@@ -318,7 +319,7 @@ void carbon_game_speed_destroy(speed);
 1. ~~**Spatial Hash Index** - Foundation for other systems~~ ✅ DONE
 2. ~~**Fog of War** - Common strategy game requirement~~ ✅ DONE
 3. ~~**Rate Tracking** - Useful analytics for economy games~~ ✅ DONE
-4. **Task Queue** - Extends existing AI system
+4. ~~**Task Queue** - Extends existing AI system~~ ✅ DONE
 5. **Network System** - Power/resource distribution
 6. **Blueprint System** - UX improvement for builders
 7. **Ghost Building** - Pairs with blueprints

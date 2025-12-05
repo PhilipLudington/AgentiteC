@@ -92,6 +92,7 @@ include/carbon/
 ├── audio.h             # Audio system API
 ├── pathfinding.h       # A* pathfinding API
 ├── ai.h                # AI personality system API
+├── task.h              # Task queue system API
 ├── turn.h              # Turn/phase system API
 ├── resource.h          # Resource economy API
 ├── tech.h              # Technology tree API
@@ -1669,6 +1670,206 @@ carbon_ai_destroy(ai);
 - Action cooldowns to prevent repetition
 - Deterministic random for reproducible behavior
 - Dynamic weight modification
+
+## Task Queue System
+
+Sequential task execution for autonomous AI agents. Provides a queue of tasks with lifecycle management and completion callbacks:
+
+```c
+#include "carbon/task.h"
+
+// Create task queue for an agent (capacity = max pending tasks)
+Carbon_TaskQueue *queue = carbon_task_queue_create(16);
+
+// Assign entity to execute tasks
+carbon_task_queue_set_assigned_entity(queue, worker_entity);
+
+// Queue tasks (builds a sequence of actions)
+carbon_task_queue_add_move(queue, target_x, target_y);
+carbon_task_queue_add_collect(queue, resource_x, resource_y, RESOURCE_WOOD);
+carbon_task_queue_add_deposit(queue, storage_x, storage_y, -1);  // -1 = all types
+carbon_task_queue_add_wait(queue, 1.0f);  // Wait 1 second
+
+// Movement with run option
+carbon_task_queue_add_move_ex(queue, x, y, true);  // Run to destination
+
+// Resource operations
+carbon_task_queue_add_collect_ex(queue, x, y, RESOURCE_IRON, 10);  // Specific quantity
+carbon_task_queue_add_withdraw(queue, storage_x, storage_y, RESOURCE_GOLD, 50);
+carbon_task_queue_add_mine(queue, node_x, node_y, 0);  // 0 = until full
+
+// Crafting and building
+carbon_task_queue_add_craft(queue, RECIPE_SWORD, 1);
+carbon_task_queue_add_build(queue, x, y, BUILDING_BARRACKS);
+carbon_task_queue_add_build_ex(queue, x, y, BUILDING_WALL, DIRECTION_NORTH);
+
+// Combat tasks
+carbon_task_queue_add_attack(queue, enemy_entity, true);   // true = pursue
+carbon_task_queue_add_defend(queue, center_x, center_y, 5);  // 5 tile radius
+carbon_task_queue_add_follow(queue, leader_entity, 2, 10);   // min/max distance
+
+// Exploration
+carbon_task_queue_add_explore(queue, area_x, area_y, 10);  // 10 tile radius
+
+// Patrol with waypoints
+int waypoints[][2] = {{10, 10}, {20, 10}, {20, 20}, {10, 20}};
+carbon_task_queue_add_patrol(queue, waypoints, 4, true);  // true = loop
+
+// Interaction
+carbon_task_queue_add_interact(queue, door_x, door_y, INTERACT_OPEN);
+carbon_task_queue_add_interact_entity(queue, npc_entity, INTERACT_TALK);
+
+// In game loop - process current task:
+Carbon_Task *current = carbon_task_queue_current(queue);
+if (current) {
+    // Start task if pending
+    if (current->status == CARBON_TASK_PENDING) {
+        carbon_task_queue_start(queue);
+    }
+
+    // Process based on task type
+    if (current->status == CARBON_TASK_IN_PROGRESS) {
+        switch (current->type) {
+            case CARBON_TASK_MOVE: {
+                Carbon_TaskMove *move = &current->data.move;
+                if (move_agent_toward(agent, move->target_x, move->target_y)) {
+                    carbon_task_queue_complete(queue);
+                }
+                break;
+            }
+            case CARBON_TASK_WAIT:
+                // Built-in wait handling - auto-completes when done
+                carbon_task_queue_update_wait(queue, delta_time);
+                break;
+            case CARBON_TASK_COLLECT: {
+                Carbon_TaskCollect *collect = &current->data.collect;
+                if (!resource_exists(collect->target_x, collect->target_y)) {
+                    carbon_task_queue_fail(queue, "Resource depleted");
+                } else if (agent_at_position(agent, collect->target_x, collect->target_y)) {
+                    collect_resource(agent, collect->resource_type, collect->quantity);
+                    carbon_task_queue_complete(queue);
+                }
+                break;
+            }
+            // ... handle other task types
+        }
+    }
+}
+
+// Update progress for UI (0.0 to 1.0)
+carbon_task_queue_set_progress(queue, 0.5f);
+
+// Task completion callback
+void on_task_done(Carbon_TaskQueue *queue, const Carbon_Task *task, void *userdata) {
+    Agent *agent = userdata;
+    if (task->status == CARBON_TASK_COMPLETED) {
+        printf("Agent completed %s\n", carbon_task_type_name(task->type));
+    } else if (task->status == CARBON_TASK_FAILED) {
+        printf("Task failed: %s\n", task->fail_reason);
+    }
+}
+carbon_task_queue_set_callback(queue, on_task_done, agent);
+
+// Insert urgent task at front (after current)
+Carbon_TaskMove urgent_move = { .target_x = safe_x, .target_y = safe_y, .run = true };
+carbon_task_queue_insert_front(queue, CARBON_TASK_MOVE, &urgent_move, sizeof(urgent_move));
+
+// Cancel current and clear queue
+carbon_task_queue_cancel(queue);  // Cancel current task
+carbon_task_queue_clear(queue);   // Clear all tasks
+
+// Query queue state
+int count = carbon_task_queue_count(queue);
+bool empty = carbon_task_queue_is_empty(queue);
+bool full = carbon_task_queue_is_full(queue);
+bool idle = carbon_task_queue_is_idle(queue);  // No task or current complete
+int capacity = carbon_task_queue_capacity(queue);
+
+// Get task by index
+Carbon_Task *second = carbon_task_queue_get(queue, 1);
+
+// Remove specific task
+carbon_task_queue_remove(queue, 2);  // Remove task at index 2
+
+// Custom task types
+typedef struct MyCustomTask {
+    int custom_data;
+    float custom_value;
+} MyCustomTask;
+
+MyCustomTask custom = { .custom_data = 42, .custom_value = 1.5f };
+carbon_task_queue_add_custom(queue, CARBON_TASK_USER + 1, &custom, sizeof(custom));
+
+// Utility functions
+const char *type_name = carbon_task_type_name(CARBON_TASK_MOVE);     // "Move"
+const char *status_name = carbon_task_status_name(CARBON_TASK_IN_PROGRESS);  // "In Progress"
+
+// Cleanup
+carbon_task_queue_destroy(queue);
+```
+
+**Built-in task types:**
+- `CARBON_TASK_MOVE` - Move to target position
+- `CARBON_TASK_EXPLORE` - Explore area around position
+- `CARBON_TASK_COLLECT` - Collect resource at position
+- `CARBON_TASK_DEPOSIT` - Deposit carried items
+- `CARBON_TASK_CRAFT` - Craft item using recipe
+- `CARBON_TASK_BUILD` - Construct building
+- `CARBON_TASK_ATTACK` - Attack target entity
+- `CARBON_TASK_DEFEND` - Defend position
+- `CARBON_TASK_FOLLOW` - Follow target entity
+- `CARBON_TASK_FLEE` - Flee from danger
+- `CARBON_TASK_WAIT` - Wait for duration
+- `CARBON_TASK_INTERACT` - Interact with entity/object
+- `CARBON_TASK_PATROL` - Patrol between waypoints
+- `CARBON_TASK_WITHDRAW` - Withdraw resources from storage
+- `CARBON_TASK_MINE` - Mine resource node
+- `CARBON_TASK_USER` (100+) - Game-defined task types
+
+**Task statuses:**
+- `CARBON_TASK_PENDING` - Not yet started
+- `CARBON_TASK_IN_PROGRESS` - Currently executing
+- `CARBON_TASK_COMPLETED` - Successfully completed
+- `CARBON_TASK_FAILED` - Failed (check `fail_reason`)
+- `CARBON_TASK_CANCELLED` - Cancelled before completion
+
+**Key features:**
+- FIFO task queue with configurable capacity
+- Type-specific task parameters (move coordinates, craft recipes, etc.)
+- Task lifecycle: pending → in_progress → completed/failed/cancelled
+- Completion callbacks for state machine integration
+- Built-in wait task with automatic completion
+- Priority front insertion for urgent tasks
+- Entity assignment for agent tracking
+- Custom task types for game-specific actions
+
+**Common patterns:**
+
+```c
+// Worker gathering loop
+void setup_gather_loop(Carbon_TaskQueue *queue, int resource_x, int resource_y,
+                        int storage_x, int storage_y) {
+    carbon_task_queue_clear(queue);
+    carbon_task_queue_add_move(queue, resource_x, resource_y);
+    carbon_task_queue_add_collect(queue, resource_x, resource_y, RESOURCE_WOOD);
+    carbon_task_queue_add_move(queue, storage_x, storage_y);
+    carbon_task_queue_add_deposit(queue, storage_x, storage_y, -1);
+    // Re-queue on completion callback to create loop
+}
+
+// Guard patrol
+void setup_guard_patrol(Carbon_TaskQueue *queue) {
+    int waypoints[][2] = {{10, 10}, {30, 10}, {30, 30}, {10, 30}};
+    carbon_task_queue_add_patrol(queue, waypoints, 4, true);
+}
+
+// Interrupt current task for emergency
+void handle_emergency(Carbon_TaskQueue *queue, int safe_x, int safe_y) {
+    Carbon_TaskMove flee = { .target_x = safe_x, .target_y = safe_y, .run = true };
+    carbon_task_queue_insert_front(queue, CARBON_TASK_MOVE, &flee, sizeof(flee));
+    carbon_task_queue_cancel(queue);  // Cancel current, starts flee immediately
+}
+```
 
 ## View Model System
 
