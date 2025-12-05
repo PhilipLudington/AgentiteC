@@ -74,7 +74,9 @@ src/
 │   ├── blueprint.c     # Blueprint system for building templates
 │   ├── construction.c  # Ghost building / construction queue
 │   ├── dialog.c        # Dialog / narrative system
-│   └── game_speed.c    # Variable simulation speed control
+│   ├── game_speed.c    # Variable simulation speed control
+│   ├── crafting.c      # Crafting state machine
+│   └── biome.c         # Biome/terrain system
 ├── ui/                 # Immediate-mode GUI system
 │   └── viewmodel.c     # Observable values for UI data binding
 └── game/               # Game-specific logic
@@ -116,7 +118,9 @@ include/carbon/
 ├── blueprint.h         # Blueprint system API
 ├── construction.h      # Ghost building / construction queue API
 ├── dialog.h            # Dialog / narrative system API
-└── game_speed.h        # Variable simulation speed API
+├── game_speed.h        # Variable simulation speed API
+├── crafting.h          # Crafting state machine API
+└── biome.h             # Biome/terrain system API
 
 lib/
 ├── flecs.h/.c          # Flecs ECS library (v4.0.0)
@@ -1916,6 +1920,463 @@ if (carbon_input_action_just_pressed(input, ACTION_NORMAL_SPEED)) {
 char speed_text[32];
 carbon_game_speed_to_string(game_speed, speed_text, sizeof(speed_text));
 cui_label(ui, speed_text);
+```
+
+## Crafting System
+
+Progress-based crafting with recipe definitions, batch support, speed multipliers, and completion callbacks:
+
+```c
+#include "carbon/crafting.h"
+
+// Create recipe registry
+Carbon_RecipeRegistry *recipes = carbon_recipe_create();
+
+// Define a recipe
+Carbon_RecipeDef recipe = {
+    .id = "iron_sword",
+    .name = "Iron Sword",
+    .description = "A sturdy sword made of iron",
+    .category = CATEGORY_WEAPONS,
+    .craft_time = 5.0f,
+    .input_count = 2,
+    .output_count = 1,
+    .unlocked = true,
+};
+recipe.inputs[0] = (Carbon_RecipeItem){ .item_type = ITEM_IRON, .quantity = 3 };
+recipe.inputs[1] = (Carbon_RecipeItem){ .item_type = ITEM_WOOD, .quantity = 1 };
+recipe.outputs[0] = (Carbon_RecipeItem){ .item_type = ITEM_IRON_SWORD, .quantity = 1 };
+carbon_recipe_register(recipes, &recipe);
+
+// Recipe with station requirement
+Carbon_RecipeDef potion = {
+    .id = "health_potion",
+    .name = "Health Potion",
+    .craft_time = 3.0f,
+    .required_station = STATION_ALCHEMY,  // Requires alchemy table
+    .input_count = 2,
+    .output_count = 1,
+    .unlocked = true,
+};
+potion.inputs[0] = (Carbon_RecipeItem){ .item_type = ITEM_HERB, .quantity = 2 };
+potion.inputs[1] = (Carbon_RecipeItem){ .item_type = ITEM_WATER, .quantity = 1 };
+potion.outputs[0] = (Carbon_RecipeItem){ .item_type = ITEM_HEALTH_POTION, .quantity = 1 };
+carbon_recipe_register(recipes, &potion);
+
+// Create a crafter (per-entity or per-building)
+Carbon_Crafter *crafter = carbon_crafter_create(recipes);
+
+// Set crafting station type (determines which recipes are available)
+carbon_crafter_set_station(crafter, STATION_FORGE);
+
+// Start crafting a batch
+carbon_crafter_start(crafter, "iron_sword", 5);  // Craft 5 swords
+
+// In game loop:
+carbon_crafter_update(crafter, delta_time);
+
+// Check status
+if (carbon_crafter_is_complete(crafter)) {
+    int collected = carbon_crafter_collect(crafter);  // Get items
+    printf("Collected %d items\n", collected);
+}
+
+// Query progress
+float progress = carbon_crafter_get_progress(crafter);           // Current item (0.0-1.0)
+float batch_progress = carbon_crafter_get_batch_progress(crafter); // Overall batch
+
+// Cleanup
+carbon_crafter_destroy(crafter);
+carbon_recipe_destroy(recipes);
+```
+
+**Queue management:**
+
+```c
+// Queue multiple recipes
+carbon_crafter_start(crafter, "iron_sword", 3);
+carbon_crafter_queue(crafter, "iron_helmet", 2);
+carbon_crafter_queue(crafter, "iron_shield", 1);
+
+// Query queue
+int queue_length = carbon_crafter_get_queue_length(crafter);
+const Carbon_CraftJob *job = carbon_crafter_get_queued_job(crafter, 1);
+
+// Remove from queue (cannot remove current job)
+carbon_crafter_remove_queued(crafter, 2);
+
+// Clear queue (keeps current job)
+carbon_crafter_clear_queue(crafter);
+
+// Cancel current job
+carbon_crafter_cancel(crafter);
+
+// Cancel everything
+carbon_crafter_cancel_all(crafter);
+
+// Pause/resume
+carbon_crafter_pause(crafter);
+carbon_crafter_resume(crafter);
+```
+
+**Speed modifiers:**
+
+```c
+// Set crafting speed (affects all recipes)
+carbon_crafter_set_speed(crafter, 2.0f);  // 2x speed (faster)
+carbon_crafter_set_speed(crafter, 0.5f);  // 0.5x speed (slower)
+
+// Query speed
+float speed = carbon_crafter_get_speed(crafter);
+
+// Time queries
+float remaining = carbon_crafter_get_remaining_time(crafter);       // Current item
+float total_remaining = carbon_crafter_get_total_remaining_time(crafter);  // All items
+```
+
+**Resource callbacks:**
+
+```c
+// Check if resources are available
+bool check_resources(Carbon_Crafter *crafter,
+                     const Carbon_RecipeDef *recipe, void *userdata) {
+    Inventory *inv = userdata;
+    for (int i = 0; i < recipe->input_count; i++) {
+        if (!inventory_has(inv, recipe->inputs[i].item_type,
+                            recipe->inputs[i].quantity)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Consume resources when crafting starts
+void consume_resources(Carbon_Crafter *crafter,
+                       const Carbon_RecipeDef *recipe, void *userdata) {
+    Inventory *inv = userdata;
+    for (int i = 0; i < recipe->input_count; i++) {
+        inventory_remove(inv, recipe->inputs[i].item_type,
+                          recipe->inputs[i].quantity);
+    }
+}
+
+// Produce items when crafting completes
+void produce_items(Carbon_Crafter *crafter,
+                   const Carbon_RecipeDef *recipe,
+                   int quantity, void *userdata) {
+    Inventory *inv = userdata;
+    for (int i = 0; i < recipe->output_count; i++) {
+        inventory_add(inv, recipe->outputs[i].item_type,
+                       recipe->outputs[i].quantity * quantity);
+    }
+}
+
+carbon_crafter_set_resource_check(crafter, check_resources, inventory);
+carbon_crafter_set_resource_consume(crafter, consume_resources, inventory);
+carbon_crafter_set_resource_produce(crafter, produce_items, inventory);
+```
+
+**Completion callback:**
+
+```c
+// Called each time an item is crafted
+void on_item_crafted(Carbon_Crafter *crafter,
+                     const Carbon_RecipeDef *recipe,
+                     int quantity, void *userdata) {
+    printf("Crafted %d x %s\n", quantity, recipe->name);
+    play_sound(SOUND_CRAFT_COMPLETE);
+}
+carbon_crafter_set_callback(crafter, on_item_crafted, NULL);
+```
+
+**Recipe queries:**
+
+```c
+// Find recipe by ID
+const Carbon_RecipeDef *recipe = carbon_recipe_find(recipes, "iron_sword");
+
+// Get recipes by category
+const Carbon_RecipeDef *weapon_recipes[32];
+int count = carbon_recipe_get_by_category(recipes, CATEGORY_WEAPONS, weapon_recipes, 32);
+
+// Get recipes available at a station
+const Carbon_RecipeDef *forge_recipes[32];
+int forge_count = carbon_recipe_get_by_station(recipes, STATION_FORGE, forge_recipes, 32);
+
+// Check if crafter can craft recipe (station + unlock)
+if (carbon_crafter_can_craft(crafter, "iron_sword")) {
+    // Recipe is available
+}
+
+// Get all available recipes for this crafter
+const Carbon_RecipeDef *available[64];
+int available_count = carbon_crafter_get_available_recipes(crafter, available, 64);
+
+// Unlock/lock recipes
+carbon_recipe_set_unlocked(recipes, "iron_sword", true);
+if (carbon_recipe_is_unlocked(recipes, "iron_sword")) {
+    // Recipe is unlocked
+}
+```
+
+**Entity association:**
+
+```c
+// Associate crafter with an entity
+carbon_crafter_set_entity(crafter, worker_entity);
+int32_t entity = carbon_crafter_get_entity(crafter);
+```
+
+**Statistics:**
+
+```c
+int total = carbon_crafter_get_total_crafted(crafter);
+float time = carbon_crafter_get_total_craft_time(crafter);
+carbon_crafter_reset_stats(crafter);
+```
+
+**Key features:**
+- Recipe registry with input/output items
+- Station requirements for specialized crafting
+- Batch crafting with queue support
+- Speed multipliers for upgrades/bonuses
+- Resource callbacks for inventory integration
+- Completion callbacks for notifications
+- Progress tracking for UI display
+- Category and station filtering
+
+**Craft statuses:**
+- `CARBON_CRAFT_IDLE` - Not crafting
+- `CARBON_CRAFT_IN_PROGRESS` - Actively crafting
+- `CARBON_CRAFT_COMPLETE` - Batch complete, awaiting collection
+- `CARBON_CRAFT_PAUSED` - Crafting paused
+- `CARBON_CRAFT_FAILED` - Failed (missing resources)
+
+## Biome System
+
+Terrain types affecting resource distribution, movement costs, and visuals:
+
+```c
+#include "carbon/biome.h"
+
+// Create biome system
+Carbon_BiomeSystem *biomes = carbon_biome_create();
+
+// Register biomes
+Carbon_BiomeDef plains = carbon_biome_default_def();
+strcpy(plains.id, "plains");
+strcpy(plains.name, "Plains");
+plains.color = carbon_biome_rgb(124, 252, 0);  // Lawn green
+plains.movement_cost = 1.0f;                    // Normal speed
+plains.flags = CARBON_BIOME_FLAG_PASSABLE | CARBON_BIOME_FLAG_BUILDABLE | CARBON_BIOME_FLAG_FARMABLE;
+int plains_id = carbon_biome_register(biomes, &plains);
+
+Carbon_BiomeDef forest = carbon_biome_default_def();
+strcpy(forest.id, "forest");
+strcpy(forest.name, "Dense Forest");
+forest.color = carbon_biome_rgb(34, 139, 34);  // Forest green
+forest.movement_cost = 1.5f;                    // 50% slower movement
+forest.visibility_modifier = 0.7f;              // Reduced visibility
+forest.defense_bonus = 0.2f;                    // +20% defense bonus
+forest.flags = CARBON_BIOME_FLAG_PASSABLE | CARBON_BIOME_FLAG_BUILDABLE;
+int forest_id = carbon_biome_register(biomes, &forest);
+
+Carbon_BiomeDef mountain = carbon_biome_default_def();
+strcpy(mountain.id, "mountain");
+strcpy(mountain.name, "Mountain");
+mountain.color = carbon_biome_rgb(128, 128, 128);  // Gray
+mountain.movement_cost = 2.5f;                      // Very slow
+mountain.defense_bonus = 0.4f;                      // +40% defense
+mountain.flags = CARBON_BIOME_FLAG_PASSABLE;        // Not buildable
+int mountain_id = carbon_biome_register(biomes, &mountain);
+
+Carbon_BiomeDef water = carbon_biome_default_def();
+strcpy(water.id, "water");
+strcpy(water.name, "Deep Water");
+water.color = carbon_biome_rgb(30, 144, 255);  // Dodger blue
+water.flags = CARBON_BIOME_FLAG_WATER;          // Only naval units can pass
+int water_id = carbon_biome_register(biomes, &water);
+
+// Set resource spawn weights
+carbon_biome_set_resource_weight(biomes, plains_id, RESOURCE_FOOD, 1.5f);
+carbon_biome_set_resource_weight(biomes, forest_id, RESOURCE_WOOD, 2.0f);
+carbon_biome_set_resource_weight(biomes, forest_id, RESOURCE_FOOD, 0.5f);  // Less food
+carbon_biome_set_resource_weight(biomes, mountain_id, RESOURCE_IRON, 2.5f);
+carbon_biome_set_resource_weight(biomes, mountain_id, RESOURCE_GOLD, 1.5f);
+
+// Or use string ID
+carbon_biome_set_resource_weight_by_id(biomes, "water", RESOURCE_FISH, 3.0f);
+
+// Cleanup
+carbon_biome_destroy(biomes);
+```
+
+**Biome queries:**
+
+```c
+// Find biome by ID
+const Carbon_BiomeDef *def = carbon_biome_find(biomes, "forest");
+int forest_index = carbon_biome_find_index(biomes, "forest");
+
+// Get biome by index
+const Carbon_BiomeDef *biome = carbon_biome_get(biomes, 0);
+
+// Query properties
+const char *name = carbon_biome_get_name(biomes, forest_id);
+uint32_t color = carbon_biome_get_color(biomes, forest_id);
+float move_cost = carbon_biome_get_movement_cost(biomes, forest_id);
+float resource_mult = carbon_biome_get_resource_multiplier(biomes, forest_id);
+float visibility = carbon_biome_get_visibility_modifier(biomes, forest_id);
+float defense = carbon_biome_get_defense_bonus(biomes, forest_id);
+
+// Get resource weight for a biome
+float wood_weight = carbon_biome_get_resource_weight(biomes, forest_id, RESOURCE_WOOD);
+
+// Find best biome for a resource
+int best_for_iron = carbon_biome_get_best_for_resource(biomes, RESOURCE_IRON);
+
+// Get all biomes that can spawn a resource
+int biome_ids[16];
+int count = carbon_biome_get_all_for_resource(biomes, RESOURCE_WOOD, biome_ids, 16);
+```
+
+**Flag queries:**
+
+```c
+// Check specific flags
+if (carbon_biome_has_flag(biomes, forest_id, CARBON_BIOME_FLAG_PASSABLE)) {
+    // Ground units can pass
+}
+
+// Convenience functions
+if (carbon_biome_is_passable(biomes, forest_id)) { }
+if (carbon_biome_is_buildable(biomes, forest_id)) { }
+if (carbon_biome_is_water(biomes, water_id)) { }
+if (carbon_biome_is_hazardous(biomes, lava_id)) { }
+```
+
+**Biome map (per-cell biome storage):**
+
+```c
+// Create biome map (matches tilemap dimensions)
+Carbon_BiomeMap *map = carbon_biome_map_create(biomes, 100, 100);
+
+// Set biomes manually
+carbon_biome_map_set(map, 10, 10, plains_id);
+carbon_biome_map_fill_rect(map, 0, 0, 50, 50, plains_id);
+carbon_biome_map_fill_circle(map, 75, 75, 15, forest_id);
+
+// Query biomes
+int biome_at = carbon_biome_map_get(map, 10, 10);
+const Carbon_BiomeDef *def_at = carbon_biome_map_get_def(map, 10, 10);
+
+// Query properties at position
+float move_cost = carbon_biome_map_get_movement_cost(map, 10, 10);
+float resource_wt = carbon_biome_map_get_resource_weight(map, 10, 10, RESOURCE_WOOD);
+
+// Check flags at position
+if (carbon_biome_map_is_passable(map, x, y)) {
+    // Can move here
+}
+if (carbon_biome_map_is_buildable(map, x, y)) {
+    // Can build here
+}
+
+// Map info
+int width, height;
+carbon_biome_map_get_size(map, &width, &height);
+
+// Statistics
+int plains_count = carbon_biome_map_count_biome(map, plains_id);
+int stats[CARBON_BIOME_MAX];
+carbon_biome_map_get_stats(map, stats);
+printf("Plains: %d cells, Forest: %d cells\n", stats[plains_id], stats[forest_id]);
+
+// Cleanup
+carbon_biome_map_destroy(map);
+```
+
+**Procedural generation:**
+
+```c
+// Noise-based generation (uses multi-octave perlin noise)
+int biome_ids[] = { water_id, plains_id, forest_id, mountain_id };
+float thresholds[] = { 0.0f, 0.3f, 0.5f, 0.8f };  // Noise value ranges
+carbon_biome_map_generate_noise(map, biome_ids, thresholds, 4, 12345);
+
+// Smooth borders (reduces noise, larger biome regions)
+carbon_biome_map_smooth(map, 2);  // 2 passes
+```
+
+**Biome flags:**
+- `CARBON_BIOME_FLAG_PASSABLE` - Ground units can traverse
+- `CARBON_BIOME_FLAG_BUILDABLE` - Can construct buildings
+- `CARBON_BIOME_FLAG_FARMABLE` - Can grow crops
+- `CARBON_BIOME_FLAG_WATER` - Naval units only
+- `CARBON_BIOME_FLAG_HAZARDOUS` - Causes damage over time
+
+**Biome definition fields:**
+- `id` - Unique string identifier
+- `name` - Display name
+- `description` - Description text
+- `color` - Primary color (ABGR format)
+- `color_variant` - Secondary color for variation
+- `base_tile` - Tilemap tile ID
+- `movement_cost` - Movement speed multiplier (1.0 = normal)
+- `resource_multiplier` - Resource yield modifier
+- `visibility_modifier` - Vision range modifier
+- `defense_bonus` - Defense bonus for units
+- `base_temperature` - Temperature (-1.0 cold to 1.0 hot)
+- `humidity` - Humidity (0.0 dry to 1.0 wet)
+- `transition_priority` - Edge blending priority
+- `flags` - Combination of biome flags
+
+**Key features:**
+- Biome registry with lookup by ID
+- Per-biome resource spawn weights
+- Movement cost modifiers
+- Combat defense bonuses
+- Visibility modifiers
+- Biome map for per-cell tracking
+- Procedural noise-based generation
+- Border smoothing algorithm
+- Flag-based terrain properties
+
+**Common patterns:**
+
+```c
+// Integrate with pathfinding
+float pathfinder_cost(int x, int y, void *userdata) {
+    Carbon_BiomeMap *map = userdata;
+    return carbon_biome_map_get_movement_cost(map, x, y);
+}
+carbon_pathfinder_set_cost_callback(pf, pathfinder_cost, biome_map);
+
+// Resource spawning based on biome
+void spawn_resources(Carbon_BiomeMap *map, int resource_type, int count) {
+    for (int i = 0; i < count; i++) {
+        int x = rand() % map_width;
+        int y = rand() % map_height;
+        float weight = carbon_biome_map_get_resource_weight(map, x, y, resource_type);
+        if ((float)rand() / RAND_MAX < weight) {
+            place_resource(x, y, resource_type);
+        }
+    }
+}
+
+// Render biome colors to minimap
+void render_minimap(Carbon_BiomeMap *map) {
+    int width, height;
+    carbon_biome_map_get_size(map, &width, &height);
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            const Carbon_BiomeDef *def = carbon_biome_map_get_def(map, x, y);
+            if (def) {
+                draw_pixel(x, y, def->color);
+            }
+        }
+    }
+}
 ```
 
 ## Event Dispatcher System

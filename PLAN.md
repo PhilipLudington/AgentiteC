@@ -26,10 +26,18 @@ Features extracted from Machinae codebase for potential addition to Carbon game 
 - Construction queue / ghost building (planned buildings with progress tracking)
 - Dialog / narrative system (event-driven dialog queue with speaker types)
 - Game speed system (variable simulation speed with pause support)
+- Crafting state machine (progress-based crafting with recipes and batching)
+- Biome system (terrain types with resource weights and generation)
 
 ---
 
-## New Features to Add
+## All Planned Features Complete ✅
+
+All 11 planned features have been implemented. The sections below document the original API sketches for reference.
+
+---
+
+## Implemented Features (Reference)
 
 ### Priority 1: Core Infrastructure
 
@@ -330,8 +338,8 @@ void carbon_game_speed_destroy(speed);
 7. ~~**Ghost Building** - Pairs with blueprints~~ ✅ DONE
 8. ~~**Dialog System** - Narrative integration~~ ✅ DONE
 9. ~~**Game Speed** - Simulation control~~ ✅ DONE
-10. **Crafting State Machine** - Extends resource system
-11. **Biome System** - World generation enhancement
+10. ~~**Crafting State Machine** - Extends resource system~~ ✅ DONE
+11. ~~**Biome System** - World generation enhancement~~ ✅ DONE
 
 ---
 
