@@ -120,7 +120,10 @@ include/carbon/
 ├── dialog.h            # Dialog / narrative system API
 ├── game_speed.h        # Variable simulation speed API
 ├── crafting.h          # Crafting state machine API
-└── biome.h             # Biome/terrain system API
+├── biome.h             # Biome/terrain system API
+├── blackboard.h        # Shared blackboard for AI coordination
+├── htn.h               # HTN AI planner API
+└── trade.h             # Trade route / supply line API
 
 lib/
 ├── flecs.h/.c          # Flecs ECS library (v4.0.0)
@@ -2990,6 +2993,326 @@ carbon_ai_destroy(ai);
 - Action cooldowns to prevent repetition
 - Deterministic random for reproducible behavior
 - Dynamic weight modification
+
+## HTN AI Planner
+
+Hierarchical Task Network planner for sophisticated AI behavior. Decomposes high-level goals into executable primitive tasks:
+
+```c
+#include "carbon/htn.h"
+
+// Create domain and world state
+Carbon_HTNDomain *domain = carbon_htn_domain_create();
+Carbon_HTNWorldState *ws = carbon_htn_world_state_create();
+
+// Set world state
+carbon_htn_ws_set_int(ws, "health", 100);
+carbon_htn_ws_set_bool(ws, "has_weapon", true);
+carbon_htn_ws_set_int(ws, "ammo", 10);
+
+// Register primitive tasks (actual actions)
+Carbon_HTNStatus execute_shoot(Carbon_HTNWorldState *ws, void *userdata) {
+    // Perform shooting action
+    carbon_htn_ws_inc_int(ws, "ammo", -1);
+    return CARBON_HTN_SUCCESS;
+}
+bool precond_has_ammo(const Carbon_HTNWorldState *ws, void *userdata) {
+    return carbon_htn_ws_get_int(ws, "ammo") > 0;
+}
+carbon_htn_register_primitive(domain, "shoot", execute_shoot, precond_has_ammo, NULL);
+
+// Or use declarative conditions/effects
+Carbon_HTNCondition conds[] = {
+    carbon_htn_cond_int("ammo", CARBON_HTN_OP_GT, 0)
+};
+Carbon_HTNEffect effects[] = {
+    carbon_htn_effect_inc_int("ammo", -1)
+};
+carbon_htn_register_primitive_ex(domain, "shoot_decl", execute_shoot,
+                                  conds, 1, effects, 1);
+
+// Register compound tasks (high-level goals)
+carbon_htn_register_compound(domain, "engage_enemy");
+
+// Add methods to compound tasks (tried in order)
+const char *ranged_attack[] = {"aim", "shoot"};
+carbon_htn_add_method(domain, "engage_enemy", precond_has_ammo,
+                       ranged_attack, 2);
+
+const char *melee_attack[] = {"approach", "melee"};
+carbon_htn_add_method(domain, "engage_enemy", NULL,  // Fallback
+                       melee_attack, 2);
+
+// Declarative method conditions
+Carbon_HTNCondition melee_conds[] = {
+    carbon_htn_cond_int("ammo", CARBON_HTN_OP_LE, 0)
+};
+carbon_htn_add_method_ex(domain, "engage_enemy", melee_conds, 1,
+                          melee_attack, 2);
+
+// Generate a plan
+Carbon_HTNPlan *plan = carbon_htn_plan(domain, ws, "engage_enemy", 1000);
+if (carbon_htn_plan_valid(plan)) {
+    printf("Plan length: %d\n", carbon_htn_plan_length(plan));
+    for (int i = 0; i < carbon_htn_plan_length(plan); i++) {
+        printf("  [%d] %s\n", i, carbon_htn_plan_get_task_name(plan, i));
+    }
+}
+
+// Execute plan
+Carbon_HTNExecutor *exec = carbon_htn_executor_create(domain);
+carbon_htn_executor_set_plan(exec, plan);  // Takes ownership
+
+// In game loop
+while (carbon_htn_executor_is_running(exec)) {
+    Carbon_HTNStatus status = carbon_htn_executor_update(exec, ws, game_context);
+    if (status == CARBON_HTN_FAILED) {
+        printf("Plan failed at: %s\n", carbon_htn_executor_get_current_task(exec));
+        break;
+    }
+}
+
+float progress = carbon_htn_executor_get_progress(exec);
+
+// Debug output
+carbon_htn_ws_debug_print(ws);
+carbon_htn_plan_debug_print(plan);
+
+// Cleanup
+carbon_htn_executor_destroy(exec);
+carbon_htn_world_state_destroy(ws);
+carbon_htn_domain_destroy(domain);
+```
+
+**Condition operators:**
+- `CARBON_HTN_OP_EQ`, `NE`, `GT`, `GE`, `LT`, `LE` - Numeric comparison
+- `CARBON_HTN_OP_HAS`, `NOT_HAS` - Key existence check
+- `CARBON_HTN_OP_TRUE`, `FALSE` - Boolean check
+
+**Key features:**
+- Compound tasks decompose into subtasks via methods
+- Methods tried in order; first with satisfied preconditions wins
+- Primitive tasks execute actual game logic
+- Declarative or callback-based conditions/effects
+- Plan simulation on cloned world state
+- Cycle detection and iteration limits
+- Executor tracks progress through plan
+
+## Shared Blackboard System
+
+Cross-system communication and data sharing without direct coupling. Supports resource reservations, plan publication, and decision history:
+
+```c
+#include "carbon/blackboard.h"
+
+// Create blackboard
+Carbon_Blackboard *bb = carbon_blackboard_create();
+
+// Store typed values
+carbon_blackboard_set_int(bb, "threat_level", 75);
+carbon_blackboard_set_float(bb, "resources_ratio", 1.2f);
+carbon_blackboard_set_bool(bb, "under_attack", false);
+carbon_blackboard_set_string(bb, "target_name", "Enemy Base");
+carbon_blackboard_set_ptr(bb, "primary_target", enemy_entity);
+carbon_blackboard_set_vec2(bb, "rally_point", 100.0f, 200.0f);
+
+// Read values
+int threat = carbon_blackboard_get_int(bb, "threat_level");
+float ratio = carbon_blackboard_get_float_or(bb, "ratio", 1.0f);  // With default
+if (carbon_blackboard_has(bb, "target_name")) {
+    const char *name = carbon_blackboard_get_string(bb, "target_name");
+}
+
+// Increment integers
+carbon_blackboard_inc_int(bb, "kills", 1);
+
+// Resource reservations (prevent double-spending by AI tracks)
+if (carbon_blackboard_reserve(bb, "gold", 500, "military_track")) {
+    // Resource reserved for military use
+    // Other tracks will see reduced available amount
+}
+int32_t available = carbon_blackboard_get_available(bb, "gold");
+int32_t reserved = carbon_blackboard_get_reserved(bb, "gold");
+
+// Release reservation when done
+carbon_blackboard_release(bb, "gold", "military_track");
+
+// Reservations with expiration
+carbon_blackboard_reserve_ex(bb, "iron", 100, "construction", 5);  // 5 turns
+
+// Plan publication for conflict avoidance
+carbon_blackboard_publish_plan(bb, "military", "Attack sector 7");
+carbon_blackboard_publish_plan_ex(bb, "expansion", "Colonize region",
+                                   "sector_7", 3);  // Target + duration
+
+if (carbon_blackboard_has_conflicting_plan(bb, "sector_7")) {
+    // Another system has plans for this target
+}
+
+const Carbon_BBPlan *plan = carbon_blackboard_get_plan(bb, "military");
+carbon_blackboard_cancel_plan(bb, "military");
+
+// Decision history (circular buffer)
+carbon_blackboard_set_turn(bb, current_turn);
+carbon_blackboard_log(bb, "Decided to attack sector %d", sector);
+carbon_blackboard_log_turn(bb, 5, "Turn 5: Built factory");
+
+const char *entries[10];
+int count = carbon_blackboard_get_history_strings(bb, entries, 10);
+
+// Subscribe to changes
+void on_change(Carbon_Blackboard *bb, const char *key,
+               const Carbon_BBValue *old, const Carbon_BBValue *new,
+               void *userdata) {
+    printf("Key %s changed\n", key);
+}
+uint32_t sub = carbon_blackboard_subscribe(bb, "threat_level", on_change, NULL);
+carbon_blackboard_subscribe(bb, NULL, on_change, NULL);  // All keys
+carbon_blackboard_unsubscribe(bb, sub);
+
+// Each turn, update expirations
+carbon_blackboard_update(bb);
+
+// Utility
+int entries_count = carbon_blackboard_count(bb);
+const char *keys[64];
+int key_count = carbon_blackboard_get_keys(bb, keys, 64);
+carbon_blackboard_remove(bb, "obsolete_key");
+carbon_blackboard_clear(bb);
+
+// Cleanup
+carbon_blackboard_destroy(bb);
+```
+
+**Value types:**
+- `CARBON_BB_TYPE_INT`, `INT64`, `FLOAT`, `DOUBLE`, `BOOL`, `STRING`, `PTR`, `VEC2`, `VEC3`
+
+**Key features:**
+- Type-safe key-value storage
+- Resource reservations for multi-track AI coordination
+- Plan publication to avoid conflicting AI decisions
+- Decision history with circular buffer
+- Value change subscriptions
+- Automatic expiration of reservations/plans
+
+## Trade Route / Supply Line System
+
+Economic connections between locations with efficiency calculations and specialized route types:
+
+```c
+#include "carbon/trade.h"
+
+// Create trade system
+Carbon_TradeSystem *trade = carbon_trade_create();
+
+// Set distance callback for efficiency calculation
+float calc_distance(uint32_t source, uint32_t dest, void *userdata) {
+    // Return distance between locations
+    return calculate_path_length(source, dest);
+}
+carbon_trade_set_distance_callback(trade, calc_distance, map_data);
+
+// Create routes between locations
+uint32_t route = carbon_trade_create_route(trade, city_a, city_b,
+                                            CARBON_ROUTE_TRADE);
+
+// Or with extended options
+uint32_t military = carbon_trade_create_route_ex(trade, base_a, base_b,
+    CARBON_ROUTE_MILITARY,
+    player_faction,    // Owner
+    150);              // Base value
+
+// Configure route
+carbon_trade_set_route_protection(trade, route, 0.8f);  // 80% protected
+carbon_trade_set_route_status(trade, route, CARBON_ROUTE_ACTIVE);
+carbon_trade_set_route_value(trade, route, 200);
+carbon_trade_set_route_owner(trade, route, player_faction);
+
+// Query route properties
+float efficiency = carbon_trade_get_efficiency(trade, route);
+float protection = carbon_trade_get_route_protection(trade, route);
+Carbon_RouteStatus status = carbon_trade_get_route_status(trade, route);
+
+// Calculate income
+int32_t income = carbon_trade_calculate_income(trade, player_faction);
+int32_t route_income = carbon_trade_calculate_route_income(trade, route);
+
+// Tax rates
+carbon_trade_set_tax_rate(trade, player_faction, 0.1f);  // 10% bonus
+float tax = carbon_trade_get_tax_rate(trade, player_faction);
+
+// Supply hubs provide bonuses
+carbon_trade_set_hub(trade, capital_location, true);
+carbon_trade_set_hub_ex(trade, fortress, player_faction,
+                         10.0f,   // Bonus radius
+                         1.5f);   // Bonus strength
+
+// Get supply bonus at location (aggregates routes + hubs)
+Carbon_SupplyBonus bonus = carbon_trade_get_supply_bonus(trade, location);
+printf("Repair: %.1fx, Reinforce: %.1fx, Growth: %.1fx\n",
+       bonus.repair_rate, bonus.reinforce_rate, bonus.growth_rate);
+
+// Query routes
+uint32_t routes[64];
+int from_count = carbon_trade_get_routes_from(trade, city_a, routes, 64);
+int to_count = carbon_trade_get_routes_to(trade, city_b, routes, 64);
+int faction_routes = carbon_trade_get_routes_by_faction(trade, player_faction, routes, 64);
+int trade_routes = carbon_trade_get_routes_by_type(trade, CARBON_ROUTE_TRADE, routes, 64);
+
+// Find specific route
+uint32_t found = carbon_trade_find_route(trade, city_a, city_b);
+uint32_t any = carbon_trade_find_route_any(trade, city_a, city_b);  // Either direction
+
+// Get hub connections
+uint32_t connections[32];
+int hub_conns = carbon_trade_get_hub_connections(trade, capital_location, connections, 32);
+
+// Statistics
+Carbon_TradeStats stats;
+carbon_trade_get_stats(trade, player_faction, &stats);
+printf("Routes: %d active, Income: %d, Avg efficiency: %.1f%%\n",
+       stats.active_routes, stats.total_income, stats.average_efficiency * 100);
+
+// Route disruption
+carbon_trade_set_route_status(trade, route, CARBON_ROUTE_DISRUPTED);  // 50% efficiency
+carbon_trade_set_route_status(trade, route, CARBON_ROUTE_BLOCKED);    // 0% efficiency
+
+// Event callback
+void on_route_event(void *trade, uint32_t route_id, int event, void *userdata) {
+    // event: 0=created, 1=destroyed, 2=status changed
+}
+carbon_trade_set_event_callback(trade, on_route_event, NULL);
+
+// Each turn
+carbon_trade_update(trade);
+carbon_trade_recalculate_efficiency(trade);
+
+// Remove route
+carbon_trade_remove_route(trade, route);
+
+// Cleanup
+carbon_trade_destroy(trade);
+```
+
+**Route types:**
+- `CARBON_ROUTE_TRADE` - Resource income
+- `CARBON_ROUTE_MILITARY` - Ship repair, reinforcement speed
+- `CARBON_ROUTE_COLONIAL` - Population growth bonus
+- `CARBON_ROUTE_RESEARCH` - Research speed bonus
+
+**Route statuses:**
+- `CARBON_ROUTE_ACTIVE` - Full efficiency
+- `CARBON_ROUTE_DISRUPTED` - 50% efficiency
+- `CARBON_ROUTE_BLOCKED` - No benefits
+- `CARBON_ROUTE_ESTABLISHING` - Being set up
+
+**Key features:**
+- Distance-based efficiency calculation
+- Protection level affects efficiency
+- Multiple route types with different bonuses
+- Supply hubs provide area bonuses
+- Faction ownership and tax rates
+- Route event callbacks
 
 ## Task Queue System
 

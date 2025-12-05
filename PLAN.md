@@ -1,351 +1,598 @@
 # Carbon Engine Feature Plan
 
-Features extracted from Machinae codebase for potential addition to Carbon game engine.
+Features identified from StellarThrone codebase analysis for potential addition to the Carbon game engine.
 
-## Features Already in Carbon
+## Features Already in Carbon (No Action Needed)
 
-- Grid-based pathfinding (A*)
-- Sprite/animation system
-- Text rendering (TrueType + SDF)
-- UI system with themes
-- Camera system (2D and 3D)
-- Audio system
-- Save/load framework
-- Event dispatcher
-- Resource economy basics
-- Technology tree
-- Victory conditions
-- AI personality system
-- View model / data binding
-- Spatial hash index (O(1) entity lookup by grid cell)
-- Fog of war / exploration system
-- Rate tracking (rolling window metrics)
-- Task queue system (sequential task execution for AI agents)
-- Network/graph system (union-find for power grid/resource distribution)
-- Blueprint system (building templates with capture/placement)
-- Construction queue / ghost building (planned buildings with progress tracking)
-- Dialog / narrative system (event-driven dialog queue with speaker types)
-- Game speed system (variable simulation speed with pause support)
-- Crafting state machine (progress-based crafting with recipes and batching)
-- Biome system (terrain types with resource weights and generation)
+- Turn/phase management (`turn.h`)
+- Resource economy system (`resource.h`)
+- Tech tree with prerequisites (`tech.h`)
+- Victory conditions (`victory.h`)
+- Save/load system (`save.h`)
+- Event dispatcher (`event.h`)
+- AI personality system (`ai.h`)
+- Task queue system (`task.h`)
+- Fog of war/visibility (`fog.h`)
+- Network/graph system (`network.h`)
+- Rate tracking (`rate.h`)
+- Modifier stacks (`modifier.h`)
+- Threshold callbacks (`threshold.h`)
 
 ---
 
-## All Planned Features Complete ✅
+## Implemented Features (Phase 1)
 
-All 11 planned features have been implemented. The sections below document the original API sketches for reference.
+### 1. Hierarchical Task Network (HTN) AI Planner ✓
+
+**Status:** COMPLETED
+**Files:** `include/carbon/htn.h`, `src/ai/htn.c`
+
+A sophisticated AI planning system that decomposes high-level goals into executable primitive tasks. Significantly more powerful than the current task queue for autonomous AI agents.
+
+**Core Components:**
+- World state management (key-value pairs with typed values)
+- Task registry (compound tasks, primitive tasks, methods)
+- Condition evaluation with operators (==, !=, >, >=, <, <=, has, not_has)
+- Method decomposition (compound task → subtasks based on preconditions)
+- Plan generation with cycle detection and timeout
+- Plan execution with task lifecycle management
+
+**API Sketch:**
+```c
+// World state
+Carbon_HTNWorldState *carbon_htn_world_state_create(void);
+void carbon_htn_world_state_set_int(Carbon_HTNWorldState *ws, const char *key, int32_t value);
+void carbon_htn_world_state_set_float(Carbon_HTNWorldState *ws, const char *key, float value);
+void carbon_htn_world_state_set_bool(Carbon_HTNWorldState *ws, const char *key, bool value);
+int32_t carbon_htn_world_state_get_int(Carbon_HTNWorldState *ws, const char *key);
+
+// Task registration
+Carbon_HTNDomain *carbon_htn_domain_create(void);
+void carbon_htn_register_primitive(Carbon_HTNDomain *domain, const char *name,
+                                    Carbon_HTNPrimitiveFunc execute,
+                                    Carbon_HTNConditionFunc precondition,
+                                    Carbon_HTNEffectFunc effects);
+void carbon_htn_register_compound(Carbon_HTNDomain *domain, const char *name);
+void carbon_htn_add_method(Carbon_HTNDomain *domain, const char *compound_task,
+                           Carbon_HTNConditionFunc precondition,
+                           const char **subtasks, int subtask_count);
+
+// Planning
+Carbon_HTNPlan *carbon_htn_plan(Carbon_HTNDomain *domain, Carbon_HTNWorldState *ws,
+                                 const char *root_task, int max_iterations);
+bool carbon_htn_plan_valid(Carbon_HTNPlan *plan);
+int carbon_htn_plan_length(Carbon_HTNPlan *plan);
+
+// Execution
+Carbon_HTNExecutor *carbon_htn_executor_create(Carbon_HTNDomain *domain);
+void carbon_htn_executor_set_plan(Carbon_HTNExecutor *exec, Carbon_HTNPlan *plan);
+Carbon_HTNStatus carbon_htn_executor_update(Carbon_HTNExecutor *exec,
+                                             Carbon_HTNWorldState *ws, void *userdata);
+```
+
+**Use Cases:**
+- Complex AI behavior (strategy game opponents)
+- NPC daily routines with goal-driven behavior
+- Automated base building and resource management
 
 ---
 
-## Implemented Features (Reference)
+### 2. Multi-Track AI Decision System
 
-### Priority 1: Core Infrastructure
+**Priority:** High
+**Complexity:** Medium
+**Files:** `include/carbon/ai_tracks.h`, `src/ai/ai_tracks.c`
 
-#### 1.1 Spatial Hash Index
-O(1) entity lookup by grid cell for efficient spatial queries.
+Parallel decision-making tracks that prevent resource competition between different AI concerns.
 
-**Concept:**
-- Hash table mapping packed grid coordinates to entity/item indices
-- Operations: add, remove, query, move (all O(1))
-- Useful for: item pickup, collision detection, entity queries at location
-
-**API Sketch:**
-```c
-Carbon_SpatialIndex *carbon_spatial_create(int capacity);
-void carbon_spatial_add(index, int x, int y, uint32_t entity_id);
-void carbon_spatial_remove(index, int x, int y, uint32_t entity_id);
-uint32_t carbon_spatial_query(index, int x, int y);  // Returns entity or 0
-bool carbon_spatial_has(index, int x, int y);
-void carbon_spatial_move(index, int old_x, int old_y, int new_x, int new_y, uint32_t entity_id);
-void carbon_spatial_destroy(index);
-```
-
-#### 1.2 Network/Graph System (Power Grid)
-Union-find algorithm for connected component grouping with resource distribution.
-
-**Concept:**
-- Nodes (e.g., power poles) define coverage areas
-- Union-find groups connected nodes into networks
-- Each network tracks production vs consumption
-- Dirty flag for lazy recalculation
+**Core Components:**
+- Track registry with independent execution
+- Per-track decision structures with priority scoring
+- Budget allocation per track
+- Decision audit trail with reason strings
 
 **API Sketch:**
 ```c
-Carbon_NetworkSystem *carbon_network_create(void);
-uint32_t carbon_network_add_node(network, int x, int y, int radius);
-void carbon_network_remove_node(network, uint32_t node_id);
-void carbon_network_set_production(network, uint32_t node_id, int32_t amount);
-void carbon_network_set_consumption(network, uint32_t node_id, int32_t amount);
-int carbon_network_get_group(network, uint32_t node_id);
-bool carbon_network_is_powered(network, int group_id);
-bool carbon_network_covers_cell(network, int x, int y);
-void carbon_network_recalculate(network);
-void carbon_network_destroy(network);
+// Track system
+Carbon_AITrackSystem *carbon_ai_tracks_create(void);
+int carbon_ai_tracks_register(Carbon_AITrackSystem *tracks, const char *name,
+                               Carbon_AITrackEvaluator evaluator);
+
+// Budget allocation
+void carbon_ai_tracks_set_budget(Carbon_AITrackSystem *tracks, int track_id,
+                                  int resource_type, int32_t amount);
+int32_t carbon_ai_tracks_get_budget(Carbon_AITrackSystem *tracks, int track_id,
+                                     int resource_type);
+
+// Decision making
+void carbon_ai_tracks_evaluate_all(Carbon_AITrackSystem *tracks, void *game_state,
+                                    Carbon_AIDecisionSet *out_decisions);
+const Carbon_AIDecision *carbon_ai_tracks_get_decision(Carbon_AITrackSystem *tracks,
+                                                        int track_id, int index);
+
+// Audit trail
+void carbon_ai_tracks_set_reason(Carbon_AITrackSystem *tracks, int track_id,
+                                  const char *reason_fmt, ...);
+const char *carbon_ai_tracks_get_reason(Carbon_AITrackSystem *tracks, int track_id);
 ```
 
-#### 1.3 Fog of War / Exploration System
-Per-cell exploration tracking with visibility radius.
-
-**Concept:**
-- Grid of exploration states: unexplored, explored, visible
-- Entities have vision radius
-- Cells become explored when within vision radius
-- Optional: shroud (explored but not currently visible)
-
-**API Sketch:**
-```c
-Carbon_FogOfWar *carbon_fog_create(int width, int height);
-void carbon_fog_set_vision_source(fog, int x, int y, int radius);
-void carbon_fog_clear_vision_sources(fog);
-void carbon_fog_update(fog);  // Recalculate visibility
-Carbon_VisibilityState carbon_fog_get_state(fog, int x, int y);  // UNEXPLORED, EXPLORED, VISIBLE
-bool carbon_fog_is_visible(fog, int x, int y);
-bool carbon_fog_is_explored(fog, int x, int y);
-void carbon_fog_reveal_all(fog);
-void carbon_fog_reset(fog);
-void carbon_fog_destroy(fog);
-```
+**Predefined Tracks:**
+- `CARBON_AI_TRACK_ECONOMY` - Resource production, expansion
+- `CARBON_AI_TRACK_MILITARY` - Unit production, defense
+- `CARBON_AI_TRACK_RESEARCH` - Technology priorities
+- `CARBON_AI_TRACK_DIPLOMACY` - Relations, treaties
+- `CARBON_AI_TRACK_EXPANSION` - Territory growth
 
 ---
 
-### Priority 2: Gameplay Systems
+### 3. Shared Blackboard System ✓
 
-#### 2.1 Blueprint System
-Save and place building templates with relative positioning.
+**Status:** COMPLETED
+**Files:** `include/carbon/blackboard.h`, `src/ai/blackboard.c`
 
-**Concept:**
-- Capture selection of buildings into template
-- Store relative positions and rotations
-- Preview before placement
-- Validate placement (collision, resources)
+Cross-system communication and data sharing without direct coupling.
 
-**API Sketch:**
-```c
-Carbon_Blueprint *carbon_blueprint_create(const char *name);
-void carbon_blueprint_add_entry(blueprint, int rel_x, int rel_y, int building_type, int direction);
-Carbon_Blueprint *carbon_blueprint_capture(buildings, int x1, int y1, int x2, int y2);
-bool carbon_blueprint_can_place(blueprint, int origin_x, int origin_y, validator_fn);
-void carbon_blueprint_get_entries(blueprint, Carbon_BlueprintEntry *out, int *count);
-void carbon_blueprint_rotate(blueprint);  // 90 degrees clockwise
-const char *carbon_blueprint_get_name(blueprint);
-void carbon_blueprint_destroy(blueprint);
-
-// Blueprint library
-Carbon_BlueprintLibrary *carbon_blueprint_library_create(int max_blueprints);
-void carbon_blueprint_library_add(library, Carbon_Blueprint *blueprint);
-Carbon_Blueprint *carbon_blueprint_library_get(library, int index);
-Carbon_Blueprint *carbon_blueprint_library_find(library, const char *name);
-void carbon_blueprint_library_destroy(library);
-```
-
-#### 2.2 Ghost Building / Construction Queue
-Planned buildings with progress tracking before actual construction.
-
-**Concept:**
-- Ghost = planned building, not yet constructed
-- Consumes resources when placed (or when construction starts)
-- Progress tracking (0% to 100%)
-- Different construction speeds (player vs AI)
-- Visual distinction from completed buildings
+**Core Components:**
+- Key-value storage with typed values
+- Plan publication for conflict avoidance
+- Resource reservation tracking
+- Circular buffer for decision history
+- Subscription for value changes
 
 **API Sketch:**
 ```c
-Carbon_ConstructionQueue *carbon_construction_create(int max_ghosts);
-uint32_t carbon_construction_add_ghost(queue, int x, int y, int building_type, int direction);
-void carbon_construction_remove_ghost(queue, uint32_t ghost_id);
-void carbon_construction_update(queue, float delta_time);
-float carbon_construction_get_progress(queue, uint32_t ghost_id);
-void carbon_construction_set_speed(queue, uint32_t ghost_id, float speed);
-bool carbon_construction_is_complete(queue, uint32_t ghost_id);
-Carbon_Ghost *carbon_construction_get_ghost(queue, uint32_t ghost_id);
-void carbon_construction_set_callback(queue, construction_complete_fn, void *userdata);
-int carbon_construction_count(queue);
-void carbon_construction_destroy(queue);
-```
+// Blackboard
+Carbon_Blackboard *carbon_blackboard_create(void);
 
-#### 2.3 Task Queue for AI
-Sequential task execution system extending AI personality.
+// Values
+void carbon_blackboard_set_int(Carbon_Blackboard *bb, const char *key, int32_t value);
+void carbon_blackboard_set_float(Carbon_Blackboard *bb, const char *key, float value);
+void carbon_blackboard_set_ptr(Carbon_Blackboard *bb, const char *key, void *ptr);
+int32_t carbon_blackboard_get_int(Carbon_Blackboard *bb, const char *key);
+bool carbon_blackboard_has(Carbon_Blackboard *bb, const char *key);
 
-**Concept:**
-- Queue of tasks for autonomous agents
-- Task types: move, explore, collect, craft, build, withdraw, mine, wait
-- Task lifecycle: pending, in_progress, completed, failed
-- Integration with pathfinding and crafting systems
+// Reservations (prevent double-spending)
+bool carbon_blackboard_reserve(Carbon_Blackboard *bb, const char *resource,
+                                int32_t amount, const char *owner);
+void carbon_blackboard_release(Carbon_Blackboard *bb, const char *resource,
+                                const char *owner);
+int32_t carbon_blackboard_get_reserved(Carbon_Blackboard *bb, const char *resource);
 
-**API Sketch:**
-```c
-Carbon_TaskQueue *carbon_task_queue_create(int max_tasks);
-void carbon_task_queue_add_move(queue, int target_x, int target_y);
-void carbon_task_queue_add_explore(queue, int area_x, int area_y, int radius);
-void carbon_task_queue_add_collect(queue, int x, int y, int resource_type);
-void carbon_task_queue_add_craft(queue, int recipe_id, int quantity);
-void carbon_task_queue_add_build(queue, int x, int y, int building_type);
-void carbon_task_queue_add_wait(queue, float duration);
-Carbon_Task *carbon_task_queue_current(queue);
-void carbon_task_queue_advance(queue);  // Mark current complete, move to next
-void carbon_task_queue_fail(queue, const char *reason);
-void carbon_task_queue_clear(queue);
-int carbon_task_queue_count(queue);
-bool carbon_task_queue_is_empty(queue);
-void carbon_task_queue_destroy(queue);
+// Plan publication
+void carbon_blackboard_publish_plan(Carbon_Blackboard *bb, const char *owner,
+                                     const char *plan_description);
+bool carbon_blackboard_has_conflicting_plan(Carbon_Blackboard *bb,
+                                             const char *resource_or_target);
+
+// History (circular buffer)
+void carbon_blackboard_log(Carbon_Blackboard *bb, const char *entry_fmt, ...);
+int carbon_blackboard_get_history(Carbon_Blackboard *bb, const char **out_entries,
+                                   int max_entries);
 ```
 
 ---
 
-### Priority 3: Analytics & Feedback
+### 4. Strategic Coordinator
 
-#### 3.1 Rate Tracking / Metrics History
-Rolling window metrics for production and consumption rates.
+**Priority:** Medium
+**Complexity:** Medium
+**Files:** `include/carbon/strategy.h`, `src/ai/strategy.c`
 
-**Concept:**
-- Periodic sampling of values (e.g., every 0.5s)
-- Circular buffer of samples (e.g., 120 samples = 60 seconds)
-- Multiple tracked metrics (resources, power, etc.)
-- Time window queries (last 10s, 30s, 60s)
-- Min/max/mean calculations
+Game phase detection and utility-based strategic decision making.
 
-**API Sketch:**
-```c
-Carbon_RateTracker *carbon_rate_tracker_create(int metric_count, float sample_interval, int history_size);
-void carbon_rate_tracker_update(tracker, float delta_time);
-void carbon_rate_tracker_record(tracker, int metric_id, int32_t produced, int32_t consumed);
-float carbon_rate_tracker_get_production_rate(tracker, int metric_id, float time_window);
-float carbon_rate_tracker_get_consumption_rate(tracker, int metric_id, float time_window);
-float carbon_rate_tracker_get_net_rate(tracker, int metric_id, float time_window);
-void carbon_rate_tracker_get_history(tracker, int metric_id, Carbon_RateSample *out, int *count);
-float carbon_rate_tracker_get_min(tracker, int metric_id, float time_window);
-float carbon_rate_tracker_get_max(tracker, int metric_id, float time_window);
-float carbon_rate_tracker_get_mean(tracker, int metric_id, float time_window);
-void carbon_rate_tracker_destroy(tracker);
-```
-
-#### 3.2 Dialog / Narrative System
-Event-driven dialog queue with speaker types.
-
-**Concept:**
-- Queue of messages with speaker attribution
-- Event-triggered dialogs (milestones, discoveries)
-- Event bitmask to prevent re-triggering
-- Speaker types (AI, player, system, custom)
+**Core Components:**
+- Phase detection (early/mid/late game)
+- Utility curve evaluation for options
+- Budget allocation proportional to utility
+- Phase-based behavior modifiers
 
 **API Sketch:**
 ```c
-Carbon_DialogSystem *carbon_dialog_create(int max_messages);
-void carbon_dialog_queue_message(dialog, Carbon_Speaker speaker, const char *text);
-void carbon_dialog_queue_printf(dialog, Carbon_Speaker speaker, const char *fmt, ...);
-void carbon_dialog_register_event(dialog, int event_id, Carbon_Speaker speaker, const char *text);
-void carbon_dialog_trigger_event(dialog, int event_id);  // Only triggers once per event
-bool carbon_dialog_has_message(dialog);
-const Carbon_DialogMessage *carbon_dialog_current(dialog);
-void carbon_dialog_advance(dialog);
-void carbon_dialog_clear(dialog);
-void carbon_dialog_reset_events(dialog);  // Allow events to trigger again
-void carbon_dialog_destroy(dialog);
-
+// Phase detection
 typedef enum {
-    CARBON_SPEAKER_SYSTEM,
-    CARBON_SPEAKER_PLAYER,
-    CARBON_SPEAKER_AI,
-    CARBON_SPEAKER_CUSTOM  // + custom ID
-} Carbon_Speaker;
+    CARBON_PHASE_EARLY_EXPANSION,
+    CARBON_PHASE_MID_CONSOLIDATION,
+    CARBON_PHASE_LATE_COMPETITION,
+    CARBON_PHASE_ENDGAME
+} Carbon_GamePhase;
+
+Carbon_StrategyCoordinator *carbon_strategy_create(void);
+void carbon_strategy_set_phase_thresholds(Carbon_StrategyCoordinator *coord,
+                                           float early_to_mid, float mid_to_late,
+                                           float late_to_end);
+Carbon_GamePhase carbon_strategy_detect_phase(Carbon_StrategyCoordinator *coord,
+                                               void *game_state,
+                                               Carbon_PhaseAnalyzer analyzer);
+
+// Utility evaluation
+void carbon_strategy_add_option(Carbon_StrategyCoordinator *coord, const char *name,
+                                 Carbon_UtilityCurve curve, float base_weight);
+void carbon_strategy_evaluate_options(Carbon_StrategyCoordinator *coord,
+                                       void *game_state);
+float carbon_strategy_get_utility(Carbon_StrategyCoordinator *coord, const char *option);
+
+// Budget allocation
+void carbon_strategy_allocate_budget(Carbon_StrategyCoordinator *coord,
+                                      int32_t total_budget,
+                                      Carbon_BudgetAllocation *out_allocation);
+
+// Phase modifiers
+void carbon_strategy_set_phase_modifier(Carbon_StrategyCoordinator *coord,
+                                         Carbon_GamePhase phase,
+                                         const char *option, float modifier);
 ```
 
 ---
 
-### Priority 4: World Generation
+### 5. Trade Route / Supply Line System ✓
 
-#### 4.1 Biome System
-Terrain types affecting resource distribution and visuals.
+**Status:** COMPLETED
+**Files:** `include/carbon/trade.h`, `src/strategy/trade.c`
 
-**Concept:**
-- Enum of biome types with properties
-- Affects resource spawn rates
-- Visual color coding
-- Integration with tilemap and world generation
+Economic connections between locations with efficiency and protection mechanics.
+
+**Core Components:**
+- Route creation between nodes
+- Distance-based efficiency calculation
+- Protection bonuses from military presence
+- Specialized route types (trade, military supply, research, colonial)
+- Income calculation with taxes
+- Supply hub mechanics
 
 **API Sketch:**
 ```c
-Carbon_BiomeSystem *carbon_biome_create(void);
-int carbon_biome_register(biomes, const char *name, uint32_t color, float resource_mult);
-void carbon_biome_set_resource_weight(biomes, int biome_id, int resource_type, float weight);
-int carbon_biome_get_best_for_resource(biomes, int resource_type);
-const char *carbon_biome_get_name(biomes, int biome_id);
-uint32_t carbon_biome_get_color(biomes, int biome_id);
-float carbon_biome_get_resource_weight(biomes, int biome_id, int resource_type);
-void carbon_biome_destroy(biomes);
+// Trade system
+Carbon_TradeSystem *carbon_trade_create(void);
+
+// Routes
+uint32_t carbon_trade_create_route(Carbon_TradeSystem *trade,
+                                    uint32_t source, uint32_t dest,
+                                    Carbon_RouteType type);
+void carbon_trade_remove_route(Carbon_TradeSystem *trade, uint32_t route_id);
+void carbon_trade_set_route_protection(Carbon_TradeSystem *trade, uint32_t route_id,
+                                        float protection);  // 0.0 to 1.0
+
+// Efficiency
+float carbon_trade_get_efficiency(Carbon_TradeSystem *trade, uint32_t route_id);
+void carbon_trade_set_distance_callback(Carbon_TradeSystem *trade,
+                                         Carbon_DistanceFunc distance_fn, void *userdata);
+
+// Income
+int32_t carbon_trade_calculate_income(Carbon_TradeSystem *trade, uint32_t faction_id);
+void carbon_trade_set_tax_rate(Carbon_TradeSystem *trade, uint32_t faction_id, float rate);
+
+// Supply bonuses
+Carbon_SupplyBonus carbon_trade_get_supply_bonus(Carbon_TradeSystem *trade,
+                                                  uint32_t location);
+
+// Supply hubs
+void carbon_trade_set_hub(Carbon_TradeSystem *trade, uint32_t location, bool is_hub);
+int carbon_trade_get_hub_connections(Carbon_TradeSystem *trade, uint32_t hub,
+                                      uint32_t *out_connections, int max);
+
+// Queries
+int carbon_trade_get_routes_from(Carbon_TradeSystem *trade, uint32_t source,
+                                  uint32_t *out_routes, int max);
+int carbon_trade_get_routes_to(Carbon_TradeSystem *trade, uint32_t dest,
+                                uint32_t *out_routes, int max);
 ```
 
-#### 4.2 Crafting State Machine
-Progress-based crafting with batch support and speed multipliers.
+**Route Types:**
+- `CARBON_ROUTE_TRADE` - Resource income
+- `CARBON_ROUTE_MILITARY` - Ship repair, reinforcement
+- `CARBON_ROUTE_COLONIAL` - Population growth bonus
+- `CARBON_ROUTE_RESEARCH` - Research speed bonus
 
-**Concept:**
-- Crafting progress (0.0 to 1.0)
-- Speed multipliers per crafter
-- Batch crafting (queue multiple)
-- Completion callbacks
-- Shared between player and AI
+---
+
+### 6. Anomaly / Discovery System
+
+**Priority:** Medium
+**Complexity:** Low
+**Files:** `include/carbon/anomaly.h`, `src/strategy/anomaly.c`
+
+Discoverable points of interest with research/investigation mechanics.
+
+**Core Components:**
+- Anomaly type registry with rarity tiers
+- Discovery and research status tracking
+- Research progress over time
+- Reward distribution on completion
+- Random anomaly generation
 
 **API Sketch:**
 ```c
-Carbon_CraftingState *carbon_crafting_create(void);
-bool carbon_crafting_start(crafting, int recipe_id, int quantity);
-void carbon_crafting_update(crafting, float delta_time);
-void carbon_crafting_set_speed(crafting, float multiplier);
-float carbon_crafting_get_progress(crafting);
-int carbon_crafting_get_remaining(crafting);
-bool carbon_crafting_is_active(crafting);
-void carbon_crafting_cancel(crafting);
-void carbon_crafting_set_callback(crafting, crafting_complete_fn, void *userdata);
-void carbon_crafting_destroy(crafting);
+// Anomaly registry
+Carbon_AnomalyRegistry *carbon_anomaly_registry_create(void);
+int carbon_anomaly_register_type(Carbon_AnomalyRegistry *reg,
+                                  const Carbon_AnomalyTypeDef *def);
+
+// Anomaly type definition
+typedef struct Carbon_AnomalyTypeDef {
+    const char *id;
+    const char *name;
+    const char *description;
+    Carbon_AnomalyRarity rarity;      // COMMON, UNCOMMON, RARE, LEGENDARY
+    float research_time;               // Base time to research
+    Carbon_AnomalyRewardFunc reward;   // Callback when completed
+} Carbon_AnomalyTypeDef;
+
+// Anomaly instances
+Carbon_AnomalyManager *carbon_anomaly_manager_create(Carbon_AnomalyRegistry *reg);
+uint32_t carbon_anomaly_spawn(Carbon_AnomalyManager *mgr, int type_id,
+                               int x, int y, uint32_t metadata);
+uint32_t carbon_anomaly_spawn_random(Carbon_AnomalyManager *mgr, int x, int y,
+                                      Carbon_AnomalyRarity max_rarity);
+
+// Status
+typedef enum {
+    CARBON_ANOMALY_UNDISCOVERED,
+    CARBON_ANOMALY_DISCOVERED,
+    CARBON_ANOMALY_RESEARCHING,
+    CARBON_ANOMALY_COMPLETED
+} Carbon_AnomalyStatus;
+
+Carbon_AnomalyStatus carbon_anomaly_get_status(Carbon_AnomalyManager *mgr, uint32_t id);
+void carbon_anomaly_discover(Carbon_AnomalyManager *mgr, uint32_t id, uint32_t faction);
+void carbon_anomaly_start_research(Carbon_AnomalyManager *mgr, uint32_t id,
+                                    uint32_t faction, uint32_t researcher);
+
+// Progress
+void carbon_anomaly_add_progress(Carbon_AnomalyManager *mgr, uint32_t id, float amount);
+float carbon_anomaly_get_progress(Carbon_AnomalyManager *mgr, uint32_t id);
+bool carbon_anomaly_is_complete(Carbon_AnomalyManager *mgr, uint32_t id);
+
+// Queries
+int carbon_anomaly_get_at(Carbon_AnomalyManager *mgr, int x, int y,
+                           uint32_t *out_ids, int max);
+int carbon_anomaly_get_by_status(Carbon_AnomalyManager *mgr, Carbon_AnomalyStatus status,
+                                  uint32_t *out_ids, int max);
 ```
 
 ---
 
-### Priority 5: Simulation Control
+### 7. Siege / Bombardment System
 
-#### 5.1 Game Speed System
-Variable simulation speed with pause support.
+**Priority:** Low
+**Complexity:** Medium
+**Files:** `include/carbon/siege.h`, `src/strategy/siege.c`
 
-**Concept:**
-- Speed multipliers (0x pause, 1x, 2x, 4x, etc.)
-- Scaled delta time for game logic
-- UI remains at normal speed
-- Pause state separate from speed
+Sustained attack mechanics over multiple rounds for location assault.
+
+**Core Components:**
+- Siege state tracking
+- Progressive damage application
+- Building/defense destruction
+- Population effects
+- Siege requirements validation
+- Round limit mechanics
 
 **API Sketch:**
 ```c
-Carbon_GameSpeed *carbon_game_speed_create(void);
-void carbon_game_speed_set(speed, float multiplier);  // 0.0 = pause, 1.0 = normal
-float carbon_game_speed_get(speed);
-void carbon_game_speed_pause(speed);
-void carbon_game_speed_resume(speed);
-bool carbon_game_speed_is_paused(speed);
-float carbon_game_speed_scale_delta(speed, float raw_delta);  // Returns scaled delta
-void carbon_game_speed_cycle(speed);  // Cycle through 1x -> 2x -> 4x -> 1x
-void carbon_game_speed_destroy(speed);
+// Siege manager
+Carbon_SiegeManager *carbon_siege_create(void);
+
+// Start siege
+uint32_t carbon_siege_begin(Carbon_SiegeManager *mgr, uint32_t attacker_id,
+                             uint32_t target_location, uint32_t attacking_force);
+bool carbon_siege_can_begin(Carbon_SiegeManager *mgr, uint32_t attacker_id,
+                             uint32_t target_location, uint32_t attacking_force);
+
+// Process siege round
+Carbon_SiegeResult carbon_siege_process_round(Carbon_SiegeManager *mgr, uint32_t siege_id);
+
+typedef struct Carbon_SiegeResult {
+    int buildings_damaged;
+    int buildings_destroyed;
+    int defense_reduced;
+    int population_casualties;
+    bool siege_broken;       // Defenders won
+    bool target_captured;    // Attackers won
+    int round_number;
+} Carbon_SiegeResult;
+
+// Query
+int carbon_siege_get_round(Carbon_SiegeManager *mgr, uint32_t siege_id);
+float carbon_siege_get_progress(Carbon_SiegeManager *mgr, uint32_t siege_id);
+bool carbon_siege_is_active(Carbon_SiegeManager *mgr, uint32_t siege_id);
+
+// End siege
+void carbon_siege_end(Carbon_SiegeManager *mgr, uint32_t siege_id);
+void carbon_siege_retreat(Carbon_SiegeManager *mgr, uint32_t siege_id);
+
+// Configuration
+void carbon_siege_set_max_rounds(Carbon_SiegeManager *mgr, int max_rounds);
+void carbon_siege_set_damage_callback(Carbon_SiegeManager *mgr,
+                                       Carbon_SiegeDamageFunc damage_fn, void *userdata);
 ```
 
 ---
 
-## Implementation Order
+### 8. Formula Engine
 
-1. ~~**Spatial Hash Index** - Foundation for other systems~~ ✅ DONE
-2. ~~**Fog of War** - Common strategy game requirement~~ ✅ DONE
-3. ~~**Rate Tracking** - Useful analytics for economy games~~ ✅ DONE
-4. ~~**Task Queue** - Extends existing AI system~~ ✅ DONE
-5. ~~**Network System** - Power/resource distribution~~ ✅ DONE
-6. ~~**Blueprint System** - UX improvement for builders~~ ✅ DONE
-7. ~~**Ghost Building** - Pairs with blueprints~~ ✅ DONE
-8. ~~**Dialog System** - Narrative integration~~ ✅ DONE
-9. ~~**Game Speed** - Simulation control~~ ✅ DONE
-10. ~~**Crafting State Machine** - Extends resource system~~ ✅ DONE
-11. ~~**Biome System** - World generation enhancement~~ ✅ DONE
+**Priority:** Low
+**Complexity:** Low
+**Files:** `include/carbon/formula.h`, `src/core/formula.c`
+
+Runtime-configurable game balance through expression evaluation.
+
+**Core Components:**
+- Mathematical expression parsing
+- Variable substitution
+- Function support (min, max, clamp, floor, ceil, sqrt, etc.)
+- Formula caching for performance
+- Error handling
+
+**API Sketch:**
+```c
+// Formula context
+Carbon_FormulaContext *carbon_formula_create(void);
+
+// Variables
+void carbon_formula_set_var(Carbon_FormulaContext *ctx, const char *name, double value);
+double carbon_formula_get_var(Carbon_FormulaContext *ctx, const char *name);
+void carbon_formula_clear_vars(Carbon_FormulaContext *ctx);
+
+// Evaluation
+double carbon_formula_eval(Carbon_FormulaContext *ctx, const char *expression);
+bool carbon_formula_valid(Carbon_FormulaContext *ctx, const char *expression);
+const char *carbon_formula_get_error(Carbon_FormulaContext *ctx);
+
+// Compiled formulas (faster for repeated evaluation)
+Carbon_Formula *carbon_formula_compile(Carbon_FormulaContext *ctx, const char *expression);
+double carbon_formula_exec(Carbon_Formula *formula, Carbon_FormulaContext *ctx);
+void carbon_formula_free(Carbon_Formula *formula);
+
+// Built-in functions: min, max, clamp, floor, ceil, round, sqrt, pow, log, abs, sin, cos
+```
+
+**Example Usage:**
+```c
+Carbon_FormulaContext *ctx = carbon_formula_create();
+carbon_formula_set_var(ctx, "base_damage", 10.0);
+carbon_formula_set_var(ctx, "strength", 15.0);
+carbon_formula_set_var(ctx, "level", 5.0);
+
+double damage = carbon_formula_eval(ctx, "base_damage + strength * 0.5 + level * 2");
+// damage = 10 + 7.5 + 10 = 27.5
+```
 
 ---
 
-## Notes
+### 9. Command Queue System
 
-- All systems should integrate with existing Carbon patterns (error handling, validation, events)
-- Each system should have corresponding unit tests in `tests/`
-- Documentation should be added to `CLAUDE.md` following existing format
-- Consider ECS integration where appropriate (components for fog, network nodes, etc.)
+**Priority:** Medium
+**Complexity:** Low
+**Files:** `include/carbon/command.h`, `src/core/command.c`
+
+Validated, atomic command execution for player actions.
+
+**Core Components:**
+- Command type registry
+- Pre-execution validation
+- Queued execution during turn processing
+- Result reporting (success/failure with reason)
+- Command history for undo/replay
+
+**API Sketch:**
+```c
+// Command system
+Carbon_CommandSystem *carbon_command_create(void);
+
+// Command registration
+typedef bool (*Carbon_CommandValidator)(const Carbon_Command *cmd, void *game_state,
+                                         char *error_buf, size_t error_size);
+typedef bool (*Carbon_CommandExecutor)(const Carbon_Command *cmd, void *game_state);
+
+void carbon_command_register(Carbon_CommandSystem *sys, int command_type,
+                              Carbon_CommandValidator validator,
+                              Carbon_CommandExecutor executor);
+
+// Command creation
+Carbon_Command *carbon_command_new(int type);
+void carbon_command_set_int(Carbon_Command *cmd, const char *key, int32_t value);
+void carbon_command_set_float(Carbon_Command *cmd, const char *key, float value);
+void carbon_command_set_entity(Carbon_Command *cmd, const char *key, uint32_t entity);
+
+// Validation
+Carbon_CommandResult carbon_command_validate(Carbon_CommandSystem *sys,
+                                              const Carbon_Command *cmd,
+                                              void *game_state);
+
+// Queueing
+void carbon_command_queue(Carbon_CommandSystem *sys, Carbon_Command *cmd);
+int carbon_command_queue_count(Carbon_CommandSystem *sys);
+void carbon_command_queue_clear(Carbon_CommandSystem *sys);
+
+// Execution
+int carbon_command_execute_all(Carbon_CommandSystem *sys, void *game_state,
+                                Carbon_CommandResult *results, int max_results);
+
+// Result
+typedef struct Carbon_CommandResult {
+    bool success;
+    int command_type;
+    char error[128];
+} Carbon_CommandResult;
+
+// History
+void carbon_command_enable_history(Carbon_CommandSystem *sys, int max_commands);
+int carbon_command_get_history(Carbon_CommandSystem *sys, Carbon_Command **out, int max);
+```
+
+---
+
+### 10. Game Query API
+
+**Priority:** Low
+**Complexity:** Low
+**Files:** `include/carbon/query.h`, `src/core/query.c`
+
+Read-only state queries with structured results for clean UI integration.
+
+**Core Components:**
+- Query registration with result types
+- Cached query results
+- Query invalidation on state change
+- Structured result formats
+
+**API Sketch:**
+```c
+// Query system
+Carbon_QuerySystem *carbon_query_create(void);
+
+// Query registration
+typedef void (*Carbon_QueryFunc)(void *game_state, void *params, void *result);
+
+void carbon_query_register(Carbon_QuerySystem *sys, const char *name,
+                            Carbon_QueryFunc query_fn, size_t result_size);
+
+// Execution
+void *carbon_query_exec(Carbon_QuerySystem *sys, const char *name,
+                         void *game_state, void *params);
+
+// Caching
+void carbon_query_enable_cache(Carbon_QuerySystem *sys, const char *name);
+void carbon_query_invalidate(Carbon_QuerySystem *sys, const char *name);
+void carbon_query_invalidate_all(Carbon_QuerySystem *sys);
+
+// Common query patterns
+// These would be game-specific but show the pattern:
+// carbon_query_get_faction_resources(sys, faction_id, &resources);
+// carbon_query_get_entities_at(sys, x, y, entities, max);
+// carbon_query_get_visible_area(sys, faction_id, &visibility);
+```
+
+---
+
+## Implementation Priority
+
+### Phase 1 - Core AI Enhancement ✓ COMPLETED
+1. **HTN AI Planner** ✓ - `include/carbon/htn.h`, `src/ai/htn.c`
+2. **Shared Blackboard** ✓ - `include/carbon/blackboard.h`, `src/ai/blackboard.c`
+3. **Trade/Supply Line System** ✓ - `include/carbon/trade.h`, `src/strategy/trade.c`
+
+### Phase 2 - Strategic Layer (Next)
+4. **Multi-Track AI Decisions** - Parallel AI decision making
+5. **Strategic Coordinator** - Phase detection and utility evaluation
+6. **Command Queue** - Clean action validation
+
+### Phase 3 - Content Systems
+7. **Anomaly/Discovery System** - Points of interest
+8. **Siege/Bombardment System** - Extended combat
+9. **Formula Engine** - Data-driven balance
+10. **Game Query API** - UI integration helper
+
+---
+
+## Design Principles
+
+All implementations should follow Carbon's existing patterns:
+
+1. **Static allocation where possible** - Capacity constants, no malloc in hot paths
+2. **Explicit state passing** - No hidden globals
+3. **Callback-based integration** - Game-specific logic via function pointers
+4. **Event emission** - Integrate with existing event dispatcher
+5. **Header-only validation** - Use `carbon/validate.h` macros
+6. **Error handling** - Use `carbon/error.h` patterns
+7. **Documentation** - Update CLAUDE.md with API examples
