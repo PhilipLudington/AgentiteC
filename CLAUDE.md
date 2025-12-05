@@ -72,7 +72,8 @@ src/
 │   ├── rate.c          # Rate tracking / rolling metrics
 │   ├── network.c       # Network/graph system (power grid)
 │   ├── blueprint.c     # Blueprint system for building templates
-│   └── construction.c  # Ghost building / construction queue
+│   ├── construction.c  # Ghost building / construction queue
+│   └── dialog.c        # Dialog / narrative system
 ├── ui/                 # Immediate-mode GUI system
 │   └── viewmodel.c     # Observable values for UI data binding
 └── game/               # Game-specific logic
@@ -112,7 +113,8 @@ include/carbon/
 ├── rate.h              # Rate tracking / rolling metrics API
 ├── network.h           # Network/graph system API
 ├── blueprint.h         # Blueprint system API
-└── construction.h      # Ghost building / construction queue API
+├── construction.h      # Ghost building / construction queue API
+└── dialog.h            # Dialog / narrative system API
 
 lib/
 ├── flecs.h/.c          # Flecs ECS library (v4.0.0)
@@ -1557,6 +1559,204 @@ void update_construction_speed(Game *game) {
     }
 }
 ```
+
+## Dialog / Narrative System
+
+Event-driven dialog queue with speaker attribution for narrative integration. Supports message queuing, event-triggered dialogs, and speaker types for contextual storytelling:
+
+```c
+#include "carbon/dialog.h"
+
+// Create dialog system (capacity = max queued messages)
+Carbon_DialogSystem *dialog = carbon_dialog_create(32);
+
+// Queue messages from built-in speaker types
+carbon_dialog_queue_message(dialog, CARBON_SPEAKER_SYSTEM, "Welcome to the game!");
+carbon_dialog_queue_message(dialog, CARBON_SPEAKER_PLAYER, "Hello, world!");
+carbon_dialog_queue_message(dialog, CARBON_SPEAKER_AI, "Initializing systems...");
+
+// Printf-style formatting
+carbon_dialog_queue_printf(dialog, CARBON_SPEAKER_TUTORIAL,
+                           "You have collected %d gold.", gold_count);
+
+// Message with options (priority, duration)
+carbon_dialog_queue_message_ex(dialog, CARBON_SPEAKER_SYSTEM, 0,
+                                "Critical warning!",
+                                CARBON_DIALOG_PRIORITY_CRITICAL,
+                                10.0f);  // 10 second duration
+
+// Insert urgent message at front of queue
+carbon_dialog_insert_front(dialog, CARBON_SPEAKER_ENEMY, "Intruder alert!");
+
+// In game loop - update and display:
+carbon_dialog_update(dialog, delta_time);
+
+if (carbon_dialog_has_message(dialog)) {
+    const Carbon_DialogMessage *msg = carbon_dialog_current(dialog);
+
+    // Get speaker info
+    const char *speaker = carbon_dialog_get_speaker_name(dialog,
+                                                          msg->speaker_type,
+                                                          msg->speaker_id);
+    uint32_t color = carbon_dialog_get_speaker_color(dialog,
+                                                      msg->speaker_type,
+                                                      msg->speaker_id);
+
+    // Display message (typewriter effect support)
+    int visible_chars = carbon_dialog_get_visible_chars(dialog);
+    if (visible_chars >= 0) {
+        // Show partial text for typewriter effect
+        char display_text[512];
+        strncpy(display_text, msg->text, visible_chars);
+        display_text[visible_chars] = '\0';
+        draw_dialog_box(speaker, display_text, color);
+    } else {
+        // Show complete text
+        draw_dialog_box(speaker, msg->text, color);
+    }
+}
+
+// Manual advance (on player input)
+if (player_pressed_continue) {
+    if (carbon_dialog_animation_complete(dialog)) {
+        carbon_dialog_advance(dialog);  // Next message
+    } else {
+        carbon_dialog_skip_animation(dialog);  // Show all text
+    }
+}
+
+// Cleanup
+carbon_dialog_destroy(dialog);
+```
+
+**Custom speakers:**
+
+```c
+// Register custom speakers (NPCs, named characters)
+uint32_t merchant = carbon_dialog_register_speaker(dialog, "Merchant Bob",
+                                                    0xFF00FFFF,  // Yellow (ABGR)
+                                                    0);           // Portrait ID
+
+uint32_t villain = carbon_dialog_register_speaker(dialog, "Dark Lord",
+                                                   0xFF0000FF,  // Red
+                                                   1);
+
+// Queue message from custom speaker
+carbon_dialog_queue_message_custom(dialog, merchant, "Would you like to trade?");
+carbon_dialog_queue_message_custom(dialog, villain, "You cannot escape!");
+
+// Get custom speaker info
+const Carbon_Speaker *speaker = carbon_dialog_get_speaker(dialog, merchant);
+printf("Speaker: %s\n", speaker->name);
+
+// Customize built-in speaker names/colors
+carbon_dialog_set_speaker_name(dialog, CARBON_SPEAKER_PLAYER, "Hero");
+carbon_dialog_set_speaker_color(dialog, CARBON_SPEAKER_PLAYER, 0xFF00FF00);  // Green
+```
+
+**Event-triggered dialogs:**
+
+```c
+// Register event dialogs (triggered once, queues message)
+carbon_dialog_register_event(dialog, EVENT_FIRST_KILL, CARBON_SPEAKER_AI,
+                              "Combat systems online. Target eliminated.");
+carbon_dialog_register_event(dialog, EVENT_LOW_HEALTH, CARBON_SPEAKER_AI,
+                              "Warning: Critical damage detected!");
+
+// Register with full options
+carbon_dialog_register_event_ex(dialog, EVENT_VICTORY, CARBON_SPEAKER_SYSTEM, 0,
+                                 "Congratulations! You have won!",
+                                 CARBON_DIALOG_PRIORITY_CRITICAL,
+                                 0.0f,   // Use default duration
+                                 false); // Not repeatable
+
+// Repeatable events
+carbon_dialog_register_event_ex(dialog, EVENT_ENEMY_SPOTTED, CARBON_SPEAKER_ALLY, 0,
+                                 "Enemy unit detected!",
+                                 CARBON_DIALOG_PRIORITY_HIGH,
+                                 3.0f,   // 3 second duration
+                                 true);  // Can trigger multiple times
+
+// Trigger events based on game state
+if (player_killed_first_enemy && !carbon_dialog_event_triggered(dialog, EVENT_FIRST_KILL)) {
+    carbon_dialog_trigger_event(dialog, EVENT_FIRST_KILL);
+}
+
+if (player_health < 20) {
+    carbon_dialog_trigger_event(dialog, EVENT_LOW_HEALTH);  // Only triggers once
+}
+
+// Reset events for new game
+carbon_dialog_reset_events(dialog);
+
+// Reset specific event
+carbon_dialog_reset_event(dialog, EVENT_LOW_HEALTH);
+```
+
+**Configuration:**
+
+```c
+// Default message duration
+carbon_dialog_set_default_duration(dialog, 5.0f);  // 5 seconds
+
+// Typewriter effect speed (characters per second)
+carbon_dialog_set_text_speed(dialog, 30.0f);  // 30 chars/sec
+carbon_dialog_set_text_speed(dialog, 0.0f);   // Instant (default)
+
+// Auto-advance after duration
+carbon_dialog_set_auto_advance(dialog, true);   // Default
+carbon_dialog_set_auto_advance(dialog, false);  // Wait for manual advance
+```
+
+**Callbacks:**
+
+```c
+// Called when a new message is displayed
+void on_message_display(Carbon_DialogSystem *dialog,
+                        const Carbon_DialogMessage *msg, void *userdata) {
+    play_sound(SOUND_DIALOG_OPEN);
+}
+carbon_dialog_set_display_callback(dialog, on_message_display, NULL);
+
+// Called when a message is dismissed
+void on_message_dismiss(Carbon_DialogSystem *dialog,
+                        const Carbon_DialogMessage *msg, void *userdata) {
+    play_sound(SOUND_DIALOG_CLOSE);
+}
+carbon_dialog_set_dismiss_callback(dialog, on_message_dismiss, NULL);
+
+// Called when an event is triggered
+void on_event_triggered(Carbon_DialogSystem *dialog, int event_id, void *userdata) {
+    log_event("Dialog event triggered: %d", event_id);
+}
+carbon_dialog_set_event_callback(dialog, on_event_triggered, NULL);
+```
+
+**Built-in speaker types:**
+- `CARBON_SPEAKER_SYSTEM` - System/narrator messages (light gray)
+- `CARBON_SPEAKER_PLAYER` - Player character (green)
+- `CARBON_SPEAKER_AI` - AI/computer voice (cyan)
+- `CARBON_SPEAKER_NPC` - Generic NPC (white)
+- `CARBON_SPEAKER_ENEMY` - Enemy/antagonist (red)
+- `CARBON_SPEAKER_ALLY` - Allied character (light green)
+- `CARBON_SPEAKER_TUTORIAL` - Tutorial hints (yellow)
+- `CARBON_SPEAKER_CUSTOM` (100+) - User-defined speakers
+
+**Priority levels:**
+- `CARBON_DIALOG_PRIORITY_LOW` - Background chatter
+- `CARBON_DIALOG_PRIORITY_NORMAL` - Default messages
+- `CARBON_DIALOG_PRIORITY_HIGH` - Important messages
+- `CARBON_DIALOG_PRIORITY_CRITICAL` - Must-see messages
+
+**Key features:**
+- Message queue with configurable capacity
+- Built-in and custom speaker support
+- Event-triggered dialogs with one-shot or repeatable modes
+- Typewriter text animation effect
+- Auto-advance or manual advance modes
+- Speaker color and portrait customization
+- Display/dismiss/event callbacks
+- Printf-style message formatting
 
 ## Event Dispatcher System
 

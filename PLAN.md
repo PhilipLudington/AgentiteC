@@ -24,6 +24,7 @@ Features extracted from Machinae codebase for potential addition to Carbon game 
 - Network/graph system (union-find for power grid/resource distribution)
 - Blueprint system (building templates with capture/placement)
 - Construction queue / ghost building (planned buildings with progress tracking)
+- Dialog / narrative system (event-driven dialog queue with speaker types)
 
 ---
 
@@ -326,7 +327,7 @@ void carbon_game_speed_destroy(speed);
 5. ~~**Network System** - Power/resource distribution~~ ✅ DONE
 6. ~~**Blueprint System** - UX improvement for builders~~ ✅ DONE
 7. ~~**Ghost Building** - Pairs with blueprints~~ ✅ DONE
-8. **Dialog System** - Narrative integration
+8. ~~**Dialog System** - Narrative integration~~ ✅ DONE
 9. **Game Speed** - Simulation control
 10. **Crafting State Machine** - Extends resource system
 11. **Biome System** - World generation enhancement
