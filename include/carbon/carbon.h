@@ -86,6 +86,7 @@ SDL_GPUCommandBuffer *carbon_get_command_buffer(Carbon_Engine *engine);
 #include "carbon/save.h"
 #include "carbon/game_event.h"
 #include "carbon/unlock.h"
+#include "carbon/blueprint.h"
 
 // UI utilities
 #include "carbon/notification.h"

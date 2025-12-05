@@ -70,7 +70,8 @@ src/
 │   ├── spatial.c       # Spatial hash index for entity lookup
 │   ├── fog.c           # Fog of war / exploration system
 │   ├── rate.c          # Rate tracking / rolling metrics
-│   └── network.c       # Network/graph system (power grid)
+│   ├── network.c       # Network/graph system (power grid)
+│   └── blueprint.c     # Blueprint system for building templates
 ├── ui/                 # Immediate-mode GUI system
 │   └── viewmodel.c     # Observable values for UI data binding
 └── game/               # Game-specific logic
@@ -108,7 +109,8 @@ include/carbon/
 ├── spatial.h           # Spatial hash index API
 ├── fog.h               # Fog of war / exploration API
 ├── rate.h              # Rate tracking / rolling metrics API
-└── network.h           # Network/graph system API
+├── network.h           # Network/graph system API
+└── blueprint.h         # Blueprint system API
 
 lib/
 ├── flecs.h/.c          # Flecs ECS library (v4.0.0)
@@ -1203,6 +1205,169 @@ void update_power_status(Game *game) {
     // Check for power deficit
     if (carbon_network_total_balance(game->power_grid) < 0) {
         show_power_warning();
+    }
+}
+```
+
+## Blueprint System
+
+Save and place building templates with relative positioning. Supports capturing selections, rotation, mirroring, and placement validation:
+
+```c
+#include "carbon/blueprint.h"
+
+// Create a blueprint
+Carbon_Blueprint *bp = carbon_blueprint_create("Solar Farm");
+
+// Add entries manually (relative positions from origin)
+carbon_blueprint_add_entry(bp, 0, 0, BUILDING_SOLAR_PANEL, 0);  // Origin
+carbon_blueprint_add_entry(bp, 1, 0, BUILDING_SOLAR_PANEL, 0);  // Right
+carbon_blueprint_add_entry(bp, 0, 1, BUILDING_SOLAR_PANEL, 0);  // Below
+carbon_blueprint_add_entry(bp, 1, 1, BUILDING_SOLAR_PANEL, 0);  // Diagonal
+
+// Or capture from existing buildings in the world
+bool capture_building(int x, int y, uint16_t *type, uint8_t *dir,
+                      uint32_t *metadata, void *userdata) {
+    Building *b = get_building_at(x, y);
+    if (!b) return false;
+    *type = b->type;
+    *dir = b->direction;
+    *metadata = b->extra_data;
+    return true;
+}
+int captured = carbon_blueprint_capture(bp, 10, 10, 15, 15,
+                                         capture_building, game);
+
+// Transform the blueprint
+carbon_blueprint_rotate_cw(bp);       // 90 degrees clockwise
+carbon_blueprint_rotate_ccw(bp);      // 90 degrees counter-clockwise
+carbon_blueprint_rotate(bp, CARBON_BLUEPRINT_ROT_180);
+carbon_blueprint_mirror_x(bp);        // Flip horizontally
+carbon_blueprint_mirror_y(bp);        // Flip vertically
+carbon_blueprint_normalize(bp);       // Move origin to top-left
+
+// Query blueprint info
+const char *name = carbon_blueprint_get_name(bp);
+int count = carbon_blueprint_get_entry_count(bp);
+int width, height;
+carbon_blueprint_get_bounds(bp, &width, &height);
+
+// Get individual entries
+const Carbon_BlueprintEntry *entry = carbon_blueprint_get_entry(bp, 0);
+printf("Entry at (%d, %d): type %d, dir %d\n",
+       entry->rel_x, entry->rel_y, entry->building_type, entry->direction);
+
+// Validate placement
+bool can_place(int x, int y, uint16_t type, uint8_t dir, void *userdata) {
+    return is_cell_empty(x, y) && is_terrain_buildable(x, y);
+}
+Carbon_BlueprintPlacement result = carbon_blueprint_can_place(bp, 50, 50,
+                                                               can_place, game);
+if (result.valid) {
+    printf("Can place all %d entries\n", result.valid_count);
+} else {
+    printf("Cannot place: %d invalid entries, first at index %d\n",
+           result.invalid_count, result.first_invalid_index);
+}
+
+// Place the blueprint
+void place_building_at(int x, int y, uint16_t type, uint8_t dir,
+                       uint32_t metadata, void *userdata) {
+    create_building(x, y, type, dir);
+}
+int placed = carbon_blueprint_place(bp, 50, 50, place_building_at, game);
+
+// Clone and modify
+Carbon_Blueprint *copy = carbon_blueprint_clone(bp);
+carbon_blueprint_set_name(copy, "Solar Farm (Rotated)");
+carbon_blueprint_rotate_cw(copy);
+
+// Cleanup
+carbon_blueprint_destroy(bp);
+carbon_blueprint_destroy(copy);
+```
+
+**Blueprint Library (managing multiple blueprints):**
+
+```c
+// Create library
+Carbon_BlueprintLibrary *library = carbon_blueprint_library_create(0);
+
+// Add blueprints (library takes ownership)
+Carbon_Blueprint *bp1 = carbon_blueprint_create("Factory Setup");
+// ... add entries ...
+uint32_t handle1 = carbon_blueprint_library_add(library, bp1);
+
+Carbon_Blueprint *bp2 = carbon_blueprint_create("Defense Tower");
+// ... add entries ...
+uint32_t handle2 = carbon_blueprint_library_add(library, bp2);
+
+// Find by name
+uint32_t found = carbon_blueprint_library_find(library, "Factory Setup");
+if (found != CARBON_BLUEPRINT_INVALID) {
+    const Carbon_Blueprint *bp = carbon_blueprint_library_get_const(library, found);
+    // Use blueprint...
+}
+
+// Get all handles
+uint32_t handles[64];
+int count = carbon_blueprint_library_get_all(library, handles, 64);
+for (int i = 0; i < count; i++) {
+    Carbon_Blueprint *bp = carbon_blueprint_library_get(library, handles[i]);
+    printf("Blueprint: %s\n", carbon_blueprint_get_name(bp));
+}
+
+// Remove blueprint
+carbon_blueprint_library_remove(library, handle1);
+
+// Clear all
+carbon_blueprint_library_clear(library);
+
+// Cleanup (destroys all contained blueprints)
+carbon_blueprint_library_destroy(library);
+```
+
+**Key features:**
+- Capture existing building layouts into reusable templates
+- Relative positioning with automatic normalization
+- Rotation (90°/180°/270°) and mirroring transformations
+- Entry direction automatically rotated with blueprint
+- Placement validation with detailed feedback
+- Blueprint library for managing collections
+- Callbacks for flexible integration with game systems
+
+**Common patterns:**
+
+```c
+// Ghost preview - render blueprint at cursor before placement
+void render_blueprint_preview(Game *game, Carbon_Blueprint *bp, int cursor_x, int cursor_y) {
+    Carbon_BlueprintPlacement validity = carbon_blueprint_can_place(bp, cursor_x, cursor_y,
+                                                                     can_place_validator, game);
+
+    int count = carbon_blueprint_get_entry_count(bp);
+    for (int i = 0; i < count; i++) {
+        const Carbon_BlueprintEntry *entry = carbon_blueprint_get_entry(bp, i);
+        int world_x, world_y;
+        carbon_blueprint_entry_to_world(entry, cursor_x, cursor_y, &world_x, &world_y);
+
+        // Draw ghost sprite (green if valid, red if invalid)
+        bool entry_valid = can_place_validator(world_x, world_y,
+                                                entry->building_type,
+                                                entry->direction, game);
+        uint32_t tint = entry_valid ? 0x8000FF00 : 0x80FF0000;
+        draw_building_ghost(world_x, world_y, entry->building_type, tint);
+    }
+}
+
+// Save/load blueprints (serialize entries)
+void save_blueprint(Carbon_Blueprint *bp, FILE *f) {
+    fprintf(f, "name=%s\n", carbon_blueprint_get_name(bp));
+    int count = carbon_blueprint_get_entry_count(bp);
+    fprintf(f, "count=%d\n", count);
+    for (int i = 0; i < count; i++) {
+        const Carbon_BlueprintEntry *e = carbon_blueprint_get_entry(bp, i);
+        fprintf(f, "%d,%d,%d,%d,%u\n", e->rel_x, e->rel_y,
+                e->building_type, e->direction, e->metadata);
     }
 }
 ```

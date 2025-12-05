@@ -22,6 +22,7 @@ Features extracted from Machinae codebase for potential addition to Carbon game 
 - Rate tracking (rolling window metrics)
 - Task queue system (sequential task execution for AI agents)
 - Network/graph system (union-find for power grid/resource distribution)
+- Blueprint system (building templates with capture/placement)
 
 ---
 
@@ -322,7 +323,7 @@ void carbon_game_speed_destroy(speed);
 3. ~~**Rate Tracking** - Useful analytics for economy games~~ ✅ DONE
 4. ~~**Task Queue** - Extends existing AI system~~ ✅ DONE
 5. ~~**Network System** - Power/resource distribution~~ ✅ DONE
-6. **Blueprint System** - UX improvement for builders
+6. ~~**Blueprint System** - UX improvement for builders~~ ✅ DONE
 7. **Ghost Building** - Pairs with blueprints
 8. **Dialog System** - Narrative integration
 9. **Game Speed** - Simulation control
