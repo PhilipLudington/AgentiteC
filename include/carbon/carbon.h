@@ -64,6 +64,9 @@ SDL_GPUCommandBuffer *carbon_get_command_buffer(Carbon_Engine *engine);
 
 // Core infrastructure
 #include "carbon/error.h"
+#include "carbon/log.h"
+#include "carbon/math_safe.h"
+#include "carbon/line.h"
 #include "carbon/event.h"
 #include "carbon/validate.h"
 #include "carbon/containers.h"
@@ -71,6 +74,11 @@ SDL_GPUCommandBuffer *carbon_get_command_buffer(Carbon_Engine *engine);
 // Strategy game systems
 #include "carbon/turn.h"
 #include "carbon/resource.h"
+#include "carbon/condition.h"
+#include "carbon/finances.h"
+#include "carbon/loan.h"
+#include "carbon/demand.h"
+#include "carbon/incident.h"
 #include "carbon/modifier.h"
 #include "carbon/threshold.h"
 #include "carbon/history.h"
@@ -78,5 +86,8 @@ SDL_GPUCommandBuffer *carbon_get_command_buffer(Carbon_Engine *engine);
 #include "carbon/save.h"
 #include "carbon/game_event.h"
 #include "carbon/unlock.h"
+
+// UI utilities
+#include "carbon/notification.h"
 
 #endif // CARBON_H

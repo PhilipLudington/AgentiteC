@@ -1657,6 +1657,345 @@ carbon_camera3d_destroy(cam);
 - Pitch limits: -89° to 89° (prevents gimbal lock)
 - Easing: Smooth (ease-in-out)
 
+## Logging System
+
+File-based logging with subsystem tags and log levels:
+
+```c
+#include "carbon/log.h"
+
+// Initialize (uses default path: /tmp/carbon.log on Unix, carbon.log on Windows)
+carbon_log_init();
+// Or: carbon_log_init_with_path("game.log");
+
+// Set log level (DEBUG includes all, ERROR only errors)
+carbon_log_set_level(CARBON_LOG_LEVEL_DEBUG);
+
+// Log messages with subsystem tags
+carbon_log_info(CARBON_LOG_CORE, "Engine initialized");
+carbon_log_warning(CARBON_LOG_GRAPHICS, "Texture not found: %s", path);
+carbon_log_error(CARBON_LOG_AUDIO, "Failed to load sound");
+carbon_log_debug(CARBON_LOG_AI, "Processing %d entities", count);
+
+// Errors auto-flush for crash debugging
+carbon_log_flush();  // Manual flush
+
+// Shutdown
+carbon_log_shutdown();
+```
+
+**Predefined subsystems:** `CARBON_LOG_CORE`, `CARBON_LOG_ECS`, `CARBON_LOG_GRAPHICS`, `CARBON_LOG_AUDIO`, `CARBON_LOG_INPUT`, `CARBON_LOG_AI`, `CARBON_LOG_UI`, `CARBON_LOG_GAME`, `CARBON_LOG_NET`, `CARBON_LOG_SAVE`
+
+**Output format:** `[2024-01-15 14:30:22] [ERROR  ] [Graphics  ] Failed to load texture`
+
+## Safe Arithmetic Library
+
+Overflow-protected integer arithmetic:
+
+```c
+#include "carbon/math_safe.h"
+
+// Check before operation
+if (carbon_would_multiply_overflow(price, quantity)) {
+    // Handle overflow case
+}
+
+// Safe operations (clamp on overflow, log warning)
+int32_t total = carbon_safe_multiply(price, quantity);
+int32_t balance = carbon_safe_add(balance, income);
+int32_t result = carbon_safe_subtract(funds, cost);
+int32_t ratio = carbon_safe_divide(a, b);  // Handles divide by zero
+
+// 64-bit variants
+int64_t big = carbon_safe_multiply_i64(a, b);
+
+// Unsigned variants
+uint32_t sum = carbon_safe_add_u32(a, b);
+uint32_t diff = carbon_safe_subtract_u32(a, b);  // Clamps to 0
+
+// Disable overflow warnings if needed
+carbon_safe_math_set_warnings(false);
+```
+
+## Notification/Toast System
+
+Timed notification messages for player feedback:
+
+```c
+#include "carbon/notification.h"
+
+// Create manager
+Carbon_NotificationManager *notify = carbon_notify_create();
+
+// Add notifications
+carbon_notify_add(notify, "Game saved!", CARBON_NOTIFY_SUCCESS);
+carbon_notify_add(notify, "Low health!", CARBON_NOTIFY_WARNING);
+carbon_notify_add(notify, "Connection lost", CARBON_NOTIFY_ERROR);
+carbon_notify_printf(notify, CARBON_NOTIFY_INFO, "Score: %d", score);
+
+// Custom color
+carbon_notify_add_colored(notify, "Special message", 1.0f, 0.5f, 0.0f);
+
+// Custom duration
+carbon_notify_add_timed(notify, "Brief", CARBON_NOTIFY_INFO, 2.0f);
+
+// In game loop:
+carbon_notify_update(notify, delta_time);
+
+// Render (during text batch)
+carbon_text_begin(text);
+carbon_notify_render(notify, text, font, 10.0f, 10.0f, 24.0f);  // x, y, spacing
+carbon_text_end(text);
+
+// Query
+int count = carbon_notify_count(notify);
+const Carbon_Notification *n = carbon_notify_get(notify, 0);
+
+// Clear all
+carbon_notify_clear(notify);
+
+// Cleanup
+carbon_notify_destroy(notify);
+```
+
+**Notification types:** `CARBON_NOTIFY_INFO` (white), `CARBON_NOTIFY_SUCCESS` (green), `CARBON_NOTIFY_WARNING` (yellow), `CARBON_NOTIFY_ERROR` (red)
+
+## Line Cell Iterator
+
+Bresenham line iteration for grid-based operations:
+
+```c
+#include "carbon/line.h"
+
+// Callback for each cell along line
+bool check_walkable(int32_t x, int32_t y, void *userdata) {
+    Tilemap *map = userdata;
+    return tilemap_is_walkable(map, x, y);  // false stops iteration
+}
+
+// Iterate over all cells (returns true if callback never stopped)
+bool clear = carbon_iterate_line_cells(x1, y1, x2, y2, check_walkable, map);
+
+// Skip endpoints (useful for city-to-city connections)
+carbon_iterate_line_cells_ex(x1, y1, x2, y2, callback, data, true, true);
+
+// Count cells
+int total = carbon_count_line_cells(0, 0, 10, 5);       // Including endpoints
+int between = carbon_count_line_cells_between(0, 0, 10, 5);  // Excluding endpoints
+
+// Get cells into buffer
+int32_t xs[100], ys[100];
+int count = carbon_get_line_cells(x1, y1, x2, y2, xs, ys, 100);
+
+// Check if line passes through a specific cell
+if (carbon_line_passes_through(x1, y1, x2, y2, cell_x, cell_y)) {
+    // Line intersects this cell
+}
+```
+
+## Condition/Degradation System
+
+Track object condition with decay and repair:
+
+```c
+#include "carbon/condition.h"
+
+// Initialize
+Carbon_Condition cond;
+carbon_condition_init(&cond, CARBON_QUALITY_STANDARD);  // or LOW, HIGH
+
+// Apply decay
+carbon_condition_decay_time(&cond, 0.1f);    // Time-based (per tick)
+carbon_condition_decay_usage(&cond, 1.0f);   // Usage-based (when used)
+
+// Check status
+Carbon_ConditionStatus status = carbon_condition_get_status(&cond);
+float percent = carbon_condition_get_percent(&cond);
+bool usable = carbon_condition_is_usable(&cond);
+
+// Repair
+int32_t cost = carbon_condition_get_repair_cost(&cond, 100);  // Base cost 100
+carbon_condition_repair(&cond, 25.0f);   // Partial repair
+carbon_condition_repair_full(&cond);      // Full repair
+
+// Damage (requires repair before use)
+carbon_condition_damage(&cond);
+
+// Efficiency based on condition
+float eff = carbon_condition_get_efficiency(&cond, 0.5f);  // 0.5 to 1.0
+
+// Failure probability
+float fail_chance = carbon_condition_get_failure_probability(&cond, 0.1f);
+```
+
+**Quality tiers:** `CARBON_QUALITY_LOW` (1.5x decay), `CARBON_QUALITY_STANDARD` (1.0x), `CARBON_QUALITY_HIGH` (0.5x)
+
+**Status thresholds:** `CARBON_CONDITION_GOOD` (≥75%), `CARBON_CONDITION_FAIR` (≥50%), `CARBON_CONDITION_POOR` (≥25%), `CARBON_CONDITION_CRITICAL` (<25%)
+
+## Financial Period Tracking
+
+Track revenue/expenses over rolling time periods:
+
+```c
+#include "carbon/finances.h"
+
+// Create tracker (30-second periods)
+Carbon_FinancialTracker *finances = carbon_finances_create(30.0f);
+
+// Record transactions
+carbon_finances_record_revenue(finances, 1000);
+carbon_finances_record_expense(finances, 500);
+
+// Update each frame
+carbon_finances_update(finances, delta_time);
+
+// Or force period end (turn-based games)
+carbon_finances_end_period(finances);
+
+// Query current period
+int32_t profit = carbon_finances_get_current_profit(finances);
+int32_t revenue = carbon_finances_get_current_revenue(finances);
+
+// Query historical
+int32_t last = carbon_finances_get_last_profit(finances);
+int32_t all_time = carbon_finances_get_all_time_profit(finances);
+
+// Sum/average last N periods
+Carbon_FinancialPeriod sum = carbon_finances_sum_periods(finances, 5);
+Carbon_FinancialPeriod avg = carbon_finances_avg_periods(finances, 5);
+
+// Period callback
+void on_period_end(const Carbon_FinancialPeriod *period, void *userdata) {
+    printf("Period profit: %d\n", carbon_finances_get_profit(period));
+}
+carbon_finances_set_period_callback(finances, on_period_end, NULL);
+
+// Cleanup
+carbon_finances_destroy(finances);
+```
+
+## Loan/Credit System
+
+Tiered loans with interest:
+
+```c
+#include "carbon/loan.h"
+
+// Create system with tiers
+Carbon_LoanSystem *loans = carbon_loan_create();
+carbon_loan_add_tier(loans, "Small Loan", 10000, 0.01f);   // 1% per period
+carbon_loan_add_tier(loans, "Medium Loan", 50000, 0.015f); // 1.5%
+carbon_loan_add_tier(loans, "Large Loan", 100000, 0.02f);  // 2%
+
+// Per-player state
+Carbon_LoanState state;
+carbon_loan_state_init(&state);
+
+// Take a loan
+if (carbon_loan_can_take(&state)) {
+    int32_t money;
+    carbon_loan_take(&state, loans, 0, &money);  // Tier 0
+    player_money += money;
+}
+
+// Each period, charge interest
+int32_t interest = carbon_loan_charge_interest(&state, loans);
+
+// Query
+int32_t owed = carbon_loan_get_amount_owed(&state);
+int32_t next_interest = carbon_loan_get_projected_interest(&state, loans);
+
+// Repay
+if (carbon_loan_can_repay(&state, player_money)) {
+    int32_t cost;
+    carbon_loan_repay(&state, &cost);
+    player_money -= cost;
+}
+
+// Cleanup
+carbon_loan_destroy(loans);
+```
+
+## Dynamic Demand System
+
+Demand values responding to service levels:
+
+```c
+#include "carbon/demand.h"
+
+// Initialize (initial value 50, equilibrium 50)
+Carbon_Demand demand;
+carbon_demand_init(&demand, 50, 50);
+
+// When service is provided
+carbon_demand_record_service(&demand);
+
+// Update (handles decay toward equilibrium)
+carbon_demand_update(&demand, delta_time);
+
+// Or tick manually (turn-based)
+carbon_demand_tick(&demand);
+
+// Query
+uint8_t level = carbon_demand_get(&demand);  // 0-100
+float mult = carbon_demand_get_multiplier(&demand);  // 0.5 to 2.0
+
+// Use as price multiplier
+int32_t price = base_price * mult;
+
+// Level descriptions
+const char *desc = carbon_demand_get_level_string(&demand);  // "Very Low" to "Very High"
+
+// Custom multiplier range
+float custom_mult = carbon_demand_get_multiplier_range(&demand, 0.8f, 1.5f);
+```
+
+## Incident/Random Event System
+
+Probabilistic events based on condition:
+
+```c
+#include "carbon/incident.h"
+
+// Configure severity distribution
+Carbon_IncidentConfig config = {
+    .base_probability = 0.1f,    // 10% base chance
+    .minor_threshold = 0.70f,    // 70% of incidents are minor
+    .major_threshold = 0.90f     // 20% major, 10% critical
+};
+
+// Check for incident based on condition
+Carbon_IncidentType result = carbon_incident_check_condition(&cond, &config);
+
+if (result != CARBON_INCIDENT_NONE) {
+    switch (result) {
+        case CARBON_INCIDENT_MINOR:
+            // Temporary effect
+            break;
+        case CARBON_INCIDENT_MAJOR:
+            // Lasting effect
+            break;
+        case CARBON_INCIDENT_CRITICAL:
+            // Severe consequence
+            break;
+    }
+}
+
+// Or calculate probability manually
+float prob = carbon_incident_calc_probability(condition_percent, quality_mult);
+Carbon_IncidentType type = carbon_incident_check(prob, &config);
+
+// Simple probability roll
+if (carbon_incident_roll(0.3f)) {
+    // 30% chance triggered
+}
+
+// Deterministic random (for reproducible behavior)
+carbon_incident_seed(game_seed);
+float r = carbon_incident_random();  // 0.0 to 1.0
+int n = carbon_incident_random_range(1, 6);  // 1 to 6
+```
+
 ## Quick Start (New Game)
 
 The recommended way to start a new game is using the game template:
