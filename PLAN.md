@@ -14,7 +14,7 @@ Features extracted from StellarThroneCPP and Ecosocialism projects that would en
 | 1 | Container Utils | Medium | containers.h/c | **DONE** | Generic algorithms and random |
 | 2 | Turn/Phase System | High | turn.h/c | **DONE** | Multi-phase turn orchestration (already existed) |
 | 2 | Resource Economy | Medium | resource.h/c | **DONE** | Multi-resource pools (already existed) |
-| 2 | Technology Tree | Medium | tech.h/c | Pending | Research with prerequisites |
+| 2 | Technology Tree | Medium | tech.h/c | **DONE** | Research with prerequisites |
 | 2 | Victory System | Low | victory.h/c | Pending | Multi-win-condition tracking |
 | 3 | AI Personality | Medium | ai.h/c | Pending | Weighted decision making |
 | 4 | View Model | Medium | viewmodel.h/c | Pending | UI data binding |
@@ -560,9 +560,9 @@ void carbon_resource_add_multi(Carbon_Resources *r,
 
 ---
 
-### 2.3 Technology Tree System
+### 2.3 Technology Tree System ✅ COMPLETE
 **Priority:** Medium
-**Location:** `src/game/tech.c`, `include/carbon/tech.h`
+**Location:** `src/strategy/tech.c`, `include/carbon/tech.h`
 
 Research system with prerequisites and effects.
 

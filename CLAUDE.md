@@ -57,6 +57,7 @@ src/
 ├── strategy/           # Turn-based strategy game systems
 │   ├── turn.c          # Turn/phase management
 │   ├── resource.c      # Resource economy
+│   ├── tech.c          # Technology tree with prerequisites
 │   ├── modifier.c      # Value modifier stacks
 │   ├── threshold.c     # Value threshold callbacks
 │   ├── history.c       # Metrics history tracking
@@ -84,6 +85,7 @@ include/carbon/
 ├── pathfinding.h       # A* pathfinding API
 ├── turn.h              # Turn/phase system API
 ├── resource.h          # Resource economy API
+├── tech.h              # Technology tree API
 ├── modifier.h          # Modifier stack API
 ├── threshold.h         # Threshold tracker API
 ├── history.h           # History tracking API
@@ -912,6 +914,128 @@ carbon_ring_push(&buffer, 42);
 int val = carbon_ring_pop(&buffer);
 bool full = carbon_ring_full(&buffer);
 ```
+
+## Technology Tree System
+
+Research system with prerequisites, branching, multiple resource costs, and effect application:
+
+```c
+#include "carbon/tech.h"
+
+// Create tech tree (optionally with event dispatcher)
+Carbon_TechTree *tree = carbon_tech_create_with_events(events);
+
+// Define a technology
+Carbon_TechDef tech = {
+    .id = "improved_farming",
+    .name = "Improved Farming",
+    .description = "Increases food production by 20%",
+    .branch = TECH_BRANCH_ECONOMY,  // Game-defined constant
+    .tier = 1,
+    .research_cost = 100,
+    .prereq_count = 0,
+    .effect_count = 1,
+};
+tech.effects[0] = (Carbon_TechEffect){
+    .type = CARBON_TECH_EFFECT_RESOURCE_BONUS,
+    .target = RESOURCE_FOOD,
+    .value = 0.20f,
+    .modifier_source = "tech_farming",
+};
+carbon_tech_register(tree, &tech);
+
+// Tech with prerequisites
+Carbon_TechDef advanced_tech = {
+    .id = "advanced_farming",
+    .name = "Advanced Farming",
+    .description = "Further increases food production",
+    .branch = TECH_BRANCH_ECONOMY,
+    .tier = 2,
+    .research_cost = 250,
+    .prereq_count = 1,
+};
+strcpy(advanced_tech.prerequisites[0], "improved_farming");
+carbon_tech_register(tree, &advanced_tech);
+
+// Per-faction technology state
+Carbon_TechState state;
+carbon_tech_state_init(&state);
+
+// Check if can research (prerequisites met, not already researched)
+if (carbon_tech_can_research(tree, &state, "improved_farming")) {
+    carbon_tech_start_research(tree, &state, "improved_farming");
+}
+
+// Each turn, add research points
+int research_per_turn = 25;
+if (carbon_tech_add_points(tree, &state, research_per_turn)) {
+    // Tech completed! CARBON_EVENT_TECH_RESEARCHED emitted
+}
+
+// Query progress
+float progress = carbon_tech_get_progress(&state, 0);  // 0.0 to 1.0
+int32_t remaining = carbon_tech_get_remaining(&state, 0);
+
+// Check if researched
+if (carbon_tech_is_researched(tree, &state, "improved_farming")) {
+    // Apply tech effects...
+}
+
+// Get available techs (prerequisites met, not researched)
+const Carbon_TechDef *available[32];
+int count = carbon_tech_get_available(tree, &state, available, 32);
+
+// Get techs by branch or tier
+const Carbon_TechDef *economy_techs[32];
+int econ_count = carbon_tech_get_by_branch(tree, TECH_BRANCH_ECONOMY, economy_techs, 32);
+
+// Completion callback (alternative to events)
+void on_tech_complete(const Carbon_TechDef *tech, Carbon_TechState *state, void *userdata) {
+    printf("Researched: %s\n", tech->name);
+    // Apply effects to game state
+}
+carbon_tech_set_completion_callback(tree, on_tech_complete, game);
+
+// Repeatable technologies (cost increases each time)
+Carbon_TechDef repeatable_tech = {
+    .id = "weapon_upgrade",
+    .name = "Weapon Upgrade",
+    .research_cost = 50,
+    .repeatable = true,
+};
+carbon_tech_register(tree, &repeatable_tech);
+int times_researched = carbon_tech_get_repeat_count(tree, &state, "weapon_upgrade");
+
+// Concurrent research (up to CARBON_TECH_MAX_ACTIVE slots)
+carbon_tech_start_research(tree, &state, "improved_farming");
+carbon_tech_start_research(tree, &state, "weapon_upgrade");
+carbon_tech_add_points_to_slot(tree, &state, 0, 25);  // To first
+carbon_tech_add_points_to_slot(tree, &state, 1, 10);  // To second
+
+// Cancel research
+carbon_tech_cancel_research(&state, 0);
+carbon_tech_cancel_all_research(&state);
+
+// Debug/cheat: instantly complete
+carbon_tech_complete(tree, &state, "improved_farming");
+
+// Cleanup
+carbon_tech_destroy(tree);
+```
+
+**Built-in effect types:**
+- `CARBON_TECH_EFFECT_RESOURCE_BONUS` - Increase resource generation
+- `CARBON_TECH_EFFECT_RESOURCE_CAP` - Increase resource maximum
+- `CARBON_TECH_EFFECT_COST_REDUCTION` - Reduce costs by percentage
+- `CARBON_TECH_EFFECT_PRODUCTION_SPEED` - Faster production
+- `CARBON_TECH_EFFECT_UNLOCK_UNIT` - Enable a unit type
+- `CARBON_TECH_EFFECT_UNLOCK_BUILDING` - Enable a building type
+- `CARBON_TECH_EFFECT_ATTACK_BONUS`, `DEFENSE_BONUS`, `HEALTH_BONUS` - Combat stats
+- `CARBON_TECH_EFFECT_CUSTOM` - Game-defined effects
+
+**Events emitted:**
+- `CARBON_EVENT_TECH_STARTED` - When research begins
+- `CARBON_EVENT_TECH_RESEARCHED` - When research completes
 
 ## Quick Start (New Game)
 
