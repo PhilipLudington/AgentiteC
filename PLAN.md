@@ -77,10 +77,9 @@ Carbon_HTNStatus carbon_htn_executor_update(Carbon_HTNExecutor *exec,
 
 ---
 
-### 2. Multi-Track AI Decision System
+### 2. Multi-Track AI Decision System ✓
 
-**Priority:** High
-**Complexity:** Medium
+**Status:** COMPLETED
 **Files:** `include/carbon/ai_tracks.h`, `src/ai/ai_tracks.c`
 
 Parallel decision-making tracks that prevent resource competition between different AI concerns.
@@ -88,8 +87,11 @@ Parallel decision-making tracks that prevent resource competition between differ
 **Core Components:**
 - Track registry with independent execution
 - Per-track decision structures with priority scoring
-- Budget allocation per track
+- Budget allocation per track (with budget provider callbacks)
 - Decision audit trail with reason strings
+- Blackboard integration for resource reservations
+- Decision filtering and validation
+- Statistics tracking for AI tuning
 
 **API Sketch:**
 ```c
@@ -97,18 +99,19 @@ Parallel decision-making tracks that prevent resource competition between differ
 Carbon_AITrackSystem *carbon_ai_tracks_create(void);
 int carbon_ai_tracks_register(Carbon_AITrackSystem *tracks, const char *name,
                                Carbon_AITrackEvaluator evaluator);
+carbon_ai_tracks_set_blackboard(tracks, blackboard);
 
 // Budget allocation
 void carbon_ai_tracks_set_budget(Carbon_AITrackSystem *tracks, int track_id,
                                   int resource_type, int32_t amount);
 int32_t carbon_ai_tracks_get_budget(Carbon_AITrackSystem *tracks, int track_id,
                                      int resource_type);
+carbon_ai_tracks_set_budget_provider(tracks, provider_fn, userdata);
 
 // Decision making
 void carbon_ai_tracks_evaluate_all(Carbon_AITrackSystem *tracks, void *game_state,
-                                    Carbon_AIDecisionSet *out_decisions);
-const Carbon_AIDecision *carbon_ai_tracks_get_decision(Carbon_AITrackSystem *tracks,
-                                                        int track_id, int index);
+                                    Carbon_AITrackResult *out_result);
+const Carbon_AITrackDecision *carbon_ai_tracks_get_best(tracks, track_id, &result);
 
 // Audit trail
 void carbon_ai_tracks_set_reason(Carbon_AITrackSystem *tracks, int track_id,
@@ -122,6 +125,8 @@ const char *carbon_ai_tracks_get_reason(Carbon_AITrackSystem *tracks, int track_
 - `CARBON_AI_TRACK_RESEARCH` - Technology priorities
 - `CARBON_AI_TRACK_DIPLOMACY` - Relations, treaties
 - `CARBON_AI_TRACK_EXPANSION` - Territory growth
+- `CARBON_AI_TRACK_INFRASTRUCTURE` - Building, improvements
+- `CARBON_AI_TRACK_ESPIONAGE` - Intelligence, sabotage
 
 ---
 
@@ -572,8 +577,8 @@ void carbon_query_invalidate_all(Carbon_QuerySystem *sys);
 2. **Shared Blackboard** ✓ - `include/carbon/blackboard.h`, `src/ai/blackboard.c`
 3. **Trade/Supply Line System** ✓ - `include/carbon/trade.h`, `src/strategy/trade.c`
 
-### Phase 2 - Strategic Layer (Next)
-4. **Multi-Track AI Decisions** - Parallel AI decision making
+### Phase 2 - Strategic Layer (In Progress)
+4. **Multi-Track AI Decisions** ✓ - `include/carbon/ai_tracks.h`, `src/ai/ai_tracks.c`
 5. **Strategic Coordinator** - Phase detection and utility evaluation
 6. **Command Queue** - Clean action validation
 

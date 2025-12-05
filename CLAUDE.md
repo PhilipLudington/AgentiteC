@@ -55,7 +55,11 @@ src/
 │   └── input.c         # Input abstraction with action mapping
 ├── ai/
 │   ├── pathfinding.c   # A* pathfinding for tile-based maps
-│   └── personality.c   # AI personality and decision making
+│   ├── personality.c   # AI personality and decision making
+│   ├── ai_tracks.c     # Multi-track AI decisions
+│   ├── blackboard.c    # Shared blackboard for AI coordination
+│   ├── htn.c           # HTN AI planner
+│   └── task.c          # Task queue system
 ├── strategy/           # Turn-based strategy game systems
 │   ├── turn.c          # Turn/phase management
 │   ├── resource.c      # Resource economy
@@ -99,6 +103,9 @@ include/carbon/
 ├── audio.h             # Audio system API
 ├── pathfinding.h       # A* pathfinding API
 ├── ai.h                # AI personality system API
+├── ai_tracks.h         # Multi-track AI decisions API
+├── blackboard.h        # Shared blackboard for AI coordination
+├── htn.h               # HTN AI planner API
 ├── task.h              # Task queue system API
 ├── turn.h              # Turn/phase system API
 ├── resource.h          # Resource economy API
@@ -3194,6 +3201,196 @@ carbon_blackboard_destroy(bb);
 - Decision history with circular buffer
 - Value change subscriptions
 - Automatic expiration of reservations/plans
+
+## Multi-Track AI Decisions
+
+Parallel decision-making tracks that prevent resource competition between different AI concerns. Each track operates independently with its own budget, evaluator, and decision set:
+
+```c
+#include "carbon/ai_tracks.h"
+
+// Create track system with blackboard for coordination
+Carbon_AITrackSystem *tracks = carbon_ai_tracks_create();
+carbon_ai_tracks_set_blackboard(tracks, blackboard);
+
+// Register tracks with evaluators
+void evaluate_economy(int track_id, void *game_state,
+                       const Carbon_AITrackBudget *budgets, int budget_count,
+                       Carbon_AITrackDecision *out, int *count, int max,
+                       void *userdata) {
+    *count = 0;
+    // Analyze game state and generate economic decisions
+    Carbon_AITrackDecision *d = &out[(*count)++];
+    carbon_ai_track_decision_init(d);
+    d->action_type = ACTION_BUILD_MINE;
+    d->target_id = best_location;
+    d->score = 0.8f;
+    d->resource_type = RESOURCE_GOLD;
+    d->resource_cost = 500;
+}
+
+int econ_track = carbon_ai_tracks_register(tracks, "economy", evaluate_economy);
+int mil_track = carbon_ai_tracks_register_ex(tracks, "military",
+                                              CARBON_AI_TRACK_MILITARY,
+                                              evaluate_military, NULL);
+int research_track = carbon_ai_tracks_register(tracks, "research", evaluate_research);
+
+// Set budgets per resource type for each track
+carbon_ai_tracks_set_budget(tracks, econ_track, RESOURCE_GOLD, 1000);
+carbon_ai_tracks_set_budget(tracks, mil_track, RESOURCE_GOLD, 500);
+carbon_ai_tracks_set_budget(tracks, mil_track, RESOURCE_IRON, 200);
+carbon_ai_tracks_set_budget(tracks, research_track, RESOURCE_GOLD, 300);
+
+// Or use a budget provider callback for dynamic allocation
+int32_t provide_budget(int track_id, int32_t resource_type,
+                        void *game_state, void *userdata) {
+    // Allocate budgets based on game phase, personality, etc.
+    if (track_id == mil_track && in_war) {
+        return total_resources * 0.5f;  // 50% to military in wartime
+    }
+    return total_resources * 0.3f;  // Default 30%
+}
+carbon_ai_tracks_set_budget_provider(tracks, provide_budget, NULL);
+carbon_ai_tracks_allocate_budgets(tracks, game_state);
+
+// Each turn, evaluate all tracks
+Carbon_AITrackResult results;
+carbon_ai_tracks_evaluate_all(tracks, game_state, &results);
+
+printf("Generated %d decisions across %d tracks\n",
+       results.total_decisions, results.track_count);
+
+// Process decisions from each track
+for (int t = 0; t < results.track_count; t++) {
+    Carbon_AITrackDecisionSet *set = &results.decisions[t];
+    carbon_ai_tracks_sort_by_priority(set);  // Sort by priority, then score
+
+    printf("Track %s: %d decisions, reason: %s\n",
+           set->track_name, set->count, set->reason);
+
+    for (int i = 0; i < set->count; i++) {
+        Carbon_AITrackDecision *d = &set->items[i];
+
+        // Check if budget allows
+        if (d->resource_cost > 0) {
+            if (!carbon_ai_tracks_spend_budget(tracks, set->track_id,
+                                                d->resource_type, d->resource_cost)) {
+                continue;  // Not enough budget
+            }
+        }
+
+        // Execute decision
+        execute_action(d->action_type, d->target_id, d->secondary_id);
+        carbon_ai_tracks_record_execution(tracks, set->track_id);
+    }
+}
+
+// Get best decision from a specific track
+const Carbon_AITrackDecision *best = carbon_ai_tracks_get_best(tracks,
+                                                                mil_track, &results);
+
+// Get all decisions above a score threshold
+const Carbon_AITrackDecision *good[32];
+int good_count = carbon_ai_tracks_get_above_score(&results, 0.7f, good, 32);
+
+// Get all decisions sorted by score across all tracks
+const Carbon_AITrackDecision *all[64];
+int all_count = carbon_ai_tracks_get_all_sorted(&results, all, 64);
+
+// Decision filter (validate/reject decisions)
+bool filter_decisions(int track_id, const Carbon_AITrackDecision *d,
+                       void *game_state, void *userdata) {
+    // Reject decisions targeting invalid locations
+    return is_valid_target(d->target_id);
+}
+carbon_ai_tracks_set_filter(tracks, filter_decisions, NULL);
+
+// Audit trail - set reason for decisions
+carbon_ai_tracks_set_reason(tracks, econ_track, "Low gold, prioritizing mines");
+const char *reason = carbon_ai_tracks_get_reason(tracks, econ_track);
+
+// Enable/disable tracks dynamically
+carbon_ai_tracks_set_enabled(tracks, research_track, false);  // Pause research
+if (carbon_ai_tracks_is_enabled(tracks, mil_track)) { }
+
+// Query remaining budget
+int32_t remaining = carbon_ai_tracks_get_remaining(tracks, econ_track, RESOURCE_GOLD);
+
+// Statistics
+Carbon_AITrackStats stats;
+carbon_ai_tracks_get_stats(tracks, econ_track, &stats);
+printf("Track evaluated %d times, %d decisions made, %.1f%% executed\n",
+       stats.evaluations, stats.decisions_made, stats.success_rate * 100);
+
+// Reset for next turn
+carbon_ai_tracks_reset_spent(tracks);
+carbon_ai_tracks_clear_reasons(tracks);
+
+// Cleanup
+carbon_ai_tracks_destroy(tracks);
+```
+
+**Built-in track types:**
+- `CARBON_AI_TRACK_ECONOMY` - Resource production, expansion
+- `CARBON_AI_TRACK_MILITARY` - Unit production, defense
+- `CARBON_AI_TRACK_RESEARCH` - Technology priorities
+- `CARBON_AI_TRACK_DIPLOMACY` - Relations, treaties
+- `CARBON_AI_TRACK_EXPANSION` - Territory growth
+- `CARBON_AI_TRACK_INFRASTRUCTURE` - Building, improvements
+- `CARBON_AI_TRACK_ESPIONAGE` - Intelligence, sabotage
+- `CARBON_AI_TRACK_CUSTOM` - Game-specific track
+- `CARBON_AI_TRACK_USER` (100+) - User-defined track types
+
+**Priority levels:**
+- `CARBON_AI_PRIORITY_LOW` - Background tasks
+- `CARBON_AI_PRIORITY_NORMAL` - Standard decisions
+- `CARBON_AI_PRIORITY_HIGH` - Important actions
+- `CARBON_AI_PRIORITY_CRITICAL` - Must-do actions
+
+**Key features:**
+- Independent tracks with separate budgets prevent resource competition
+- Blackboard integration for resource reservations and coordination
+- Budget provider callbacks for dynamic allocation based on game state
+- Decision filtering to validate actions before execution
+- Audit trail with reason strings per track
+- Statistics tracking for AI tuning and debugging
+- Track enable/disable for dynamic behavior changes
+
+**Common patterns:**
+
+```c
+// War-time behavior adjustment
+void on_war_declared(Game *game) {
+    // Increase military budget
+    carbon_ai_tracks_set_budget(tracks, mil_track, RESOURCE_GOLD, 2000);
+    // Disable non-essential tracks
+    carbon_ai_tracks_set_enabled(tracks, research_track, false);
+    carbon_ai_tracks_set_reason(tracks, mil_track, "War declared - mobilizing");
+}
+
+// Phase-based budget allocation
+int32_t phase_budget_provider(int track_id, int32_t resource_type,
+                               void *game_state, void *userdata) {
+    Game *game = game_state;
+    float total = get_available_resources(game, resource_type);
+
+    switch (detect_game_phase(game)) {
+        case PHASE_EARLY:
+            // Early game: economy and expansion
+            if (track_id == econ_track) return total * 0.5f;
+            if (track_id == expansion_track) return total * 0.3f;
+            break;
+        case PHASE_MID:
+            // Mid game: balanced
+            return total * 0.25f;
+        case PHASE_LATE:
+            // Late game: military focus
+            if (track_id == mil_track) return total * 0.5f;
+            break;
+    }
+    return total * 0.2f;  // Default
+}
+```
 
 ## Trade Route / Supply Line System
 
