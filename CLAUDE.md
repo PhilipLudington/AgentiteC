@@ -73,7 +73,8 @@ src/
 │   ├── network.c       # Network/graph system (power grid)
 │   ├── blueprint.c     # Blueprint system for building templates
 │   ├── construction.c  # Ghost building / construction queue
-│   └── dialog.c        # Dialog / narrative system
+│   ├── dialog.c        # Dialog / narrative system
+│   └── game_speed.c    # Variable simulation speed control
 ├── ui/                 # Immediate-mode GUI system
 │   └── viewmodel.c     # Observable values for UI data binding
 └── game/               # Game-specific logic
@@ -114,7 +115,8 @@ include/carbon/
 ├── network.h           # Network/graph system API
 ├── blueprint.h         # Blueprint system API
 ├── construction.h      # Ghost building / construction queue API
-└── dialog.h            # Dialog / narrative system API
+├── dialog.h            # Dialog / narrative system API
+└── game_speed.h        # Variable simulation speed API
 
 lib/
 ├── flecs.h/.c          # Flecs ECS library (v4.0.0)
@@ -1757,6 +1759,164 @@ carbon_dialog_set_event_callback(dialog, on_event_triggered, NULL);
 - Speaker color and portrait customization
 - Display/dismiss/event callbacks
 - Printf-style message formatting
+
+## Game Speed System
+
+Variable simulation speed with pause support. Allows games to run at different speeds (pause, normal, fast forward) while keeping UI responsive:
+
+```c
+#include "carbon/game_speed.h"
+
+// Create game speed controller
+Carbon_GameSpeed *speed = carbon_game_speed_create();
+
+// Set speed multiplier (1.0 = normal, 2.0 = double, etc.)
+carbon_game_speed_set(speed, 2.0f);  // 2x speed
+
+// Pause/resume
+carbon_game_speed_pause(speed);
+carbon_game_speed_resume(speed);
+carbon_game_speed_toggle_pause(speed);
+
+// Check state
+if (carbon_game_speed_is_paused(speed)) {
+    // Game is paused
+}
+
+// In game loop - scale delta time
+float raw_delta = carbon_get_delta_time(engine);
+float scaled_delta = carbon_game_speed_scale_delta(speed, raw_delta);
+
+// Game logic uses scaled delta (affected by speed)
+update_game_logic(scaled_delta);
+
+// UI uses raw delta (always normal speed)
+update_ui(raw_delta);
+
+// Speed presets with cycling
+carbon_game_speed_set_default_presets(speed);  // 1x, 2x, 4x
+carbon_game_speed_cycle(speed);                 // Cycle through presets
+carbon_game_speed_cycle_reverse(speed);         // Cycle backward
+
+// Custom presets
+float presets[] = { 0.5f, 1.0f, 2.0f, 4.0f, 8.0f };
+carbon_game_speed_set_presets(speed, presets, 5);
+
+// Set speed to specific preset by index
+carbon_game_speed_set_preset(speed, 2);  // Set to third preset (2.0f)
+
+// Query preset state
+int preset_idx = carbon_game_speed_get_preset_index(speed);  // -1 if not on preset
+float preset_val = carbon_game_speed_get_preset(speed, 0);   // Get first preset value
+
+// Speed limits
+carbon_game_speed_set_min(speed, 0.25f);  // Minimum speed
+carbon_game_speed_set_max(speed, 8.0f);   // Maximum speed
+
+// Convenience functions
+carbon_game_speed_multiply(speed, 2.0f);  // Double current speed
+carbon_game_speed_divide(speed, 2.0f);    // Halve current speed
+carbon_game_speed_reset(speed);           // Reset to 1.0x
+
+// Query state
+float current = carbon_game_speed_get(speed);       // 0 if paused
+float base = carbon_game_speed_get_base(speed);     // Ignores pause
+bool at_min = carbon_game_speed_is_at_min(speed);
+bool at_max = carbon_game_speed_is_at_max(speed);
+bool normal = carbon_game_speed_is_normal(speed);   // Is 1.0x
+
+// Format for display
+char buf[32];
+carbon_game_speed_to_string(speed, buf, sizeof(buf));  // "Paused", "1x", "2x"
+int percent = carbon_game_speed_get_percent(speed);    // 100, 200, etc.
+
+// Cleanup
+carbon_game_speed_destroy(speed);
+```
+
+**Smooth transitions (optional):**
+
+```c
+// Enable smooth speed changes
+carbon_game_speed_set_smooth_transitions(speed, true);
+carbon_game_speed_set_transition_rate(speed, 5.0f);  // How fast to interpolate
+
+// In game loop, update transitions
+carbon_game_speed_update(speed, raw_delta);
+
+// Check transition state
+if (carbon_game_speed_is_transitioning(speed)) {
+    // Speed is changing smoothly
+}
+
+// Skip directly to target speed
+carbon_game_speed_complete_transition(speed);
+```
+
+**Callbacks:**
+
+```c
+// Called when speed changes
+void on_speed_change(Carbon_GameSpeed *speed, float old_speed,
+                     float new_speed, void *userdata) {
+    printf("Speed: %.1fx -> %.1fx\n", old_speed, new_speed);
+}
+carbon_game_speed_set_callback(speed, on_speed_change, NULL);
+
+// Called when pause state changes
+void on_pause_change(Carbon_GameSpeed *speed, bool paused, void *userdata) {
+    if (paused) {
+        show_pause_menu();
+    } else {
+        hide_pause_menu();
+    }
+}
+carbon_game_speed_set_pause_callback(speed, on_pause_change, NULL);
+```
+
+**Statistics:**
+
+```c
+// Track time spent at various speeds
+float game_time = carbon_game_speed_get_total_scaled_time(speed);   // Scaled time
+float real_time = carbon_game_speed_get_total_real_time(speed);     // Real time
+float paused_time = carbon_game_speed_get_total_paused_time(speed); // Time paused
+
+// Reset statistics
+carbon_game_speed_reset_stats(speed);
+```
+
+**Key features:**
+- Speed multipliers from 0.1x to 16x (configurable)
+- Pause/resume separate from speed setting
+- Speed presets with cycling (keyboard shortcuts)
+- Smooth transitions between speeds (optional)
+- Callbacks for speed and pause changes
+- Statistics tracking for game/real time
+- Thread-safe delta time scaling
+
+**Common patterns:**
+
+```c
+// Handle keyboard shortcuts
+if (carbon_input_action_just_pressed(input, ACTION_PAUSE)) {
+    carbon_game_speed_toggle_pause(speed);
+}
+if (carbon_input_action_just_pressed(input, ACTION_SPEED_UP)) {
+    carbon_game_speed_cycle(speed);
+}
+if (carbon_input_action_just_pressed(input, ACTION_SPEED_DOWN)) {
+    carbon_game_speed_cycle_reverse(speed);
+}
+if (carbon_input_action_just_pressed(input, ACTION_NORMAL_SPEED)) {
+    carbon_game_speed_reset(speed);
+}
+
+// Show current speed in UI
+char speed_text[32];
+carbon_game_speed_to_string(game_speed, speed_text, sizeof(speed_text));
+cui_label(ui, speed_text);
+```
 
 ## Event Dispatcher System
 
