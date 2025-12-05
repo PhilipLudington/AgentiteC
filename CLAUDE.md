@@ -112,6 +112,7 @@ include/carbon/
 ├── htn.h               # HTN AI planner API
 ├── task.h              # Task queue system API
 ├── command.h           # Command queue system API
+├── query.h             # Game query API
 ├── formula.h           # Expression evaluation API
 ├── turn.h              # Turn/phase system API
 ├── resource.h          # Resource economy API
@@ -4408,6 +4409,195 @@ void handle_action(Game *game, Carbon_Command *cmd) {
     Carbon_CommandResult r = carbon_command_execute(game->commands, cmd, game);
     if (!r.success) {
         show_error_toast(r.error);
+    }
+}
+```
+
+## Game Query API
+
+Read-only state queries with structured results for clean UI integration. Provides query registration, cached query results, query invalidation on state change, and structured result formats:
+
+```c
+#include "carbon/query.h"
+
+// Create query system
+Carbon_QuerySystem *queries = carbon_query_create();
+
+// Define a query result structure
+typedef struct FactionResources {
+    int32_t gold;
+    int32_t food;
+    int32_t production;
+    int32_t count;  // Number of resource types
+} FactionResources;
+
+// Define query function
+Carbon_QueryStatus query_faction_resources(void *game_state,
+                                            const Carbon_QueryParams *params,
+                                            void *result, size_t result_size,
+                                            void *userdata) {
+    Game *game = game_state;
+    int32_t faction_id = carbon_query_params_get_int(params, 0);
+
+    FactionResources *res = result;
+    res->gold = get_faction_gold(game, faction_id);
+    res->food = get_faction_food(game, faction_id);
+    res->production = get_faction_production(game, faction_id);
+    res->count = 3;
+
+    return CARBON_QUERY_OK;
+}
+
+// Register the query
+carbon_query_register(queries, "faction_resources", query_faction_resources,
+                       sizeof(FactionResources));
+
+// Execute query with integer parameter
+FactionResources resources;
+Carbon_QueryStatus status = carbon_query_exec_int(queries, "faction_resources",
+                                                    game, player_faction, &resources);
+if (carbon_query_status_ok(status)) {
+    printf("Gold: %d, Food: %d\n", resources.gold, resources.food);
+}
+
+// Or use parameter builder for complex queries
+Carbon_QueryParams params;
+carbon_query_params_init(&params);
+carbon_query_params_add_int(&params, faction_id);
+carbon_query_params_add_bool(&params, include_allies);
+
+status = carbon_query_exec(queries, "faction_resources", game, &params, &resources);
+
+// Enable caching for frequently-used queries
+carbon_query_enable_cache(queries, "faction_resources", 16);  // Cache up to 16 results
+
+// Query with caching - subsequent calls with same params return cached result
+status = carbon_query_exec_int(queries, "faction_resources", game, 0, &resources);
+if (status == CARBON_QUERY_CACHE_HIT) {
+    // Result came from cache
+}
+
+// Invalidate cache when game state changes
+carbon_query_invalidate(queries, "faction_resources");
+
+// Invalidate all caches
+carbon_query_invalidate_all(queries);
+
+// Query tags for group invalidation
+carbon_query_add_tag(queries, "faction_resources", "economy");
+carbon_query_add_tag(queries, "faction_income", "economy");
+carbon_query_add_tag(queries, "trade_routes", "economy");
+
+// Invalidate all economy-related queries at once
+carbon_query_invalidate_tag(queries, "economy");
+
+// Get queries with a tag
+const char *econ_queries[16];
+int count = carbon_query_get_by_tag(queries, "economy", econ_queries, 16);
+
+// Cache statistics
+uint32_t hits, misses, evictions;
+carbon_query_get_cache_stats(queries, "faction_resources", &hits, &misses, &evictions);
+printf("Cache: %u hits, %u misses, %u evictions\n", hits, misses, evictions);
+
+// Custom cache key function (for complex parameter hashing)
+uint64_t custom_key_func(const Carbon_QueryParams *params, void *userdata) {
+    // Custom hashing logic
+    return params->params[0].i32 * 1000 + params->params[1].b;
+}
+carbon_query_set_cache_key_func(queries, "faction_resources", custom_key_func, NULL);
+
+// Invalidation callback (for logging, debugging)
+void on_invalidate(Carbon_QuerySystem *sys, const char *query_name, void *userdata) {
+    printf("Cache invalidated: %s\n", query_name);
+}
+carbon_query_set_invalidate_callback(queries, on_invalidate, NULL);
+
+// Statistics
+Carbon_QueryStats stats;
+carbon_query_get_stats(queries, &stats);
+printf("Registered: %d, Cached: %d, Executions: %u, Failures: %u\n",
+       stats.registered_count, stats.cached_count,
+       stats.total_executions, stats.total_failures);
+
+// Cleanup
+carbon_query_destroy(queries);
+```
+
+**Convenience query functions:**
+
+```c
+// Query with single integer parameter
+Carbon_QueryStatus carbon_query_exec_int(queries, "query_name", game, 42, &result);
+
+// Query with entity parameter
+Carbon_QueryStatus carbon_query_exec_entity(queries, "entity_info", game, entity_id, &result);
+
+// Query with point parameter
+Carbon_QueryStatus carbon_query_exec_point(queries, "tile_info", game, x, y, &result);
+
+// Query with rectangle parameter
+Carbon_QueryStatus carbon_query_exec_rect(queries, "entities_in_area", game, x, y, w, h, &result);
+```
+
+**Parameter types:**
+- `CARBON_QUERY_PARAM_INT` - 32-bit integer
+- `CARBON_QUERY_PARAM_INT64` - 64-bit integer
+- `CARBON_QUERY_PARAM_FLOAT` - Single precision float
+- `CARBON_QUERY_PARAM_DOUBLE` - Double precision float
+- `CARBON_QUERY_PARAM_BOOL` - Boolean
+- `CARBON_QUERY_PARAM_STRING` - String (max 32 chars)
+- `CARBON_QUERY_PARAM_PTR` - Void pointer
+- `CARBON_QUERY_PARAM_ENTITY` - Entity ID (uint32_t)
+- `CARBON_QUERY_PARAM_POINT` - 2D point (x, y)
+- `CARBON_QUERY_PARAM_RECT` - Rectangle (x, y, w, h)
+
+**Query statuses:**
+- `CARBON_QUERY_OK` - Query succeeded
+- `CARBON_QUERY_NOT_FOUND` - Query not registered
+- `CARBON_QUERY_INVALID_PARAMS` - Invalid parameters
+- `CARBON_QUERY_FAILED` - Query execution failed
+- `CARBON_QUERY_NO_RESULT` - Query returned no results
+- `CARBON_QUERY_CACHE_HIT` - Result returned from cache
+
+**Key features:**
+- Query registration with typed result structures
+- Caching with configurable capacity per query
+- Cache invalidation by name or tag group
+- Parameter builders for complex queries
+- Convenience functions for common parameter types
+- Statistics tracking for cache performance tuning
+- Custom cache key generation
+
+**Common patterns:**
+
+```c
+// UI data binding - query and display faction info
+void draw_faction_panel(Carbon_QuerySystem *queries, void *game, int faction_id) {
+    FactionResources res;
+    if (carbon_query_status_ok(carbon_query_exec_int(queries, "faction_resources",
+                                                      game, faction_id, &res))) {
+        cui_label_printf(ui, "Gold: %d", res.gold);
+        cui_label_printf(ui, "Food: %d", res.food);
+    }
+}
+
+// Invalidate caches on game state changes
+void on_resource_changed(int faction_id, int resource_type) {
+    carbon_query_invalidate_tag(queries, "economy");
+}
+
+void on_turn_end(Game *game) {
+    carbon_query_invalidate_all(queries);  // Clear all caches at turn boundary
+}
+
+// Lazy query registration
+void ensure_queries_registered(Carbon_QuerySystem *queries) {
+    if (!carbon_query_is_registered(queries, "faction_resources")) {
+        carbon_query_register(queries, "faction_resources",
+                               query_faction_resources, sizeof(FactionResources));
+        carbon_query_enable_cache(queries, "faction_resources", 8);
+        carbon_query_add_tag(queries, "faction_resources", "economy");
     }
 }
 ```

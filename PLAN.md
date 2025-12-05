@@ -522,19 +522,19 @@ int carbon_command_get_history(Carbon_CommandSystem *sys, Carbon_Command **out, 
 
 ---
 
-### 10. Game Query API
+### 10. Game Query API ✓
 
-**Priority:** Low
-**Complexity:** Low
+**Status:** COMPLETED
 **Files:** `include/carbon/query.h`, `src/core/query.c`
 
 Read-only state queries with structured results for clean UI integration.
 
 **Core Components:**
 - Query registration with result types
-- Cached query results
-- Query invalidation on state change
-- Structured result formats
+- Cached query results with configurable capacity
+- Query invalidation by name or tag group
+- Structured result formats with typed parameters
+- Cache statistics for performance tuning
 
 **API Sketch:**
 ```c
@@ -542,25 +542,38 @@ Read-only state queries with structured results for clean UI integration.
 Carbon_QuerySystem *carbon_query_create(void);
 
 // Query registration
-typedef void (*Carbon_QueryFunc)(void *game_state, void *params, void *result);
+typedef Carbon_QueryStatus (*Carbon_QueryFunc)(void *game_state,
+                                                const Carbon_QueryParams *params,
+                                                void *result, size_t result_size,
+                                                void *userdata);
 
-void carbon_query_register(Carbon_QuerySystem *sys, const char *name,
+bool carbon_query_register(Carbon_QuerySystem *sys, const char *name,
                             Carbon_QueryFunc query_fn, size_t result_size);
 
 // Execution
-void *carbon_query_exec(Carbon_QuerySystem *sys, const char *name,
-                         void *game_state, void *params);
+Carbon_QueryStatus carbon_query_exec(Carbon_QuerySystem *sys, const char *name,
+                                       void *game_state, const Carbon_QueryParams *params,
+                                       void *result);
+
+// Convenience functions
+Carbon_QueryStatus carbon_query_exec_int(sys, name, game_state, int_param, &result);
+Carbon_QueryStatus carbon_query_exec_entity(sys, name, game_state, entity_id, &result);
+Carbon_QueryStatus carbon_query_exec_point(sys, name, game_state, x, y, &result);
+Carbon_QueryStatus carbon_query_exec_rect(sys, name, game_state, x, y, w, h, &result);
 
 // Caching
-void carbon_query_enable_cache(Carbon_QuerySystem *sys, const char *name);
+bool carbon_query_enable_cache(Carbon_QuerySystem *sys, const char *name, int max_cached);
 void carbon_query_invalidate(Carbon_QuerySystem *sys, const char *name);
+void carbon_query_invalidate_tag(Carbon_QuerySystem *sys, const char *tag);
 void carbon_query_invalidate_all(Carbon_QuerySystem *sys);
 
-// Common query patterns
-// These would be game-specific but show the pattern:
-// carbon_query_get_faction_resources(sys, faction_id, &resources);
-// carbon_query_get_entities_at(sys, x, y, entities, max);
-// carbon_query_get_visible_area(sys, faction_id, &visibility);
+// Tags for group invalidation
+bool carbon_query_add_tag(Carbon_QuerySystem *sys, const char *name, const char *tag);
+int carbon_query_get_by_tag(sys, tag, names, max);
+
+// Statistics
+void carbon_query_get_cache_stats(sys, name, &hits, &misses, &evictions);
+void carbon_query_get_stats(sys, &stats);
 ```
 
 ---
@@ -577,11 +590,11 @@ void carbon_query_invalidate_all(Carbon_QuerySystem *sys);
 5. **Strategic Coordinator** ✓ - `include/carbon/strategy.h`, `src/ai/strategy.c`
 6. **Command Queue** ✓ - `include/carbon/command.h`, `src/core/command.c`
 
-### Phase 3 - Content Systems (In Progress)
+### Phase 3 - Content Systems ✓ COMPLETED
 7. **Anomaly/Discovery System** ✓ - `include/carbon/anomaly.h`, `src/strategy/anomaly.c`
 8. **Formula Engine** ✓ - `include/carbon/formula.h`, `src/core/formula.c`
 9. **Siege/Bombardment System** ✓ - `include/carbon/siege.h`, `src/strategy/siege.c`
-10. **Game Query API** - UI integration helper
+10. **Game Query API** ✓ - `include/carbon/query.h`, `src/core/query.c`
 
 ---
 
