@@ -587,7 +587,7 @@ static inline bool carbon_command_result_ok(const Carbon_CommandResult *result) 
  * Create a success result.
  */
 static inline Carbon_CommandResult carbon_command_result_success(int type) {
-    Carbon_CommandResult r = {0};
+    Carbon_CommandResult r = {};
     r.success = true;
     r.command_type = type;
     return r;

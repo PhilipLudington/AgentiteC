@@ -159,16 +159,17 @@ void game_components_register(ecs_world_t *world);
  *============================================================================*/
 
 /* These macros tell Flecs about our component types */
-ECS_COMPONENT_DECLARE(C_Player);
-ECS_COMPONENT_DECLARE(C_PlayerInput);
-ECS_COMPONENT_DECLARE(C_Speed);
-ECS_COMPONENT_DECLARE(C_Collider);
-ECS_COMPONENT_DECLARE(C_Enemy);
-ECS_COMPONENT_DECLARE(C_Damage);
-ECS_COMPONENT_DECLARE(C_Projectile);
-ECS_COMPONENT_DECLARE(C_AIState);
-ECS_COMPONENT_DECLARE(C_PathFollow);
-ECS_COMPONENT_DECLARE(C_Sprite);
-ECS_COMPONENT_DECLARE(C_Animated);
+/* Use extern for C++ to avoid multiple definitions */
+extern ECS_COMPONENT_DECLARE(C_Player);
+extern ECS_COMPONENT_DECLARE(C_PlayerInput);
+extern ECS_COMPONENT_DECLARE(C_Speed);
+extern ECS_COMPONENT_DECLARE(C_Collider);
+extern ECS_COMPONENT_DECLARE(C_Enemy);
+extern ECS_COMPONENT_DECLARE(C_Damage);
+extern ECS_COMPONENT_DECLARE(C_Projectile);
+extern ECS_COMPONENT_DECLARE(C_AIState);
+extern ECS_COMPONENT_DECLARE(C_PathFollow);
+extern ECS_COMPONENT_DECLARE(C_Sprite);
+extern ECS_COMPONENT_DECLARE(C_Animated);
 
 #endif /* GAME_COMPONENTS_H */

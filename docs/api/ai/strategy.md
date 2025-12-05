@@ -35,9 +35,9 @@ carbon_strategy_add_option(coord, "military",
 
 // Phase-specific modifiers
 carbon_strategy_set_phase_modifier(coord, "economy",
-    CARBON_PHASE_EARLY_EXPANSION, 1.5f);  // +50% early
+    CARBON_GAME_PHASE_EARLY_EXPANSION, 1.5f);  // +50% early
 carbon_strategy_set_phase_modifier(coord, "military",
-    CARBON_PHASE_LATE_COMPETITION, 1.8f); // +80% late
+    CARBON_GAME_PHASE_LATE_COMPETITION, 1.8f); // +80% late
 ```
 
 ## Utility Curves
@@ -92,7 +92,7 @@ carbon_strategy_set_max_allocation(coord, "research", 0.40f);
 
 | Phase | Description |
 |-------|-------------|
-| `CARBON_PHASE_EARLY_EXPANSION` | Early game, expansion focus |
-| `CARBON_PHASE_MID_CONSOLIDATION` | Mid game, consolidation |
-| `CARBON_PHASE_LATE_COMPETITION` | Late game, competition |
-| `CARBON_PHASE_ENDGAME` | Final push |
+| `CARBON_GAME_PHASE_EARLY_EXPANSION` | Early game, expansion focus |
+| `CARBON_GAME_PHASE_MID_CONSOLIDATION` | Mid game, consolidation |
+| `CARBON_GAME_PHASE_LATE_COMPETITION` | Late game, competition |
+| `CARBON_GAME_PHASE_ENDGAME` | Final push |

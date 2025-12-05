@@ -32,11 +32,11 @@ extern "C" {
  * @brief Game phase enumeration
  */
 typedef enum Carbon_GamePhase {
-    CARBON_PHASE_EARLY_EXPANSION = 0,   /**< Early game - expansion focus */
-    CARBON_PHASE_MID_CONSOLIDATION,     /**< Mid game - consolidation */
-    CARBON_PHASE_LATE_COMPETITION,      /**< Late game - competition */
-    CARBON_PHASE_ENDGAME,               /**< End game - final push */
-    CARBON_PHASE_COUNT
+    CARBON_GAME_PHASE_EARLY_EXPANSION = 0,   /**< Early game - expansion focus */
+    CARBON_GAME_PHASE_MID_CONSOLIDATION,     /**< Mid game - consolidation */
+    CARBON_GAME_PHASE_LATE_COMPETITION,      /**< Late game - competition */
+    CARBON_GAME_PHASE_ENDGAME,               /**< End game - final push */
+    CARBON_GAME_PHASE_COUNT
 } Carbon_GamePhase;
 
 /**
@@ -76,7 +76,7 @@ typedef struct Carbon_StrategyOption {
     float base_weight;          /**< Base weight before modifiers */
     float current_input;        /**< Current input value (0-1) */
     float current_utility;      /**< Computed utility (cached) */
-    float phase_modifiers[CARBON_PHASE_COUNT];  /**< Per-phase multipliers */
+    float phase_modifiers[CARBON_GAME_PHASE_COUNT];  /**< Per-phase multipliers */
     bool active;                /**< Whether option is active */
 } Carbon_StrategyOption;
 
@@ -330,7 +330,7 @@ float carbon_strategy_get_phase_modifier(const Carbon_StrategyCoordinator *coord
  * @brief Set all phase modifiers for an option at once
  * @param coord Coordinator
  * @param option_name Option name
- * @param modifiers Array of CARBON_PHASE_COUNT modifiers
+ * @param modifiers Array of CARBON_GAME_PHASE_COUNT modifiers
  */
 void carbon_strategy_set_all_phase_modifiers(Carbon_StrategyCoordinator *coord,
                                              const char *option_name,

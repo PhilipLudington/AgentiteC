@@ -4,6 +4,22 @@
 #include <SDL3/SDL.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdlib.h>
+
+// C++ compatibility for memory allocation
+#ifdef __cplusplus
+#define CARBON_ALLOC(type) (type*)calloc(1, sizeof(type))
+#define CARBON_ALLOC_ARRAY(type, count) (type*)calloc((count), sizeof(type))
+#define CARBON_REALLOC(ptr, type, count) (type*)realloc((ptr), (count) * sizeof(type))
+#define CARBON_MALLOC(size) malloc(size)
+#define CARBON_CALLOC(count, size) calloc((count), (size))
+#else
+#define CARBON_ALLOC(type) (type*)calloc(1, sizeof(type))
+#define CARBON_ALLOC_ARRAY(type, count) (type*)calloc((count), sizeof(type))
+#define CARBON_REALLOC(ptr, type, count) (type*)realloc((ptr), (count) * sizeof(type))
+#define CARBON_MALLOC(size) malloc(size)
+#define CARBON_CALLOC(count, size) calloc((count), (size))
+#endif
 
 // Version info
 #define CARBON_VERSION_MAJOR 0
