@@ -91,8 +91,18 @@ Each example has a README.md with usage and patterns.
 - `include/carbon/error.h` - Thread-local error API
 - `src/core/error.c` - Implementation with SDL integration
 
-#### 4.2 Update Existing Systems - DEFERRED
-The error system is available for use. Updating existing systems can be done incrementally as needed.
+#### 4.2 Update Existing Systems - DONE
+All existing systems updated to use the error context system:
+- `src/core/engine.c` - SDL/GPU initialization errors
+- `src/graphics/sprite.c` - Texture loading and GPU resource errors
+- `src/graphics/text.c` - Font loading, atlas creation, and pipeline errors
+- `src/audio/audio.c` - Audio stream and WAV loading errors
+- `src/ui/ui.c`, `ui_draw.c`, `ui_text.c` - UI initialization and font errors
+- `src/core/game_context.c` - System initialization errors
+- `src/game/data/loader.c` - JSON parsing and file loading errors
+
+Note: animation.c, camera.c, tilemap.c, pathfinding.c, ecs.c, and input.c don't have error logging
+(they use early returns with NULL/false, or use Flecs logging for ECS).
 
 ---
 

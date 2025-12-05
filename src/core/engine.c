@@ -1,4 +1,5 @@
 #include "carbon/carbon.h"
+#include "carbon/error.h"
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -25,14 +26,14 @@ Carbon_Engine *carbon_init(const Carbon_Config *config) {
 
     // Initialize SDL
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) {
-        SDL_Log("Failed to initialize SDL: %s", SDL_GetError());
+        carbon_set_error_from_sdl("Failed to initialize SDL");
         return NULL;
     }
 
     // Allocate engine
     Carbon_Engine *engine = calloc(1, sizeof(Carbon_Engine));
     if (!engine) {
-        SDL_Log("Failed to allocate engine");
+        carbon_set_error("Failed to allocate engine");
         SDL_Quit();
         return NULL;
     }
@@ -51,7 +52,7 @@ Carbon_Engine *carbon_init(const Carbon_Config *config) {
     );
 
     if (!engine->window) {
-        SDL_Log("Failed to create window: %s", SDL_GetError());
+        carbon_set_error_from_sdl("Failed to create window");
         free(engine);
         SDL_Quit();
         return NULL;
@@ -65,7 +66,7 @@ Carbon_Engine *carbon_init(const Carbon_Config *config) {
     );
 
     if (!engine->gpu_device) {
-        SDL_Log("Failed to create GPU device: %s", SDL_GetError());
+        carbon_set_error_from_sdl("Failed to create GPU device");
         SDL_DestroyWindow(engine->window);
         free(engine);
         SDL_Quit();
@@ -74,7 +75,7 @@ Carbon_Engine *carbon_init(const Carbon_Config *config) {
 
     // Claim window for GPU rendering
     if (!SDL_ClaimWindowForGPUDevice(engine->gpu_device, engine->window)) {
-        SDL_Log("Failed to claim window for GPU: %s", SDL_GetError());
+        carbon_set_error_from_sdl("Failed to claim window for GPU");
         SDL_DestroyGPUDevice(engine->gpu_device);
         SDL_DestroyWindow(engine->window);
         free(engine);
@@ -188,7 +189,7 @@ SDL_GPUCommandBuffer *carbon_acquire_command_buffer(Carbon_Engine *engine) {
     if (!engine->cmd_buffer) {
         engine->cmd_buffer = SDL_AcquireGPUCommandBuffer(engine->gpu_device);
         if (!engine->cmd_buffer) {
-            SDL_Log("Failed to acquire command buffer: %s", SDL_GetError());
+            carbon_set_error_from_sdl("Failed to acquire command buffer");
             return NULL;
         }
     }
@@ -202,7 +203,7 @@ bool carbon_begin_render_pass(Carbon_Engine *engine, float r, float g, float b, 
     if (!engine->cmd_buffer) {
         engine->cmd_buffer = SDL_AcquireGPUCommandBuffer(engine->gpu_device);
         if (!engine->cmd_buffer) {
-            SDL_Log("Failed to acquire command buffer: %s", SDL_GetError());
+            carbon_set_error_from_sdl("Failed to acquire command buffer");
             return false;
         }
     }
@@ -215,7 +216,7 @@ bool carbon_begin_render_pass(Carbon_Engine *engine, float r, float g, float b, 
             &swapchain_texture,
             NULL,
             NULL)) {
-        SDL_Log("Failed to acquire swapchain texture: %s", SDL_GetError());
+        carbon_set_error_from_sdl("Failed to acquire swapchain texture");
         SDL_CancelGPUCommandBuffer(engine->cmd_buffer);
         engine->cmd_buffer = NULL;
         return false;
@@ -245,7 +246,7 @@ bool carbon_begin_render_pass(Carbon_Engine *engine, float r, float g, float b, 
     );
 
     if (!engine->render_pass) {
-        SDL_Log("Failed to begin render pass: %s", SDL_GetError());
+        carbon_set_error_from_sdl("Failed to begin render pass");
         SDL_CancelGPUCommandBuffer(engine->cmd_buffer);
         engine->cmd_buffer = NULL;
         return false;

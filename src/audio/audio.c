@@ -1,4 +1,5 @@
 #include "carbon/audio.h"
+#include "carbon/error.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -205,7 +206,7 @@ Carbon_Audio *carbon_audio_init(void) {
     );
 
     if (!audio->stream) {
-        SDL_Log("Failed to create audio stream: %s", SDL_GetError());
+        carbon_set_error_from_sdl("Failed to create audio stream");
         free(audio);
         return NULL;
     }
@@ -259,13 +260,13 @@ static bool convert_audio_to_device(Carbon_Audio *audio, Uint8 *src_data, Uint32
     // Create a temporary stream for conversion
     SDL_AudioStream *conv = SDL_CreateAudioStream(src_spec, &dst_spec);
     if (!conv) {
-        SDL_Log("Failed to create conversion stream: %s", SDL_GetError());
+        carbon_set_error_from_sdl("Failed to create conversion stream");
         return false;
     }
 
     // Put source data
     if (!SDL_PutAudioStreamData(conv, src_data, src_length)) {
-        SDL_Log("Failed to put data in conversion stream: %s", SDL_GetError());
+        carbon_set_error_from_sdl("Failed to put data in conversion stream");
         SDL_DestroyAudioStream(conv);
         return false;
     }
@@ -296,7 +297,7 @@ Carbon_Sound *carbon_sound_load(Carbon_Audio *audio, const char *filepath) {
     Uint32 wav_length = 0;
 
     if (!SDL_LoadWAV(filepath, &spec, &wav_data, &wav_length)) {
-        SDL_Log("Failed to load WAV '%s': %s", filepath, SDL_GetError());
+        carbon_set_error("Failed to load WAV '%s': %s", filepath, SDL_GetError());
         return NULL;
     }
 
@@ -309,7 +310,7 @@ Carbon_Sound *carbon_sound_load(Carbon_Audio *audio, const char *filepath) {
     // Convert to device format
     if (!convert_audio_to_device(audio, wav_data, wav_length, &spec,
                                  &sound->data, &sound->length)) {
-        SDL_Log("Failed to convert audio format for '%s'", filepath);
+        carbon_set_error("Failed to convert audio format for '%s'", filepath);
         SDL_free(wav_data);
         free(sound);
         return NULL;
@@ -336,7 +337,7 @@ Carbon_Sound *carbon_sound_load_wav_memory(Carbon_Audio *audio, const void *data
     Uint32 wav_length = 0;
 
     if (!SDL_LoadWAV_IO(io, true, &spec, &wav_data, &wav_length)) {
-        SDL_Log("Failed to load WAV from memory: %s", SDL_GetError());
+        carbon_set_error_from_sdl("Failed to load WAV from memory");
         return NULL;
     }
 
@@ -386,7 +387,7 @@ Carbon_Music *carbon_music_load(Carbon_Audio *audio, const char *filepath) {
     Uint32 wav_length = 0;
 
     if (!SDL_LoadWAV(filepath, &spec, &wav_data, &wav_length)) {
-        SDL_Log("Failed to load music '%s': %s", filepath, SDL_GetError());
+        carbon_set_error("Failed to load music '%s': %s", filepath, SDL_GetError());
         return NULL;
     }
 
@@ -401,7 +402,7 @@ Carbon_Music *carbon_music_load(Carbon_Audio *audio, const char *filepath) {
     // Convert to device format
     if (!convert_audio_to_device(audio, wav_data, wav_length, &spec,
                                  &music->data, &music->length)) {
-        SDL_Log("Failed to convert music format for '%s'", filepath);
+        carbon_set_error("Failed to convert music format for '%s'", filepath);
         SDL_free(wav_data);
         free(music->filepath);
         free(music);

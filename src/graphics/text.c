@@ -3,6 +3,7 @@
  */
 
 #include "carbon/text.h"
+#include "carbon/error.h"
 #include <cglm/cglm.h>
 #include <stdlib.h>
 #include <string.h>
@@ -445,7 +446,7 @@ static bool text_create_pipeline(Carbon_TextRenderer *tr)
         };
         vertex_shader = SDL_CreateGPUShader(tr->gpu, &vs_info);
         if (!vertex_shader) {
-            SDL_Log("Text: Failed to create vertex shader: %s", SDL_GetError());
+            carbon_set_error_from_sdl("Text: Failed to create vertex shader");
             return false;
         }
 
@@ -463,12 +464,12 @@ static bool text_create_pipeline(Carbon_TextRenderer *tr)
         };
         fragment_shader = SDL_CreateGPUShader(tr->gpu, &fs_info);
         if (!fragment_shader) {
-            SDL_Log("Text: Failed to create fragment shader: %s", SDL_GetError());
+            carbon_set_error_from_sdl("Text: Failed to create fragment shader");
             SDL_ReleaseGPUShader(tr->gpu, vertex_shader);
             return false;
         }
     } else {
-        SDL_Log("Text: No supported shader format (need MSL for Metal)");
+        carbon_set_error("Text: No supported shader format (need MSL for Metal)");
         return false;
     }
 
@@ -560,7 +561,7 @@ static bool text_create_pipeline(Carbon_TextRenderer *tr)
     SDL_ReleaseGPUShader(tr->gpu, fragment_shader);
 
     if (!tr->pipeline) {
-        SDL_Log("Text: Failed to create graphics pipeline: %s", SDL_GetError());
+        carbon_set_error_from_sdl("Text: Failed to create graphics pipeline");
         return false;
     }
 
@@ -600,7 +601,7 @@ static bool sdf_create_pipeline(Carbon_TextRenderer *tr, bool is_msdf)
         };
         vertex_shader = SDL_CreateGPUShader(tr->gpu, &vs_info);
         if (!vertex_shader) {
-            SDL_Log("Text: Failed to create %s vertex shader: %s",
+            carbon_set_error("Text: Failed to create %s vertex shader: %s",
                     is_msdf ? "MSDF" : "SDF", SDL_GetError());
             return false;
         }
@@ -618,13 +619,13 @@ static bool sdf_create_pipeline(Carbon_TextRenderer *tr, bool is_msdf)
         };
         fragment_shader = SDL_CreateGPUShader(tr->gpu, &fs_info);
         if (!fragment_shader) {
-            SDL_Log("Text: Failed to create %s fragment shader: %s",
+            carbon_set_error("Text: Failed to create %s fragment shader: %s",
                     is_msdf ? "MSDF" : "SDF", SDL_GetError());
             SDL_ReleaseGPUShader(tr->gpu, vertex_shader);
             return false;
         }
     } else {
-        SDL_Log("Text: No supported shader format for SDF (need MSL)");
+        carbon_set_error("Text: No supported shader format for SDF (need MSL)");
         return false;
     }
 
@@ -705,7 +706,7 @@ static bool sdf_create_pipeline(Carbon_TextRenderer *tr, bool is_msdf)
     SDL_ReleaseGPUShader(tr->gpu, fragment_shader);
 
     if (!pipeline) {
-        SDL_Log("Text: Failed to create %s pipeline: %s",
+        carbon_set_error("Text: Failed to create %s pipeline: %s",
                 is_msdf ? "MSDF" : "SDF", SDL_GetError());
         return false;
     }
@@ -915,13 +916,13 @@ static bool parse_sdf_json(const char *json, Carbon_SDFFont *font) {
     /* Parse glyphs array */
     const char *glyphs = json_find_key(json, "glyphs");
     if (!glyphs) {
-        SDL_Log("Text: No glyphs array in JSON");
+        carbon_set_error("Text: No glyphs array in JSON");
         return false;
     }
 
     glyphs = json_skip_ws(glyphs);
     if (*glyphs != '[') {
-        SDL_Log("Text: Glyphs is not an array");
+        carbon_set_error("Text: Glyphs is not an array");
         return false;
     }
     glyphs++;
@@ -1015,7 +1016,7 @@ static SDL_GPUTexture *create_font_atlas(Carbon_TextRenderer *tr,
     };
     SDL_GPUTexture *texture = SDL_CreateGPUTexture(tr->gpu, &tex_info);
     if (!texture) {
-        SDL_Log("Text: Failed to create atlas texture: %s", SDL_GetError());
+        carbon_set_error_from_sdl("Text: Failed to create atlas texture");
         return NULL;
     }
 
@@ -1027,7 +1028,7 @@ static SDL_GPUTexture *create_font_atlas(Carbon_TextRenderer *tr,
     };
     SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(tr->gpu, &transfer_info);
     if (!transfer) {
-        SDL_Log("Text: Failed to create transfer buffer");
+        carbon_set_error_from_sdl("Text: Failed to create transfer buffer");
         SDL_ReleaseGPUTexture(tr->gpu, texture);
         return NULL;
     }
@@ -1081,7 +1082,7 @@ Carbon_TextRenderer *carbon_text_init(SDL_GPUDevice *gpu, SDL_Window *window)
 
     Carbon_TextRenderer *tr = calloc(1, sizeof(Carbon_TextRenderer));
     if (!tr) {
-        SDL_Log("Text: Failed to allocate renderer");
+        carbon_set_error("Text: Failed to allocate renderer");
         return NULL;
     }
 
@@ -1095,7 +1096,7 @@ Carbon_TextRenderer *carbon_text_init(SDL_GPUDevice *gpu, SDL_Window *window)
     tr->vertices = malloc(TEXT_VERTEX_CAPACITY * sizeof(TextVertex));
     tr->indices = malloc(TEXT_INDEX_CAPACITY * sizeof(uint16_t));
     if (!tr->vertices || !tr->indices) {
-        SDL_Log("Text: Failed to allocate batch buffers");
+        carbon_set_error("Text: Failed to allocate batch buffers");
         carbon_text_shutdown(tr);
         return NULL;
     }
@@ -1120,7 +1121,7 @@ Carbon_TextRenderer *carbon_text_init(SDL_GPUDevice *gpu, SDL_Window *window)
     };
     tr->vertex_buffer = SDL_CreateGPUBuffer(gpu, &vb_info);
     if (!tr->vertex_buffer) {
-        SDL_Log("Text: Failed to create vertex buffer");
+        carbon_set_error_from_sdl("Text: Failed to create vertex buffer");
         carbon_text_shutdown(tr);
         return NULL;
     }
@@ -1132,7 +1133,7 @@ Carbon_TextRenderer *carbon_text_init(SDL_GPUDevice *gpu, SDL_Window *window)
     };
     tr->index_buffer = SDL_CreateGPUBuffer(gpu, &ib_info);
     if (!tr->index_buffer) {
-        SDL_Log("Text: Failed to create index buffer");
+        carbon_set_error_from_sdl("Text: Failed to create index buffer");
         carbon_text_shutdown(tr);
         return NULL;
     }
@@ -1148,7 +1149,7 @@ Carbon_TextRenderer *carbon_text_init(SDL_GPUDevice *gpu, SDL_Window *window)
     };
     tr->sampler = SDL_CreateGPUSampler(gpu, &sampler_info);
     if (!tr->sampler) {
-        SDL_Log("Text: Failed to create sampler");
+        carbon_set_error_from_sdl("Text: Failed to create sampler");
         carbon_text_shutdown(tr);
         return NULL;
     }
@@ -1219,20 +1220,20 @@ Carbon_Font *carbon_font_load(Carbon_TextRenderer *tr, const char *path, float s
     /* Read TTF file */
     SDL_IOStream *file = SDL_IOFromFile(path, "rb");
     if (!file) {
-        SDL_Log("Text: Failed to open font file '%s': %s", path, SDL_GetError());
+        carbon_set_error("Text: Failed to open font file '%s': %s", path, SDL_GetError());
         return NULL;
     }
 
     Sint64 file_size = SDL_GetIOSize(file);
     if (file_size <= 0) {
-        SDL_Log("Text: Invalid font file size");
+        carbon_set_error("Text: Invalid font file size");
         SDL_CloseIO(file);
         return NULL;
     }
 
     unsigned char *font_data = malloc((size_t)file_size);
     if (!font_data) {
-        SDL_Log("Text: Failed to allocate font data buffer");
+        carbon_set_error("Text: Failed to allocate font data buffer");
         SDL_CloseIO(file);
         return NULL;
     }
@@ -1241,7 +1242,7 @@ Carbon_Font *carbon_font_load(Carbon_TextRenderer *tr, const char *path, float s
     SDL_CloseIO(file);
 
     if (read != (size_t)file_size) {
-        SDL_Log("Text: Failed to read font file");
+        carbon_set_error("Text: Failed to read font file");
         free(font_data);
         return NULL;
     }
@@ -1270,7 +1271,7 @@ Carbon_Font *carbon_font_load_memory(Carbon_TextRenderer *tr,
 
     /* Initialize stb_truetype */
     if (!stbtt_InitFont(&font->stb_font, (const unsigned char *)data, 0)) {
-        SDL_Log("Text: Failed to initialize font");
+        carbon_set_error("Text: Failed to initialize font");
         free(font);
         return NULL;
     }
@@ -1288,7 +1289,7 @@ Carbon_Font *carbon_font_load_memory(Carbon_TextRenderer *tr,
     /* Bake font atlas using stb_truetype's built-in packer */
     unsigned char *atlas_bitmap = malloc(ATLAS_SIZE * ATLAS_SIZE);
     if (!atlas_bitmap) {
-        SDL_Log("Text: Failed to allocate atlas bitmap");
+        carbon_set_error("Text: Failed to allocate atlas bitmap");
         free(font);
         return NULL;
     }
@@ -1300,7 +1301,7 @@ Carbon_Font *carbon_font_load_memory(Carbon_TextRenderer *tr,
                                        FIRST_CHAR, NUM_CHARS,
                                        baked_chars);
     if (result <= 0) {
-        SDL_Log("Text: Font atlas baking failed (too many chars or atlas too small)");
+        carbon_set_error("Text: Font atlas baking failed (too many chars or atlas too small)");
         free(atlas_bitmap);
         free(font);
         return NULL;
@@ -1822,13 +1823,13 @@ Carbon_SDFFont *carbon_sdf_font_load(Carbon_TextRenderer *tr,
     /* Read JSON metrics file */
     SDL_IOStream *json_file = SDL_IOFromFile(metrics_path, "rb");
     if (!json_file) {
-        SDL_Log("Text: Failed to open SDF metrics file '%s': %s", metrics_path, SDL_GetError());
+        carbon_set_error("Text: Failed to open SDF metrics file '%s': %s", metrics_path, SDL_GetError());
         return NULL;
     }
 
     Sint64 json_size = SDL_GetIOSize(json_file);
     if (json_size <= 0) {
-        SDL_Log("Text: Invalid metrics file size");
+        carbon_set_error("Text: Invalid metrics file size");
         SDL_CloseIO(json_file);
         return NULL;
     }
@@ -1861,7 +1862,7 @@ Carbon_SDFFont *carbon_sdf_font_load(Carbon_TextRenderer *tr,
 
     /* Parse JSON */
     if (!parse_sdf_json(json_data, font)) {
-        SDL_Log("Text: Failed to parse SDF JSON");
+        carbon_set_error("Text: Failed to parse SDF JSON");
         free(json_data);
         free(font->glyphs);
         free(font);
@@ -1873,7 +1874,7 @@ Carbon_SDFFont *carbon_sdf_font_load(Carbon_TextRenderer *tr,
     int width, height, channels;
     unsigned char *pixels = stbi_load(atlas_path, &width, &height, &channels, 0);
     if (!pixels) {
-        SDL_Log("Text: Failed to load SDF atlas PNG '%s'", atlas_path);
+        carbon_set_error("Text: Failed to load SDF atlas PNG '%s'", atlas_path);
         free(font->glyphs);
         free(font);
         return NULL;
@@ -1908,7 +1909,7 @@ Carbon_SDFFont *carbon_sdf_font_load(Carbon_TextRenderer *tr,
 
     font->atlas_texture = SDL_CreateGPUTexture(tr->gpu, &tex_info);
     if (!font->atlas_texture) {
-        SDL_Log("Text: Failed to create SDF atlas texture: %s", SDL_GetError());
+        carbon_set_error_from_sdl("Text: Failed to create SDF atlas texture");
         stbi_image_free(pixels);
         free(font->glyphs);
         free(font);

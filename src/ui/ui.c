@@ -3,6 +3,7 @@
  */
 
 #include "carbon/ui.h"
+#include "carbon/error.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -51,7 +52,7 @@ CUI_Context *cui_init(SDL_GPUDevice *gpu, SDL_Window *window, int width, int hei
 {
     CUI_Context *ctx = (CUI_Context *)calloc(1, sizeof(CUI_Context));
     if (!ctx) {
-        SDL_Log("CUI: Failed to allocate context");
+        carbon_set_error("CUI: Failed to allocate context");
         return NULL;
     }
 
@@ -70,21 +71,21 @@ CUI_Context *cui_init(SDL_GPUDevice *gpu, SDL_Window *window, int width, int hei
     ctx->indices = (uint16_t *)malloc(ctx->index_capacity * sizeof(uint16_t));
 
     if (!ctx->vertices || !ctx->indices) {
-        SDL_Log("CUI: Failed to allocate vertex/index arrays");
+        carbon_set_error("CUI: Failed to allocate vertex/index arrays");
         cui_shutdown(ctx);
         return NULL;
     }
 
     /* Create GPU pipeline and resources */
     if (!cui_create_pipeline(ctx)) {
-        SDL_Log("CUI: Failed to create GPU pipeline");
+        carbon_set_error("CUI: Failed to create GPU pipeline");
         cui_shutdown(ctx);
         return NULL;
     }
 
     /* Load font */
     if (font_path && !cui_load_font(ctx, font_path, font_size)) {
-        SDL_Log("CUI: Failed to load font '%s'", font_path);
+        carbon_set_error("CUI: Failed to load font '%s'", font_path);
         cui_shutdown(ctx);
         return NULL;
     }

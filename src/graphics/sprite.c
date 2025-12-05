@@ -4,6 +4,7 @@
 
 #include "carbon/sprite.h"
 #include "carbon/camera.h"
+#include "carbon/error.h"
 #include <cglm/cglm.h>
 #include <stdlib.h>
 #include <string.h>
@@ -139,7 +140,7 @@ static bool sprite_create_pipeline(Carbon_SpriteRenderer *sr)
         };
         vertex_shader = SDL_CreateGPUShader(sr->gpu, &vs_info);
         if (!vertex_shader) {
-            SDL_Log("Sprite: Failed to create vertex shader: %s", SDL_GetError());
+            carbon_set_error_from_sdl("Sprite: Failed to create vertex shader");
             return false;
         }
 
@@ -157,12 +158,12 @@ static bool sprite_create_pipeline(Carbon_SpriteRenderer *sr)
         };
         fragment_shader = SDL_CreateGPUShader(sr->gpu, &fs_info);
         if (!fragment_shader) {
-            SDL_Log("Sprite: Failed to create fragment shader: %s", SDL_GetError());
+            carbon_set_error_from_sdl("Sprite: Failed to create fragment shader");
             SDL_ReleaseGPUShader(sr->gpu, vertex_shader);
             return false;
         }
     } else {
-        SDL_Log("Sprite: No supported shader format (need MSL for Metal)");
+        carbon_set_error("Sprite: No supported shader format (need MSL for Metal)");
         return false;
     }
 
@@ -254,7 +255,7 @@ static bool sprite_create_pipeline(Carbon_SpriteRenderer *sr)
     SDL_ReleaseGPUShader(sr->gpu, fragment_shader);
 
     if (!sr->pipeline) {
-        SDL_Log("Sprite: Failed to create graphics pipeline: %s", SDL_GetError());
+        carbon_set_error_from_sdl("Sprite: Failed to create graphics pipeline");
         return false;
     }
 
@@ -272,7 +273,7 @@ Carbon_SpriteRenderer *carbon_sprite_init(SDL_GPUDevice *gpu, SDL_Window *window
 
     Carbon_SpriteRenderer *sr = calloc(1, sizeof(Carbon_SpriteRenderer));
     if (!sr) {
-        SDL_Log("Sprite: Failed to allocate renderer");
+        carbon_set_error("Sprite: Failed to allocate renderer");
         return NULL;
     }
 
@@ -286,7 +287,7 @@ Carbon_SpriteRenderer *carbon_sprite_init(SDL_GPUDevice *gpu, SDL_Window *window
     sr->vertices = malloc(SPRITE_VERTEX_CAPACITY * sizeof(Carbon_SpriteVertex));
     sr->indices = malloc(SPRITE_INDEX_CAPACITY * sizeof(uint16_t));
     if (!sr->vertices || !sr->indices) {
-        SDL_Log("Sprite: Failed to allocate batch buffers");
+        carbon_set_error("Sprite: Failed to allocate batch buffers");
         carbon_sprite_shutdown(sr);
         return NULL;
     }
@@ -311,7 +312,7 @@ Carbon_SpriteRenderer *carbon_sprite_init(SDL_GPUDevice *gpu, SDL_Window *window
     };
     sr->vertex_buffer = SDL_CreateGPUBuffer(gpu, &vb_info);
     if (!sr->vertex_buffer) {
-        SDL_Log("Sprite: Failed to create vertex buffer");
+        carbon_set_error_from_sdl("Sprite: Failed to create vertex buffer");
         carbon_sprite_shutdown(sr);
         return NULL;
     }
@@ -323,7 +324,7 @@ Carbon_SpriteRenderer *carbon_sprite_init(SDL_GPUDevice *gpu, SDL_Window *window
     };
     sr->index_buffer = SDL_CreateGPUBuffer(gpu, &ib_info);
     if (!sr->index_buffer) {
-        SDL_Log("Sprite: Failed to create index buffer");
+        carbon_set_error_from_sdl("Sprite: Failed to create index buffer");
         carbon_sprite_shutdown(sr);
         return NULL;
     }
@@ -339,7 +340,7 @@ Carbon_SpriteRenderer *carbon_sprite_init(SDL_GPUDevice *gpu, SDL_Window *window
     };
     sr->sampler = SDL_CreateGPUSampler(gpu, &sampler_info);
     if (!sr->sampler) {
-        SDL_Log("Sprite: Failed to create sampler");
+        carbon_set_error_from_sdl("Sprite: Failed to create sampler");
         carbon_sprite_shutdown(sr);
         return NULL;
     }
@@ -397,7 +398,7 @@ Carbon_Texture *carbon_texture_load(Carbon_SpriteRenderer *sr, const char *path)
     int width, height, channels;
     unsigned char *pixels = stbi_load(path, &width, &height, &channels, 4);  /* Force RGBA */
     if (!pixels) {
-        SDL_Log("Sprite: Failed to load image '%s': %s", path, stbi_failure_reason());
+        carbon_set_error("Sprite: Failed to load image '%s': %s", path, stbi_failure_reason());
         return NULL;
     }
 
@@ -419,7 +420,7 @@ Carbon_Texture *carbon_texture_load_memory(Carbon_SpriteRenderer *sr,
     int width, height, channels;
     unsigned char *pixels = stbi_load_from_memory(data, size, &width, &height, &channels, 4);
     if (!pixels) {
-        SDL_Log("Sprite: Failed to load image from memory: %s", stbi_failure_reason());
+        carbon_set_error("Sprite: Failed to load image from memory: %s", stbi_failure_reason());
         return NULL;
     }
 
@@ -455,7 +456,7 @@ Carbon_Texture *carbon_texture_create(Carbon_SpriteRenderer *sr,
     };
     texture->gpu_texture = SDL_CreateGPUTexture(sr->gpu, &tex_info);
     if (!texture->gpu_texture) {
-        SDL_Log("Sprite: Failed to create GPU texture: %s", SDL_GetError());
+        carbon_set_error_from_sdl("Sprite: Failed to create GPU texture");
         free(texture);
         return NULL;
     }
@@ -468,7 +469,7 @@ Carbon_Texture *carbon_texture_create(Carbon_SpriteRenderer *sr,
     };
     SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(sr->gpu, &transfer_info);
     if (!transfer) {
-        SDL_Log("Sprite: Failed to create transfer buffer");
+        carbon_set_error_from_sdl("Sprite: Failed to create transfer buffer");
         SDL_ReleaseGPUTexture(sr->gpu, texture->gpu_texture);
         free(texture);
         return NULL;

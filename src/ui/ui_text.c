@@ -3,6 +3,7 @@
  */
 
 #include "carbon/ui.h"
+#include "carbon/error.h"
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
@@ -28,7 +29,7 @@ bool cui_load_font(CUI_Context *ctx, const char *path, float size)
     /* Read font file */
     FILE *f = fopen(path, "rb");
     if (!f) {
-        SDL_Log("CUI: Cannot open font file '%s'", path);
+        carbon_set_error("CUI: Cannot open font file '%s'", path);
         return false;
     }
 
@@ -75,7 +76,7 @@ bool cui_load_font(CUI_Context *ctx, const char *path, float size)
                                        32, 96,
                                        (stbtt_bakedchar *)ctx->glyphs);
     if (result <= 0) {
-        SDL_Log("CUI: Failed to bake font (result=%d)", result);
+        carbon_set_error("CUI: Failed to bake font (result=%d)", result);
         free(atlas_bitmap);
         free(ctx->glyphs);
         ctx->glyphs = NULL;
@@ -114,7 +115,7 @@ bool cui_load_font(CUI_Context *ctx, const char *path, float size)
     };
     ctx->font_atlas = SDL_CreateGPUTexture(ctx->gpu, &tex_info);
     if (!ctx->font_atlas) {
-        SDL_Log("CUI: Failed to create font atlas texture");
+        carbon_set_error_from_sdl("CUI: Failed to create font atlas texture");
         free(atlas_bitmap);
         free(ctx->glyphs);
         ctx->glyphs = NULL;

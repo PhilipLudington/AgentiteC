@@ -3,6 +3,7 @@
  */
 
 #include "carbon/ui.h"
+#include "carbon/error.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stddef.h>
@@ -89,7 +90,7 @@ static bool cui_create_graphics_pipeline(CUI_Context *ctx)
         };
         vertex_shader = SDL_CreateGPUShader(ctx->gpu, &vs_info);
         if (!vertex_shader) {
-            SDL_Log("CUI: Failed to create vertex shader: %s", SDL_GetError());
+            carbon_set_error_from_sdl("CUI: Failed to create vertex shader");
             return false;
         }
 
@@ -107,12 +108,12 @@ static bool cui_create_graphics_pipeline(CUI_Context *ctx)
         };
         fragment_shader = SDL_CreateGPUShader(ctx->gpu, &fs_info);
         if (!fragment_shader) {
-            SDL_Log("CUI: Failed to create fragment shader: %s", SDL_GetError());
+            carbon_set_error_from_sdl("CUI: Failed to create fragment shader");
             SDL_ReleaseGPUShader(ctx->gpu, vertex_shader);
             return false;
         }
     } else {
-        SDL_Log("CUI: No supported shader format (need MSL for Metal)");
+        carbon_set_error("CUI: No supported shader format (need MSL for Metal)");
         return false;
     }
 
@@ -209,7 +210,7 @@ static bool cui_create_graphics_pipeline(CUI_Context *ctx)
     SDL_ReleaseGPUShader(ctx->gpu, fragment_shader);
 
     if (!ctx->pipeline) {
-        SDL_Log("CUI: Failed to create graphics pipeline: %s", SDL_GetError());
+        carbon_set_error_from_sdl("CUI: Failed to create graphics pipeline");
         return false;
     }
 
@@ -229,7 +230,7 @@ bool cui_create_pipeline(CUI_Context *ctx)
     };
     ctx->vertex_buffer = SDL_CreateGPUBuffer(ctx->gpu, &vb_info);
     if (!ctx->vertex_buffer) {
-        SDL_Log("CUI: Failed to create vertex buffer");
+        carbon_set_error_from_sdl("CUI: Failed to create vertex buffer");
         return false;
     }
 
@@ -241,7 +242,7 @@ bool cui_create_pipeline(CUI_Context *ctx)
     };
     ctx->index_buffer = SDL_CreateGPUBuffer(ctx->gpu, &ib_info);
     if (!ctx->index_buffer) {
-        SDL_Log("CUI: Failed to create index buffer");
+        carbon_set_error_from_sdl("CUI: Failed to create index buffer");
         return false;
     }
 
@@ -256,13 +257,13 @@ bool cui_create_pipeline(CUI_Context *ctx)
     };
     ctx->sampler = SDL_CreateGPUSampler(ctx->gpu, &sampler_info);
     if (!ctx->sampler) {
-        SDL_Log("CUI: Failed to create sampler");
+        carbon_set_error_from_sdl("CUI: Failed to create sampler");
         return false;
     }
 
     /* Create graphics pipeline with shaders */
     if (!cui_create_graphics_pipeline(ctx)) {
-        SDL_Log("CUI: Failed to create graphics pipeline");
+        carbon_set_error("CUI: Failed to create graphics pipeline");
         return false;
     }
 
@@ -501,7 +502,7 @@ void cui_upload(CUI_Context *ctx, SDL_GPUCommandBuffer *cmd)
     };
     SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(ctx->gpu, &transfer_info);
     if (!transfer) {
-        SDL_Log("CUI: Failed to create transfer buffer");
+        carbon_set_error_from_sdl("CUI: Failed to create transfer buffer");
         return;
     }
 
