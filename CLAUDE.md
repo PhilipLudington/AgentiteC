@@ -69,7 +69,8 @@ src/
 │   ├── unlock.c        # Unlock/achievement system
 │   ├── spatial.c       # Spatial hash index for entity lookup
 │   ├── fog.c           # Fog of war / exploration system
-│   └── rate.c          # Rate tracking / rolling metrics
+│   ├── rate.c          # Rate tracking / rolling metrics
+│   └── network.c       # Network/graph system (power grid)
 ├── ui/                 # Immediate-mode GUI system
 │   └── viewmodel.c     # Observable values for UI data binding
 └── game/               # Game-specific logic
@@ -106,7 +107,8 @@ include/carbon/
 ├── viewmodel.h         # View model/data binding API
 ├── spatial.h           # Spatial hash index API
 ├── fog.h               # Fog of war / exploration API
-└── rate.h              # Rate tracking / rolling metrics API
+├── rate.h              # Rate tracking / rolling metrics API
+└── network.h           # Network/graph system API
 
 lib/
 ├── flecs.h/.c          # Flecs ECS library (v4.0.0)
@@ -1056,6 +1058,152 @@ float power_production = carbon_rate_get_production_rate(rates, POWER, 5.0f);
 float power_consumption = carbon_rate_get_consumption_rate(rates, POWER, 5.0f);
 if (power_consumption > power_production) {
     show_warning("Power deficit!");
+}
+```
+
+## Network/Graph System (Power Grid)
+
+Union-find based network system for connected component grouping with resource distribution. Useful for power grids, water pipes, or any system where nodes form connected groups and share resources:
+
+```c
+#include "carbon/network.h"
+
+// Create network system
+Carbon_NetworkSystem *network = carbon_network_create();
+
+// Add nodes (e.g., power poles, substations)
+// Each node has a position and coverage radius
+uint32_t generator = carbon_network_add_node(network, 10, 10, 5);   // Radius 5
+uint32_t pole1 = carbon_network_add_node(network, 15, 10, 3);       // Radius 3
+uint32_t pole2 = carbon_network_add_node(network, 20, 10, 3);
+uint32_t consumer = carbon_network_add_node(network, 25, 10, 2);
+
+// Set production/consumption values
+carbon_network_set_production(network, generator, 100);    // Generates 100 power
+carbon_network_set_consumption(network, consumer, 30);     // Consumes 30 power
+
+// Nodes connect when their coverage overlaps (distance <= radius1 + radius2)
+// After adding/moving nodes, update to recalculate connectivity
+carbon_network_update(network);
+
+// Query network state
+uint32_t group = carbon_network_get_group(network, consumer);  // Get group ID
+
+Carbon_NetworkGroup group_info;
+if (carbon_network_get_group_info(network, group, &group_info)) {
+    printf("Group %u: %d nodes, balance %d (%s)\n",
+           group_info.id,
+           group_info.node_count,
+           group_info.balance,
+           group_info.powered ? "powered" : "unpowered");
+}
+
+// Check if specific node is powered
+if (carbon_network_node_is_powered(network, consumer)) {
+    printf("Consumer has power!\n");
+}
+
+// Check if a cell has power coverage
+if (carbon_network_cell_is_powered(network, building_x, building_y)) {
+    printf("Building location has power!\n");
+}
+
+// Move a node (may change connectivity)
+carbon_network_move_node(network, pole1, 18, 12);
+carbon_network_update(network);
+
+// Deactivate a node (e.g., damaged)
+carbon_network_set_active(network, pole1, false);
+carbon_network_update(network);
+
+// Get all nodes covering a cell
+Carbon_NetworkCoverage coverage[8];
+int count = carbon_network_get_coverage(network, 12, 10, coverage, 8);
+for (int i = 0; i < count; i++) {
+    printf("Covered by node %u at (%d, %d), distance %d\n",
+           coverage[i].node_id, coverage[i].x, coverage[i].y, coverage[i].distance);
+}
+
+// Find nearest node to position
+uint32_t nearest = carbon_network_get_nearest_node(network, 50, 50, 20);  // Max distance 20
+if (nearest != CARBON_NETWORK_INVALID) {
+    printf("Nearest node: %u\n", nearest);
+}
+
+// Get all nodes in a group
+uint32_t nodes[64];
+int node_count = carbon_network_get_group_nodes(network, group, nodes, 64);
+
+// Get all groups
+uint32_t groups[32];
+int group_count = carbon_network_get_all_groups(network, groups, 32);
+
+// Statistics
+int total_nodes, active_nodes, num_groups, powered_groups;
+carbon_network_get_stats(network, &total_nodes, &active_nodes, &num_groups, &powered_groups);
+
+int32_t total_prod = carbon_network_total_production(network);
+int32_t total_cons = carbon_network_total_consumption(network);
+int32_t balance = carbon_network_total_balance(network);
+
+// Callback for group changes
+void on_network_change(Carbon_NetworkSystem *net, uint32_t node_id,
+                       uint32_t old_group, uint32_t new_group, void *userdata) {
+    printf("Node %u moved from group %u to group %u\n", node_id, old_group, new_group);
+}
+carbon_network_set_callback(network, on_network_change, NULL);
+
+// Remove node
+carbon_network_remove_node(network, pole1);
+carbon_network_update(network);
+
+// Cleanup
+carbon_network_destroy(network);
+```
+
+**Key features:**
+- Union-find algorithm with path compression (O(α(n)) ≈ O(1) connectivity)
+- Nodes connect when coverage areas overlap (Chebyshev distance)
+- Per-node production/consumption tracking
+- Group balance calculation (production - consumption)
+- Coverage queries for cells
+- Lazy recalculation with dirty tracking
+- Callback for group membership changes
+
+**Common patterns:**
+
+```c
+// Power grid for buildings
+void place_building(Game *game, int x, int y, BuildingType type) {
+    // Check if location has power
+    if (!carbon_network_cell_is_powered(game->power_grid, x, y)) {
+        show_warning("No power at this location!");
+        return;
+    }
+
+    // Create building
+    Building *b = create_building(game, x, y, type);
+
+    // If building produces/consumes power, add as network node
+    if (type == BUILDING_GENERATOR) {
+        b->power_node = carbon_network_add_node(game->power_grid, x, y, 8);
+        carbon_network_set_production(game->power_grid, b->power_node, 100);
+    } else if (type == BUILDING_FACTORY) {
+        b->power_node = carbon_network_add_node(game->power_grid, x, y, 2);
+        carbon_network_set_consumption(game->power_grid, b->power_node, 25);
+    }
+
+    carbon_network_update(game->power_grid);
+}
+
+// Check grid status each frame
+void update_power_status(Game *game) {
+    carbon_network_update(game->power_grid);
+
+    // Check for power deficit
+    if (carbon_network_total_balance(game->power_grid) < 0) {
+        show_power_warning();
+    }
 }
 ```
 
