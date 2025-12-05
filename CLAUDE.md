@@ -53,7 +53,8 @@ src/
 ├── input/
 │   └── input.c         # Input abstraction with action mapping
 ├── ai/
-│   └── pathfinding.c   # A* pathfinding for tile-based maps
+│   ├── pathfinding.c   # A* pathfinding for tile-based maps
+│   └── personality.c   # AI personality and decision making
 ├── strategy/           # Turn-based strategy game systems
 │   ├── turn.c          # Turn/phase management
 │   ├── resource.c      # Resource economy
@@ -84,6 +85,7 @@ include/carbon/
 ├── input.h             # Input system with action mapping
 ├── audio.h             # Audio system API
 ├── pathfinding.h       # A* pathfinding API
+├── ai.h                # AI personality system API
 ├── turn.h              # Turn/phase system API
 ├── resource.h          # Resource economy API
 ├── tech.h              # Technology tree API
@@ -1167,6 +1169,155 @@ carbon_victory_destroy(victory);
 - Automatic elimination victory detection
 - Score-based victory with turn limits
 - Event integration for UI updates
+
+## AI Personality System
+
+Personality-driven AI decision making with weighted behaviors, threat assessment, and goal management:
+
+```c
+#include "carbon/ai.h"
+
+// Create AI system
+Carbon_AISystem *ai = carbon_ai_create();
+
+// Initialize per-faction AI state with personality
+Carbon_AIState ai_state;
+carbon_ai_state_init(&ai_state, CARBON_AI_AGGRESSIVE);
+
+// Personalities affect behavior weights
+// CARBON_AI_AGGRESSIVE: High aggression, low caution
+// CARBON_AI_DEFENSIVE: High defense, high caution
+// CARBON_AI_ECONOMIC: Focus on economy and trade
+// CARBON_AI_EXPANSIONIST: Focus on territory expansion
+// CARBON_AI_TECHNOLOGIST: Focus on research
+// CARBON_AI_DIPLOMATIC: Prefers alliances
+// CARBON_AI_OPPORTUNIST: Adapts to situations
+
+// Register custom action evaluators (game-specific)
+void evaluate_attacks(Carbon_AIState *state, void *game_ctx,
+                      Carbon_AIAction *out, int *count, int max) {
+    // Analyze game state and generate potential attack actions
+    MyGame *game = game_ctx;
+    *count = 0;
+
+    for (int i = 0; i < game->enemy_count && *count < max; i++) {
+        Enemy *enemy = &game->enemies[i];
+        if (can_attack(game, enemy)) {
+            out[*count].type = CARBON_AI_ACTION_ATTACK;
+            out[*count].target_id = enemy->id;
+            out[*count].priority = calculate_attack_value(game, enemy);
+            out[*count].urgency = enemy->threat_level;
+            (*count)++;
+        }
+    }
+}
+carbon_ai_register_evaluator(ai, CARBON_AI_ACTION_ATTACK, evaluate_attacks);
+carbon_ai_register_evaluator(ai, CARBON_AI_ACTION_BUILD, evaluate_builds);
+carbon_ai_register_evaluator(ai, CARBON_AI_ACTION_RESEARCH, evaluate_research);
+
+// Register situation analyzer (updates ratios, morale)
+void analyze_situation(Carbon_AIState *state, void *game_ctx) {
+    MyGame *game = game_ctx;
+    carbon_ai_set_ratios(state,
+        our_resources / avg_resources,
+        our_military / avg_military,
+        our_tech / avg_tech);
+    carbon_ai_set_morale(state, calculate_morale(game));
+}
+carbon_ai_set_situation_analyzer(ai, analyze_situation);
+
+// Register threat assessor
+void assess_threats(Carbon_AIState *state, void *game_ctx,
+                    Carbon_AIThreat *threats, int *count, int max) {
+    // Populate threat array based on game state
+}
+carbon_ai_set_threat_assessor(ai, assess_threats);
+
+// Each turn, process AI decisions
+Carbon_AIDecision decision;
+carbon_ai_process_turn(ai, &ai_state, game, &decision);
+
+// Execute returned actions
+for (int i = 0; i < decision.action_count; i++) {
+    Carbon_AIAction *action = &decision.actions[i];
+    switch (action->type) {
+        case CARBON_AI_ACTION_ATTACK:
+            execute_attack(game, action->target_id);
+            break;
+        case CARBON_AI_ACTION_BUILD:
+            execute_build(game, action->secondary_id);
+            break;
+        // ... handle other action types
+    }
+}
+
+// Threat management
+carbon_ai_add_threat(&ai_state, enemy_faction, 0.8f, our_base_id, 5.0f);
+const Carbon_AIThreat *top_threat = carbon_ai_get_highest_threat(&ai_state);
+float threat_level = carbon_ai_calculate_threat_level(&ai_state);
+
+// Goal management
+int goal_idx = carbon_ai_add_goal(&ai_state, GOAL_CONQUER_REGION, region_id, 0.9f);
+carbon_ai_update_goal_progress(&ai_state, goal_idx, 0.5f);  // 50% complete
+carbon_ai_complete_goal(&ai_state, goal_idx);
+carbon_ai_cleanup_goals(&ai_state, 10);  // Remove goals older than 10 turns
+
+// Cooldowns (prevent repetitive actions)
+carbon_ai_set_cooldown(&ai_state, CARBON_AI_ACTION_DIPLOMACY, 5);  // 5 turn cooldown
+if (!carbon_ai_is_on_cooldown(&ai_state, CARBON_AI_ACTION_DIPLOMACY)) {
+    // Can attempt diplomacy
+}
+
+// Modify weights dynamically (e.g., in response to events)
+Carbon_AIWeights boost = { .defense = 1.5f };  // 50% defense boost
+carbon_ai_modify_weights(&ai_state, &boost);
+carbon_ai_reset_weights(&ai_state);  // Reset to personality defaults
+
+// Set strategic targets
+carbon_ai_set_primary_target(&ai_state, enemy_faction_id);
+carbon_ai_set_ally_target(&ai_state, friendly_faction_id);
+
+// Deterministic random for reproducible AI behavior
+carbon_ai_seed_random(&ai_state, game_seed);
+float r = carbon_ai_random(&ai_state);  // 0.0 to 1.0
+int choice = carbon_ai_random_int(&ai_state, 0, 5);  // 0 to 5
+
+// Cleanup
+carbon_ai_destroy(ai);
+```
+
+**Built-in personalities:**
+- `CARBON_AI_BALANCED` - Equal weights across all behaviors
+- `CARBON_AI_AGGRESSIVE` - High aggression, low caution
+- `CARBON_AI_DEFENSIVE` - High defense and caution
+- `CARBON_AI_ECONOMIC` - Focus on resource generation
+- `CARBON_AI_EXPANSIONIST` - Prioritizes territory acquisition
+- `CARBON_AI_TECHNOLOGIST` - Prioritizes research
+- `CARBON_AI_DIPLOMATIC` - Prefers alliances
+- `CARBON_AI_OPPORTUNIST` - Adapts based on situation
+
+**Built-in action types:**
+- `CARBON_AI_ACTION_BUILD` - Construct buildings/units
+- `CARBON_AI_ACTION_ATTACK` - Attack enemies
+- `CARBON_AI_ACTION_DEFEND` - Defend territory
+- `CARBON_AI_ACTION_EXPAND` - Claim new territory
+- `CARBON_AI_ACTION_RESEARCH` - Research technologies
+- `CARBON_AI_ACTION_DIPLOMACY` - Diplomatic actions
+- `CARBON_AI_ACTION_RECRUIT` - Train units
+- `CARBON_AI_ACTION_RETREAT` - Withdraw from danger
+- `CARBON_AI_ACTION_SCOUT` - Explore/gather intel
+- `CARBON_AI_ACTION_TRADE` - Economic transactions
+- `CARBON_AI_ACTION_UPGRADE` - Improve existing assets
+
+**Key features:**
+- Personality-driven behavior weights
+- Custom evaluators for game-specific action scoring
+- Threat assessment with distance/age decay
+- Goal tracking with progress monitoring
+- Situational modifiers (resource/military/tech ratios)
+- Action cooldowns to prevent repetition
+- Deterministic random for reproducible behavior
+- Dynamic weight modification
 
 ## Quick Start (New Game)
 
