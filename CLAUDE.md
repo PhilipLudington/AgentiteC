@@ -46,6 +46,7 @@ src/
 │   ├── sprite.c        # Sprite/texture rendering with batching
 │   ├── animation.c     # Sprite-based animation system
 │   ├── camera.c        # 2D camera with pan, zoom, rotation
+│   ├── camera3d.c      # 3D orbital camera with animations
 │   ├── tilemap.c       # Chunk-based tilemap rendering
 │   └── text.c          # TrueType font rendering
 ├── audio/
@@ -81,6 +82,7 @@ include/carbon/
 ├── sprite.h            # Sprite/texture API
 ├── animation.h         # Sprite animation API
 ├── camera.h            # 2D camera API
+├── camera3d.h          # 3D orbital camera API
 ├── tilemap.h           # Tilemap system API
 ├── text.h              # Text rendering API
 ├── input.h             # Input system with action mapping
@@ -1559,6 +1561,101 @@ typedef struct CUI_Theme {
 - Color helper functions (brighten, darken, alpha, lerp)
 - Semantic button variants for common actions
 - All colors in packed ABGR format (0xAABBGGRR)
+
+## 3D Camera System
+
+Orbital 3D camera with spherical coordinate control and smooth animations:
+
+```c
+#include "carbon/camera3d.h"
+
+// Create camera
+Carbon_Camera3D *cam = carbon_camera3d_create();
+
+// Set perspective projection (default)
+carbon_camera3d_set_perspective(cam, 60.0f, 16.0f/9.0f, 0.1f, 1000.0f);
+
+// Or orthographic for strategy/isometric views
+carbon_camera3d_set_orthographic(cam, 20.0f, 15.0f, 0.1f, 1000.0f);
+
+// Position using spherical coordinates (orbit around target)
+carbon_camera3d_set_target(cam, 0, 0, 0);           // Look at origin
+carbon_camera3d_set_spherical(cam, 45.0f,           // Yaw: 45 degrees
+                                   30.0f,           // Pitch: 30 degrees up
+                                   15.0f);          // Distance: 15 units
+
+// Or set position directly
+carbon_camera3d_set_position(cam, 10.0f, 5.0f, 10.0f);
+
+// Orbital controls (for mouse/gamepad input)
+carbon_camera3d_orbit(cam, delta_yaw, delta_pitch);   // Rotate around target
+carbon_camera3d_zoom(cam, delta_distance);            // Zoom in/out
+carbon_camera3d_pan(cam, right_amount, up_amount);    // Pan in camera space
+carbon_camera3d_pan_xz(cam, dx, dz);                  // Pan in world XZ plane
+
+// Set constraints
+carbon_camera3d_set_distance_limits(cam, 5.0f, 100.0f);   // Min/max zoom
+carbon_camera3d_set_pitch_limits(cam, -80.0f, 80.0f);     // Prevent gimbal lock
+
+// Smooth animations
+carbon_camera3d_animate_spherical_to(cam, 90.0f, 45.0f, 20.0f, 1.5f);  // Over 1.5 seconds
+carbon_camera3d_animate_target_to(cam, 10.0f, 0.0f, 10.0f, 1.0f);       // Move target
+carbon_camera3d_animate_to(cam, 20.0f, 10.0f, 20.0f, 2.0f);             // Move position
+
+// Check animation state
+if (carbon_camera3d_is_animating(cam)) {
+    // Camera is transitioning
+}
+carbon_camera3d_stop_animation(cam);  // Cancel animation
+
+// In game loop:
+carbon_camera3d_update(cam, delta_time);  // Update animations and matrices
+
+// Get matrices for rendering
+const float *view = carbon_camera3d_get_view_matrix(cam);
+const float *proj = carbon_camera3d_get_projection_matrix(cam);
+const float *vp = carbon_camera3d_get_vp_matrix(cam);  // Combined
+
+// Get camera direction vectors
+float fx, fy, fz;
+carbon_camera3d_get_forward(cam, &fx, &fy, &fz);
+carbon_camera3d_get_right(cam, &rx, &ry, &rz);
+carbon_camera3d_get_up(cam, &ux, &uy, &uz);
+
+// 3D picking (mouse to world ray)
+float ray_ox, ray_oy, ray_oz, ray_dx, ray_dy, ray_dz;
+carbon_camera3d_screen_to_ray(cam, mouse_x, mouse_y, screen_w, screen_h,
+                               &ray_ox, &ray_oy, &ray_oz,
+                               &ray_dx, &ray_dy, &ray_dz);
+
+// Project world point to screen
+float sx, sy;
+if (carbon_camera3d_world_to_screen(cam, world_x, world_y, world_z,
+                                     screen_w, screen_h, &sx, &sy)) {
+    // Point is visible, draw UI at (sx, sy)
+}
+
+// Window resize
+carbon_camera3d_set_aspect(cam, new_width / new_height);
+
+// Cleanup
+carbon_camera3d_destroy(cam);
+```
+
+**Key features:**
+- Spherical coordinate orbit (yaw, pitch, distance around target)
+- Perspective and orthographic projection modes
+- Distance and pitch constraints to prevent issues
+- Smooth animated transitions with easing
+- Screen-to-ray conversion for 3D picking
+- World-to-screen projection for UI overlays
+- Direction vectors (forward, right, up) for movement
+
+**Default values:**
+- Projection: Perspective, 60° FOV, 16:9 aspect
+- Distance limits: 1.0 to 1000.0
+- Pitch limits: -89° to 89° (prevents gimbal lock)
+- Easing: Smooth (ease-in-out)
 
 ## Quick Start (New Game)
 
