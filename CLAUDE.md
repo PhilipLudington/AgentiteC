@@ -67,6 +67,7 @@ src/
 │   ├── game_event.c    # Scripted game events
 │   └── unlock.c        # Unlock/achievement system
 ├── ui/                 # Immediate-mode GUI system
+│   └── viewmodel.c     # Observable values for UI data binding
 └── game/               # Game-specific logic
 
 include/carbon/
@@ -95,7 +96,8 @@ include/carbon/
 ├── history.h           # History tracking API
 ├── save.h              # Save/load system API
 ├── game_event.h        # Game event system API
-└── unlock.h            # Unlock system API
+├── unlock.h            # Unlock system API
+└── viewmodel.h         # View model/data binding API
 
 lib/
 ├── flecs.h/.c          # Flecs ECS library (v4.0.0)
@@ -1318,6 +1320,119 @@ carbon_ai_destroy(ai);
 - Action cooldowns to prevent repetition
 - Deterministic random for reproducible behavior
 - Dynamic weight modification
+
+## View Model System
+
+Observable values with change detection for UI data binding:
+
+```c
+#include "carbon/viewmodel.h"
+
+// Create view model
+Carbon_ViewModel *vm = carbon_vm_create();
+
+// Define observables
+uint32_t health_id = carbon_vm_define_int(vm, "player_health", 100);
+uint32_t gold_id = carbon_vm_define_int(vm, "gold", 0);
+uint32_t name_id = carbon_vm_define_string(vm, "player_name", "Hero");
+uint32_t pos_id = carbon_vm_define_vec2(vm, "position", 100.0f, 200.0f);
+uint32_t color_id = carbon_vm_define_color(vm, "tint", 1.0f, 1.0f, 1.0f, 1.0f);
+
+// Subscribe to changes
+void on_health_changed(Carbon_ViewModel *vm, const Carbon_VMChangeEvent *event, void *userdata) {
+    UI *ui = userdata;
+    printf("Health changed: %d -> %d\n",
+           event->old_value.i32, event->new_value.i32);
+    ui_update_health_bar(ui, event->new_value.i32);
+}
+uint32_t listener = carbon_vm_subscribe(vm, health_id, on_health_changed, ui);
+
+// Subscribe to ALL changes (for logging, debugging)
+carbon_vm_subscribe_all(vm, log_all_changes, NULL);
+
+// Update values (triggers callbacks if changed)
+carbon_vm_set_int(vm, health_id, 75);   // Triggers on_health_changed
+carbon_vm_set_int(vm, health_id, 75);   // No callback (same value)
+
+// Batch updates (defer callbacks until commit)
+carbon_vm_begin_batch(vm);
+carbon_vm_set_int(vm, health_id, 50);
+carbon_vm_set_int(vm, gold_id, 100);
+carbon_vm_set_string(vm, name_id, "Champion");
+carbon_vm_commit_batch(vm);  // All callbacks fire now
+
+// Cancel batch (revert changes)
+carbon_vm_begin_batch(vm);
+carbon_vm_set_int(vm, health_id, 0);
+carbon_vm_cancel_batch(vm);  // health_id reverts to 50
+
+// Get values
+int health = carbon_vm_get_int(vm, health_id);
+const char *name = carbon_vm_get_string(vm, name_id);
+Carbon_VMVec2 pos = carbon_vm_get_vec2(vm, pos_id);
+
+// Lookup by name
+uint32_t id = carbon_vm_find(vm, "player_health");
+
+// Value validation
+bool validate_health(Carbon_ViewModel *vm, uint32_t id,
+                     const Carbon_VMValue *new_val, void *userdata) {
+    return new_val->i32 >= 0 && new_val->i32 <= 100;  // Clamp 0-100
+}
+carbon_vm_set_validator(vm, health_id, validate_health, NULL);
+
+// Custom formatting
+int format_gold(Carbon_ViewModel *vm, uint32_t id, const Carbon_VMValue *val,
+                char *buf, size_t size, void *userdata) {
+    return snprintf(buf, size, "%d gold", val->i32);
+}
+carbon_vm_set_formatter(vm, gold_id, format_gold, NULL);
+
+char buf[64];
+carbon_vm_format(vm, gold_id, buf, sizeof(buf));  // "100 gold"
+
+// Computed values (auto-update when dependencies change)
+Carbon_VMValue compute_health_percent(Carbon_ViewModel *vm, uint32_t id, void *userdata) {
+    int health = carbon_vm_get_int(vm, *(uint32_t*)userdata);
+    Carbon_VMValue result = { .type = CARBON_VM_TYPE_FLOAT };
+    result.f32 = (float)health / 100.0f;
+    return result;
+}
+uint32_t deps[] = { health_id };
+uint32_t percent_id = carbon_vm_define_computed(vm, "health_percent",
+    CARBON_VM_TYPE_FLOAT, compute_health_percent, &health_id, deps, 1);
+
+// Force notification (even if value unchanged)
+carbon_vm_notify(vm, health_id);
+carbon_vm_notify_all(vm);
+
+// Unsubscribe
+carbon_vm_unsubscribe(vm, listener);
+
+// Cleanup
+carbon_vm_destroy(vm);
+```
+
+**Supported value types:**
+- `CARBON_VM_TYPE_INT` - 32-bit integer
+- `CARBON_VM_TYPE_INT64` - 64-bit integer
+- `CARBON_VM_TYPE_FLOAT` - Single precision float
+- `CARBON_VM_TYPE_DOUBLE` - Double precision float
+- `CARBON_VM_TYPE_BOOL` - Boolean
+- `CARBON_VM_TYPE_STRING` - String (up to 256 chars)
+- `CARBON_VM_TYPE_POINTER` - Void pointer (not owned)
+- `CARBON_VM_TYPE_VEC2` - 2D vector (x, y)
+- `CARBON_VM_TYPE_VEC3` - 3D vector (x, y, z)
+- `CARBON_VM_TYPE_VEC4` - 4D vector / color (r, g, b, a)
+
+**Key features:**
+- Type-safe observable values with change detection
+- Per-observable and global subscriptions
+- Batch updates with commit/cancel
+- Value validation before changes
+- Custom formatting for display
+- Computed values with automatic dependency tracking
+- Event dispatcher integration
 
 ## Quick Start (New Game)
 

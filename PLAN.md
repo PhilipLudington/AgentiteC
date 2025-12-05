@@ -17,7 +17,7 @@ Features extracted from StellarThroneCPP and Ecosocialism projects that would en
 | 2 | Technology Tree | Medium | tech.h/c | **DONE** | Research with prerequisites |
 | 2 | Victory System | Low | victory.h/c | **DONE** | Multi-win-condition tracking |
 | 3 | AI Personality | Medium | ai.h/c | **DONE** | Weighted decision making |
-| 4 | View Model | Medium | viewmodel.h/c | Pending | UI data binding |
+| 4 | View Model | Medium | viewmodel.h/c | **DONE** | UI data binding |
 | 4 | Theme Enhancement | Low | (existing) | Pending | Semantic color system |
 | 5 | 3D Camera | Low | camera3d.h/c | Pending | Orbital camera for 3D views |
 | - | History Tracking | Medium | history.h/c | **DONE** | Metrics snapshots (already existed) |
