@@ -66,7 +66,10 @@ src/
 │   ├── history.c       # Metrics history tracking
 │   ├── save.c          # TOML-based save/load
 │   ├── game_event.c    # Scripted game events
-│   └── unlock.c        # Unlock/achievement system
+│   ├── unlock.c        # Unlock/achievement system
+│   ├── spatial.c       # Spatial hash index for entity lookup
+│   ├── fog.c           # Fog of war / exploration system
+│   └── rate.c          # Rate tracking / rolling metrics
 ├── ui/                 # Immediate-mode GUI system
 │   └── viewmodel.c     # Observable values for UI data binding
 └── game/               # Game-specific logic
@@ -99,7 +102,10 @@ include/carbon/
 ├── save.h              # Save/load system API
 ├── game_event.h        # Game event system API
 ├── unlock.h            # Unlock system API
-└── viewmodel.h         # View model/data binding API
+├── viewmodel.h         # View model/data binding API
+├── spatial.h           # Spatial hash index API
+├── fog.h               # Fog of war / exploration API
+└── rate.h              # Rate tracking / rolling metrics API
 
 lib/
 ├── flecs.h/.c          # Flecs ECS library (v4.0.0)
@@ -710,6 +716,347 @@ carbon_pathfinder_destroy(pf);
 - Use `max_iterations` to limit search on very large maps
 - `carbon_pathfinder_has_path()` is equivalent to full pathfinding (future: early exit)
 - For dynamic obstacles, update with `set_walkable()` or re-sync tilemap
+
+## Spatial Hash Index
+
+O(1) entity lookup by grid cell for efficient spatial queries. Useful for item pickup, collision detection, and proximity queries:
+
+```c
+#include "carbon/spatial.h"
+
+// Create spatial index (capacity = expected occupied cells)
+Carbon_SpatialIndex *spatial = carbon_spatial_create(256);
+
+// Add entities at grid positions
+carbon_spatial_add(spatial, 10, 20, player_entity);
+carbon_spatial_add(spatial, 10, 20, item_entity);  // Multiple entities per cell
+
+// Check for entities
+if (carbon_spatial_has(spatial, 10, 20)) {
+    uint32_t first = carbon_spatial_query(spatial, 10, 20);  // Get first entity
+}
+
+// Get all entities at a position
+uint32_t entities[16];
+int count = carbon_spatial_query_all(spatial, 10, 20, entities, 16);
+
+// Check for specific entity
+if (carbon_spatial_has_entity(spatial, 10, 20, player_entity)) {
+    // Player is at this cell
+}
+
+// Move entity between cells
+carbon_spatial_move(spatial, old_x, old_y, new_x, new_y, entity_id);
+
+// Remove entity
+carbon_spatial_remove(spatial, 10, 20, entity_id);
+
+// Region queries (rectangular area)
+Carbon_SpatialQueryResult results[64];
+int found = carbon_spatial_query_rect(spatial, x1, y1, x2, y2, results, 64);
+for (int i = 0; i < found; i++) {
+    uint32_t entity = results[i].entity_id;
+    int ex = results[i].x;
+    int ey = results[i].y;
+    // Process entity...
+}
+
+// Radius query (Chebyshev distance - square area)
+found = carbon_spatial_query_radius(spatial, center_x, center_y, 5, results, 64);
+
+// Circle query (Euclidean distance - true circle)
+found = carbon_spatial_query_circle(spatial, center_x, center_y, 5, results, 64);
+
+// Iterate entities at a cell
+Carbon_SpatialIterator iter = carbon_spatial_iter_begin(spatial, x, y);
+while (carbon_spatial_iter_valid(&iter)) {
+    uint32_t entity = carbon_spatial_iter_get(&iter);
+    // Process entity...
+    carbon_spatial_iter_next(&iter);
+}
+
+// Statistics
+int total = carbon_spatial_total_count(spatial);      // All entities
+int cells = carbon_spatial_occupied_cells(spatial);   // Cells with entities
+float load = carbon_spatial_load_factor(spatial);     // Hash table load
+
+// Clear all entities
+carbon_spatial_clear(spatial);
+
+// Cleanup
+carbon_spatial_destroy(spatial);
+```
+
+**Key features:**
+- O(1) add, remove, query, move operations
+- Multiple entities per cell (up to `CARBON_SPATIAL_MAX_PER_CELL`, default 16)
+- Rectangular and circular region queries
+- Automatic hash table growth when load factor exceeds 0.7
+- Iterator for processing all entities at a cell
+
+**Common patterns:**
+
+```c
+// Item pickup - find items at player position
+if (carbon_spatial_has(items_index, player_x, player_y)) {
+    uint32_t item = carbon_spatial_query(items_index, player_x, player_y);
+    pickup_item(player, item);
+    carbon_spatial_remove(items_index, player_x, player_y, item);
+}
+
+// Collision detection - check if destination is occupied
+if (!carbon_spatial_has(units_index, dest_x, dest_y)) {
+    carbon_spatial_move(units_index, unit_x, unit_y, dest_x, dest_y, unit_id);
+}
+
+// Find nearby enemies
+Carbon_SpatialQueryResult nearby[32];
+int count = carbon_spatial_query_circle(enemies_index, unit_x, unit_y,
+                                         attack_range, nearby, 32);
+for (int i = 0; i < count; i++) {
+    attack(unit_id, nearby[i].entity_id);
+}
+```
+
+**Performance notes:**
+- Initial capacity should be ~1.5-2x expected occupied cells
+- Hash table grows automatically, but pre-sizing avoids rehashing
+- Region queries iterate all cells in range (O(area))
+- Use separate indices for different entity types if counts are large
+
+## Fog of War / Exploration System
+
+Per-cell exploration tracking with visibility radius. Supports three visibility states: unexplored, explored (shroud), and visible:
+
+```c
+#include "carbon/fog.h"
+
+// Create fog of war system (matching map dimensions)
+Carbon_FogOfWar *fog = carbon_fog_create(100, 100);
+
+// Set shroud alpha (explored but not visible cells)
+carbon_fog_set_shroud_alpha(fog, 0.5f);  // 50% visible
+
+// Add vision sources (units, buildings, scouts)
+Carbon_VisionSource unit_vision = carbon_fog_add_source(fog, 50, 50, 8);  // Radius 8
+Carbon_VisionSource base_vision = carbon_fog_add_source(fog, 10, 10, 12); // Larger radius
+
+// Move vision source when unit moves
+carbon_fog_move_source(fog, unit_vision, new_x, new_y);
+
+// Update radius (e.g., upgrades)
+carbon_fog_set_source_radius(fog, unit_vision, 10);
+
+// Remove vision source when unit dies
+carbon_fog_remove_source(fog, unit_vision);
+
+// Update visibility (call each frame or after moving sources)
+carbon_fog_update(fog);
+
+// Query visibility for rendering
+Carbon_VisibilityState state = carbon_fog_get_state(fog, tile_x, tile_y);
+switch (state) {
+    case CARBON_VIS_UNEXPLORED:
+        // Don't render tile at all
+        break;
+    case CARBON_VIS_EXPLORED:
+        // Render with shroud/fog overlay
+        break;
+    case CARBON_VIS_VISIBLE:
+        // Render fully
+        break;
+}
+
+// Convenience checks
+if (carbon_fog_is_visible(fog, x, y)) { }     // Currently visible
+if (carbon_fog_is_explored(fog, x, y)) { }    // Explored or visible
+if (carbon_fog_is_unexplored(fog, x, y)) { }  // Never seen
+
+// Get alpha for sprite tinting
+float alpha = carbon_fog_get_alpha(fog, x, y);  // 0.0, shroud_alpha, or 1.0
+carbon_sprite_draw_tinted(sr, &sprite, x * 32, y * 32, alpha, alpha, alpha, 1.0f);
+
+// Region queries
+if (carbon_fog_any_visible_in_rect(fog, x1, y1, x2, y2)) {
+    // At least one cell is visible (for enemy building detection)
+}
+int visible_count = carbon_fog_count_visible_in_rect(fog, x1, y1, x2, y2);
+
+// Manual exploration (reveal map areas)
+carbon_fog_explore_cell(fog, x, y);              // Single cell
+carbon_fog_explore_rect(fog, 0, 0, 10, 10);      // Rectangle
+carbon_fog_explore_circle(fog, 50, 50, 5);       // Circle
+
+// Cheat/debug commands
+carbon_fog_reveal_all(fog);   // Reveal entire map
+carbon_fog_explore_all(fog);  // Mark all as explored (but not visible)
+carbon_fog_reset(fog);        // Reset to unexplored
+
+// Statistics
+float explored_pct = carbon_fog_get_exploration_percent(fog);  // 0.0 to 1.0
+int unexplored, explored, visible;
+carbon_fog_get_stats(fog, &unexplored, &explored, &visible);
+
+// Exploration callback (for achievements, events)
+void on_cell_explored(Carbon_FogOfWar *fog, int x, int y, void *userdata) {
+    printf("Explored cell (%d, %d)!\n", x, y);
+}
+carbon_fog_set_exploration_callback(fog, on_cell_explored, NULL);
+
+// Cleanup
+carbon_fog_destroy(fog);
+```
+
+**Line of Sight (Optional):**
+
+Enable LOS checking so vision is blocked by walls/obstacles:
+
+```c
+// Callback to check if a cell blocks vision
+bool is_wall(int x, int y, void *userdata) {
+    Tilemap *map = userdata;
+    return tilemap_get_tile(map, x, y) == TILE_WALL;
+}
+
+// Enable LOS checking
+carbon_fog_set_los_callback(fog, is_wall, tilemap);
+
+// Now visibility is blocked by walls
+carbon_fog_update(fog);
+
+// Check LOS between two points
+if (carbon_fog_has_los(fog, unit_x, unit_y, target_x, target_y)) {
+    // Can see target
+}
+```
+
+**Key features:**
+- Three visibility states: unexplored, explored (shroud), visible
+- Multiple vision sources with independent radii
+- Automatic dirty tracking for efficient updates
+- Optional line-of-sight checking with blocker callback
+- Exploration callbacks for achievements/events
+- Statistics for exploration progress
+
+**Integration with rendering:**
+
+```c
+// In render loop - cull tiles outside camera, then check visibility
+for (int y = min_y; y <= max_y; y++) {
+    for (int x = min_x; x <= max_x; x++) {
+        Carbon_VisibilityState vis = carbon_fog_get_state(fog, x, y);
+        if (vis == CARBON_VIS_UNEXPLORED) continue;  // Skip unexplored
+
+        // Draw tile with fog alpha
+        float alpha = (vis == CARBON_VIS_VISIBLE) ? 1.0f : fog_shroud_alpha;
+        carbon_sprite_draw_tinted(sr, &tile_sprite, x * 32, y * 32,
+                                   alpha, alpha, alpha, 1.0f);
+    }
+}
+```
+
+## Rate Tracking System
+
+Rolling window metrics for production and consumption rates. Useful for economy statistics, performance monitoring, and analytics displays:
+
+```c
+#include "carbon/rate.h"
+
+// Create rate tracker
+// 8 metrics, sample every 0.5 seconds, keep 120 samples = 60 seconds of history
+Carbon_RateTracker *rates = carbon_rate_create(8, 0.5f, 120);
+
+// Name metrics for debugging
+carbon_rate_set_name(rates, 0, "Gold");
+carbon_rate_set_name(rates, 1, "Iron");
+carbon_rate_set_name(rates, 2, "Food");
+carbon_rate_set_name(rates, 3, "Power");
+
+// In game loop: update each frame
+carbon_rate_update(rates, delta_time);
+
+// Record production/consumption as they happen
+carbon_rate_record_production(rates, 0, 100);  // Produced 100 gold
+carbon_rate_record_consumption(rates, 0, 50);  // Consumed 50 gold
+carbon_rate_record(rates, 1, 20, 15);          // Iron: produced 20, consumed 15
+
+// Query rates over different time windows
+float gold_per_sec = carbon_rate_get_production_rate(rates, 0, 10.0f);  // Last 10s
+float gold_drain = carbon_rate_get_consumption_rate(rates, 0, 10.0f);
+float gold_net = carbon_rate_get_net_rate(rates, 0, 10.0f);  // Production - consumption
+
+// Get comprehensive stats
+Carbon_RateStats stats = carbon_rate_get_stats(rates, 0, 30.0f);  // Last 30 seconds
+printf("Gold: +%.1f/s (min %d, max %d)\n",
+       stats.production_rate, stats.min_production, stats.max_production);
+printf("Total: produced %d, consumed %d, net %d\n",
+       stats.total_produced, stats.total_consumed, stats.total_net);
+
+// Aggregate queries
+int32_t total_prod = carbon_rate_get_total_production(rates, 0, 60.0f);  // Last minute
+int32_t min_prod = carbon_rate_get_min_production(rates, 0, 60.0f);
+int32_t max_prod = carbon_rate_get_max_production(rates, 0, 60.0f);
+float avg_prod = carbon_rate_get_avg_production(rates, 0, 60.0f);
+
+// Get sample history for graphing
+Carbon_RateSample samples[120];
+int count = carbon_rate_get_history(rates, 0, 30.0f, samples, 120);
+for (int i = 0; i < count; i++) {
+    // Draw point at (samples[i].timestamp, samples[i].produced)
+}
+
+// Get latest sample
+Carbon_RateSample latest;
+if (carbon_rate_get_latest_sample(rates, 0, &latest)) {
+    printf("Latest: +%d/-%d at %.1fs\n",
+           latest.produced, latest.consumed, latest.timestamp);
+}
+
+// For turn-based games: force sample at end of turn
+carbon_rate_force_sample(rates);
+
+// Configuration queries
+float interval = carbon_rate_get_interval(rates);      // 0.5
+int history = carbon_rate_get_history_size(rates);     // 120
+float max_window = carbon_rate_get_max_time_window(rates);  // 60.0
+
+// Reset or cleanup
+carbon_rate_reset(rates);
+carbon_rate_destroy(rates);
+```
+
+**Key features:**
+- Multiple metrics tracked independently
+- Automatic periodic sampling at configurable intervals
+- Time window queries (last 10s, 30s, 60s, etc.)
+- Production/consumption tracking with net calculation
+- Min/max/mean/sum statistics
+- Sample history for UI graphs
+- Circular buffer for constant memory usage
+
+**Common patterns:**
+
+```c
+// Economy overview UI
+void draw_economy_panel(Carbon_RateTracker *rates) {
+    for (int i = 0; i < carbon_rate_get_metric_count(rates); i++) {
+        const char *name = carbon_rate_get_name(rates, i);
+        float rate = carbon_rate_get_net_rate(rates, i, 10.0f);
+
+        // Color based on positive/negative
+        uint32_t color = rate >= 0 ? COLOR_GREEN : COLOR_RED;
+        cui_label_colored(ui, name, color);
+        cui_label_printf(ui, "%+.1f/s", rate);
+    }
+}
+
+// Power grid status
+float power_production = carbon_rate_get_production_rate(rates, POWER, 5.0f);
+float power_consumption = carbon_rate_get_consumption_rate(rates, POWER, 5.0f);
+if (power_consumption > power_production) {
+    show_warning("Power deficit!");
+}
+```
 
 ## Event Dispatcher System
 

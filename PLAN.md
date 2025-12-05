@@ -1,507 +1,337 @@
 # Carbon Engine Feature Plan
 
-Features identified from the Railroad project that would be valuable additions to the Carbon game engine.
+Features extracted from Machinae codebase for potential addition to Carbon game engine.
 
-**STATUS: ALL FEATURES IMPLEMENTED** (December 2024)
+## Features Already in Carbon
+
+- Grid-based pathfinding (A*)
+- Sprite/animation system
+- Text rendering (TrueType + SDF)
+- UI system with themes
+- Camera system (2D and 3D)
+- Audio system
+- Save/load framework
+- Event dispatcher
+- Resource economy basics
+- Technology tree
+- Victory conditions
+- AI personality system
+- View model / data binding
+- Spatial hash index (O(1) entity lookup by grid cell)
+- Fog of war / exploration system
+- Rate tracking (rolling window metrics)
 
 ---
 
-## 1. Structured Logging System ✅
+## New Features to Add
 
-**Priority:** High | **Complexity:** Low | **Status:** Implemented
+### Priority 1: Core Infrastructure
 
-A file-based logging system with subsystem tags and log levels for debugging and post-mortem analysis.
+#### 1.1 Spatial Hash Index
+O(1) entity lookup by grid cell for efficient spatial queries.
 
-### API Design
+**Concept:**
+- Hash table mapping packed grid coordinates to entity/item indices
+- Operations: add, remove, query, move (all O(1))
+- Useful for: item pickup, collision detection, entity queries at location
 
+**API Sketch:**
 ```c
-// Log levels
+Carbon_SpatialIndex *carbon_spatial_create(int capacity);
+void carbon_spatial_add(index, int x, int y, uint32_t entity_id);
+void carbon_spatial_remove(index, int x, int y, uint32_t entity_id);
+uint32_t carbon_spatial_query(index, int x, int y);  // Returns entity or 0
+bool carbon_spatial_has(index, int x, int y);
+void carbon_spatial_move(index, int old_x, int old_y, int new_x, int new_y, uint32_t entity_id);
+void carbon_spatial_destroy(index);
+```
+
+#### 1.2 Network/Graph System (Power Grid)
+Union-find algorithm for connected component grouping with resource distribution.
+
+**Concept:**
+- Nodes (e.g., power poles) define coverage areas
+- Union-find groups connected nodes into networks
+- Each network tracks production vs consumption
+- Dirty flag for lazy recalculation
+
+**API Sketch:**
+```c
+Carbon_NetworkSystem *carbon_network_create(void);
+uint32_t carbon_network_add_node(network, int x, int y, int radius);
+void carbon_network_remove_node(network, uint32_t node_id);
+void carbon_network_set_production(network, uint32_t node_id, int32_t amount);
+void carbon_network_set_consumption(network, uint32_t node_id, int32_t amount);
+int carbon_network_get_group(network, uint32_t node_id);
+bool carbon_network_is_powered(network, int group_id);
+bool carbon_network_covers_cell(network, int x, int y);
+void carbon_network_recalculate(network);
+void carbon_network_destroy(network);
+```
+
+#### 1.3 Fog of War / Exploration System
+Per-cell exploration tracking with visibility radius.
+
+**Concept:**
+- Grid of exploration states: unexplored, explored, visible
+- Entities have vision radius
+- Cells become explored when within vision radius
+- Optional: shroud (explored but not currently visible)
+
+**API Sketch:**
+```c
+Carbon_FogOfWar *carbon_fog_create(int width, int height);
+void carbon_fog_set_vision_source(fog, int x, int y, int radius);
+void carbon_fog_clear_vision_sources(fog);
+void carbon_fog_update(fog);  // Recalculate visibility
+Carbon_VisibilityState carbon_fog_get_state(fog, int x, int y);  // UNEXPLORED, EXPLORED, VISIBLE
+bool carbon_fog_is_visible(fog, int x, int y);
+bool carbon_fog_is_explored(fog, int x, int y);
+void carbon_fog_reveal_all(fog);
+void carbon_fog_reset(fog);
+void carbon_fog_destroy(fog);
+```
+
+---
+
+### Priority 2: Gameplay Systems
+
+#### 2.1 Blueprint System
+Save and place building templates with relative positioning.
+
+**Concept:**
+- Capture selection of buildings into template
+- Store relative positions and rotations
+- Preview before placement
+- Validate placement (collision, resources)
+
+**API Sketch:**
+```c
+Carbon_Blueprint *carbon_blueprint_create(const char *name);
+void carbon_blueprint_add_entry(blueprint, int rel_x, int rel_y, int building_type, int direction);
+Carbon_Blueprint *carbon_blueprint_capture(buildings, int x1, int y1, int x2, int y2);
+bool carbon_blueprint_can_place(blueprint, int origin_x, int origin_y, validator_fn);
+void carbon_blueprint_get_entries(blueprint, Carbon_BlueprintEntry *out, int *count);
+void carbon_blueprint_rotate(blueprint);  // 90 degrees clockwise
+const char *carbon_blueprint_get_name(blueprint);
+void carbon_blueprint_destroy(blueprint);
+
+// Blueprint library
+Carbon_BlueprintLibrary *carbon_blueprint_library_create(int max_blueprints);
+void carbon_blueprint_library_add(library, Carbon_Blueprint *blueprint);
+Carbon_Blueprint *carbon_blueprint_library_get(library, int index);
+Carbon_Blueprint *carbon_blueprint_library_find(library, const char *name);
+void carbon_blueprint_library_destroy(library);
+```
+
+#### 2.2 Ghost Building / Construction Queue
+Planned buildings with progress tracking before actual construction.
+
+**Concept:**
+- Ghost = planned building, not yet constructed
+- Consumes resources when placed (or when construction starts)
+- Progress tracking (0% to 100%)
+- Different construction speeds (player vs AI)
+- Visual distinction from completed buildings
+
+**API Sketch:**
+```c
+Carbon_ConstructionQueue *carbon_construction_create(int max_ghosts);
+uint32_t carbon_construction_add_ghost(queue, int x, int y, int building_type, int direction);
+void carbon_construction_remove_ghost(queue, uint32_t ghost_id);
+void carbon_construction_update(queue, float delta_time);
+float carbon_construction_get_progress(queue, uint32_t ghost_id);
+void carbon_construction_set_speed(queue, uint32_t ghost_id, float speed);
+bool carbon_construction_is_complete(queue, uint32_t ghost_id);
+Carbon_Ghost *carbon_construction_get_ghost(queue, uint32_t ghost_id);
+void carbon_construction_set_callback(queue, construction_complete_fn, void *userdata);
+int carbon_construction_count(queue);
+void carbon_construction_destroy(queue);
+```
+
+#### 2.3 Task Queue for AI
+Sequential task execution system extending AI personality.
+
+**Concept:**
+- Queue of tasks for autonomous agents
+- Task types: move, explore, collect, craft, build, withdraw, mine, wait
+- Task lifecycle: pending, in_progress, completed, failed
+- Integration with pathfinding and crafting systems
+
+**API Sketch:**
+```c
+Carbon_TaskQueue *carbon_task_queue_create(int max_tasks);
+void carbon_task_queue_add_move(queue, int target_x, int target_y);
+void carbon_task_queue_add_explore(queue, int area_x, int area_y, int radius);
+void carbon_task_queue_add_collect(queue, int x, int y, int resource_type);
+void carbon_task_queue_add_craft(queue, int recipe_id, int quantity);
+void carbon_task_queue_add_build(queue, int x, int y, int building_type);
+void carbon_task_queue_add_wait(queue, float duration);
+Carbon_Task *carbon_task_queue_current(queue);
+void carbon_task_queue_advance(queue);  // Mark current complete, move to next
+void carbon_task_queue_fail(queue, const char *reason);
+void carbon_task_queue_clear(queue);
+int carbon_task_queue_count(queue);
+bool carbon_task_queue_is_empty(queue);
+void carbon_task_queue_destroy(queue);
+```
+
+---
+
+### Priority 3: Analytics & Feedback
+
+#### 3.1 Rate Tracking / Metrics History
+Rolling window metrics for production and consumption rates.
+
+**Concept:**
+- Periodic sampling of values (e.g., every 0.5s)
+- Circular buffer of samples (e.g., 120 samples = 60 seconds)
+- Multiple tracked metrics (resources, power, etc.)
+- Time window queries (last 10s, 30s, 60s)
+- Min/max/mean calculations
+
+**API Sketch:**
+```c
+Carbon_RateTracker *carbon_rate_tracker_create(int metric_count, float sample_interval, int history_size);
+void carbon_rate_tracker_update(tracker, float delta_time);
+void carbon_rate_tracker_record(tracker, int metric_id, int32_t produced, int32_t consumed);
+float carbon_rate_tracker_get_production_rate(tracker, int metric_id, float time_window);
+float carbon_rate_tracker_get_consumption_rate(tracker, int metric_id, float time_window);
+float carbon_rate_tracker_get_net_rate(tracker, int metric_id, float time_window);
+void carbon_rate_tracker_get_history(tracker, int metric_id, Carbon_RateSample *out, int *count);
+float carbon_rate_tracker_get_min(tracker, int metric_id, float time_window);
+float carbon_rate_tracker_get_max(tracker, int metric_id, float time_window);
+float carbon_rate_tracker_get_mean(tracker, int metric_id, float time_window);
+void carbon_rate_tracker_destroy(tracker);
+```
+
+#### 3.2 Dialog / Narrative System
+Event-driven dialog queue with speaker types.
+
+**Concept:**
+- Queue of messages with speaker attribution
+- Event-triggered dialogs (milestones, discoveries)
+- Event bitmask to prevent re-triggering
+- Speaker types (AI, player, system, custom)
+
+**API Sketch:**
+```c
+Carbon_DialogSystem *carbon_dialog_create(int max_messages);
+void carbon_dialog_queue_message(dialog, Carbon_Speaker speaker, const char *text);
+void carbon_dialog_queue_printf(dialog, Carbon_Speaker speaker, const char *fmt, ...);
+void carbon_dialog_register_event(dialog, int event_id, Carbon_Speaker speaker, const char *text);
+void carbon_dialog_trigger_event(dialog, int event_id);  // Only triggers once per event
+bool carbon_dialog_has_message(dialog);
+const Carbon_DialogMessage *carbon_dialog_current(dialog);
+void carbon_dialog_advance(dialog);
+void carbon_dialog_clear(dialog);
+void carbon_dialog_reset_events(dialog);  // Allow events to trigger again
+void carbon_dialog_destroy(dialog);
+
 typedef enum {
-    CARBON_LOG_LEVEL_ERROR = 0,   // Always logged, auto-flush
-    CARBON_LOG_LEVEL_WARNING = 1,
-    CARBON_LOG_LEVEL_INFO = 2,
-    CARBON_LOG_LEVEL_DEBUG = 3
-} Carbon_LogLevel;
-
-// Subsystem identifiers
-#define CARBON_LOG_CORE       "Core"
-#define CARBON_LOG_ECS        "ECS"
-#define CARBON_LOG_GRAPHICS   "Graphics"
-#define CARBON_LOG_AUDIO      "Audio"
-#define CARBON_LOG_INPUT      "Input"
-#define CARBON_LOG_AI         "AI"
-#define CARBON_LOG_UI         "UI"
-
-// API
-bool carbon_log_init(void);
-bool carbon_log_init_with_path(const char *path);
-void carbon_log_shutdown(void);
-void carbon_log_set_level(Carbon_LogLevel level);
-Carbon_LogLevel carbon_log_get_level(void);
-
-void carbon_log_error(const char *subsystem, const char *fmt, ...);
-void carbon_log_warning(const char *subsystem, const char *fmt, ...);
-void carbon_log_info(const char *subsystem, const char *fmt, ...);
-void carbon_log_debug(const char *subsystem, const char *fmt, ...);
-void carbon_log_flush(void);
+    CARBON_SPEAKER_SYSTEM,
+    CARBON_SPEAKER_PLAYER,
+    CARBON_SPEAKER_AI,
+    CARBON_SPEAKER_CUSTOM  // + custom ID
+} Carbon_Speaker;
 ```
-
-### Features
-
-- Timestamp + level + subsystem tagged output: `[2024-01-15 14:30:22] [ERROR] [Graphics  ] Failed to load texture`
-- Automatic flush on errors (for crash debugging)
-- Session start/end markers
-- Configurable log level filtering
-- File output to configurable path (default: `/tmp/carbon.log`)
-
-### Files
-
-- `include/carbon/log.h`
-- `src/core/log.c`
 
 ---
 
-## 2. Safe Arithmetic Library ✅
+### Priority 4: World Generation
 
-**Priority:** High | **Complexity:** Low | **Status:** Implemented
+#### 4.1 Biome System
+Terrain types affecting resource distribution and visuals.
 
-Overflow-protected integer arithmetic for financial calculations, scores, and resource systems.
+**Concept:**
+- Enum of biome types with properties
+- Affects resource spawn rates
+- Visual color coding
+- Integration with tilemap and world generation
 
-### API Design
-
+**API Sketch:**
 ```c
-// Overflow detection predicates (no side effects)
-bool carbon_would_multiply_overflow(int32_t a, int32_t b);
-bool carbon_would_add_overflow(int32_t a, int32_t b);
-bool carbon_would_subtract_overflow(int32_t a, int32_t b);
-
-// Safe operations (clamp to INT32_MAX/MIN on overflow, log warning)
-int32_t carbon_safe_multiply(int32_t a, int32_t b);
-int32_t carbon_safe_add(int32_t a, int32_t b);
-int32_t carbon_safe_subtract(int32_t a, int32_t b);
-
-// 64-bit variants
-bool carbon_would_multiply_overflow_i64(int64_t a, int64_t b);
-int64_t carbon_safe_multiply_i64(int64_t a, int64_t b);
-int64_t carbon_safe_add_i64(int64_t a, int64_t b);
-int64_t carbon_safe_subtract_i64(int64_t a, int64_t b);
+Carbon_BiomeSystem *carbon_biome_create(void);
+int carbon_biome_register(biomes, const char *name, uint32_t color, float resource_mult);
+void carbon_biome_set_resource_weight(biomes, int biome_id, int resource_type, float weight);
+int carbon_biome_get_best_for_resource(biomes, int resource_type);
+const char *carbon_biome_get_name(biomes, int biome_id);
+uint32_t carbon_biome_get_color(biomes, int biome_id);
+float carbon_biome_get_resource_weight(biomes, int biome_id, int resource_type);
+void carbon_biome_destroy(biomes);
 ```
 
-### Use Cases
+#### 4.2 Crafting State Machine
+Progress-based crafting with batch support and speed multipliers.
 
-- Resource economy systems
-- Score tracking
-- Financial calculations
-- Any game with potentially large numbers
+**Concept:**
+- Crafting progress (0.0 to 1.0)
+- Speed multipliers per crafter
+- Batch crafting (queue multiple)
+- Completion callbacks
+- Shared between player and AI
 
-### Files
-
-- `include/carbon/math_safe.h`
-- `src/core/math_safe.c`
+**API Sketch:**
+```c
+Carbon_CraftingState *carbon_crafting_create(void);
+bool carbon_crafting_start(crafting, int recipe_id, int quantity);
+void carbon_crafting_update(crafting, float delta_time);
+void carbon_crafting_set_speed(crafting, float multiplier);
+float carbon_crafting_get_progress(crafting);
+int carbon_crafting_get_remaining(crafting);
+bool carbon_crafting_is_active(crafting);
+void carbon_crafting_cancel(crafting);
+void carbon_crafting_set_callback(crafting, crafting_complete_fn, void *userdata);
+void carbon_crafting_destroy(crafting);
+```
 
 ---
 
-## 3. Notification/Toast System ✅
+### Priority 5: Simulation Control
 
-**Priority:** High | **Complexity:** Low | **Status:** Implemented
+#### 5.1 Game Speed System
+Variable simulation speed with pause support.
 
-Timed notification messages with color coding for player feedback.
+**Concept:**
+- Speed multipliers (0x pause, 1x, 2x, 4x, etc.)
+- Scaled delta time for game logic
+- UI remains at normal speed
+- Pause state separate from speed
 
-### API Design
-
+**API Sketch:**
 ```c
-#define CARBON_MAX_NOTIFICATIONS 8
-#define CARBON_NOTIFICATION_MAX_LEN 128
-
-typedef enum {
-    CARBON_NOTIFY_INFO,
-    CARBON_NOTIFY_SUCCESS,
-    CARBON_NOTIFY_WARNING,
-    CARBON_NOTIFY_ERROR
-} Carbon_NotifyType;
-
-typedef struct {
-    char message[CARBON_NOTIFICATION_MAX_LEN];
-    float time_remaining;
-    float r, g, b, a;
-    Carbon_NotifyType type;
-} Carbon_Notification;
-
-typedef struct Carbon_NotificationManager Carbon_NotificationManager;
-
-Carbon_NotificationManager *carbon_notify_create(void);
-void carbon_notify_destroy(Carbon_NotificationManager *mgr);
-
-void carbon_notify_add(Carbon_NotificationManager *mgr, const char *message, Carbon_NotifyType type);
-void carbon_notify_add_colored(Carbon_NotificationManager *mgr, const char *message,
-                                float r, float g, float b);
-void carbon_notify_printf(Carbon_NotificationManager *mgr, Carbon_NotifyType type,
-                          const char *fmt, ...);
-
-void carbon_notify_update(Carbon_NotificationManager *mgr, float dt);
-void carbon_notify_clear(Carbon_NotificationManager *mgr);
-
-int carbon_notify_count(Carbon_NotificationManager *mgr);
-const Carbon_Notification *carbon_notify_get(Carbon_NotificationManager *mgr, int index);
-
-// Optional: built-in rendering
-void carbon_notify_render(Carbon_NotificationManager *mgr, Carbon_TextRenderer *text,
-                          Carbon_Font *font, float x, float y, float spacing);
+Carbon_GameSpeed *carbon_game_speed_create(void);
+void carbon_game_speed_set(speed, float multiplier);  // 0.0 = pause, 1.0 = normal
+float carbon_game_speed_get(speed);
+void carbon_game_speed_pause(speed);
+void carbon_game_speed_resume(speed);
+bool carbon_game_speed_is_paused(speed);
+float carbon_game_speed_scale_delta(speed, float raw_delta);  // Returns scaled delta
+void carbon_game_speed_cycle(speed);  // Cycle through 1x -> 2x -> 4x -> 1x
+void carbon_game_speed_destroy(speed);
 ```
-
-### Features
-
-- Auto-expire after configurable duration (default 5 seconds)
-- FIFO queue with max limit
-- Color-coded by type (info=white, success=green, warning=yellow, error=red)
-- Stack rendering (newest on top or bottom)
-- Printf-style formatting
-
-### Files
-
-- `include/carbon/notification.h`
-- `src/ui/notification.c`
-
----
-
-## 4. Bresenham Line Cell Iterator ✅
-
-**Priority:** Medium | **Complexity:** Low | **Status:** Implemented
-
-Iterate over grid cells along a line for pathfinding, line-of-sight, and construction.
-
-### API Design
-
-```c
-// Callback returns false to stop iteration early
-typedef bool (*Carbon_LineCellCallback)(int32_t x, int32_t y, void *userdata);
-
-// Iterate over all cells along a line
-// Returns true if completed, false if callback stopped early
-bool carbon_iterate_line_cells(
-    int32_t from_x, int32_t from_y,
-    int32_t to_x, int32_t to_y,
-    Carbon_LineCellCallback callback,
-    void *userdata
-);
-
-// Variant that skips endpoints (useful when endpoints are special, e.g., cities)
-bool carbon_iterate_line_cells_ex(
-    int32_t from_x, int32_t from_y,
-    int32_t to_x, int32_t to_y,
-    Carbon_LineCellCallback callback,
-    void *userdata,
-    bool skip_start,
-    bool skip_end
-);
-
-// Count cells along a line (excluding endpoints)
-int carbon_count_line_cells(int32_t from_x, int32_t from_y, int32_t to_x, int32_t to_y);
-```
-
-### Use Cases
-
-- Line-of-sight checking
-- Ray casting on tile grids
-- Construction cost calculation along paths
-- Drawing lines on tilemaps
-- Checking terrain along routes
-
-### Files
-
-- `include/carbon/line.h` (or add to `include/carbon/helpers.h`)
-- `src/core/line.c` (or add to `src/core/containers.c`)
-
----
-
-## 5. Condition/Degradation System ✅
-
-**Priority:** Medium | **Complexity:** Medium | **Status:** Implemented
-
-Track object condition with time-based and usage-based decay for equipment, buildings, vehicles.
-
-### API Design
-
-```c
-// Condition status thresholds
-typedef enum {
-    CARBON_CONDITION_GOOD,      // >= 75%
-    CARBON_CONDITION_FAIR,      // >= 50%
-    CARBON_CONDITION_POOR,      // >= 25%
-    CARBON_CONDITION_CRITICAL   // < 25%
-} Carbon_ConditionStatus;
-
-// Quality tiers affect decay rates
-typedef enum {
-    CARBON_QUALITY_LOW,
-    CARBON_QUALITY_STANDARD,
-    CARBON_QUALITY_HIGH
-} Carbon_QualityTier;
-
-typedef struct {
-    float condition;           // 0.0 - 100.0
-    float max_condition;       // Usually 100.0
-    Carbon_QualityTier quality;
-    bool is_damaged;           // Requires repair before use
-    uint32_t usage_count;      // Total uses
-} Carbon_Condition;
-
-// Decay rate multipliers by quality
-#define CARBON_DECAY_MULT_LOW      1.5f
-#define CARBON_DECAY_MULT_STANDARD 1.0f
-#define CARBON_DECAY_MULT_HIGH     0.5f
-
-void carbon_condition_init(Carbon_Condition *cond, Carbon_QualityTier quality);
-void carbon_condition_decay_time(Carbon_Condition *cond, float amount);
-void carbon_condition_decay_usage(Carbon_Condition *cond, float amount);
-void carbon_condition_repair(Carbon_Condition *cond, float amount);
-void carbon_condition_repair_full(Carbon_Condition *cond);
-void carbon_condition_damage(Carbon_Condition *cond);
-
-Carbon_ConditionStatus carbon_condition_get_status(const Carbon_Condition *cond);
-float carbon_condition_get_percent(const Carbon_Condition *cond);
-float carbon_condition_get_failure_probability(const Carbon_Condition *cond, float base_rate);
-
-// Cost calculation for repairs
-int32_t carbon_condition_get_repair_cost(const Carbon_Condition *cond, int32_t base_cost);
-```
-
-### Features
-
-- Quality tiers affect decay rates
-- Separate time-based and usage-based decay
-- Damage flag for blocking usage until repaired
-- Status thresholds (good/fair/poor/critical)
-- Failure probability calculation based on condition
-- Repair cost scaling
-
-### Files
-
-- `include/carbon/condition.h`
-- `src/strategy/condition.c`
-
----
-
-## 6. Financial Period Tracking ✅
-
-**Priority:** Medium | **Complexity:** Medium | **Status:** Implemented
-
-Track revenue and expenses over rolling time periods for economy games.
-
-### API Design
-
-```c
-typedef struct {
-    int32_t revenue;
-    int32_t expenses;
-} Carbon_FinancialPeriod;
-
-typedef struct {
-    // Current accumulator
-    Carbon_FinancialPeriod current;
-
-    // Historical periods
-    Carbon_FinancialPeriod last_period;
-    Carbon_FinancialPeriod all_time;
-
-    // Rolling history (circular buffer)
-    Carbon_FinancialPeriod history[12];
-    int history_index;
-    int history_count;
-
-    // Timing
-    float period_duration;     // Seconds per period
-    float time_in_period;      // Current progress
-    int periods_elapsed;       // Total periods completed
-} Carbon_FinancialTracker;
-
-Carbon_FinancialTracker *carbon_finances_create(float period_duration);
-void carbon_finances_destroy(Carbon_FinancialTracker *tracker);
-
-void carbon_finances_record_revenue(Carbon_FinancialTracker *tracker, int32_t amount);
-void carbon_finances_record_expense(Carbon_FinancialTracker *tracker, int32_t amount);
-void carbon_finances_update(Carbon_FinancialTracker *tracker, float dt);
-
-// Queries
-int32_t carbon_finances_get_profit(const Carbon_FinancialPeriod *period);
-int32_t carbon_finances_get_current_revenue(const Carbon_FinancialTracker *tracker);
-int32_t carbon_finances_get_current_expenses(const Carbon_FinancialTracker *tracker);
-int32_t carbon_finances_get_current_profit(const Carbon_FinancialTracker *tracker);
-
-// Get sum of last N periods
-Carbon_FinancialPeriod carbon_finances_sum_periods(const Carbon_FinancialTracker *tracker, int count);
-
-// Callbacks for period rollover
-typedef void (*Carbon_FinancePeriodCallback)(const Carbon_FinancialPeriod *completed, void *userdata);
-void carbon_finances_set_period_callback(Carbon_FinancialTracker *tracker,
-                                          Carbon_FinancePeriodCallback callback, void *userdata);
-```
-
-### Files
-
-- `include/carbon/finances.h`
-- `src/strategy/finances.c`
-
----
-
-## 7. Loan/Credit System ✅
-
-**Priority:** Low | **Complexity:** Medium | **Status:** Implemented
-
-Tiered loan system with interest for economy games.
-
-### API Design
-
-```c
-typedef struct {
-    const char *name;
-    int32_t principal;        // Amount to borrow
-    float interest_rate;      // Per period (e.g., 0.01 = 1%)
-} Carbon_LoanTier;
-
-typedef struct {
-    int active_tier;              // -1 if no loan
-    int32_t principal;            // Original amount
-    int32_t amount_owed;          // Current balance
-    int32_t total_interest_paid;  // Lifetime interest
-} Carbon_LoanState;
-
-typedef struct Carbon_LoanSystem Carbon_LoanSystem;
-
-Carbon_LoanSystem *carbon_loan_create(void);
-void carbon_loan_destroy(Carbon_LoanSystem *loans);
-
-void carbon_loan_add_tier(Carbon_LoanSystem *loans, const char *name,
-                          int32_t principal, float interest_rate);
-
-bool carbon_loan_can_take(const Carbon_LoanState *state);
-bool carbon_loan_take(Carbon_LoanState *state, const Carbon_LoanSystem *loans,
-                      int tier, int32_t *out_money);
-
-bool carbon_loan_can_repay(const Carbon_LoanState *state, int32_t available_money);
-bool carbon_loan_repay(Carbon_LoanState *state, int32_t *out_cost);
-
-void carbon_loan_charge_interest(Carbon_LoanState *state, const Carbon_LoanSystem *loans);
-
-int carbon_loan_get_tier_count(const Carbon_LoanSystem *loans);
-const Carbon_LoanTier *carbon_loan_get_tier(const Carbon_LoanSystem *loans, int index);
-```
-
-### Files
-
-- `include/carbon/loan.h`
-- `src/strategy/loan.c`
-
----
-
-## 8. Dynamic Demand System ✅
-
-**Priority:** Low | **Complexity:** Medium | **Status:** Implemented
-
-Demand values that respond to service levels for economy/logistics games.
-
-### API Design
-
-```c
-#define CARBON_DEMAND_MIN 0
-#define CARBON_DEMAND_MAX 100
-
-typedef struct {
-    uint8_t demand;           // Current demand (0-100)
-    uint8_t equilibrium;      // Natural resting point
-    uint8_t min_demand;       // Floor
-    uint8_t max_demand;       // Ceiling
-
-    float update_interval;    // Seconds between updates
-    float time_since_update;
-    uint32_t service_count;   // Services since last update
-
-    float growth_per_service; // Demand increase per service
-    float decay_rate;         // Demand decrease per update without service
-} Carbon_Demand;
-
-void carbon_demand_init(Carbon_Demand *demand, uint8_t initial, uint8_t equilibrium);
-void carbon_demand_record_service(Carbon_Demand *demand);
-void carbon_demand_update(Carbon_Demand *demand, float dt);
-
-uint8_t carbon_demand_get(const Carbon_Demand *demand);
-float carbon_demand_get_multiplier(const Carbon_Demand *demand);  // 0.5 - 2.0
-```
-
-### Files
-
-- `include/carbon/demand.h`
-- `src/strategy/demand.c`
-
----
-
-## 9. Incident/Random Event System ✅
-
-**Priority:** Low | **Complexity:** Medium | **Status:** Implemented
-
-Probabilistic event system for random failures and events.
-
-### API Design
-
-```c
-typedef enum {
-    CARBON_INCIDENT_NONE = 0,
-    CARBON_INCIDENT_MINOR = 1,     // Temporary effect
-    CARBON_INCIDENT_MAJOR = 2,     // Lasting effect
-    CARBON_INCIDENT_CRITICAL = 4   // Severe consequence
-} Carbon_IncidentType;
-
-typedef struct {
-    float base_probability;        // Base chance (0.0 - 1.0)
-    float minor_threshold;         // Roll below = minor (e.g., 0.70)
-    float major_threshold;         // Roll below = major (e.g., 0.90)
-    // Above major_threshold = critical
-} Carbon_IncidentConfig;
-
-// Calculate incident probability based on condition
-float carbon_incident_calc_probability(float condition, float quality_mult);
-
-// Roll for incident
-Carbon_IncidentType carbon_incident_check(float probability, const Carbon_IncidentConfig *config);
-
-// Convenience for condition-based incidents
-Carbon_IncidentType carbon_incident_check_condition(const Carbon_Condition *cond,
-                                                     const Carbon_IncidentConfig *config);
-```
-
-### Files
-
-- `include/carbon/incident.h`
-- `src/strategy/incident.c`
 
 ---
 
 ## Implementation Order
 
-All phases completed in December 2024.
-
-### Phase 1: Core Utilities ✅
-1. **Logging System** - `include/carbon/log.h`, `src/core/log.c`
-2. **Safe Arithmetic** - `include/carbon/math_safe.h`, `src/core/math_safe.c`
-3. **Notification System** - `include/carbon/notification.h`, `src/ui/notification.c`
-
-### Phase 2: Grid Utilities ✅
-4. **Line Cell Iterator** - `include/carbon/line.h`, `src/core/line.c`
-
-### Phase 3: Strategy Game Systems ✅
-5. **Condition/Degradation** - `include/carbon/condition.h`, `src/strategy/condition.c`
-6. **Financial Tracking** - `include/carbon/finances.h`, `src/strategy/finances.c`
-
-### Phase 4: Advanced Economy ✅
-7. **Loan System** - `include/carbon/loan.h`, `src/strategy/loan.c`
-8. **Demand System** - `include/carbon/demand.h`, `src/strategy/demand.c`
-9. **Incident System** - `include/carbon/incident.h`, `src/strategy/incident.c`
+1. ~~**Spatial Hash Index** - Foundation for other systems~~ ✅ DONE
+2. ~~**Fog of War** - Common strategy game requirement~~ ✅ DONE
+3. ~~**Rate Tracking** - Useful analytics for economy games~~ ✅ DONE
+4. **Task Queue** - Extends existing AI system
+5. **Network System** - Power/resource distribution
+6. **Blueprint System** - UX improvement for builders
+7. **Ghost Building** - Pairs with blueprints
+8. **Dialog System** - Narrative integration
+9. **Game Speed** - Simulation control
+10. **Crafting State Machine** - Extends resource system
+11. **Biome System** - World generation enhancement
 
 ---
 
 ## Notes
 
-- All systems should integrate with the existing Carbon event dispatcher where appropriate
-- Safe arithmetic should log warnings via the logging system
-- Financial and loan systems should use safe arithmetic internally
-- Consider adding these to `carbon_game_context_create()` as optional systems
+- All systems should integrate with existing Carbon patterns (error handling, validation, events)
+- Each system should have corresponding unit tests in `tests/`
+- Documentation should be added to `CLAUDE.md` following existing format
+- Consider ECS integration where appropriate (components for fog, network nodes, etc.)
