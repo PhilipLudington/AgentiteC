@@ -71,7 +71,8 @@ src/
 │   ├── fog.c           # Fog of war / exploration system
 │   ├── rate.c          # Rate tracking / rolling metrics
 │   ├── network.c       # Network/graph system (power grid)
-│   └── blueprint.c     # Blueprint system for building templates
+│   ├── blueprint.c     # Blueprint system for building templates
+│   └── construction.c  # Ghost building / construction queue
 ├── ui/                 # Immediate-mode GUI system
 │   └── viewmodel.c     # Observable values for UI data binding
 └── game/               # Game-specific logic
@@ -110,7 +111,8 @@ include/carbon/
 ├── fog.h               # Fog of war / exploration API
 ├── rate.h              # Rate tracking / rolling metrics API
 ├── network.h           # Network/graph system API
-└── blueprint.h         # Blueprint system API
+├── blueprint.h         # Blueprint system API
+└── construction.h      # Ghost building / construction queue API
 
 lib/
 ├── flecs.h/.c          # Flecs ECS library (v4.0.0)
@@ -1368,6 +1370,190 @@ void save_blueprint(Carbon_Blueprint *bp, FILE *f) {
         const Carbon_BlueprintEntry *e = carbon_blueprint_get_entry(bp, i);
         fprintf(f, "%d,%d,%d,%d,%u\n", e->rel_x, e->rel_y,
                 e->building_type, e->direction, e->metadata);
+    }
+}
+```
+
+## Construction Queue / Ghost Building System
+
+Planned buildings with progress tracking before actual construction. Supports ghost/preview buildings, construction progress, speed modifiers, and completion callbacks:
+
+```c
+#include "carbon/construction.h"
+
+// Create construction queue
+Carbon_ConstructionQueue *queue = carbon_construction_create(32);
+
+// Add ghost building (planned, not yet constructed)
+uint32_t ghost = carbon_construction_add_ghost(queue, 10, 20, BUILDING_FACTORY, 0);
+
+// Or with extended options (duration, faction)
+uint32_t ghost2 = carbon_construction_add_ghost_ex(queue, 15, 20,
+    BUILDING_POWERPLANT, 0,   // type, direction
+    30.0f,                     // base duration in seconds
+    player_faction);           // owning faction
+
+// Start construction (changes status from PENDING to CONSTRUCTING)
+carbon_construction_start(queue, ghost);
+
+// Set construction speed (based on workers assigned, upgrades, etc.)
+carbon_construction_set_speed(queue, ghost, 1.5f);  // 1.5x normal speed
+
+// Assign a builder entity
+carbon_construction_set_builder(queue, ghost, worker_entity);
+
+// In game loop - update construction progress:
+carbon_construction_update(queue, delta_time);
+
+// Query progress
+float progress = carbon_construction_get_progress(queue, ghost);  // 0.0 to 1.0
+float remaining = carbon_construction_get_remaining_time(queue, ghost);  // seconds
+
+// Check for completion
+if (carbon_construction_is_complete(queue, ghost)) {
+    Carbon_Ghost *g = carbon_construction_get_ghost(queue, ghost);
+    create_actual_building(g->x, g->y, g->building_type, g->direction);
+    carbon_construction_remove_ghost(queue, ghost);
+}
+
+// Pause/resume construction
+carbon_construction_pause(queue, ghost);
+carbon_construction_resume(queue, ghost);
+
+// Cancel construction (triggers callback with CANCELLED status)
+carbon_construction_cancel_ghost(queue, ghost);
+
+// Find ghost at position
+uint32_t found = carbon_construction_find_at(queue, 10, 20);
+if (found != CARBON_GHOST_INVALID) {
+    // Ghost exists at this position
+}
+
+// Check if position has a ghost
+if (carbon_construction_has_ghost_at(queue, 10, 20)) {
+    // Cannot place another building here
+}
+
+// Worker-based construction (add progress directly)
+carbon_construction_add_progress(queue, ghost, 0.01f);  // Add 1% progress
+
+// Instant completion (cheat/ability)
+carbon_construction_complete_instant(queue, ghost);
+
+// Query by faction
+uint32_t handles[64];
+int count = carbon_construction_get_by_faction(queue, player_faction, handles, 64);
+int active = carbon_construction_count_active_by_faction(queue, player_faction);
+
+// Query by builder
+int builder_jobs = carbon_construction_find_by_builder(queue, worker_entity, handles, 64);
+
+// Queue statistics
+int total = carbon_construction_count(queue);
+int constructing = carbon_construction_count_active(queue);
+int complete = carbon_construction_count_complete(queue);
+bool full = carbon_construction_is_full(queue);
+int capacity = carbon_construction_capacity(queue);
+
+// Cleanup
+carbon_construction_destroy(queue);
+```
+
+**Completion callbacks:**
+
+```c
+// Callback when ghost completes or is cancelled
+void on_construction_done(Carbon_ConstructionQueue *queue,
+                          const Carbon_Ghost *ghost, void *userdata) {
+    Game *game = userdata;
+
+    if (ghost->status == CARBON_GHOST_COMPLETE) {
+        printf("Completed %s at (%d, %d)\n",
+               building_name(ghost->building_type),
+               ghost->x, ghost->y);
+        // Create actual building, play sound, etc.
+        create_building(game, ghost->x, ghost->y,
+                        ghost->building_type, ghost->direction);
+    } else if (ghost->status == CARBON_GHOST_CANCELLED) {
+        printf("Construction cancelled\n");
+        // Refund resources, etc.
+        refund_building_cost(game, ghost->building_type);
+    }
+}
+carbon_construction_set_callback(queue, on_construction_done, game);
+```
+
+**Condition callbacks (resource checking):**
+
+```c
+// Only allow construction when resources are available
+bool can_continue_building(Carbon_ConstructionQueue *queue,
+                            const Carbon_Ghost *ghost, void *userdata) {
+    Game *game = userdata;
+    // Check if we have resources to continue
+    // (e.g., power, workers, materials)
+    return has_construction_resources(game, ghost->faction_id);
+}
+carbon_construction_set_condition_callback(queue, can_continue_building, game);
+```
+
+**Ghost statuses:**
+- `CARBON_GHOST_PENDING` - Waiting to start construction
+- `CARBON_GHOST_CONSTRUCTING` - Construction in progress
+- `CARBON_GHOST_COMPLETE` - Construction finished
+- `CARBON_GHOST_CANCELLED` - Construction cancelled
+- `CARBON_GHOST_PAUSED` - Construction paused
+
+**Key features:**
+- Progress-based construction with time duration
+- Speed multipliers for upgrades and worker bonuses
+- Builder assignment for worker-based construction
+- Faction tracking for multiplayer/AI
+- Pause/resume/cancel support
+- Condition callbacks for resource checking
+- Completion callbacks for game integration
+- Metadata and userdata for game-specific extensions
+
+**Common patterns:**
+
+```c
+// Ghost preview rendering
+void render_ghosts(Game *game, Carbon_ConstructionQueue *queue) {
+    uint32_t handles[64];
+    int count = carbon_construction_get_all(queue, handles, 64);
+
+    for (int i = 0; i < count; i++) {
+        const Carbon_Ghost *g = carbon_construction_get_ghost_const(queue, handles[i]);
+
+        // Draw ghost sprite with transparency
+        float alpha = 0.5f + 0.3f * g->progress;  // More opaque as construction progresses
+        draw_building_ghost(g->x, g->y, g->building_type, g->direction, alpha);
+
+        // Draw progress bar
+        if (g->status == CARBON_GHOST_CONSTRUCTING) {
+            draw_progress_bar(g->x, g->y, g->progress);
+        }
+    }
+}
+
+// Assign workers to construction
+void assign_worker_to_building(Game *game, uint32_t worker, uint32_t ghost) {
+    carbon_construction_set_builder(game->construction, ghost, worker);
+    // Set worker task to build
+    carbon_task_queue_add_build(get_worker_tasks(game, worker),
+                                 ghost_x, ghost_y, 0);
+}
+
+// Calculate speed based on workers
+void update_construction_speed(Game *game) {
+    uint32_t handles[64];
+    int count = carbon_construction_get_all(game->construction, handles, 64);
+
+    for (int i = 0; i < count; i++) {
+        uint32_t ghost = handles[i];
+        int workers = count_workers_at_site(game, ghost);
+        float speed = 1.0f + (workers - 1) * 0.5f;  // +50% per extra worker
+        carbon_construction_set_speed(game->construction, ghost, speed);
     }
 }
 ```
