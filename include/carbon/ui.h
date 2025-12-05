@@ -81,20 +81,47 @@ typedef struct CUI_LayoutFrame {
 
 /* Theme colors and metrics */
 typedef struct CUI_Theme {
+    /* Background colors */
     uint32_t bg_panel;
     uint32_t bg_widget;
     uint32_t bg_widget_hover;
     uint32_t bg_widget_active;
     uint32_t bg_widget_disabled;
+
+    /* Border */
     uint32_t border;
+
+    /* Text colors */
     uint32_t text;
     uint32_t text_dim;
+    uint32_t text_highlight;
+    uint32_t text_disabled;
+
+    /* Accent color (primary interactive color) */
     uint32_t accent;
+    uint32_t accent_hover;
+    uint32_t accent_active;
+
+    /* Semantic colors */
+    uint32_t success;           /* Green - positive actions, confirmations */
+    uint32_t success_hover;
+    uint32_t warning;           /* Yellow/Orange - caution, attention */
+    uint32_t warning_hover;
+    uint32_t danger;            /* Red - destructive actions, errors */
+    uint32_t danger_hover;
+    uint32_t info;              /* Blue - informational, neutral highlights */
+    uint32_t info_hover;
+
+    /* Widget-specific colors */
     uint32_t checkbox_check;
     uint32_t slider_track;
     uint32_t slider_grab;
     uint32_t scrollbar;
     uint32_t scrollbar_grab;
+    uint32_t progress_fill;     /* Progress bar fill color */
+    uint32_t selection;         /* Text selection background */
+
+    /* Metrics */
     float corner_radius;
     float border_width;
     float widget_height;
@@ -284,6 +311,13 @@ void cui_label_colored(CUI_Context *ctx, const char *text, uint32_t color);
 bool cui_button(CUI_Context *ctx, const char *label);
 bool cui_button_ex(CUI_Context *ctx, const char *label, float width, float height);
 
+/* Semantic button variants (colored by theme semantic colors) */
+bool cui_button_primary(CUI_Context *ctx, const char *label);
+bool cui_button_success(CUI_Context *ctx, const char *label);
+bool cui_button_warning(CUI_Context *ctx, const char *label);
+bool cui_button_danger(CUI_Context *ctx, const char *label);
+bool cui_button_info(CUI_Context *ctx, const char *label);
+
 /* Toggle widgets */
 bool cui_checkbox(CUI_Context *ctx, const char *label, bool *value);
 bool cui_radio(CUI_Context *ctx, const char *label, int *value, int option);
@@ -307,6 +341,8 @@ bool cui_listbox(CUI_Context *ctx, const char *label, int *selected,
 
 /* Progress display */
 void cui_progress_bar(CUI_Context *ctx, float value, float min, float max);
+void cui_progress_bar_colored(CUI_Context *ctx, float value, float min, float max,
+                               uint32_t fill_color);
 
 /* Collapsible sections */
 bool cui_collapsing_header(CUI_Context *ctx, const char *label);
@@ -364,6 +400,8 @@ uint32_t cui_rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 uint32_t cui_rgb(uint8_t r, uint8_t g, uint8_t b);
 uint32_t cui_color_lerp(uint32_t a, uint32_t b, float t);
 uint32_t cui_color_alpha(uint32_t color, float alpha);
+uint32_t cui_color_brighten(uint32_t color, float amount);
+uint32_t cui_color_darken(uint32_t color, float amount);
 
 /* Rect helpers */
 bool cui_rect_contains(CUI_Rect rect, float x, float y);
@@ -371,6 +409,24 @@ CUI_Rect cui_rect_intersect(CUI_Rect a, CUI_Rect b);
 
 /* Get persistent widget state */
 CUI_WidgetState *cui_get_state(CUI_Context *ctx, CUI_Id id);
+
+/* ============================================================================
+ * Theme System
+ * ============================================================================ */
+
+/* Get predefined theme presets */
+CUI_Theme cui_theme_dark(void);
+CUI_Theme cui_theme_light(void);
+
+/* Get/set current theme */
+void cui_set_theme(CUI_Context *ctx, const CUI_Theme *theme);
+const CUI_Theme *cui_get_theme(const CUI_Context *ctx);
+
+/* Theme customization helpers */
+void cui_theme_set_accent(CUI_Theme *theme, uint32_t color);
+void cui_theme_set_semantic_colors(CUI_Theme *theme,
+                                    uint32_t success, uint32_t warning,
+                                    uint32_t danger, uint32_t info);
 
 #ifdef __cplusplus
 }

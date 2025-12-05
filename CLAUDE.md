@@ -1434,6 +1434,132 @@ carbon_vm_destroy(vm);
 - Computed values with automatic dependency tracking
 - Event dispatcher integration
 
+## UI Theme System
+
+Semantic color system with predefined themes and easy customization:
+
+```c
+#include "carbon/ui.h"
+
+// Get predefined theme presets
+CUI_Theme dark_theme = cui_theme_dark();   // Default dark theme
+CUI_Theme light_theme = cui_theme_light(); // Light theme variant
+
+// Apply theme to UI context
+cui_set_theme(ui, &dark_theme);
+
+// Get current theme for reading
+const CUI_Theme *current = cui_get_theme(ui);
+
+// Customize accent color (updates related colors automatically)
+CUI_Theme custom = cui_theme_dark();
+cui_theme_set_accent(&custom, cui_rgb(100, 150, 255));  // Blue accent
+cui_set_theme(ui, &custom);
+
+// Set semantic colors (success, warning, danger, info)
+cui_theme_set_semantic_colors(&custom,
+    cui_rgb(80, 200, 120),   // success - green
+    cui_rgb(255, 180, 50),   // warning - orange
+    cui_rgb(240, 80, 80),    // danger - red
+    cui_rgb(80, 150, 240));  // info - blue
+
+// Use semantic button variants
+if (cui_button_primary(ui, "Save")) {
+    // Accent-colored button
+}
+if (cui_button_success(ui, "Confirm")) {
+    // Green success button
+}
+if (cui_button_warning(ui, "Caution")) {
+    // Orange warning button
+}
+if (cui_button_danger(ui, "Delete")) {
+    // Red danger button for destructive actions
+}
+if (cui_button_info(ui, "Help")) {
+    // Blue info button
+}
+
+// Colored progress bars
+cui_progress_bar(ui, health, 0, 100);  // Uses theme.progress_fill
+cui_progress_bar_colored(ui, health, 0, 100, current->success);  // Green health bar
+cui_progress_bar_colored(ui, mana, 0, 100, current->info);       // Blue mana bar
+
+// Color helper functions
+uint32_t lighter = cui_color_brighten(color, 0.2f);  // 20% brighter
+uint32_t darker = cui_color_darken(color, 0.2f);     // 20% darker
+uint32_t faded = cui_color_alpha(color, 0.5f);       // 50% opacity
+uint32_t blended = cui_color_lerp(color1, color2, 0.5f);  // 50% blend
+
+// Direct theme color access for custom widgets
+cui_draw_rect(ctx, x, y, w, h, current->success);  // Green rect
+cui_label_colored(ui, "Error!", current->danger);   // Red text
+```
+
+**Theme structure colors:**
+```c
+typedef struct CUI_Theme {
+    /* Background colors */
+    uint32_t bg_panel;              // Panel/window background
+    uint32_t bg_widget;             // Widget background (normal)
+    uint32_t bg_widget_hover;       // Widget background (hovered)
+    uint32_t bg_widget_active;      // Widget background (pressed/active)
+    uint32_t bg_widget_disabled;    // Widget background (disabled)
+
+    /* Border */
+    uint32_t border;                // Border color
+
+    /* Text colors */
+    uint32_t text;                  // Primary text
+    uint32_t text_dim;              // Secondary/dimmed text
+    uint32_t text_highlight;        // Highlighted text (white in dark, black in light)
+    uint32_t text_disabled;         // Disabled text
+
+    /* Accent color */
+    uint32_t accent;                // Primary interactive color
+    uint32_t accent_hover;          // Accent when hovered
+    uint32_t accent_active;         // Accent when pressed
+
+    /* Semantic colors */
+    uint32_t success, success_hover;  // Green - positive/confirm
+    uint32_t warning, warning_hover;  // Orange - caution/attention
+    uint32_t danger, danger_hover;    // Red - destructive/error
+    uint32_t info, info_hover;        // Blue - informational
+
+    /* Widget-specific */
+    uint32_t checkbox_check;        // Checkmark color
+    uint32_t slider_track;          // Slider track background
+    uint32_t slider_grab;           // Slider handle
+    uint32_t scrollbar;             // Scrollbar track
+    uint32_t scrollbar_grab;        // Scrollbar thumb
+    uint32_t progress_fill;         // Progress bar fill
+    uint32_t selection;             // Text selection background
+
+    /* Metrics */
+    float corner_radius;            // Rounded corner radius (default: 4)
+    float border_width;             // Border thickness (default: 1)
+    float widget_height;            // Standard widget height (default: 28)
+    float spacing;                  // Inter-widget spacing (default: 4)
+    float padding;                  // Inner padding (default: 8)
+    float scrollbar_width;          // Scrollbar width (default: 12)
+} CUI_Theme;
+```
+
+**Semantic button variants:**
+- `cui_button_primary()` - Accent-colored for primary actions
+- `cui_button_success()` - Green for confirmations, positive actions
+- `cui_button_warning()` - Orange for cautionary actions
+- `cui_button_danger()` - Red for destructive actions (delete, cancel)
+- `cui_button_info()` - Blue for informational actions (help, details)
+
+**Key features:**
+- Predefined dark and light themes
+- Semantic colors for consistent UI meaning
+- Easy accent color customization
+- Color helper functions (brighten, darken, alpha, lerp)
+- Semantic button variants for common actions
+- All colors in packed ABGR format (0xAABBGGRR)
+
 ## Quick Start (New Game)
 
 The recommended way to start a new game is using the game template:

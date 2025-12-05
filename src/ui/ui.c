@@ -16,31 +16,160 @@ extern bool cui_load_font(CUI_Context *ctx, const char *path, float size);
 extern void cui_free_font(CUI_Context *ctx);
 
 /* ============================================================================
- * Default Theme
+ * Theme System
  * ============================================================================ */
+
+CUI_Theme cui_theme_dark(void)
+{
+    CUI_Theme theme = {0};
+
+    /* Background colors */
+    theme.bg_panel          = 0xF21A1A2E;  /* Dark blue, slight transparency */
+    theme.bg_widget         = 0xFF3D3D4A;  /* Gray */
+    theme.bg_widget_hover   = 0xFF4D4D5A;  /* Lighter gray */
+    theme.bg_widget_active  = 0xFF2D2D3A;  /* Darker gray */
+    theme.bg_widget_disabled = 0xFF252530; /* Very dark */
+
+    /* Border */
+    theme.border            = 0xFF4A4A5A;  /* Medium gray */
+
+    /* Text colors */
+    theme.text              = 0xFFE0E0E0;  /* Light gray */
+    theme.text_dim          = 0xFF808080;  /* Dim gray */
+    theme.text_highlight    = 0xFFFFFFFF;  /* White */
+    theme.text_disabled     = 0xFF505050;  /* Dark gray */
+
+    /* Accent color (copper/orange) */
+    theme.accent            = 0xFFEF9A4D;  /* Copper (ABGR) */
+    theme.accent_hover      = 0xFFFFA85D;  /* Lighter copper */
+    theme.accent_active     = 0xFFDF8A3D;  /* Darker copper */
+
+    /* Semantic colors */
+    theme.success           = 0xFF50C878;  /* Emerald green */
+    theme.success_hover     = 0xFF60D888;  /* Lighter green */
+    theme.warning           = 0xFF50BFFF;  /* Orange (ABGR) */
+    theme.warning_hover     = 0xFF60CFFF;  /* Lighter orange */
+    theme.danger            = 0xFF5050EF;  /* Red (ABGR) */
+    theme.danger_hover      = 0xFF6060FF;  /* Lighter red */
+    theme.info              = 0xFFEFAF50;  /* Blue (ABGR) */
+    theme.info_hover        = 0xFFFFBF60;  /* Lighter blue */
+
+    /* Widget-specific colors */
+    theme.checkbox_check    = 0xFFFFFFFF;  /* White */
+    theme.slider_track      = 0xFF2A2A3A;  /* Dark */
+    theme.slider_grab       = 0xFFEF9A4D;  /* Accent */
+    theme.scrollbar         = 0x80404050;  /* Semi-transparent */
+    theme.scrollbar_grab    = 0xC0606070;  /* Lighter */
+    theme.progress_fill     = 0xFFEF9A4D;  /* Accent */
+    theme.selection         = 0x804D9AEF;  /* Semi-transparent accent */
+
+    /* Metrics */
+    theme.corner_radius     = 4.0f;
+    theme.border_width      = 1.0f;
+    theme.widget_height     = 28.0f;
+    theme.spacing           = 4.0f;
+    theme.padding           = 8.0f;
+    theme.scrollbar_width   = 12.0f;
+
+    return theme;
+}
+
+CUI_Theme cui_theme_light(void)
+{
+    CUI_Theme theme = {0};
+
+    /* Background colors */
+    theme.bg_panel          = 0xF2F5F5F5;  /* Light gray, slight transparency */
+    theme.bg_widget         = 0xFFFFFFFF;  /* White */
+    theme.bg_widget_hover   = 0xFFE8E8E8;  /* Light gray */
+    theme.bg_widget_active  = 0xFFD0D0D0;  /* Medium gray */
+    theme.bg_widget_disabled = 0xFFF0F0F0; /* Very light gray */
+
+    /* Border */
+    theme.border            = 0xFFC0C0C0;  /* Light gray border */
+
+    /* Text colors */
+    theme.text              = 0xFF202020;  /* Dark gray */
+    theme.text_dim          = 0xFF707070;  /* Medium gray */
+    theme.text_highlight    = 0xFF000000;  /* Black */
+    theme.text_disabled     = 0xFFA0A0A0;  /* Light gray */
+
+    /* Accent color (blue) */
+    theme.accent            = 0xFFD07020;  /* Blue (ABGR) */
+    theme.accent_hover      = 0xFFE08030;  /* Lighter blue */
+    theme.accent_active     = 0xFFC06010;  /* Darker blue */
+
+    /* Semantic colors */
+    theme.success           = 0xFF40A060;  /* Green */
+    theme.success_hover     = 0xFF50B070;  /* Lighter green */
+    theme.warning           = 0xFF30A0E0;  /* Orange (ABGR) */
+    theme.warning_hover     = 0xFF40B0F0;  /* Lighter orange */
+    theme.danger            = 0xFF4040D0;  /* Red (ABGR) */
+    theme.danger_hover      = 0xFF5050E0;  /* Lighter red */
+    theme.info              = 0xFFD09030;  /* Blue (ABGR) */
+    theme.info_hover        = 0xFFE0A040;  /* Lighter blue */
+
+    /* Widget-specific colors */
+    theme.checkbox_check    = 0xFFFFFFFF;  /* White (on accent bg) */
+    theme.slider_track      = 0xFFD0D0D0;  /* Light gray */
+    theme.slider_grab       = 0xFFD07020;  /* Accent */
+    theme.scrollbar         = 0x40000000;  /* Semi-transparent black */
+    theme.scrollbar_grab    = 0x80606060;  /* Gray */
+    theme.progress_fill     = 0xFFD07020;  /* Accent */
+    theme.selection         = 0x602070D0;  /* Semi-transparent accent */
+
+    /* Metrics (same as dark) */
+    theme.corner_radius     = 4.0f;
+    theme.border_width      = 1.0f;
+    theme.widget_height     = 28.0f;
+    theme.spacing           = 4.0f;
+    theme.padding           = 8.0f;
+    theme.scrollbar_width   = 12.0f;
+
+    return theme;
+}
+
+void cui_set_theme(CUI_Context *ctx, const CUI_Theme *theme)
+{
+    if (!ctx || !theme) return;
+    ctx->theme = *theme;
+}
+
+const CUI_Theme *cui_get_theme(const CUI_Context *ctx)
+{
+    if (!ctx) return NULL;
+    return &ctx->theme;
+}
+
+void cui_theme_set_accent(CUI_Theme *theme, uint32_t color)
+{
+    if (!theme) return;
+    theme->accent = color;
+    theme->accent_hover = cui_color_brighten(color, 0.15f);
+    theme->accent_active = cui_color_darken(color, 0.15f);
+    theme->slider_grab = color;
+    theme->progress_fill = color;
+    theme->selection = cui_color_alpha(color, 0.5f);
+}
+
+void cui_theme_set_semantic_colors(CUI_Theme *theme,
+                                    uint32_t success, uint32_t warning,
+                                    uint32_t danger, uint32_t info)
+{
+    if (!theme) return;
+    theme->success = success;
+    theme->success_hover = cui_color_brighten(success, 0.15f);
+    theme->warning = warning;
+    theme->warning_hover = cui_color_brighten(warning, 0.15f);
+    theme->danger = danger;
+    theme->danger_hover = cui_color_brighten(danger, 0.15f);
+    theme->info = info;
+    theme->info_hover = cui_color_brighten(info, 0.15f);
+}
 
 static void cui_init_theme(CUI_Context *ctx)
 {
-    ctx->theme.bg_panel          = 0xF21A1A2E;  /* Dark blue, slight transparency */
-    ctx->theme.bg_widget         = 0xFF3D3D4A;  /* Gray */
-    ctx->theme.bg_widget_hover   = 0xFF4D4D5A;  /* Lighter gray */
-    ctx->theme.bg_widget_active  = 0xFF2D2D3A;  /* Darker gray */
-    ctx->theme.bg_widget_disabled = 0xFF252530; /* Very dark */
-    ctx->theme.border            = 0xFF4A4A5A;  /* Medium gray */
-    ctx->theme.text              = 0xFFE0E0E0;  /* Light gray */
-    ctx->theme.text_dim          = 0xFF808080;  /* Dim gray */
-    ctx->theme.accent            = 0xFFEF9A4D;  /* Blue (ABGR) */
-    ctx->theme.checkbox_check    = 0xFFFFFFFF;  /* White */
-    ctx->theme.slider_track      = 0xFF2A2A3A;  /* Dark */
-    ctx->theme.slider_grab       = 0xFFEF9A4D;  /* Accent blue */
-    ctx->theme.scrollbar         = 0x80404050;  /* Semi-transparent */
-    ctx->theme.scrollbar_grab    = 0xC0606070;  /* Lighter */
-    ctx->theme.corner_radius     = 4.0f;
-    ctx->theme.border_width      = 1.0f;
-    ctx->theme.widget_height     = 28.0f;
-    ctx->theme.spacing           = 4.0f;
-    ctx->theme.padding           = 8.0f;
-    ctx->theme.scrollbar_width   = 12.0f;
+    ctx->theme = cui_theme_dark();
 }
 
 /* ============================================================================
@@ -359,6 +488,42 @@ uint32_t cui_color_alpha(uint32_t color, float alpha)
 {
     uint8_t a = (uint8_t)(((color >> 24) & 0xFF) * alpha);
     return (color & 0x00FFFFFF) | ((uint32_t)a << 24);
+}
+
+uint32_t cui_color_brighten(uint32_t color, float amount)
+{
+    uint8_t r = (color >> 0) & 0xFF;
+    uint8_t g = (color >> 8) & 0xFF;
+    uint8_t b = (color >> 16) & 0xFF;
+    uint8_t a = (color >> 24) & 0xFF;
+
+    int nr = (int)(r + (255 - r) * amount);
+    int ng = (int)(g + (255 - g) * amount);
+    int nb = (int)(b + (255 - b) * amount);
+
+    if (nr > 255) nr = 255;
+    if (ng > 255) ng = 255;
+    if (nb > 255) nb = 255;
+
+    return cui_rgba((uint8_t)nr, (uint8_t)ng, (uint8_t)nb, a);
+}
+
+uint32_t cui_color_darken(uint32_t color, float amount)
+{
+    uint8_t r = (color >> 0) & 0xFF;
+    uint8_t g = (color >> 8) & 0xFF;
+    uint8_t b = (color >> 16) & 0xFF;
+    uint8_t a = (color >> 24) & 0xFF;
+
+    int nr = (int)(r * (1.0f - amount));
+    int ng = (int)(g * (1.0f - amount));
+    int nb = (int)(b * (1.0f - amount));
+
+    if (nr < 0) nr = 0;
+    if (ng < 0) ng = 0;
+    if (nb < 0) nb = 0;
+
+    return cui_rgba((uint8_t)nr, (uint8_t)ng, (uint8_t)nb, a);
 }
 
 bool cui_rect_contains(CUI_Rect rect, float x, float y)

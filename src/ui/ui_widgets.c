@@ -113,6 +113,68 @@ bool cui_button_ex(CUI_Context *ctx, const char *label, float width, float heigh
     return pressed;
 }
 
+/* Semantic button variants using theme semantic colors */
+static bool cui_button_semantic(CUI_Context *ctx, const char *label,
+                                 uint32_t color, uint32_t color_hover,
+                                 float width, float height)
+{
+    if (!ctx || !label) return false;
+
+    CUI_Id id = cui_make_id(ctx, label);
+
+    float text_w = cui_text_width(ctx, label);
+    float text_h = cui_text_height(ctx);
+    float btn_w = width > 0 ? width : text_w + ctx->theme.padding * 2;
+    float btn_h = height > 0 ? height : ctx->theme.widget_height;
+
+    CUI_Rect rect = cui_allocate_rect(ctx, btn_w, btn_h);
+
+    bool hovered, held;
+    bool pressed = cui_widget_behavior(ctx, id, rect, &hovered, &held);
+
+    /* Use semantic color based on state */
+    uint32_t bg = held ? cui_color_darken(color, 0.15f) :
+                  (hovered ? color_hover : color);
+    cui_draw_rect_rounded(ctx, rect.x, rect.y, rect.w, rect.h, bg, ctx->theme.corner_radius);
+
+    /* Use highlight text for contrast on colored backgrounds */
+    float text_x = rect.x + (rect.w - text_w) * 0.5f;
+    float text_y = rect.y + (rect.h - text_h) * 0.5f;
+    cui_draw_text(ctx, label, text_x, text_y, ctx->theme.text_highlight);
+
+    return pressed;
+}
+
+bool cui_button_primary(CUI_Context *ctx, const char *label)
+{
+    return cui_button_semantic(ctx, label,
+                                ctx->theme.accent, ctx->theme.accent_hover, 0, 0);
+}
+
+bool cui_button_success(CUI_Context *ctx, const char *label)
+{
+    return cui_button_semantic(ctx, label,
+                                ctx->theme.success, ctx->theme.success_hover, 0, 0);
+}
+
+bool cui_button_warning(CUI_Context *ctx, const char *label)
+{
+    return cui_button_semantic(ctx, label,
+                                ctx->theme.warning, ctx->theme.warning_hover, 0, 0);
+}
+
+bool cui_button_danger(CUI_Context *ctx, const char *label)
+{
+    return cui_button_semantic(ctx, label,
+                                ctx->theme.danger, ctx->theme.danger_hover, 0, 0);
+}
+
+bool cui_button_info(CUI_Context *ctx, const char *label)
+{
+    return cui_button_semantic(ctx, label,
+                                ctx->theme.info, ctx->theme.info_hover, 0, 0);
+}
+
 /* ============================================================================
  * Checkbox
  * ============================================================================ */
@@ -337,7 +399,29 @@ void cui_progress_bar(CUI_Context *ctx, float value, float min, float max)
     float filled_w = rect.w * t;
     if (filled_w > 0) {
         cui_draw_rect_rounded(ctx, rect.x, rect.y, filled_w, rect.h,
-                              ctx->theme.accent, ctx->theme.corner_radius);
+                              ctx->theme.progress_fill, ctx->theme.corner_radius);
+    }
+}
+
+void cui_progress_bar_colored(CUI_Context *ctx, float value, float min, float max,
+                               uint32_t fill_color)
+{
+    if (!ctx) return;
+
+    CUI_Rect rect = cui_allocate_rect(ctx, 0, ctx->theme.widget_height);
+
+    /* Draw background */
+    cui_draw_rect_rounded(ctx, rect.x, rect.y, rect.w, rect.h,
+                          ctx->theme.slider_track, ctx->theme.corner_radius);
+
+    /* Draw filled portion with custom color */
+    float t = (value - min) / (max - min);
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
+    float filled_w = rect.w * t;
+    if (filled_w > 0) {
+        cui_draw_rect_rounded(ctx, rect.x, rect.y, filled_w, rect.h,
+                              fill_color, ctx->theme.corner_radius);
     }
 }
 
