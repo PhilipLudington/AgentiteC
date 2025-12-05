@@ -1,0 +1,145 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://carbon-engine.example/schemas/level.schema.json",
+  "title": "Carbon Level Definition",
+  "description": "Schema for level/map files",
+  "type": "object",
+  "required": ["width", "height"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Display name of the level"
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Width of the level in tiles"
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Height of the level in tiles"
+    },
+    "tile_width": {
+      "type": "integer",
+      "default": 32,
+      "description": "Width of each tile in pixels"
+    },
+    "tile_height": {
+      "type": "integer",
+      "default": 32,
+      "description": "Height of each tile in pixels"
+    },
+    "tileset": {
+      "type": "string",
+      "description": "Path to tileset image"
+    },
+    "layers": {
+      "type": "array",
+      "description": "Tile layers (rendered back to front)",
+      "items": {
+        "type": "object",
+        "required": ["name", "tiles"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Layer name"
+          },
+          "visible": {
+            "type": "boolean",
+            "default": true
+          },
+          "opacity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 1
+          },
+          "tiles": {
+            "type": "array",
+            "items": { "type": "integer" },
+            "description": "Tile IDs (0 = empty, 1+ = tile index). Length must be width * height"
+          }
+        }
+      }
+    },
+    "spawns": {
+      "type": "array",
+      "description": "Entity spawn points",
+      "items": {
+        "type": "object",
+        "required": ["type", "x", "y"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Entity type to spawn (references entity definition)"
+          },
+          "x": {
+            "type": "number",
+            "description": "World X position (pixels or tile coordinates)"
+          },
+          "y": {
+            "type": "number",
+            "description": "World Y position (pixels or tile coordinates)"
+          },
+          "properties": {
+            "type": "object",
+            "description": "Override properties for this spawn"
+          }
+        }
+      }
+    },
+    "properties": {
+      "type": "object",
+      "description": "Custom level properties",
+      "properties": {
+        "ambient_color": {
+          "type": "object",
+          "properties": {
+            "r": { "type": "number", "minimum": 0, "maximum": 1 },
+            "g": { "type": "number", "minimum": 0, "maximum": 1 },
+            "b": { "type": "number", "minimum": 0, "maximum": 1 }
+          }
+        },
+        "music": {
+          "type": "string",
+          "description": "Path to background music"
+        },
+        "next_level": {
+          "type": "string",
+          "description": "Path to next level file"
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "name": "Forest Clearing",
+      "width": 20,
+      "height": 15,
+      "tile_width": 32,
+      "tile_height": 32,
+      "tileset": "assets/tilesets/forest.png",
+      "layers": [
+        {
+          "name": "ground",
+          "tiles": [1, 1, 1, 1, 2, 2, 1, 1]
+        },
+        {
+          "name": "decorations",
+          "opacity": 0.9,
+          "tiles": [0, 0, 5, 0, 0, 0, 5, 0]
+        }
+      ],
+      "spawns": [
+        { "type": "player", "x": 100, "y": 200 },
+        { "type": "enemy_goblin", "x": 400, "y": 150 },
+        { "type": "enemy_goblin", "x": 450, "y": 200 }
+      ],
+      "properties": {
+        "music": "assets/music/forest.wav",
+        "next_level": "assets/levels/level2.json"
+      }
+    }
+  ]
+}

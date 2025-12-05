@@ -1,0 +1,158 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://carbon-engine.example/schemas/animation.schema.json",
+  "title": "Carbon Animation Definition",
+  "description": "Schema for animation definitions",
+  "type": "object",
+  "required": ["name", "spritesheet"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Animation name/identifier"
+    },
+    "spritesheet": {
+      "type": "string",
+      "description": "Path to sprite sheet image"
+    },
+    "frame_width": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Width of each frame in pixels"
+    },
+    "frame_height": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Height of each frame in pixels"
+    },
+    "origin_x": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.5,
+      "description": "X origin for rotation (0-1, 0.5 = center)"
+    },
+    "origin_y": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.5,
+      "description": "Y origin for rotation (0-1, 0.5 = center)"
+    },
+    "fps": {
+      "type": "number",
+      "minimum": 0.1,
+      "default": 12,
+      "description": "Frames per second"
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["loop", "once", "ping_pong", "once_reset"],
+      "default": "loop",
+      "description": "Playback mode"
+    },
+    "frames": {
+      "type": "array",
+      "description": "Frame definitions (optional - defaults to horizontal strip)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "integer",
+            "description": "X position in spritesheet"
+          },
+          "y": {
+            "type": "integer",
+            "description": "Y position in spritesheet"
+          },
+          "width": {
+            "type": "integer",
+            "description": "Frame width (overrides frame_width)"
+          },
+          "height": {
+            "type": "integer",
+            "description": "Frame height (overrides frame_height)"
+          },
+          "duration": {
+            "type": "number",
+            "description": "Custom duration for this frame in seconds"
+          }
+        }
+      }
+    },
+    "strip": {
+      "type": "object",
+      "description": "Define animation as a horizontal strip",
+      "properties": {
+        "x": { "type": "integer", "default": 0 },
+        "y": { "type": "integer", "default": 0 },
+        "count": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "grid": {
+      "type": "object",
+      "description": "Define animation as a grid of frames",
+      "properties": {
+        "x": { "type": "integer", "default": 0 },
+        "y": { "type": "integer", "default": 0 },
+        "cols": { "type": "integer", "minimum": 1 },
+        "rows": { "type": "integer", "minimum": 1 }
+      }
+    }
+  },
+  "examples": [
+    {
+      "name": "player_walk",
+      "spritesheet": "assets/sprites/player.png",
+      "frame_width": 64,
+      "frame_height": 64,
+      "fps": 12,
+      "mode": "loop",
+      "strip": {
+        "x": 0,
+        "y": 0,
+        "count": 8
+      }
+    },
+    {
+      "name": "player_idle",
+      "spritesheet": "assets/sprites/player.png",
+      "frame_width": 64,
+      "frame_height": 64,
+      "fps": 6,
+      "mode": "loop",
+      "strip": {
+        "x": 0,
+        "y": 64,
+        "count": 4
+      }
+    },
+    {
+      "name": "explosion",
+      "spritesheet": "assets/sprites/effects.png",
+      "frame_width": 128,
+      "frame_height": 128,
+      "fps": 24,
+      "mode": "once",
+      "origin_y": 1.0,
+      "grid": {
+        "x": 0,
+        "y": 0,
+        "cols": 4,
+        "rows": 4
+      }
+    },
+    {
+      "name": "custom_timing",
+      "spritesheet": "assets/sprites/attack.png",
+      "frame_width": 64,
+      "frame_height": 64,
+      "mode": "once",
+      "frames": [
+        { "x": 0, "y": 0, "duration": 0.05 },
+        { "x": 64, "y": 0, "duration": 0.05 },
+        { "x": 128, "y": 0, "duration": 0.1 },
+        { "x": 192, "y": 0, "duration": 0.2 }
+      ]
+    }
+  ]
+}

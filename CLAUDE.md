@@ -676,6 +676,266 @@ carbon_pathfinder_destroy(pf);
 - `carbon_pathfinder_has_path()` is equivalent to full pathfinding (future: early exit)
 - For dynamic obstacles, update with `set_walkable()` or re-sync tilemap
 
+## Quick Start (New Game)
+
+The recommended way to start a new game is using the game template:
+
+```c
+#include "carbon/game_context.h"
+#include "game/game.h"
+
+int main(int argc, char *argv[]) {
+    // Configure
+    Carbon_GameContextConfig config = CARBON_GAME_CONTEXT_DEFAULT;
+    config.window_title = "My Game";
+    config.font_path = "assets/fonts/font.ttf";
+
+    // Create context (initializes all systems)
+    Carbon_GameContext *ctx = carbon_game_context_create(&config);
+    if (!ctx) return 1;
+
+    // Create game (state machine, ECS systems)
+    Game *game = game_init(ctx);
+
+    // Main loop
+    while (carbon_game_context_is_running(ctx)) {
+        carbon_game_context_begin_frame(ctx);
+        carbon_game_context_poll_events(ctx);
+        game_update(game, ctx);
+        // ... render ...
+        carbon_game_context_end_frame(ctx);
+    }
+
+    game_shutdown(game);
+    carbon_game_context_destroy(ctx);
+    return 0;
+}
+```
+
+See `src/main.c` for the complete bootstrap and `src/game/` for the template structure.
+
+## Build Commands
+
+```bash
+# Build main game (uses game template)
+make
+
+# Build and run main game
+make run
+
+# Build and run comprehensive demo
+make run-demo
+
+# Build with debug symbols
+make DEBUG=1
+
+# Run examples
+make example-minimal     # Minimal window setup
+make example-sprites     # Sprite rendering
+make example-animation   # Animation system
+make example-tilemap     # Tilemap rendering
+make example-ui          # UI widgets
+make example-strategy    # RTS-style selection + pathfinding
+
+# Clean
+make clean
+
+# Show help
+make help
+```
+
+## Project Structure
+
+```
+src/
+├── main.c                  # Game bootstrap (uses game template)
+├── core/
+│   ├── engine.c            # SDL3/GPU setup, frame management
+│   ├── game_context.c      # Unified system container
+│   └── error.c             # Error handling
+├── game/                   # Game template
+│   ├── game.h/c            # Game lifecycle
+│   ├── components.h/c      # Game-specific ECS components
+│   ├── systems/            # ECS systems (movement, collision, AI)
+│   ├── states/             # State machine (menu, playing, paused)
+│   └── data/               # JSON data loading
+├── graphics/
+│   ├── sprite.c            # Batched sprite rendering
+│   ├── animation.c         # Sprite animation
+│   ├── camera.c            # 2D camera
+│   ├── tilemap.c           # Chunk-based tilemaps
+│   └── text.c              # TrueType + SDF fonts
+├── audio/audio.c           # Sound/music playback
+├── input/input.c           # Action-based input
+├── ecs/ecs.c               # Flecs wrapper
+├── ai/pathfinding.c        # A* pathfinding
+└── ui/                     # Immediate-mode UI
+
+include/carbon/
+├── carbon.h                # Core engine API
+├── game_context.h          # Unified context
+├── error.h                 # Error handling
+├── helpers.h               # Convenience macros/utils
+├── sprite.h, camera.h, etc.
+
+examples/
+├── minimal/                # ~40 lines window setup
+├── demo/                   # Full feature demo
+├── sprites/                # Sprite rendering
+├── animation/              # Animation system
+├── tilemap/                # Tilemap rendering
+├── ui/                     # UI widgets
+└── strategy/               # RTS patterns
+
+assets/schemas/             # JSON schemas for data files
+```
+
+## Common Patterns
+
+### Adding a New Entity Type
+
+1. Define component in `src/game/components.h`:
+```c
+typedef struct C_Projectile {
+    ecs_entity_t owner;
+    float lifetime;
+} C_Projectile;
+ECS_COMPONENT_DECLARE(C_Projectile);
+```
+
+2. Register in `src/game/components.c`:
+```c
+ECS_COMPONENT_DEFINE(world, C_Projectile);
+```
+
+3. Create system in `src/game/systems/`:
+```c
+void ProjectileSystem(ecs_iter_t *it) {
+    C_Projectile *proj = ecs_field(it, C_Projectile, 0);
+    for (int i = 0; i < it->count; i++) {
+        proj[i].lifetime -= it->delta_time;
+        if (proj[i].lifetime <= 0) {
+            ecs_delete(it->world, it->entities[i]);
+        }
+    }
+}
+```
+
+4. Register system in `src/game/systems/systems.c`:
+```c
+ECS_SYSTEM(world, ProjectileSystem, EcsOnUpdate, C_Projectile);
+```
+
+### Adding a New Game State
+
+1. Create state file `src/game/states/gameover.c`:
+```c
+static void gameover_enter(Carbon_GameContext *ctx, void *userdata) { }
+static void gameover_exit(Carbon_GameContext *ctx, void *userdata) { }
+static void gameover_update(Carbon_GameContext *ctx, float dt, void *userdata) { }
+static void gameover_render(Carbon_GameContext *ctx,
+                             SDL_GPUCommandBuffer *cmd,
+                             SDL_GPURenderPass *pass,
+                             void *userdata) { }
+
+GameState game_state_gameover_create(void) {
+    return (GameState){
+        .name = "GameOver",
+        .enter = gameover_enter,
+        .exit = gameover_exit,
+        .update = gameover_update,
+        .render = gameover_render,
+        .userdata = NULL
+    };
+}
+```
+
+2. Add to state enum in `src/game/states/state.h`:
+```c
+typedef enum {
+    // ...existing states...
+    GAME_STATE_GAME_OVER,
+} GameStateID;
+```
+
+3. Register in `src/game/game.c`:
+```c
+GameState gameover_state = game_state_gameover_create();
+game_state_machine_register(sm, GAME_STATE_GAME_OVER, &gameover_state);
+```
+
+### Loading Level Data
+
+```c
+#include "game/data/loader.h"
+
+LevelData level;
+if (game_load_level("assets/levels/level1.json", &level)) {
+    // Set up tilemap
+    for (int i = 0; i < level.width * level.height; i++) {
+        int x = i % level.width;
+        int y = i / level.width;
+        carbon_tilemap_set_tile(tilemap, ground, x, y, level.tiles[i]);
+    }
+
+    // Spawn entities
+    for (int i = 0; i < level.spawn_count; i++) {
+        spawn_entity(level.spawns[i].type,
+                     level.spawns[i].x,
+                     level.spawns[i].y);
+    }
+
+    game_free_level(&level);
+}
+```
+
+## Troubleshooting
+
+### Build Issues
+
+**SDL3 not found:**
+```bash
+# macOS
+brew install sdl3
+
+# Linux - build from source
+git clone https://github.com/libsdl-org/SDL
+cd SDL && mkdir build && cd build
+cmake .. && make && sudo make install
+```
+
+**Font not loading:**
+- Check path is relative to working directory (usually project root)
+- Ensure font file exists: `ls assets/fonts/`
+
+### Runtime Issues
+
+**Black screen / no rendering:**
+- Check `carbon_begin_render_pass()` return value
+- Ensure upload calls happen before render pass
+- Verify command buffer is acquired
+
+**Sprites not showing:**
+1. Check texture loaded: `if (!tex) { SDL_Log("Error"); }`
+2. Ensure sprite batch: `carbon_sprite_begin()` → draw → `carbon_sprite_upload()` → render pass → `carbon_sprite_render()`
+3. Check camera position if sprites are in world space
+
+**Input not working:**
+- Ensure `carbon_input_begin_frame()` is called at start of frame
+- Call `carbon_input_update()` after polling events
+- Check UI isn't consuming events: `if (cui_process_event(ui, &event)) continue;`
+
+### Error Handling
+
+```c
+#include "carbon/error.h"
+
+Carbon_Texture *tex = carbon_texture_load(sprites, "missing.png");
+if (!tex) {
+    SDL_Log("Failed: %s", carbon_get_last_error());
+}
+```
+
 ## Development Notes
 
 - Target platforms: macOS, Linux, Windows
@@ -684,3 +944,9 @@ carbon_pathfinder_destroy(pf);
 - ECS: Flecs (high-performance Entity Component System)
 - Math: cglm (SIMD-optimized)
 - Repository: https://github.com/PhilipLudington/Carbon
+
+## Additional Documentation
+
+- `SYSTEMS.md` - System dependencies and initialization order
+- `examples/*/README.md` - Per-example documentation
+- `assets/schemas/` - JSON schemas for data files

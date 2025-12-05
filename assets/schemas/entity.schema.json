@@ -1,0 +1,138 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://carbon-engine.example/schemas/entity.schema.json",
+  "title": "Carbon Entity Definition",
+  "description": "Schema for entity spawn templates",
+  "type": "object",
+  "required": ["type"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "description": "Entity type identifier (e.g., 'player', 'enemy', 'item')"
+    },
+    "name": {
+      "type": "string",
+      "description": "Optional display name for the entity"
+    },
+    "components": {
+      "type": "object",
+      "description": "Component data for this entity",
+      "properties": {
+        "position": {
+          "type": "object",
+          "properties": {
+            "x": { "type": "number", "default": 0 },
+            "y": { "type": "number", "default": 0 }
+          }
+        },
+        "velocity": {
+          "type": "object",
+          "properties": {
+            "vx": { "type": "number", "default": 0 },
+            "vy": { "type": "number", "default": 0 }
+          }
+        },
+        "size": {
+          "type": "object",
+          "properties": {
+            "width": { "type": "number", "default": 32 },
+            "height": { "type": "number", "default": 32 }
+          }
+        },
+        "health": {
+          "type": "object",
+          "properties": {
+            "current": { "type": "integer", "default": 100 },
+            "max": { "type": "integer", "default": 100 }
+          }
+        },
+        "speed": {
+          "type": "object",
+          "properties": {
+            "speed": { "type": "number", "default": 100 },
+            "acceleration": { "type": "number", "default": 500 },
+            "friction": { "type": "number", "default": 400 }
+          }
+        },
+        "collider": {
+          "type": "object",
+          "properties": {
+            "offset_x": { "type": "number", "default": 0 },
+            "offset_y": { "type": "number", "default": 0 },
+            "width": { "type": "number" },
+            "height": { "type": "number" },
+            "solid": { "type": "boolean", "default": true },
+            "trigger": { "type": "boolean", "default": false }
+          }
+        },
+        "sprite": {
+          "type": "object",
+          "properties": {
+            "texture": { "type": "string", "description": "Path to texture file" },
+            "origin_x": { "type": "number", "default": 0.5 },
+            "origin_y": { "type": "number", "default": 0.5 },
+            "flip_x": { "type": "boolean", "default": false },
+            "flip_y": { "type": "boolean", "default": false }
+          }
+        },
+        "animation": {
+          "type": "object",
+          "properties": {
+            "spritesheet": { "type": "string", "description": "Path to sprite sheet" },
+            "frame_width": { "type": "integer" },
+            "frame_height": { "type": "integer" },
+            "frame_count": { "type": "integer" },
+            "fps": { "type": "number", "default": 12 },
+            "mode": {
+              "type": "string",
+              "enum": ["loop", "once", "ping_pong", "once_reset"],
+              "default": "loop"
+            }
+          }
+        },
+        "enemy": {
+          "type": "object",
+          "properties": {
+            "type": { "type": "integer", "default": 0 },
+            "aggro_range": { "type": "number", "default": 200 }
+          }
+        },
+        "damage": {
+          "type": "object",
+          "properties": {
+            "amount": { "type": "integer", "default": 10 },
+            "type": { "type": "integer", "default": 0 }
+          }
+        }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Optional tags for filtering/grouping"
+    }
+  },
+  "examples": [
+    {
+      "type": "player",
+      "name": "Hero",
+      "components": {
+        "position": { "x": 100, "y": 100 },
+        "health": { "current": 100, "max": 100 },
+        "speed": { "speed": 150, "acceleration": 800 },
+        "collider": { "width": 24, "height": 32, "solid": true },
+        "sprite": { "texture": "assets/sprites/player.png" }
+      },
+      "tags": ["player", "controllable"]
+    },
+    {
+      "type": "enemy_goblin",
+      "components": {
+        "health": { "current": 30, "max": 30 },
+        "speed": { "speed": 80 },
+        "enemy": { "type": 1, "aggro_range": 150 },
+        "damage": { "amount": 5 }
+      }
+    }
+  ]
+}
