@@ -3392,6 +3392,193 @@ int32_t phase_budget_provider(int track_id, int32_t resource_type,
 }
 ```
 
+## Strategic Coordinator
+
+Game phase detection and utility-based strategic decision making. Automatically allocates budgets based on option utilities and game phase:
+
+```c
+#include "carbon/strategy.h"
+
+// Create coordinator
+Carbon_StrategyCoordinator *coord = carbon_strategy_create();
+
+// Set phase analyzer callback (determines game phase from state)
+int analyze_phase(void *game_state, float *out_metrics, int max, void *userdata) {
+    Game *game = game_state;
+    // Return normalized metrics (0-1) indicating game progression
+    // Higher values = later in game
+    out_metrics[0] = (float)game->turn / (float)game->max_turns;           // Turn progress
+    out_metrics[1] = (float)game->territories / (float)game->total_territories;  // Map control
+    out_metrics[2] = (float)game->tech_researched / (float)game->total_techs;    // Tech progress
+    return 3;
+}
+carbon_strategy_set_phase_analyzer(coord, analyze_phase, NULL);
+
+// Configure phase transition thresholds
+carbon_strategy_set_phase_thresholds(coord,
+    0.25f,   // Early -> Mid at 25% average metric
+    0.60f,   // Mid -> Late at 60%
+    0.85f);  // Late -> Endgame at 85%
+
+// Add strategic options with utility curves
+carbon_strategy_add_option(coord, "economy",
+    &carbon_curve_sqrt(0.0f, 1.0f),   // Diminishing returns curve
+    1.0f);                             // Base weight
+
+carbon_strategy_add_option(coord, "military",
+    &carbon_curve_sigmoid(8.0f, 0.5f), // S-curve, ramps up mid-game
+    1.0f);
+
+carbon_strategy_add_option(coord, "research",
+    &carbon_curve_inverse(0.2f, 1.0f), // Higher early, lower late
+    0.8f);
+
+carbon_strategy_add_option(coord, "expansion",
+    &carbon_curve_step(0.7f, 1.0f, 0.2f),  // Full until 70%, then drops
+    1.0f);
+
+// Set phase modifiers (multiply utility in specific phases)
+carbon_strategy_set_phase_modifier(coord, "economy",
+    CARBON_PHASE_EARLY_EXPANSION, 1.5f);    // +50% in early game
+carbon_strategy_set_phase_modifier(coord, "military",
+    CARBON_PHASE_LATE_COMPETITION, 1.8f);   // +80% in late game
+carbon_strategy_set_phase_modifier(coord, "expansion",
+    CARBON_PHASE_ENDGAME, 0.3f);            // -70% in endgame
+
+// Input provider calculates how much each option "needs" investment
+float provide_input(void *game_state, const char *option, void *userdata) {
+    Game *game = game_state;
+    if (strcmp(option, "economy") == 0) {
+        // Higher input = lower economy ratio -> needs more investment
+        return 1.0f - (float)our_income / avg_income;
+    }
+    if (strcmp(option, "military") == 0) {
+        return 1.0f - (float)our_military / avg_military;
+    }
+    // ... etc
+    return 0.5f;
+}
+carbon_strategy_set_input_provider(coord, provide_input, NULL);
+
+// Each turn: detect phase and evaluate options
+Carbon_GamePhase phase = carbon_strategy_detect_phase(coord, game_state);
+printf("Current phase: %s\n", carbon_strategy_phase_name(phase));
+
+carbon_strategy_evaluate_options(coord, game_state);
+
+// Get best option
+const char *best = carbon_strategy_get_best_option(coord);
+printf("Priority: %s (utility %.2f)\n", best,
+       carbon_strategy_get_utility(coord, best));
+
+// Get all options sorted by utility
+const char *options[4];
+float utilities[4];
+int count = carbon_strategy_get_options_by_utility(coord, options, utilities, 4);
+
+// Allocate budget proportionally
+Carbon_BudgetAllocation allocs[4];
+int alloc_count = carbon_strategy_allocate_budget(coord, total_resources,
+                                                   allocs, 4);
+for (int i = 0; i < alloc_count; i++) {
+    printf("%s: %d (%.0f%%)\n", allocs[i].option_name,
+           allocs[i].allocated, allocs[i].proportion * 100);
+}
+
+// Set allocation constraints
+carbon_strategy_set_min_allocation(coord, "military", 0.15f);  // At least 15%
+carbon_strategy_set_max_allocation(coord, "research", 0.40f);  // At most 40%
+
+// Get allocation for specific option
+int32_t military_budget = carbon_strategy_get_allocation(coord, "military", total);
+
+// Detailed phase analysis
+Carbon_PhaseAnalysis analysis;
+carbon_strategy_analyze_phase(coord, game_state, &analysis);
+printf("Phase: %s, Progress: %.0f%%, Confidence: %.0f%%\n",
+       carbon_strategy_phase_name(analysis.phase),
+       analysis.progress * 100, analysis.confidence * 100);
+
+// Manual phase override (for testing/scripted scenarios)
+carbon_strategy_set_phase(coord, CARBON_PHASE_LATE_COMPETITION);
+
+// Statistics
+Carbon_StrategyStats stats;
+carbon_strategy_get_stats(coord, &stats);
+printf("Evaluations: %d, Phase changes: %d\n",
+       stats.evaluations, stats.phase_changes);
+
+// Cleanup
+carbon_strategy_destroy(coord);
+```
+
+**Utility curve types:**
+- `carbon_curve_linear(min, max)` - Linear: y = x
+- `carbon_curve_quadratic(min, max)` - Quadratic: y = x² (slow start, fast end)
+- `carbon_curve_sqrt(min, max)` - Square root: y = √x (fast start, slow end)
+- `carbon_curve_sigmoid(steepness, midpoint)` - S-curve with configurable steepness
+- `carbon_curve_inverse(min, max)` - Inverse: y = 1 - x
+- `carbon_curve_step(threshold, low, high)` - Step function at threshold
+- `carbon_curve_exponential(rate, min, max)` - Exponential growth
+- `carbon_curve_logarithmic(scale, min, max)` - Logarithmic (diminishing returns)
+- `carbon_curve_custom(fn, userdata)` - Custom callback
+
+**Game phases:**
+- `CARBON_PHASE_EARLY_EXPANSION` - Early game, expansion focus
+- `CARBON_PHASE_MID_CONSOLIDATION` - Mid game, consolidation
+- `CARBON_PHASE_LATE_COMPETITION` - Late game, competition
+- `CARBON_PHASE_ENDGAME` - Final push
+
+**Key features:**
+- Automatic game phase detection from metrics
+- Multiple utility curves for different behaviors
+- Phase-specific modifiers for options
+- Proportional budget allocation
+- Min/max allocation constraints
+- Input provider for dynamic utility calculation
+- Statistics tracking
+
+**Common patterns:**
+
+```c
+// AI faction budget distribution
+void allocate_ai_budgets(Game *game, int faction) {
+    // Update inputs based on faction state
+    for (int i = 0; i < carbon_strategy_get_option_count(ai_coord); i++) {
+        const Carbon_StrategyOption *opt = carbon_strategy_get_option(ai_coord, i);
+        float input = calculate_faction_need(game, faction, opt->name);
+        carbon_strategy_set_input(ai_coord, opt->name, input);
+    }
+
+    // Evaluate and allocate
+    carbon_strategy_detect_phase(ai_coord, game);
+    carbon_strategy_evaluate_options(ai_coord, game);
+
+    int32_t total = get_faction_resources(game, faction);
+    Carbon_BudgetAllocation allocs[8];
+    int count = carbon_strategy_allocate_budget(ai_coord, total, allocs, 8);
+
+    // Pass to AI tracks
+    for (int i = 0; i < count; i++) {
+        int track = carbon_ai_tracks_find(tracks, allocs[i].option_name);
+        if (track >= 0) {
+            carbon_ai_tracks_set_budget(tracks, track, RESOURCE_GOLD,
+                                         allocs[i].allocated);
+        }
+    }
+}
+
+// Integration with AI tracks
+void setup_strategy_with_tracks(void) {
+    // Strategic coordinator handles high-level budget allocation
+    // AI tracks handle detailed decision making within each budget
+
+    // Economy track gets budget from "economy" option
+    // Military track gets budget from "military" option
+    // etc.
+}
+```
+
 ## Trade Route / Supply Line System
 
 Economic connections between locations with efficiency calculations and specialized route types:

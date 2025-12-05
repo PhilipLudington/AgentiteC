@@ -177,10 +177,9 @@ int carbon_blackboard_get_history(Carbon_Blackboard *bb, const char **out_entrie
 
 ---
 
-### 4. Strategic Coordinator
+### 4. Strategic Coordinator ✓
 
-**Priority:** Medium
-**Complexity:** Medium
+**Status:** COMPLETED
 **Files:** `include/carbon/strategy.h`, `src/ai/strategy.c`
 
 Game phase detection and utility-based strategic decision making.
@@ -579,7 +578,7 @@ void carbon_query_invalidate_all(Carbon_QuerySystem *sys);
 
 ### Phase 2 - Strategic Layer (In Progress)
 4. **Multi-Track AI Decisions** ✓ - `include/carbon/ai_tracks.h`, `src/ai/ai_tracks.c`
-5. **Strategic Coordinator** - Phase detection and utility evaluation
+5. **Strategic Coordinator** ✓ - `include/carbon/strategy.h`, `src/ai/strategy.c`
 6. **Command Queue** - Clean action validation
 
 ### Phase 3 - Content Systems
