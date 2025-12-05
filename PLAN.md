@@ -1,857 +1,1174 @@
-# Strategy Game Systems Implementation Plan
+# Carbon Engine Feature Roadmap
 
-This plan adds 9 engine-agnostic systems extracted from the Ecosocialism project to the Carbon engine. These systems are designed to support strategy games and simulations but are generic enough for any game type.
+Features extracted from StellarThroneCPP and Ecosocialism projects that would enhance the Carbon game engine. All features are engine-agnostic and designed for C11.
+
+---
 
 ## Overview
 
-| System | Priority | New Files | Description |
-|--------|----------|-----------|-------------|
-| Data Configuration | High | config.h/c | TOML-based data loading with hash lookup |
-| Event System | High | event.h/c | Trigger-based events with player choices |
-| Save/Load | High | save.h/c | Game state serialization with versioning |
-| Turn Manager | Medium | turn.h/c | Multi-phase turn orchestration |
-| History Tracking | Medium | history.h/c | Metrics snapshots and event log |
-| Resource System | Medium | resource.h/c | Per-turn generation and spending |
-| Modifier Stack | Medium | modifier.h/c | Composable effect multipliers |
-| Unlock Tree | Medium | unlock.h/c | Prerequisites and tech trees |
-| Threshold Tracker | Low | threshold.h/c | Value boundary callbacks |
+| Phase | System | Priority | New Files | Status | Description |
+|-------|--------|----------|-----------|--------|-------------|
+| 1 | Event Dispatcher | High | event.h/c | **DONE** | Pub-sub messaging for decoupled systems |
+| 1 | Save/Load | High | save.h/c | **DONE** (TOML) | TOML-based serialization (already existed) |
+| 1 | Validation | Medium | validate.h | **DONE** | Macro-based validation utilities |
+| 1 | Container Utils | Medium | containers.h/c | **DONE** | Generic algorithms and random |
+| 2 | Turn/Phase System | High | turn.h/c | **DONE** | Multi-phase turn orchestration (already existed) |
+| 2 | Resource Economy | Medium | resource.h/c | **DONE** | Multi-resource pools (already existed) |
+| 2 | Technology Tree | Medium | tech.h/c | Pending | Research with prerequisites |
+| 2 | Victory System | Low | victory.h/c | Pending | Multi-win-condition tracking |
+| 3 | AI Personality | Medium | ai.h/c | Pending | Weighted decision making |
+| 4 | View Model | Medium | viewmodel.h/c | Pending | UI data binding |
+| 4 | Theme Enhancement | Low | (existing) | Pending | Semantic color system |
+| 5 | 3D Camera | Low | camera3d.h/c | Pending | Orbital camera for 3D views |
+| - | History Tracking | Medium | history.h/c | **DONE** | Metrics snapshots (already existed) |
+| - | Modifier Stack | Medium | modifier.h/c | **DONE** | Composable effect multipliers (already existed) |
+| - | Threshold Tracker | Low | threshold.h/c | **DONE** | Value boundary callbacks (already existed) |
 
 ---
 
-## Phase 1: Core Infrastructure (High Priority)
+## Phase 1: Core Infrastructure ✅ COMPLETE
 
-### 1.1 Data Configuration System
+### 1.1 Event/Messaging System
+**Priority:** High
+**Location:** `src/core/event.c`, `include/carbon/event.h`
 
-**Files:**
-- `include/carbon/config.h`
-- `src/data/config.c`
+A publish-subscribe event dispatcher for decoupled system communication.
 
-**Dependencies:** None (standalone). Requires adding tomlc99 library.
+**Features:**
+- Type-safe event data using tagged unions
+- Per-event-type subscription with listener IDs
+- `subscribe()`, `unsubscribe()`, `emit()` API
+- Factory functions for common events
+- Support for 30+ event types
+- Deferred emission queue for events during callbacks
 
 **API Design:**
-
 ```c
-#include "carbon/config.h"
+// Event types
+typedef enum {
+    CARBON_EVENT_NONE = 0,
+    // Engine events
+    CARBON_EVENT_WINDOW_RESIZE,
+    CARBON_EVENT_WINDOW_FOCUS,
+    // Game events
+    CARBON_EVENT_TURN_STARTED,
+    CARBON_EVENT_TURN_ENDED,
+    CARBON_EVENT_PHASE_STARTED,
+    CARBON_EVENT_PHASE_ENDED,
+    CARBON_EVENT_ENTITY_CREATED,
+    CARBON_EVENT_ENTITY_DESTROYED,
+    CARBON_EVENT_SELECTION_CHANGED,
+    CARBON_EVENT_RESOURCE_CHANGED,
+    CARBON_EVENT_TECH_RESEARCHED,
+    CARBON_EVENT_VICTORY_ACHIEVED,
+    // ... extensible
+    CARBON_EVENT_CUSTOM = 1000,  // User-defined events start here
+} Carbon_EventType;
 
-// Generic definition with string ID and name
-typedef struct Carbon_DataEntry {
-    char id[64];
-    char name[128];
-    void *data;           // Points to type-specific struct
-} Carbon_DataEntry;
+// Event data (tagged union)
+typedef struct Carbon_Event {
+    Carbon_EventType type;
+    uint32_t timestamp;
+    union {
+        struct { int width, height; } window_resize;
+        struct { uint32_t turn; } turn;
+        struct { Carbon_TurnPhase phase; } phase;
+        struct { ecs_entity_t entity; } entity;
+        struct { int32_t id; float x, y; } selection;
+        struct { int resource_type; int old_value, new_value; } resource;
+        struct { uint32_t tech_id; } tech;
+        struct { int victory_type; int winner_id; } victory;
+        struct { void *data; size_t size; } custom;
+    };
+} Carbon_Event;
 
-// Loader manages multiple data types
-typedef struct Carbon_DataLoader Carbon_DataLoader;
+// Dispatcher
+typedef struct Carbon_EventDispatcher Carbon_EventDispatcher;
+typedef void (*Carbon_EventCallback)(const Carbon_Event *event, void *userdata);
+typedef uint32_t Carbon_ListenerID;
 
-// Create/destroy
-Carbon_DataLoader *carbon_data_create(void);
-void carbon_data_destroy(Carbon_DataLoader *loader);
+Carbon_EventDispatcher *carbon_event_dispatcher_create(void);
+void carbon_event_dispatcher_destroy(Carbon_EventDispatcher *d);
 
-// Load data from TOML file with custom parser callback
-typedef bool (*Carbon_DataParseFunc)(const char *key, void *toml_table, void *out_entry, void *userdata);
-bool carbon_data_load(Carbon_DataLoader *loader, const char *path,
-                      const char *array_key,  // e.g. "policy", "event"
-                      size_t entry_size,      // sizeof(MyDataDef)
-                      Carbon_DataParseFunc parse_func,
-                      void *userdata);
+Carbon_ListenerID carbon_event_subscribe(Carbon_EventDispatcher *d,
+                                          Carbon_EventType type,
+                                          Carbon_EventCallback callback,
+                                          void *userdata);
+Carbon_ListenerID carbon_event_subscribe_all(Carbon_EventDispatcher *d,
+                                              Carbon_EventCallback callback,
+                                              void *userdata);
+void carbon_event_unsubscribe(Carbon_EventDispatcher *d, Carbon_ListenerID id);
+void carbon_event_emit(Carbon_EventDispatcher *d, const Carbon_Event *event);
 
-// Access data
-size_t carbon_data_count(const Carbon_DataLoader *loader);
-void *carbon_data_get_by_index(const Carbon_DataLoader *loader, size_t index);
-void *carbon_data_find(const Carbon_DataLoader *loader, const char *id);  // O(1) hash lookup
-const char *carbon_data_get_last_error(const Carbon_DataLoader *loader);
+// Deferred emission (for events during callbacks)
+void carbon_event_emit_deferred(Carbon_EventDispatcher *d, const Carbon_Event *event);
+void carbon_event_flush_deferred(Carbon_EventDispatcher *d);
+
+// Convenience emitters
+void carbon_event_emit_turn_started(Carbon_EventDispatcher *d, uint32_t turn);
+void carbon_event_emit_turn_ended(Carbon_EventDispatcher *d, uint32_t turn);
+void carbon_event_emit_entity_created(Carbon_EventDispatcher *d, ecs_entity_t entity);
+void carbon_event_emit_resource_changed(Carbon_EventDispatcher *d, int type, int old_val, int new_val);
 ```
 
 **Implementation Notes:**
-- Uses tomlc99 (single-header TOML parser, MIT license)
-- Stores entries in contiguous array for cache-friendly iteration
-- Builds hash map after load for O(1) ID lookup
-- Parse callback allows game to define struct layout
-
-**Example Usage:**
-```c
-typedef struct PolicyDef {
-    char id[64];
-    char name[128];
-    int cost;
-    float effect;
-} PolicyDef;
-
-bool parse_policy(const char *key, void *tbl, void *out, void *ud) {
-    PolicyDef *p = out;
-    strncpy(p->id, toml_string_at(tbl, "id"), 64);
-    strncpy(p->name, toml_string_at(tbl, "name"), 128);
-    p->cost = toml_int_at(tbl, "cost");
-    p->effect = toml_double_at(tbl, "effect");
-    return true;
-}
-
-Carbon_DataLoader *loader = carbon_data_create();
-carbon_data_load(loader, "data/policies.toml", "policy", sizeof(PolicyDef), parse_policy, NULL);
-PolicyDef *p = carbon_data_find(loader, "renewable_energy");
-```
+- Use dynamic array for listeners per event type
+- Listener IDs are monotonically increasing (never reused)
+- Thread-safe option via mutex (optional compile flag)
+- Deferred emission queue prevents issues during callback iteration
 
 ---
 
-### 1.2 Event System
+### 1.2 Save/Load System
+**Priority:** High
+**Location:** `src/core/save.c`, `include/carbon/save.h`
 
-**Files:**
-- `include/carbon/event.h` (game events, not SDL events)
-- `src/data/event.c`
+Binary serialization with version checking and data integrity validation.
 
-**Dependencies:** Data Configuration System (for loading event definitions)
-
-**API Design:**
-
-```c
-#include "carbon/event.h"
-
-// Maximum values
-#define CARBON_EVENT_MAX_CHOICES 4
-#define CARBON_EVENT_MAX_EFFECTS 16
-#define CARBON_EVENT_MAX_VARS 16
-
-// Effect types are game-defined via indices
-typedef struct Carbon_EventEffect {
-    int type;             // Game-defined effect type enum
-    float value;          // Effect magnitude
-} Carbon_EventEffect;
-
-// Player choice
-typedef struct Carbon_EventChoice {
-    char label[64];
-    char description[256];
-    Carbon_EventEffect effects[CARBON_EVENT_MAX_EFFECTS];
-    int effect_count;
-} Carbon_EventChoice;
-
-// Event definition (loadable from config)
-typedef struct Carbon_EventDef {
-    char id[64];
-    char name[128];
-    char description[512];
-    char trigger[256];    // Expression: "health < 0.2" or "turn > 10"
-    Carbon_EventChoice choices[CARBON_EVENT_MAX_CHOICES];
-    int choice_count;
-    bool one_shot;        // Only trigger once per game
-} Carbon_EventDef;
-
-// Trigger context - game fills with current values
-typedef struct Carbon_TriggerContext {
-    const char *var_names[CARBON_EVENT_MAX_VARS];
-    float var_values[CARBON_EVENT_MAX_VARS];
-    int var_count;
-} Carbon_TriggerContext;
-
-// Active event awaiting player choice
-typedef struct Carbon_ActiveEvent {
-    const Carbon_EventDef *def;
-    bool resolved;
-    int choice_made;      // -1 if not yet chosen
-} Carbon_ActiveEvent;
-
-// Event manager
-typedef struct Carbon_EventManager Carbon_EventManager;
-
-Carbon_EventManager *carbon_event_create(void);
-void carbon_event_destroy(Carbon_EventManager *em);
-
-// Register event definitions (typically from data loader)
-void carbon_event_register(Carbon_EventManager *em, const Carbon_EventDef *def);
-
-// Check triggers and potentially activate an event
-// Returns true if a new event was triggered
-bool carbon_event_check_triggers(Carbon_EventManager *em, const Carbon_TriggerContext *ctx);
-
-// Query active event
-bool carbon_event_has_pending(const Carbon_EventManager *em);
-const Carbon_ActiveEvent *carbon_event_get_pending(const Carbon_EventManager *em);
-
-// Make a choice (returns effects to apply)
-bool carbon_event_choose(Carbon_EventManager *em, int choice_index);
-const Carbon_EventChoice *carbon_event_get_chosen(const Carbon_EventManager *em);
-
-// Clear resolved event
-void carbon_event_clear_pending(Carbon_EventManager *em);
-
-// Expression evaluation (public for game use)
-bool carbon_event_evaluate(const char *expr, const Carbon_TriggerContext *ctx);
-```
-
-**Trigger Expression Format:**
-- Simple: `"variable > 0.5"`, `"health < 20"`, `"turn >= 100"`
-- Variables are looked up in TriggerContext by name
-- Operators: `>`, `<`, `>=`, `<=`, `==`, `!=`
-
-**Implementation Notes:**
-- Simple tokenizer for trigger expressions
-- Tracks triggered event IDs to prevent duplicates for one_shot events
-- Cooldown counter between events (configurable)
-- Game applies effects from chosen choice
-
----
-
-### 1.3 Save/Load System
-
-**Files:**
-- `include/carbon/save.h`
-- `src/data/save.c`
-
-**Dependencies:** Data Configuration System (uses TOML for save format)
+**Features:**
+- Magic number + version header
+- CRC32 checksum validation
+- Binary reader/writer with type-safe methods
+- Directory management for save files
+- Human-readable error codes
 
 **API Design:**
-
 ```c
-#include "carbon/save.h"
+// Save header (written automatically)
+typedef struct Carbon_SaveHeader {
+    uint32_t magic;           // 'CARB' = 0x42524143
+    uint16_t version_major;
+    uint16_t version_minor;
+    uint64_t timestamp;
+    uint32_t checksum;        // CRC32 of data after header
+    uint32_t data_size;
+} Carbon_SaveHeader;
 
-#define CARBON_SAVE_MAX_PATH 512
-#define CARBON_SAVE_VERSION 1
-
-// Save file info (for save list UI)
-typedef struct Carbon_SaveInfo {
-    char filename[256];
-    char display_name[128];
-    char timestamp[32];     // ISO 8601
-    int version;
-    bool is_compatible;
-
-    // Game can add preview data via metadata
-    int preview_turn;
-    float preview_values[4]; // Game-defined preview metrics
-} Carbon_SaveInfo;
-
-// Result of save/load operation
-typedef struct Carbon_SaveResult {
-    bool success;
-    char filepath[CARBON_SAVE_MAX_PATH];
-    char error_message[256];
-    int save_version;
-    bool was_migrated;
+// Result codes
+typedef enum {
+    CARBON_SAVE_OK = 0,
+    CARBON_SAVE_ERROR_FILE,
+    CARBON_SAVE_ERROR_WRITE,
+    CARBON_SAVE_ERROR_CHECKSUM,
+    CARBON_SAVE_ERROR_VERSION,
+    CARBON_SAVE_ERROR_CORRUPT,
 } Carbon_SaveResult;
 
-// Callbacks for game-specific serialization
-typedef bool (*Carbon_SerializeFunc)(void *game_state, void *toml_table);
-typedef bool (*Carbon_DeserializeFunc)(void *game_state, const void *toml_table);
+// Binary writer
+typedef struct Carbon_BinaryWriter Carbon_BinaryWriter;
 
-// Save manager
-typedef struct Carbon_SaveManager Carbon_SaveManager;
+Carbon_BinaryWriter *carbon_binary_writer_create(const char *path);
+void carbon_binary_writer_destroy(Carbon_BinaryWriter *w);
 
-Carbon_SaveManager *carbon_save_create(const char *saves_dir);
-void carbon_save_destroy(Carbon_SaveManager *sm);
+void carbon_write_u8(Carbon_BinaryWriter *w, uint8_t value);
+void carbon_write_u16(Carbon_BinaryWriter *w, uint16_t value);
+void carbon_write_u32(Carbon_BinaryWriter *w, uint32_t value);
+void carbon_write_u64(Carbon_BinaryWriter *w, uint64_t value);
+void carbon_write_i32(Carbon_BinaryWriter *w, int32_t value);
+void carbon_write_f32(Carbon_BinaryWriter *w, float value);
+void carbon_write_f64(Carbon_BinaryWriter *w, double value);
+void carbon_write_bool(Carbon_BinaryWriter *w, bool value);
+void carbon_write_string(Carbon_BinaryWriter *w, const char *str);
+void carbon_write_bytes(Carbon_BinaryWriter *w, const void *data, size_t size);
 
-// Set game version for compatibility checking
-void carbon_save_set_version(Carbon_SaveManager *sm, int version, int min_compatible);
+// Write array with count prefix
+void carbon_write_array_u32(Carbon_BinaryWriter *w, const uint32_t *arr, size_t count);
+void carbon_write_array_f32(Carbon_BinaryWriter *w, const float *arr, size_t count);
 
-// Save/load with callbacks
-Carbon_SaveResult carbon_save_game(Carbon_SaveManager *sm,
-                                    const char *save_name,
-                                    Carbon_SerializeFunc serialize,
-                                    void *game_state);
+Carbon_SaveResult carbon_binary_writer_finalize(Carbon_BinaryWriter *w,
+                                                 uint16_t version_major,
+                                                 uint16_t version_minor);
 
-Carbon_SaveResult carbon_load_game(Carbon_SaveManager *sm,
-                                    const char *save_name,
-                                    Carbon_DeserializeFunc deserialize,
-                                    void *game_state);
+// Binary reader
+typedef struct Carbon_BinaryReader Carbon_BinaryReader;
 
-// Quick save/load and autosave
-Carbon_SaveResult carbon_save_quick(Carbon_SaveManager *sm, Carbon_SerializeFunc s, void *gs);
-Carbon_SaveResult carbon_load_quick(Carbon_SaveManager *sm, Carbon_DeserializeFunc d, void *gs);
-Carbon_SaveResult carbon_save_auto(Carbon_SaveManager *sm, Carbon_SerializeFunc s, void *gs);
+Carbon_BinaryReader *carbon_binary_reader_create(const char *path);
+void carbon_binary_reader_destroy(Carbon_BinaryReader *r);
 
-// List saves for load screen
-Carbon_SaveInfo *carbon_save_list(const Carbon_SaveManager *sm, int *out_count);
-void carbon_save_list_free(Carbon_SaveInfo *list);
+Carbon_SaveResult carbon_binary_reader_validate(Carbon_BinaryReader *r,
+                                                 uint16_t expected_major,
+                                                 uint16_t expected_minor);
+const Carbon_SaveHeader *carbon_binary_reader_get_header(Carbon_BinaryReader *r);
 
-// Delete a save
-bool carbon_save_delete(Carbon_SaveManager *sm, const char *save_name);
+uint8_t carbon_read_u8(Carbon_BinaryReader *r);
+uint16_t carbon_read_u16(Carbon_BinaryReader *r);
+uint32_t carbon_read_u32(Carbon_BinaryReader *r);
+uint64_t carbon_read_u64(Carbon_BinaryReader *r);
+int32_t carbon_read_i32(Carbon_BinaryReader *r);
+float carbon_read_f32(Carbon_BinaryReader *r);
+double carbon_read_f64(Carbon_BinaryReader *r);
+bool carbon_read_bool(Carbon_BinaryReader *r);
+char *carbon_read_string(Carbon_BinaryReader *r);  // Caller must free
+size_t carbon_read_bytes(Carbon_BinaryReader *r, void *buffer, size_t max_size);
 
-// Check if save exists
-bool carbon_save_exists(const Carbon_SaveManager *sm, const char *save_name);
-```
+// Array reading
+size_t carbon_read_array_u32(Carbon_BinaryReader *r, uint32_t *out, size_t max_count);
+size_t carbon_read_array_f32(Carbon_BinaryReader *r, float *out, size_t max_count);
 
-**TOML Save Format:**
-```toml
-[metadata]
-version = 1
-timestamp = "2025-01-15T10:30:00Z"
-save_name = "quicksave"
-game_version = "1.0.0"
+bool carbon_binary_reader_has_error(Carbon_BinaryReader *r);
+const char *carbon_binary_reader_error(Carbon_BinaryReader *r);
+bool carbon_binary_reader_eof(Carbon_BinaryReader *r);
 
-[game_state]
-# Game-specific data written by serialize callback
-turn = 42
-score = 1000
-
-[player]
-# More game data...
+// Save directory management
+const char *carbon_save_get_directory(void);  // Platform-specific
+bool carbon_save_set_directory(const char *path);
+bool carbon_save_list(const char *extension, char ***out_files, int *out_count);
+void carbon_save_free_list(char **files, int count);
+bool carbon_save_delete(const char *filename);
+bool carbon_save_exists(const char *filename);
 ```
 
 **Implementation Notes:**
-- Creates saves directory if it doesn't exist
-- Writes TOML format for human-readable saves
-- Metadata section for quick preview without full parse
-- Version checking with clear error messages
-- Serialize/deserialize callbacks give game full control
+- Little-endian format (convert on big-endian platforms)
+- String format: uint32_t length + chars (no null terminator in file)
+- CRC32 uses standard polynomial 0xEDB88320
+- Save directory: `~/Library/Application Support/<app>/` (macOS), `~/.local/share/<app>/` (Linux), `%APPDATA%/<app>/` (Windows)
 
 ---
 
-## Phase 2: Turn-Based Game Support (Medium Priority)
+### 1.3 Validation Framework
+**Priority:** Medium
+**Location:** `include/carbon/validate.h` (header-only)
 
-### 2.1 Turn Manager
+Macro-based validation utilities with logging integration.
 
-**Files:**
-- `include/carbon/turn.h`
-- `src/game/turn.c`
-
-**Dependencies:** None (standalone)
+**Features:**
+- Pointer and ID validation with early return
+- Range checking
+- Automatic context from `__func__`
+- Integration with Carbon's error system
 
 **API Design:**
-
 ```c
-#include "carbon/turn.h"
+// Validation macros with early return
+#define CARBON_VALIDATE_PTR(ptr) \
+    do { \
+        if (!(ptr)) { \
+            carbon_set_error("%s: null pointer: %s", __func__, #ptr); \
+            return; \
+        } \
+    } while(0)
 
-// Turn phases (game can define meaning)
+#define CARBON_VALIDATE_PTR_RET(ptr, ret) \
+    do { \
+        if (!(ptr)) { \
+            carbon_set_error("%s: null pointer: %s", __func__, #ptr); \
+            return (ret); \
+        } \
+    } while(0)
+
+#define CARBON_VALIDATE_ID(id, invalid_value) \
+    do { \
+        if ((id) == (invalid_value)) { \
+            carbon_set_error("%s: invalid ID: %s", __func__, #id); \
+            return; \
+        } \
+    } while(0)
+
+#define CARBON_VALIDATE_ID_RET(id, invalid_value, ret) \
+    do { \
+        if ((id) == (invalid_value)) { \
+            carbon_set_error("%s: invalid ID: %s", __func__, #id); \
+            return (ret); \
+        } \
+    } while(0)
+
+#define CARBON_VALIDATE_RANGE(val, min, max) \
+    do { \
+        if ((val) < (min) || (val) > (max)) { \
+            carbon_set_error("%s: %s out of range [%d, %d]: %d", \
+                            __func__, #val, (int)(min), (int)(max), (int)(val)); \
+            return; \
+        } \
+    } while(0)
+
+#define CARBON_VALIDATE_RANGE_RET(val, min, max, ret) \
+    do { \
+        if ((val) < (min) || (val) > (max)) { \
+            carbon_set_error("%s: %s out of range [%d, %d]: %d", \
+                            __func__, #val, (int)(min), (int)(max), (int)(val)); \
+            return (ret); \
+        } \
+    } while(0)
+
+// Entity validation (for ECS)
+#define CARBON_VALIDATE_ENTITY(world, entity) \
+    do { \
+        if ((entity) == 0 || !ecs_is_alive(world, entity)) { \
+            carbon_set_error("%s: invalid entity: %s", __func__, #entity); \
+            return false; \
+        } \
+    } while(0)
+
+// Debug-only assertions (compiled out in release)
+#ifdef CARBON_DEBUG
+#define CARBON_ASSERT(cond) \
+    do { \
+        if (!(cond)) { \
+            SDL_Log("ASSERT FAILED: %s at %s:%d", #cond, __FILE__, __LINE__); \
+            abort(); \
+        } \
+    } while(0)
+#define CARBON_ASSERT_MSG(cond, msg) \
+    do { \
+        if (!(cond)) { \
+            SDL_Log("ASSERT FAILED: %s - %s at %s:%d", #cond, msg, __FILE__, __LINE__); \
+            abort(); \
+        } \
+    } while(0)
+#else
+#define CARBON_ASSERT(cond) ((void)0)
+#define CARBON_ASSERT_MSG(cond, msg) ((void)0)
+#endif
+```
+
+---
+
+### 1.4 Container Utilities
+**Priority:** Medium
+**Location:** `include/carbon/containers.h` (mostly header-only), `src/core/containers.c`
+
+Generic container algorithms to reduce code duplication.
+
+**Features:**
+- Dynamic arrays with type safety via macros
+- Random selection utilities
+- Weighted random choice
+- Shuffle algorithm
+
+**API Design:**
+```c
+// Dynamic array (type-generic via macros)
+#define Carbon_Array(T) struct { T *data; size_t count; size_t capacity; }
+
+#define carbon_array_init(arr) \
+    do { (arr)->data = NULL; (arr)->count = 0; (arr)->capacity = 0; } while(0)
+
+#define carbon_array_free(arr) \
+    do { free((arr)->data); carbon_array_init(arr); } while(0)
+
+#define carbon_array_push(arr, item) \
+    do { \
+        if ((arr)->count >= (arr)->capacity) { \
+            (arr)->capacity = (arr)->capacity ? (arr)->capacity * 2 : 8; \
+            (arr)->data = realloc((arr)->data, (arr)->capacity * sizeof(*(arr)->data)); \
+        } \
+        (arr)->data[(arr)->count++] = (item); \
+    } while(0)
+
+#define carbon_array_pop(arr) \
+    ((arr)->count > 0 ? (arr)->data[--(arr)->count] : (arr)->data[0])
+
+#define carbon_array_clear(arr) \
+    do { (arr)->count = 0; } while(0)
+
+#define carbon_array_remove(arr, index) \
+    do { \
+        if ((size_t)(index) < (arr)->count - 1) { \
+            memmove(&(arr)->data[index], &(arr)->data[(index) + 1], \
+                    ((arr)->count - (index) - 1) * sizeof(*(arr)->data)); \
+        } \
+        (arr)->count--; \
+    } while(0)
+
+#define carbon_array_remove_swap(arr, index) \
+    do { \
+        if ((size_t)(index) < (arr)->count - 1) { \
+            (arr)->data[index] = (arr)->data[(arr)->count - 1]; \
+        } \
+        (arr)->count--; \
+    } while(0)
+
+#define carbon_array_reserve(arr, cap) \
+    do { \
+        if ((cap) > (arr)->capacity) { \
+            (arr)->capacity = (cap); \
+            (arr)->data = realloc((arr)->data, (arr)->capacity * sizeof(*(arr)->data)); \
+        } \
+    } while(0)
+
+// Random utilities (uses SDL random internally)
+int carbon_random_int(int min, int max);           // [min, max] inclusive
+float carbon_random_float(float min, float max);   // [min, max)
+bool carbon_random_bool(void);
+size_t carbon_random_index(size_t count);          // [0, count)
+void carbon_random_seed(uint64_t seed);
+
+// Random choice from array
+#define carbon_random_choice(arr, count) \
+    ((count) > 0 ? (arr)[carbon_random_index(count)] : (arr)[0])
+
+// Weighted random choice
+typedef struct {
+    size_t index;
+    float weight;
+} Carbon_WeightedItem;
+
+size_t carbon_weighted_random(const Carbon_WeightedItem *items, size_t count);
+
+// Shuffle array in place (Fisher-Yates)
+void carbon_shuffle(void *array, size_t count, size_t element_size);
+
+#define carbon_shuffle_array(arr, count) \
+    carbon_shuffle((arr), (count), sizeof(*(arr)))
+```
+
+---
+
+## Phase 2: Strategy Game Systems
+
+### 2.1 Turn/Phase System
+**Priority:** High (for strategy games)
+**Location:** `src/game/turn.c`, `include/carbon/turn.h`
+
+Manages turn advancement through ordered phases with callbacks.
+
+**Features:**
+- Configurable phase list
+- Per-phase callbacks
+- Turn counter
+- Integration with event system
+
+**API Design:**
+```c
+// Phase definition
 typedef enum {
-    CARBON_PHASE_WORLD_UPDATE = 0,  // AI/simulation runs
-    CARBON_PHASE_EVENTS,            // Events trigger
-    CARBON_PHASE_PLAYER_INPUT,      // Player makes decisions
-    CARBON_PHASE_RESOLUTION,        // Apply player actions
-    CARBON_PHASE_END_CHECK,         // Victory/defeat check
+    CARBON_PHASE_NONE = 0,
+    CARBON_PHASE_PRE_TURN,
+    CARBON_PHASE_ECONOMY,
+    CARBON_PHASE_PRODUCTION,
+    CARBON_PHASE_AI,
+    CARBON_PHASE_MOVEMENT,
+    CARBON_PHASE_COMBAT,
+    CARBON_PHASE_POST_TURN,
     CARBON_PHASE_COUNT
 } Carbon_TurnPhase;
 
-// Phase callback
-typedef void (*Carbon_PhaseCallback)(void *userdata, int turn_number);
+typedef void (*Carbon_PhaseCallback)(Carbon_TurnPhase phase, uint32_t turn, void *userdata);
 
-// Turn manager
-typedef struct Carbon_TurnManager {
-    int turn_number;
-    Carbon_TurnPhase current_phase;
-    Carbon_PhaseCallback phase_callbacks[CARBON_PHASE_COUNT];
-    void *phase_userdata[CARBON_PHASE_COUNT];
-    bool turn_in_progress;
-} Carbon_TurnManager;
+typedef struct Carbon_TurnSystem Carbon_TurnSystem;
 
-// Create with default phases
-void carbon_turn_init(Carbon_TurnManager *tm);
+Carbon_TurnSystem *carbon_turn_system_create(Carbon_EventDispatcher *events);
+void carbon_turn_system_destroy(Carbon_TurnSystem *ts);
 
-// Set phase callback
-void carbon_turn_set_callback(Carbon_TurnManager *tm, Carbon_TurnPhase phase,
-                               Carbon_PhaseCallback callback, void *userdata);
+// Configure phases (order matters)
+void carbon_turn_add_phase(Carbon_TurnSystem *ts, Carbon_TurnPhase phase,
+                           Carbon_PhaseCallback callback, void *userdata);
+void carbon_turn_remove_phase(Carbon_TurnSystem *ts, Carbon_TurnPhase phase);
+void carbon_turn_set_phase_order(Carbon_TurnSystem *ts, const Carbon_TurnPhase *phases, int count);
 
-// Advance to next phase (calls callback)
-// Returns true if turn completed (wrapped back to first phase)
-bool carbon_turn_advance(Carbon_TurnManager *tm);
+// Turn control
+void carbon_turn_advance(Carbon_TurnSystem *ts);  // Process all phases
+void carbon_turn_process_phase(Carbon_TurnSystem *ts, Carbon_TurnPhase phase);  // Single phase
+void carbon_turn_skip_to_phase(Carbon_TurnSystem *ts, Carbon_TurnPhase phase);
 
-// Skip to specific phase
-void carbon_turn_skip_to(Carbon_TurnManager *tm, Carbon_TurnPhase phase);
-
-// Query
-Carbon_TurnPhase carbon_turn_current_phase(const Carbon_TurnManager *tm);
-int carbon_turn_number(const Carbon_TurnManager *tm);
+// Queries
+uint32_t carbon_turn_get_current(Carbon_TurnSystem *ts);
+Carbon_TurnPhase carbon_turn_get_phase(Carbon_TurnSystem *ts);
+bool carbon_turn_is_processing(Carbon_TurnSystem *ts);
 const char *carbon_turn_phase_name(Carbon_TurnPhase phase);
+
+// Events emitted:
+// - CARBON_EVENT_TURN_STARTED (at start of advance)
+// - CARBON_EVENT_PHASE_STARTED (before each phase callback)
+// - CARBON_EVENT_PHASE_ENDED (after each phase callback)
+// - CARBON_EVENT_TURN_ENDED (after all phases complete)
 ```
 
 **Implementation Notes:**
-- Lightweight struct (can be stack allocated)
-- Callbacks are optional - can manually advance phases
-- Phase names for debug UI
-- No allocations needed
+- Phases are processed in registration order
+- Callbacks can be async (return immediately, signal completion later)
+- For real-time hybrid games, phases can be time-limited
 
 ---
 
-### 2.2 History Tracking
+### 2.2 Resource Economy System
+**Priority:** Medium
+**Location:** `src/game/economy.c`, `include/carbon/economy.h`
 
-**Files:**
-- `include/carbon/history.h`
-- `src/game/history.c`
+Multi-resource economy with income tracking.
 
-**Dependencies:** None (standalone)
+**Features:**
+- Configurable resource types
+- Per-entity resource pools
+- Income/expense calculation
+- Resource events
 
 **API Design:**
+```c
+// Resource types (customizable)
+#define CARBON_MAX_RESOURCE_TYPES 8
+
+typedef struct Carbon_ResourceDef {
+    const char *name;
+    int32_t starting_value;
+    int32_t min_value;
+    int32_t max_value;  // 0 = unlimited
+} Carbon_ResourceDef;
+
+typedef struct Carbon_Resources {
+    int32_t values[CARBON_MAX_RESOURCE_TYPES];
+    int32_t income[CARBON_MAX_RESOURCE_TYPES];   // Per-turn income
+    int32_t expense[CARBON_MAX_RESOURCE_TYPES];  // Per-turn expenses
+} Carbon_Resources;
+
+typedef struct Carbon_EconomySystem Carbon_EconomySystem;
+
+Carbon_EconomySystem *carbon_economy_create(Carbon_EventDispatcher *events);
+void carbon_economy_destroy(Carbon_EconomySystem *es);
+
+// Define resource types
+int carbon_economy_define_resource(Carbon_EconomySystem *es, const Carbon_ResourceDef *def);
+const char *carbon_economy_get_resource_name(Carbon_EconomySystem *es, int type);
+int carbon_economy_get_resource_count(Carbon_EconomySystem *es);
+
+// Resource pool management
+Carbon_Resources *carbon_economy_create_pool(Carbon_EconomySystem *es);
+void carbon_economy_destroy_pool(Carbon_EconomySystem *es, Carbon_Resources *pool);
+void carbon_economy_init_pool(Carbon_EconomySystem *es, Carbon_Resources *pool);
+
+// Resource operations
+void carbon_resource_add(Carbon_Resources *r, int type, int32_t amount);
+void carbon_resource_subtract(Carbon_Resources *r, int type, int32_t amount);
+bool carbon_resource_can_afford(const Carbon_Resources *r, int type, int32_t amount);
+bool carbon_resource_spend(Carbon_Resources *r, int type, int32_t amount);  // Returns false if insufficient
+int32_t carbon_resource_get(const Carbon_Resources *r, int type);
+void carbon_resource_set(Carbon_Resources *r, int type, int32_t value);
+
+// Income/expense
+void carbon_resource_set_income(Carbon_Resources *r, int type, int32_t amount);
+void carbon_resource_add_income(Carbon_Resources *r, int type, int32_t delta);
+void carbon_resource_set_expense(Carbon_Resources *r, int type, int32_t amount);
+int32_t carbon_resource_get_net_income(const Carbon_Resources *r, int type);
+
+// Apply income (call during economy phase)
+void carbon_economy_process_income(Carbon_EconomySystem *es, Carbon_Resources *pool);
+
+// Bulk operations
+typedef struct {
+    int type;
+    int32_t amount;
+} Carbon_ResourceCost;
+
+bool carbon_resource_can_afford_multi(const Carbon_Resources *r,
+                                       const Carbon_ResourceCost *costs, int count);
+bool carbon_resource_spend_multi(Carbon_Resources *r,
+                                  const Carbon_ResourceCost *costs, int count);
+void carbon_resource_add_multi(Carbon_Resources *r,
+                                const Carbon_ResourceCost *amounts, int count);
+```
+
+---
+
+### 2.3 Technology Tree System
+**Priority:** Medium
+**Location:** `src/game/tech.c`, `include/carbon/tech.h`
+
+Research system with prerequisites and effects.
+
+**Features:**
+- Branch-based tech tree
+- Prerequisite chains
+- Effect application
+- Per-faction progress tracking
+
+**API Design:**
+```c
+// Technology effect types
+typedef enum {
+    CARBON_TECH_EFFECT_NONE = 0,
+    CARBON_TECH_EFFECT_RESOURCE_BONUS,
+    CARBON_TECH_EFFECT_PRODUCTION_BONUS,
+    CARBON_TECH_EFFECT_UNLOCK_UNIT,
+    CARBON_TECH_EFFECT_UNLOCK_BUILDING,
+    CARBON_TECH_EFFECT_STAT_MODIFIER,
+    CARBON_TECH_EFFECT_CUSTOM,
+} Carbon_TechEffectType;
+
+typedef struct Carbon_TechEffect {
+    Carbon_TechEffectType type;
+    int target_id;      // Unit/building/resource type
+    float value;        // Bonus amount or multiplier
+} Carbon_TechEffect;
+
+#define CARBON_TECH_MAX_PREREQS 4
+#define CARBON_TECH_MAX_EFFECTS 4
+
+typedef struct Carbon_Technology {
+    uint32_t id;
+    const char *name;
+    const char *description;
+    int branch;                           // Category/branch ID
+    int32_t cost;                         // Research cost
+    uint32_t prerequisites[CARBON_TECH_MAX_PREREQS];  // Tech IDs (0 = none)
+    int prereq_count;
+    Carbon_TechEffect effects[CARBON_TECH_MAX_EFFECTS];
+    int effect_count;
+} Carbon_Technology;
+
+// Per-faction tech state (supports up to 64 techs via bitmask, or use hash set for more)
+typedef struct Carbon_TechState {
+    uint64_t researched_mask;             // Bitmask of completed techs
+    uint32_t current_research;            // Tech ID being researched (0 = none)
+    int32_t research_progress;            // Points toward current tech
+} Carbon_TechState;
+
+typedef struct Carbon_TechSystem Carbon_TechSystem;
+
+Carbon_TechSystem *carbon_tech_system_create(Carbon_EventDispatcher *events);
+void carbon_tech_system_destroy(Carbon_TechSystem *ts);
+
+// Define technologies
+uint32_t carbon_tech_define(Carbon_TechSystem *ts, const Carbon_Technology *tech);
+const Carbon_Technology *carbon_tech_get(Carbon_TechSystem *ts, uint32_t id);
+int carbon_tech_count(Carbon_TechSystem *ts);
+
+// Tech state management
+void carbon_tech_state_init(Carbon_TechState *state);
+
+// Research operations
+bool carbon_tech_is_researched(const Carbon_TechState *state, uint32_t tech_id);
+bool carbon_tech_can_research(Carbon_TechSystem *ts, const Carbon_TechState *state, uint32_t tech_id);
+void carbon_tech_start_research(Carbon_TechState *state, uint32_t tech_id);
+bool carbon_tech_add_progress(Carbon_TechSystem *ts, Carbon_TechState *state, int32_t points);  // Returns true if completed
+void carbon_tech_complete(Carbon_TechSystem *ts, Carbon_TechState *state, uint32_t tech_id);
+void carbon_tech_cancel_research(Carbon_TechState *state);
+
+// Queries
+int carbon_tech_get_available(Carbon_TechSystem *ts, const Carbon_TechState *state,
+                               uint32_t *out_ids, int max_count);
+int carbon_tech_get_by_branch(Carbon_TechSystem *ts, int branch,
+                               uint32_t *out_ids, int max_count);
+float carbon_tech_get_progress_percent(Carbon_TechSystem *ts, const Carbon_TechState *state);
+int32_t carbon_tech_get_remaining_cost(Carbon_TechSystem *ts, const Carbon_TechState *state);
+```
+
+---
+
+### 2.4 Victory Condition System
+**Priority:** Low
+**Location:** `src/game/victory.c`, `include/carbon/victory.h`
+
+Multi-win-condition tracking.
+
+**Features:**
+- Multiple victory types
+- Progress tracking
+- Configurable thresholds
+
+**API Design:**
+```c
+typedef enum {
+    CARBON_VICTORY_NONE = 0,
+    CARBON_VICTORY_DOMINATION,    // Control X% of territory
+    CARBON_VICTORY_ELIMINATION,   // Defeat all opponents
+    CARBON_VICTORY_TECHNOLOGY,    // Research all techs
+    CARBON_VICTORY_ECONOMIC,      // Accumulate X resources
+    CARBON_VICTORY_SCORE,         // Highest score after N turns
+    CARBON_VICTORY_CUSTOM,
+    CARBON_VICTORY_COUNT
+} Carbon_VictoryType;
+
+typedef struct Carbon_VictoryCondition {
+    Carbon_VictoryType type;
+    bool enabled;
+    float threshold;              // e.g., 0.75 for 75% domination
+    int32_t target_value;         // e.g., 100000 for economic
+    int32_t target_turn;          // For score victory
+} Carbon_VictoryCondition;
+
+typedef struct Carbon_VictoryProgress {
+    float progress[CARBON_VICTORY_COUNT];  // 0.0 to 1.0 per condition type
+} Carbon_VictoryProgress;
+
+typedef struct Carbon_VictoryState {
+    bool achieved;
+    Carbon_VictoryType type;
+    int winner_id;                // Faction/player ID
+    char message[256];
+} Carbon_VictoryState;
+
+// Custom victory checker callback
+typedef bool (*Carbon_VictoryChecker)(int faction_id, float *out_progress, void *userdata);
+
+typedef struct Carbon_VictorySystem Carbon_VictorySystem;
+
+Carbon_VictorySystem *carbon_victory_system_create(Carbon_EventDispatcher *events);
+void carbon_victory_system_destroy(Carbon_VictorySystem *vs);
+
+void carbon_victory_set_condition(Carbon_VictorySystem *vs, const Carbon_VictoryCondition *cond);
+void carbon_victory_disable_condition(Carbon_VictorySystem *vs, Carbon_VictoryType type);
+void carbon_victory_set_custom_checker(Carbon_VictorySystem *vs, Carbon_VictoryChecker checker, void *userdata);
+
+void carbon_victory_check(Carbon_VictorySystem *vs);  // Checks all conditions, emits event if won
+void carbon_victory_declare(Carbon_VictorySystem *vs, Carbon_VictoryType type, int winner_id, const char *message);
+const Carbon_VictoryState *carbon_victory_get_state(Carbon_VictorySystem *vs);
+bool carbon_victory_is_achieved(Carbon_VictorySystem *vs);
+
+// Progress queries (for UI)
+void carbon_victory_get_progress(Carbon_VictorySystem *vs, int faction_id, Carbon_VictoryProgress *out);
+```
+
+---
+
+## Phase 3: AI Framework
+
+### 3.1 AI Personality System
+**Priority:** Medium
+**Location:** `src/ai/personality.c`, `include/carbon/ai.h`
+
+Personality-driven AI decision making.
+
+**Features:**
+- Personality types with weighted behaviors
+- Per-faction AI state
+- Threat assessment
+- Goal management
+
+**API Design:**
+```c
+// AI personality types
+typedef enum {
+    CARBON_AI_BALANCED = 0,
+    CARBON_AI_AGGRESSIVE,
+    CARBON_AI_DEFENSIVE,
+    CARBON_AI_ECONOMIC,
+    CARBON_AI_EXPANSIONIST,
+    CARBON_AI_TECHNOLOGIST,
+    CARBON_AI_COUNT
+} Carbon_AIPersonality;
+
+// Behavior weights (normalized, sum to 1.0)
+typedef struct Carbon_AIWeights {
+    float aggression;      // Attack enemies
+    float defense;         // Protect own territory
+    float expansion;       // Claim new territory
+    float economy;         // Build economy
+    float technology;      // Research
+    float diplomacy;       // Make alliances
+} Carbon_AIWeights;
+
+// Per-faction AI state
+typedef struct Carbon_AIState {
+    Carbon_AIPersonality personality;
+    Carbon_AIWeights weights;
+    uint32_t primary_target;      // Enemy faction to focus on
+    uint32_t ally_target;         // Faction to ally with
+    float threat_level;           // 0.0 to 1.0
+    int cooldowns[8];             // Action cooldowns
+} Carbon_AIState;
+
+// AI decision output
+typedef enum {
+    CARBON_AI_ACTION_NONE = 0,
+    CARBON_AI_ACTION_BUILD,
+    CARBON_AI_ACTION_ATTACK,
+    CARBON_AI_ACTION_DEFEND,
+    CARBON_AI_ACTION_EXPAND,
+    CARBON_AI_ACTION_RESEARCH,
+    CARBON_AI_ACTION_DIPLOMACY,
+    CARBON_AI_ACTION_COUNT
+} Carbon_AIActionType;
+
+typedef struct Carbon_AIAction {
+    Carbon_AIActionType type;
+    uint32_t target_id;
+    int32_t priority;
+    void *data;                   // Action-specific data
+} Carbon_AIAction;
+
+#define CARBON_AI_MAX_ACTIONS 16
+
+typedef struct Carbon_AIDecision {
+    Carbon_AIAction actions[CARBON_AI_MAX_ACTIONS];
+    int action_count;
+} Carbon_AIDecision;
+
+typedef struct Carbon_AISystem Carbon_AISystem;
+
+Carbon_AISystem *carbon_ai_system_create(void);
+void carbon_ai_system_destroy(Carbon_AISystem *ai);
+
+// Configure personality weights
+void carbon_ai_get_default_weights(Carbon_AIPersonality personality, Carbon_AIWeights *out);
+void carbon_ai_set_weights(Carbon_AIState *state, const Carbon_AIWeights *weights);
+void carbon_ai_state_init(Carbon_AIState *state, Carbon_AIPersonality personality);
+
+// Custom evaluator function receives game state and returns scored actions
+typedef void (*Carbon_AIEvaluator)(Carbon_AIState *state, void *game_context,
+                                    Carbon_AIAction *out_actions, int *out_count, int max_actions);
+
+void carbon_ai_register_evaluator(Carbon_AISystem *ai, Carbon_AIActionType type,
+                                   Carbon_AIEvaluator evaluator);
+
+// Decision making (call during AI phase)
+void carbon_ai_process_turn(Carbon_AISystem *ai, Carbon_AIState *state, void *game_context,
+                            Carbon_AIDecision *out_decision);
+
+// Utility functions
+float carbon_ai_score_action(Carbon_AIState *state, Carbon_AIActionType type, float base_score);
+void carbon_ai_update_cooldowns(Carbon_AIState *state);
+```
+
+---
+
+## Phase 4: UI Enhancements
+
+### 4.1 View Model / Data Binding
+**Priority:** Medium
+**Location:** `src/ui/viewmodel.c`, `include/carbon/viewmodel.h`
+
+Separates game state from UI presentation.
+
+**Features:**
+- Observable values with change detection
+- Event-driven UI updates
+- Type-safe value access
+
+**API Design:**
+```c
+// Observable value types
+typedef enum {
+    CARBON_VM_INT,
+    CARBON_VM_FLOAT,
+    CARBON_VM_BOOL,
+    CARBON_VM_STRING,
+    CARBON_VM_POINTER,
+} Carbon_ViewModelType;
+
+typedef struct Carbon_ViewModel Carbon_ViewModel;
+typedef void (*Carbon_VMChangeCallback)(Carbon_ViewModel *vm, uint32_t observable_id, void *userdata);
+
+Carbon_ViewModel *carbon_viewmodel_create(Carbon_EventDispatcher *events);
+void carbon_viewmodel_destroy(Carbon_ViewModel *vm);
+
+// Define observables
+uint32_t carbon_vm_define_int(Carbon_ViewModel *vm, const char *name, int32_t initial);
+uint32_t carbon_vm_define_float(Carbon_ViewModel *vm, const char *name, float initial);
+uint32_t carbon_vm_define_bool(Carbon_ViewModel *vm, const char *name, bool initial);
+uint32_t carbon_vm_define_string(Carbon_ViewModel *vm, const char *name, const char *initial);
+uint32_t carbon_vm_define_ptr(Carbon_ViewModel *vm, const char *name, void *initial);
+
+// Set values (emits change event if different)
+void carbon_vm_set_int(Carbon_ViewModel *vm, uint32_t id, int32_t value);
+void carbon_vm_set_float(Carbon_ViewModel *vm, uint32_t id, float value);
+void carbon_vm_set_bool(Carbon_ViewModel *vm, uint32_t id, bool value);
+void carbon_vm_set_string(Carbon_ViewModel *vm, uint32_t id, const char *value);
+void carbon_vm_set_ptr(Carbon_ViewModel *vm, uint32_t id, void *value);
+
+// Get values
+int32_t carbon_vm_get_int(Carbon_ViewModel *vm, uint32_t id);
+float carbon_vm_get_float(Carbon_ViewModel *vm, uint32_t id);
+bool carbon_vm_get_bool(Carbon_ViewModel *vm, uint32_t id);
+const char *carbon_vm_get_string(Carbon_ViewModel *vm, uint32_t id);
+void *carbon_vm_get_ptr(Carbon_ViewModel *vm, uint32_t id);
+
+// Lookup by name
+uint32_t carbon_vm_find(Carbon_ViewModel *vm, const char *name);
+
+// Change notification
+void carbon_vm_subscribe(Carbon_ViewModel *vm, uint32_t id,
+                          Carbon_VMChangeCallback callback, void *userdata);
+void carbon_vm_unsubscribe(Carbon_ViewModel *vm, uint32_t id, Carbon_VMChangeCallback callback);
+void carbon_vm_subscribe_all(Carbon_ViewModel *vm, Carbon_VMChangeCallback callback, void *userdata);
+
+// Batch updates (defer change events until commit)
+void carbon_vm_begin_update(Carbon_ViewModel *vm);
+void carbon_vm_commit_update(Carbon_ViewModel *vm);
+
+// Force notification even if value unchanged
+void carbon_vm_notify(Carbon_ViewModel *vm, uint32_t id);
+```
+
+---
+
+### 4.2 Theme System Enhancement
+**Priority:** Low
+**Location:** Enhance existing `src/ui/` code
+
+Add semantic colors and consistent styling.
+
+**Features:**
+- Named color slots (background, text, accent, success, warning, danger)
+- Per-widget state colors (normal, hover, pressed, disabled)
+- Easy theme switching
+
+**API Design:**
+```c
+// Add to existing UI system
+typedef struct Carbon_UITheme {
+    // Background colors
+    struct { float r, g, b, a; } bg_normal;
+    struct { float r, g, b, a; } bg_light;
+    struct { float r, g, b, a; } bg_dark;
+    struct { float r, g, b, a; } bg_panel;
+
+    // Text colors
+    struct { float r, g, b, a; } text_normal;
+    struct { float r, g, b, a; } text_dimmed;
+    struct { float r, g, b, a; } text_highlight;
+    struct { float r, g, b, a; } text_disabled;
+
+    // Accent colors (buttons, selections)
+    struct { float r, g, b, a; } accent_normal;
+    struct { float r, g, b, a; } accent_hover;
+    struct { float r, g, b, a; } accent_pressed;
+    struct { float r, g, b, a; } accent_disabled;
+
+    // Semantic colors
+    struct { float r, g, b, a; } success;
+    struct { float r, g, b, a; } warning;
+    struct { float r, g, b, a; } danger;
+    struct { float r, g, b, a; } info;
+
+    // Border styling
+    struct { float r, g, b, a; } border_color;
+    float border_radius;
+    float border_width;
+
+    // Spacing
+    float padding;
+    float margin;
+    float item_spacing;
+} Carbon_UITheme;
+
+Carbon_UITheme carbon_ui_theme_default(void);
+Carbon_UITheme carbon_ui_theme_dark(void);
+Carbon_UITheme carbon_ui_theme_light(void);
+
+void cui_set_theme(Carbon_UI *ui, const Carbon_UITheme *theme);
+const Carbon_UITheme *cui_get_theme(Carbon_UI *ui);
+```
+
+---
+
+## Phase 5: 3D Support (Future)
+
+### 5.1 3D Camera System
+**Priority:** Low (future expansion)
+**Location:** `src/graphics/camera3d.c`, `include/carbon/camera3d.h`
+
+Orbital camera for 3D views (galaxy maps, isometric).
+
+**Features:**
+- Spherical coordinate manipulation
+- Smooth transitions
+- Orbital controls (orbit, zoom, pan)
+
+**API Design:**
+```c
+typedef struct Carbon_Camera3D Carbon_Camera3D;
+
+Carbon_Camera3D *carbon_camera3d_create(void);
+void carbon_camera3d_destroy(Carbon_Camera3D *cam);
+
+// Position
+void carbon_camera3d_set_position(Carbon_Camera3D *cam, float x, float y, float z);
+void carbon_camera3d_set_target(Carbon_Camera3D *cam, float x, float y, float z);
+void carbon_camera3d_get_position(Carbon_Camera3D *cam, float *x, float *y, float *z);
+void carbon_camera3d_get_target(Carbon_Camera3D *cam, float *x, float *y, float *z);
+
+// Spherical coordinates
+void carbon_camera3d_set_spherical(Carbon_Camera3D *cam, float yaw, float pitch, float distance);
+void carbon_camera3d_get_spherical(Carbon_Camera3D *cam, float *yaw, float *pitch, float *distance);
+
+// Controls
+void carbon_camera3d_orbit(Carbon_Camera3D *cam, float delta_yaw, float delta_pitch);
+void carbon_camera3d_zoom(Carbon_Camera3D *cam, float delta);
+void carbon_camera3d_pan(Carbon_Camera3D *cam, float dx, float dy);
+
+// Constraints
+void carbon_camera3d_set_distance_limits(Carbon_Camera3D *cam, float min, float max);
+void carbon_camera3d_set_pitch_limits(Carbon_Camera3D *cam, float min, float max);
+
+// Projection
+void carbon_camera3d_set_perspective(Carbon_Camera3D *cam, float fov, float aspect,
+                                      float near, float far);
+void carbon_camera3d_set_orthographic(Carbon_Camera3D *cam, float width, float height,
+                                       float near, float far);
+
+// Matrices
+void carbon_camera3d_get_view_matrix(Carbon_Camera3D *cam, float *out_mat4);
+void carbon_camera3d_get_projection_matrix(Carbon_Camera3D *cam, float *out_mat4);
+void carbon_camera3d_get_view_projection(Carbon_Camera3D *cam, float *out_mat4);
+
+// Update (call each frame)
+void carbon_camera3d_update(Carbon_Camera3D *cam);
+
+// Smooth transitions
+void carbon_camera3d_animate_to(Carbon_Camera3D *cam, float x, float y, float z, float duration);
+void carbon_camera3d_animate_spherical_to(Carbon_Camera3D *cam, float yaw, float pitch, float distance, float duration);
+bool carbon_camera3d_is_animating(Carbon_Camera3D *cam);
+```
+
+---
+
+## Additional Systems (From Ecosocialism)
+
+### History Tracking
+**Priority:** Medium
+**Location:** `src/game/history.c`, `include/carbon/history.h`
+
+Metrics snapshots and event log for graphs and timeline.
 
 ```c
-#include "carbon/history.h"
-
 #define CARBON_HISTORY_MAX_SNAPSHOTS 100
 #define CARBON_HISTORY_MAX_EVENTS 50
 #define CARBON_HISTORY_MAX_METRICS 16
 
-// Metric snapshot (one per turn)
 typedef struct Carbon_MetricSnapshot {
     int turn;
     float values[CARBON_HISTORY_MAX_METRICS];
 } Carbon_MetricSnapshot;
 
-// Significant event (game-defined types)
 typedef struct Carbon_HistoryEvent {
     int turn;
-    int type;               // Game-defined enum
+    int type;
     char title[64];
     char description[256];
-    float value_before;
-    float value_after;
 } Carbon_HistoryEvent;
 
-// Graph data for rendering
-typedef struct Carbon_GraphData {
-    float *values;
-    int count;
-    float min_value;
-    float max_value;
-} Carbon_GraphData;
-
-// History tracker
 typedef struct Carbon_History Carbon_History;
 
 Carbon_History *carbon_history_create(void);
 void carbon_history_destroy(Carbon_History *h);
 
-// Register metric names (for debugging)
 void carbon_history_set_metric_name(Carbon_History *h, int index, const char *name);
-
-// Record a snapshot (circular buffer, keeps last N)
 void carbon_history_add_snapshot(Carbon_History *h, const Carbon_MetricSnapshot *snap);
-
-// Record a significant event
 void carbon_history_add_event(Carbon_History *h, const Carbon_HistoryEvent *event);
 
-// Query snapshots
 int carbon_history_snapshot_count(const Carbon_History *h);
 const Carbon_MetricSnapshot *carbon_history_get_snapshot(const Carbon_History *h, int index);
-
-// Query events
 int carbon_history_event_count(const Carbon_History *h);
 const Carbon_HistoryEvent *carbon_history_get_event(const Carbon_History *h, int index);
-
-// Get graph data for a metric (for UI graphing)
-// Caller must free returned values array
-Carbon_GraphData carbon_history_get_graph(const Carbon_History *h, int metric_index);
-void carbon_graph_data_free(Carbon_GraphData *data);
-
-// Clear all history
-void carbon_history_clear(Carbon_History *h);
 ```
-
-**Implementation Notes:**
-- Circular buffer for snapshots (deque-style)
-- Separate circular buffer for events
-- Graph data normalized with min/max for easy rendering
-- Metric names optional (for debug display)
 
 ---
 
-### 2.3 Resource System
+### Modifier Stack
+**Priority:** Medium
+**Location:** `src/game/modifier.c`, `include/carbon/modifier.h`
 
-**Files:**
-- `include/carbon/resource.h`
-- `src/game/resource.c`
-
-**Dependencies:** None (standalone)
-
-**API Design:**
+Composable effect multipliers with source tracking.
 
 ```c
-#include "carbon/resource.h"
-
-// Single resource type
-typedef struct Carbon_Resource {
-    int current;
-    int maximum;            // 0 = unlimited
-    int per_turn_base;
-    float per_turn_modifier; // Multiplier (1.0 = normal)
-} Carbon_Resource;
-
-// Initialize with defaults
-void carbon_resource_init(Carbon_Resource *r, int initial, int maximum, int per_turn);
-
-// Per-turn tick (adds per_turn_base * per_turn_modifier, clamped to max)
-void carbon_resource_tick(Carbon_Resource *r);
-
-// Spending
-bool carbon_resource_can_afford(const Carbon_Resource *r, int amount);
-bool carbon_resource_spend(Carbon_Resource *r, int amount);
-
-// Adding (respects maximum)
-void carbon_resource_add(Carbon_Resource *r, int amount);
-
-// Set values
-void carbon_resource_set(Carbon_Resource *r, int value);
-void carbon_resource_set_modifier(Carbon_Resource *r, float modifier);
-void carbon_resource_set_per_turn(Carbon_Resource *r, int per_turn);
-void carbon_resource_set_max(Carbon_Resource *r, int maximum);
-
-// Calculate how much would be gained next tick
-int carbon_resource_preview_tick(const Carbon_Resource *r);
-```
-
-**Implementation Notes:**
-- Inline-able simple struct
-- No allocations
-- Can be used as component in ECS
-
----
-
-### 2.4 Modifier Stack
-
-**Files:**
-- `include/carbon/modifier.h`
-- `src/game/modifier.c`
-
-**Dependencies:** None (standalone)
-
-**API Design:**
-
-```c
-#include "carbon/modifier.h"
-
 #define CARBON_MODIFIER_MAX 32
 
-// Named modifier source (for UI display/debugging)
 typedef struct Carbon_Modifier {
-    char source[32];        // E.g., "policy_renewable", "tech_efficiency"
-    float value;            // Multiplier delta: 0.1 = +10%, -0.05 = -5%
+    char source[32];
+    float value;            // 0.1 = +10%, -0.05 = -5%
 } Carbon_Modifier;
 
-// Stack of modifiers
 typedef struct Carbon_ModifierStack {
     Carbon_Modifier modifiers[CARBON_MODIFIER_MAX];
     int count;
 } Carbon_ModifierStack;
 
-// Initialize empty stack
 void carbon_modifier_init(Carbon_ModifierStack *stack);
-
-// Add/remove modifiers
 bool carbon_modifier_add(Carbon_ModifierStack *stack, const char *source, float value);
 bool carbon_modifier_remove(Carbon_ModifierStack *stack, const char *source);
-bool carbon_modifier_has(const Carbon_ModifierStack *stack, const char *source);
-
-// Update existing modifier value
 bool carbon_modifier_set(Carbon_ModifierStack *stack, const char *source, float value);
 
-// Calculate final value: base * (1 + mod1) * (1 + mod2) * ...
 float carbon_modifier_apply(const Carbon_ModifierStack *stack, float base_value);
-
-// Alternative: additive stacking: base * (1 + sum(modifiers))
 float carbon_modifier_apply_additive(const Carbon_ModifierStack *stack, float base_value);
-
-// Get total modifier for display: e.g., "+15%" or "-8%"
 float carbon_modifier_total(const Carbon_ModifierStack *stack);
-
-// Clear all modifiers
-void carbon_modifier_clear(Carbon_ModifierStack *stack);
-
-// Iterate for UI display
-int carbon_modifier_count(const Carbon_ModifierStack *stack);
-const Carbon_Modifier *carbon_modifier_get(const Carbon_ModifierStack *stack, int index);
 ```
-
-**Implementation Notes:**
-- Fixed-size array (no allocations)
-- Source names for debugging/UI tooltips
-- Both multiplicative and additive stacking modes
 
 ---
 
-### 2.5 Unlock/Tech Tree
+### Threshold Tracker
+**Priority:** Low
+**Location:** `src/game/threshold.c`, `include/carbon/threshold.h`
 
-**Files:**
-- `include/carbon/unlock.h`
-- `src/game/unlock.c`
-
-**Dependencies:** Data Configuration System (for loading definitions)
-
-**API Design:**
+Callbacks when values cross boundaries.
 
 ```c
-#include "carbon/unlock.h"
+typedef void (*Carbon_ThresholdCallback)(int id, float old_val, float new_val, bool crossed_above, void *userdata);
 
-#define CARBON_UNLOCK_MAX_PREREQS 8
+typedef struct Carbon_ThresholdTracker Carbon_ThresholdTracker;
 
-// Unlock node definition (loadable from config)
-typedef struct Carbon_UnlockDef {
-    char id[64];
-    char name[128];
-    char description[256];
-    char category[32];
-
-    char prerequisites[CARBON_UNLOCK_MAX_PREREQS][64];
-    int prereq_count;
-
-    int cost;               // Research points, gold, etc.
-
-    // Game-specific data can follow in derived struct
-} Carbon_UnlockDef;
-
-// Unlock tree manager
-typedef struct Carbon_UnlockTree Carbon_UnlockTree;
-
-Carbon_UnlockTree *carbon_unlock_create(void);
-void carbon_unlock_destroy(Carbon_UnlockTree *tree);
-
-// Register unlock nodes
-void carbon_unlock_register(Carbon_UnlockTree *tree, const Carbon_UnlockDef *def);
-
-// Mark as completed
-void carbon_unlock_complete(Carbon_UnlockTree *tree, const char *id);
-
-// Query state
-bool carbon_unlock_is_completed(const Carbon_UnlockTree *tree, const char *id);
-bool carbon_unlock_has_prerequisites(const Carbon_UnlockTree *tree, const char *id);
-bool carbon_unlock_can_research(const Carbon_UnlockTree *tree, const char *id);
-
-// Get available (researchable) unlocks
-// Returns array of pointers, caller provides buffer
-int carbon_unlock_get_available(const Carbon_UnlockTree *tree,
-                                 const Carbon_UnlockDef **out_defs,
-                                 int max_count);
-
-// Get unlocks by category
-int carbon_unlock_get_by_category(const Carbon_UnlockTree *tree,
-                                   const char *category,
-                                   const Carbon_UnlockDef **out_defs,
-                                   int max_count);
-
-// Get all unlocks
-int carbon_unlock_count(const Carbon_UnlockTree *tree);
-const Carbon_UnlockDef *carbon_unlock_get_by_index(const Carbon_UnlockTree *tree, int index);
-const Carbon_UnlockDef *carbon_unlock_find(const Carbon_UnlockTree *tree, const char *id);
-
-// Reset all progress
-void carbon_unlock_reset(Carbon_UnlockTree *tree);
-
-// Progress tracking (for active research)
-typedef struct Carbon_ResearchProgress {
-    char current_id[64];
-    int points_invested;
-    int points_required;
-} Carbon_ResearchProgress;
-
-void carbon_unlock_start_research(Carbon_UnlockTree *tree, Carbon_ResearchProgress *progress, const char *id);
-bool carbon_unlock_add_points(Carbon_UnlockTree *tree, Carbon_ResearchProgress *progress, int points);
-float carbon_unlock_get_progress_percent(const Carbon_ResearchProgress *progress);
-```
-
-**Implementation Notes:**
-- Stores completion state as bitset or hash set
-- Prerequisites checked by looking up completed set
-- Category for filtering in UI
-
----
-
-### 2.6 Threshold Tracker
-
-**Files:**
-- `include/carbon/threshold.h`
-- `src/game/threshold.c`
-
-**Dependencies:** None (standalone)
-
-**API Design:**
-
-```c
-#include "carbon/threshold.h"
-
-#define CARBON_THRESHOLD_MAX 16
-
-// Callback when threshold is crossed
-typedef void (*Carbon_ThresholdCallback)(int threshold_id,
-                                          float old_value,
-                                          float new_value,
-                                          bool crossed_above,  // true = went above, false = went below
-                                          void *userdata);
-
-// Single threshold
-typedef struct Carbon_Threshold {
-    float boundary;
-    Carbon_ThresholdCallback callback;
-    void *userdata;
-    bool was_above;         // Previous state
-} Carbon_Threshold;
-
-// Tracker for multiple thresholds on one value
-typedef struct Carbon_ThresholdTracker {
-    Carbon_Threshold thresholds[CARBON_THRESHOLD_MAX];
-    int count;
-    float current_value;
-} Carbon_ThresholdTracker;
-
-// Initialize
 void carbon_threshold_init(Carbon_ThresholdTracker *tracker, float initial_value);
-
-// Add threshold
-int carbon_threshold_add(Carbon_ThresholdTracker *tracker,
-                          float boundary,
-                          Carbon_ThresholdCallback callback,
-                          void *userdata);
-
-// Remove threshold by ID
-void carbon_threshold_remove(Carbon_ThresholdTracker *tracker, int threshold_id);
-
-// Update value and fire callbacks if thresholds crossed
+int carbon_threshold_add(Carbon_ThresholdTracker *tracker, float boundary,
+                          Carbon_ThresholdCallback callback, void *userdata);
+void carbon_threshold_remove(Carbon_ThresholdTracker *tracker, int id);
 void carbon_threshold_update(Carbon_ThresholdTracker *tracker, float new_value);
-
-// Query
-float carbon_threshold_get_value(const Carbon_ThresholdTracker *tracker);
-int carbon_threshold_count(const Carbon_ThresholdTracker *tracker);
 ```
-
-**Implementation Notes:**
-- Lightweight, no allocations
-- Fires callback on both directions (above→below, below→above)
-- Returns threshold ID for later removal
-
----
-
-## Phase 3: Library Dependencies
-
-### 3.1 Add tomlc99 Library
-
-**Files:**
-- `lib/toml.h`
-- `lib/toml.c`
-
-**Source:** https://github.com/cktan/tomlc99 (MIT License)
-
-**Steps:**
-1. Download toml.h and toml.c from tomlc99 repo
-2. Place in `lib/` directory
-3. Add to Makefile SOURCES
-
----
-
-## Phase 4: Integration
-
-### 4.1 Update Build System
-
-Add to Makefile:
-```makefile
-# New source files
-SOURCES += src/data/config.c
-SOURCES += src/data/event.c
-SOURCES += src/data/save.c
-SOURCES += src/game/turn.c
-SOURCES += src/game/history.c
-SOURCES += src/game/resource.c
-SOURCES += src/game/modifier.c
-SOURCES += src/game/unlock.c
-SOURCES += src/game/threshold.c
-SOURCES += lib/toml.c
-```
-
-### 4.2 Update Headers
-
-Add includes to `include/carbon/carbon.h`:
-```c
-// Strategy game systems
-#include "carbon/config.h"
-#include "carbon/event.h"
-#include "carbon/save.h"
-#include "carbon/turn.h"
-#include "carbon/history.h"
-#include "carbon/resource.h"
-#include "carbon/modifier.h"
-#include "carbon/unlock.h"
-#include "carbon/threshold.h"
-```
-
-### 4.3 Create Example
-
-**Files:**
-- `examples/strategy-sim/main.c`
-- `examples/strategy-sim/data/policies.toml`
-- `examples/strategy-sim/data/events.toml`
-- `examples/strategy-sim/data/techs.toml`
-
-Demonstrates:
-- Loading data from TOML
-- Turn-based game loop with phases
-- Event triggers and choices
-- Tech tree progression
-- Resource management
-- History tracking for graphs
-- Save/load game state
-
----
-
-## Phase 5: Documentation
-
-### 5.1 Update CLAUDE.md
-
-Add sections documenting:
-- Data Configuration System
-- Event System
-- Save/Load System
-- Turn Manager
-- History Tracking
-- Resource System
-- Modifier Stack
-- Unlock Tree
-- Threshold Tracker
-
-### 5.2 Add TOML Data Schemas
-
-**Files:**
-- `assets/schemas/policy.schema.json`
-- `assets/schemas/event.schema.json`
-- `assets/schemas/tech.schema.json`
 
 ---
 
 ## Implementation Order
 
-1. **Week 1: Core Infrastructure**
-   - [ ] Add tomlc99 library
-   - [ ] Implement config.c (data loading)
-   - [ ] Implement save.c (serialization)
-   - [ ] Basic tests
+**Recommended sequence based on dependencies:**
 
-2. **Week 2: Event System**
-   - [ ] Implement event.c (triggers, choices)
-   - [ ] Expression parser for triggers
-   - [ ] Integration with config loader
-
-3. **Week 3: Turn-Based Support**
-   - [ ] Implement turn.c (phase manager)
-   - [ ] Implement resource.c
-   - [ ] Implement modifier.c
-   - [ ] Implement threshold.c
-
-4. **Week 4: Progression Systems**
-   - [ ] Implement unlock.c (tech trees)
-   - [ ] Implement history.c (metrics tracking)
-   - [ ] Integration tests
-
-5. **Week 5: Example & Docs**
-   - [ ] Create strategy-sim example
-   - [ ] Sample TOML data files
-   - [ ] Update CLAUDE.md
-   - [ ] Final testing
+1. **Event System** (1.1) - Foundation for other systems
+2. **Validation Framework** (1.3) - Improves code quality immediately
+3. **Container Utilities** (1.4) - Used by many systems
+4. **Save/Load System** (1.2) - Critical for any real game
+5. **Turn/Phase System** (2.1) - Depends on events
+6. **Resource Economy** (2.2) - Depends on events
+7. **Modifier Stack** - Standalone, used by economy
+8. **View Model** (4.1) - Depends on events
+9. **Technology Tree** (2.3) - Depends on economy
+10. **History Tracking** - Standalone
+11. **Victory System** (2.4) - Depends on economy, tech
+12. **AI Framework** (3.1) - Depends on all game systems
+13. **Threshold Tracker** - Standalone utility
+14. **Theme Enhancement** (4.2) - UI polish
+15. **3D Camera** (5.1) - Future expansion
 
 ---
 
-## Testing Strategy
+## File Structure After Implementation
 
-Each system should have:
-1. **Unit tests** in `tests/` directory
-2. **Integration test** in example
-3. **Edge cases**: empty data, missing files, max capacity
+```
+src/
+├── core/
+│   ├── engine.c
+│   ├── game_context.c
+│   ├── error.c
+│   ├── event.c          # NEW: Event dispatcher
+│   ├── save.c           # NEW: Save/load system
+│   └── containers.c     # NEW: Container utilities
+├── game/
+│   ├── turn.c           # NEW: Turn/phase system
+│   ├── economy.c        # NEW: Resource economy
+│   ├── tech.c           # NEW: Technology tree
+│   ├── victory.c        # NEW: Victory conditions
+│   ├── history.c        # NEW: History tracking
+│   ├── modifier.c       # NEW: Modifier stack
+│   └── threshold.c      # NEW: Threshold tracker
+├── ai/
+│   ├── pathfinding.c
+│   └── personality.c    # NEW: AI personality system
+├── ui/
+│   └── viewmodel.c      # NEW: View model system
+└── graphics/
+    └── camera3d.c       # NEW: 3D camera (future)
 
-Key test scenarios:
-- Load malformed TOML → graceful error
-- Trigger expression edge cases
-- Save/load round-trip
-- Circular dependencies in tech tree
-- Modifier overflow/underflow
+include/carbon/
+├── event.h              # NEW
+├── save.h               # NEW
+├── validate.h           # NEW (header-only)
+├── containers.h         # NEW (header-only macros + functions)
+├── turn.h               # NEW
+├── economy.h            # NEW
+├── tech.h               # NEW
+├── victory.h            # NEW
+├── history.h            # NEW
+├── modifier.h           # NEW
+├── threshold.h          # NEW
+├── ai.h                 # NEW
+├── viewmodel.h          # NEW
+└── camera3d.h           # NEW (future)
+```
 
 ---
 
 ## Notes
 
-- All systems use C11
-- No external dependencies except tomlc99 (for TOML)
-- Existing JSON loader in `src/game/data/loader.c` remains for JSON data
-- New TOML loader is for configuration data (more human-friendly)
-- All new code follows existing Carbon style
-- Systems are optional - games can use only what they need
+- All systems follow Carbon's existing patterns (opaque pointers, `carbon_*` prefix)
+- Header-only utilities where appropriate for zero runtime cost
+- Event system is the backbone - most systems emit/subscribe to events
+- Strategy game systems are optional modules (can be excluded from build)
+- C11 standard maintained throughout
+- Systems are designed to work together but can be used independently

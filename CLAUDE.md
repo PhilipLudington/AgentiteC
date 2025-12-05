@@ -34,7 +34,11 @@ make info
 src/
 ├── main.c              # Entry point, game loop
 ├── core/
-│   └── engine.c        # Engine initialization, SDL3/GPU setup, frame management
+│   ├── engine.c        # Engine initialization, SDL3/GPU setup, frame management
+│   ├── error.c         # Error handling system
+│   ├── event.c         # Pub-sub event dispatcher
+│   ├── containers.c    # Container utilities (random, shuffle)
+│   └── game_context.c  # Unified system container
 ├── ecs/
 │   └── ecs.c           # ECS wrapper around Flecs
 ├── platform/           # Platform-specific code (future)
@@ -50,11 +54,24 @@ src/
 │   └── input.c         # Input abstraction with action mapping
 ├── ai/
 │   └── pathfinding.c   # A* pathfinding for tile-based maps
+├── strategy/           # Turn-based strategy game systems
+│   ├── turn.c          # Turn/phase management
+│   ├── resource.c      # Resource economy
+│   ├── modifier.c      # Value modifier stacks
+│   ├── threshold.c     # Value threshold callbacks
+│   ├── history.c       # Metrics history tracking
+│   ├── save.c          # TOML-based save/load
+│   ├── game_event.c    # Scripted game events
+│   └── unlock.c        # Unlock/achievement system
 ├── ui/                 # Immediate-mode GUI system
-└── game/               # Game-specific logic (future)
+└── game/               # Game-specific logic
 
 include/carbon/
 ├── carbon.h            # Public API header
+├── error.h             # Error handling API
+├── event.h             # Event dispatcher API
+├── validate.h          # Validation macros (header-only)
+├── containers.h        # Dynamic arrays, random utils
 ├── ecs.h               # ECS API and component definitions
 ├── ui.h                # UI system header
 ├── sprite.h            # Sprite/texture API
@@ -64,7 +81,15 @@ include/carbon/
 ├── text.h              # Text rendering API
 ├── input.h             # Input system with action mapping
 ├── audio.h             # Audio system API
-└── pathfinding.h       # A* pathfinding API
+├── pathfinding.h       # A* pathfinding API
+├── turn.h              # Turn/phase system API
+├── resource.h          # Resource economy API
+├── modifier.h          # Modifier stack API
+├── threshold.h         # Threshold tracker API
+├── history.h           # History tracking API
+├── save.h              # Save/load system API
+├── game_event.h        # Game event system API
+└── unlock.h            # Unlock system API
 
 lib/
 ├── flecs.h/.c          # Flecs ECS library (v4.0.0)
@@ -675,6 +700,218 @@ carbon_pathfinder_destroy(pf);
 - Use `max_iterations` to limit search on very large maps
 - `carbon_pathfinder_has_path()` is equivalent to full pathfinding (future: early exit)
 - For dynamic obstacles, update with `set_walkable()` or re-sync tilemap
+
+## Event Dispatcher System
+
+Publish-subscribe event system for decoupled communication between game systems:
+
+```c
+#include "carbon/event.h"
+
+// Create dispatcher
+Carbon_EventDispatcher *events = carbon_event_dispatcher_create();
+
+// Define callback
+void on_turn_started(const Carbon_Event *event, void *userdata) {
+    printf("Turn %u started!\n", event->turn.turn);
+}
+
+// Subscribe to specific event type
+Carbon_ListenerID id = carbon_event_subscribe(events, CARBON_EVENT_TURN_STARTED,
+                                               on_turn_started, NULL);
+
+// Subscribe to ALL events (for logging, debugging)
+carbon_event_subscribe_all(events, log_all_events, NULL);
+
+// Emit events using convenience functions
+carbon_event_emit_turn_started(events, 1);
+carbon_event_emit_resource_changed(events, RESOURCE_GOLD, 100, 150);
+carbon_event_emit_entity_created(events, player_entity);
+
+// Or emit custom events
+Carbon_Event e = { .type = CARBON_EVENT_CUSTOM };
+e.custom.id = MY_CUSTOM_EVENT;
+e.custom.data = my_data;
+carbon_event_emit(events, &e);
+
+// Deferred emission (safe during callbacks)
+carbon_event_emit_deferred(events, &e);
+carbon_event_flush_deferred(events);  // Call at end of frame
+
+// Unsubscribe when done
+carbon_event_unsubscribe(events, id);
+
+// Cleanup
+carbon_event_dispatcher_destroy(events);
+```
+
+**Built-in event types:**
+- Engine: `WINDOW_RESIZE`, `WINDOW_FOCUS`, `ENGINE_SHUTDOWN`
+- Game lifecycle: `GAME_STARTED`, `GAME_PAUSED`, `GAME_RESUMED`, `STATE_CHANGED`
+- Turn-based: `TURN_STARTED`, `TURN_ENDED`, `PHASE_STARTED`, `PHASE_ENDED`
+- Entity: `ENTITY_CREATED`, `ENTITY_DESTROYED`, `ENTITY_MODIFIED`
+- Selection: `SELECTION_CHANGED`, `SELECTION_CLEARED`
+- Resource: `RESOURCE_CHANGED`, `RESOURCE_DEPLETED`, `RESOURCE_THRESHOLD`
+- Tech: `TECH_RESEARCHED`, `TECH_STARTED`, `UNLOCK_ACHIEVED`
+- Victory: `VICTORY_ACHIEVED`, `DEFEAT`, `VICTORY_PROGRESS`
+- UI: `UI_BUTTON_CLICKED`, `UI_VALUE_CHANGED`, `UI_PANEL_OPENED`
+- Custom: `CARBON_EVENT_CUSTOM` + user-defined IDs (1000+)
+
+## Validation Framework
+
+Macro-based validation utilities for consistent error handling:
+
+```c
+#include "carbon/validate.h"
+
+// Pointer validation (void return)
+void process_data(Data *data) {
+    CARBON_VALIDATE_PTR(data);  // Returns if NULL, sets error
+    // ... use data safely ...
+}
+
+// Pointer validation (with return value)
+bool load_file(const char *path) {
+    CARBON_VALIDATE_PTR_RET(path, false);  // Returns false if NULL
+    CARBON_VALIDATE_STRING_RET(path, false);  // Also checks empty string
+    // ...
+    return true;
+}
+
+// Multiple pointer validation
+void draw_sprite(Renderer *r, Sprite *s, Texture *t) {
+    CARBON_VALIDATE_PTRS3(r, s, t);  // Checks all three
+    // ...
+}
+
+// Range validation
+void set_volume(float vol) {
+    CARBON_VALIDATE_RANGE_F(vol, 0.0f, 1.0f);  // Must be 0.0-1.0
+    // ...
+}
+
+// Index validation
+int get_item(int *array, size_t count, size_t index) {
+    CARBON_VALIDATE_INDEX_RET(index, count, -1);  // Returns -1 if out of bounds
+    return array[index];
+}
+
+// Entity validation
+void damage_entity(ecs_world_t *world, ecs_entity_t entity, int damage) {
+    CARBON_VALIDATE_ENTITY_ALIVE(world, entity);  // Checks ecs_is_alive()
+    // ...
+}
+
+// Condition validation with message
+bool connect(const char *host, int port) {
+    CARBON_VALIDATE_COND_RET(port > 0 && port < 65536, "invalid port", false);
+    // ...
+    return true;
+}
+
+// Debug-only assertions (compiled out in release)
+CARBON_ASSERT(count > 0);
+CARBON_ASSERT_MSG(ptr != NULL, "pointer should never be null here");
+CARBON_UNREACHABLE();  // Marks code that should never execute
+
+// Soft warnings (continue execution)
+CARBON_WARN_IF_NULL(optional_param);
+CARBON_WARN_IF(count == 0, "processing empty array");
+```
+
+## Container Utilities
+
+Dynamic arrays, random selection, and shuffle algorithms:
+
+```c
+#include "carbon/containers.h"
+
+// Dynamic array declaration and usage
+Carbon_Array(int) numbers;
+carbon_array_init(&numbers);
+
+carbon_array_push(&numbers, 10);
+carbon_array_push(&numbers, 20);
+carbon_array_push(&numbers, 30);
+
+printf("Count: %zu\n", numbers.count);  // 3
+printf("First: %d\n", numbers.data[0]); // 10
+
+int last = carbon_array_pop(&numbers);  // 30, count now 2
+
+carbon_array_remove(&numbers, 0);       // Remove first, shift remaining
+carbon_array_remove_swap(&numbers, 0);  // Remove by swapping with last (O(1))
+
+carbon_array_reserve(&numbers, 100);    // Pre-allocate capacity
+carbon_array_resize(&numbers, 50);      // Resize to exactly 50 elements
+carbon_array_clear(&numbers);           // Set count to 0, keep capacity
+
+carbon_array_free(&numbers);            // Free memory
+
+// Array iteration
+Carbon_Array(float) values;
+carbon_array_init(&values);
+// ... push values ...
+
+float v;
+carbon_array_foreach(&values, float, v) {
+    printf("%f\n", v);
+}
+
+// With index
+size_t i;
+carbon_array_foreach_i(&values, i, float, v) {
+    printf("[%zu] = %f\n", i, v);
+}
+
+// Array utilities
+int sum = carbon_array_sum(&numbers);
+double avg = carbon_array_avg(&numbers);
+int min_val = carbon_array_min(&numbers);
+int max_val = carbon_array_max(&numbers);
+size_t idx = carbon_array_find(&numbers, 42);  // SIZE_MAX if not found
+
+// Random utilities
+carbon_random_seed(0);  // 0 = time-based seed
+
+int roll = carbon_rand_int(1, 6);           // [1, 6] inclusive
+float pct = carbon_rand_float(0.0f, 1.0f);  // [0.0, 1.0)
+bool coin = carbon_rand_bool();
+size_t idx = carbon_rand_index(array_count); // [0, count)
+
+// Random choice from array
+int items[] = {10, 20, 30, 40, 50};
+int chosen = carbon_random_choice(items, 5);  // Random element
+
+// Weighted random selection
+float weights[] = {0.5f, 0.3f, 0.2f};  // 50%, 30%, 20% probabilities
+size_t selected = carbon_weighted_random_simple(weights, 3);
+
+// Shuffle array in place (Fisher-Yates)
+int deck[52];
+// ... fill deck ...
+carbon_shuffle_array(deck, 52);
+
+// Shuffle Carbon_Array
+carbon_array_shuffle(&numbers);
+
+// Stack operations (same as array, different semantics)
+Carbon_Stack(int) stack;
+carbon_stack_init(&stack);
+carbon_stack_push(&stack, 1);
+carbon_stack_push(&stack, 2);
+int top = carbon_stack_peek(&stack);  // 2
+int popped = carbon_stack_pop(&stack); // 2
+bool empty = carbon_stack_empty(&stack);
+carbon_stack_free(&stack);
+
+// Fixed-size ring buffer
+Carbon_RingBuffer(int, 16) buffer;  // 16 elements max
+carbon_ring_init(&buffer);
+carbon_ring_push(&buffer, 42);
+int val = carbon_ring_pop(&buffer);
+bool full = carbon_ring_full(&buffer);
+```
 
 ## Quick Start (New Game)
 

@@ -62,6 +62,12 @@ void carbon_end_render_pass(Carbon_Engine *engine);
 SDL_GPURenderPass *carbon_get_render_pass(Carbon_Engine *engine);
 SDL_GPUCommandBuffer *carbon_get_command_buffer(Carbon_Engine *engine);
 
+// Core infrastructure
+#include "carbon/error.h"
+#include "carbon/event.h"
+#include "carbon/validate.h"
+#include "carbon/containers.h"
+
 // Strategy game systems
 #include "carbon/turn.h"
 #include "carbon/resource.h"
