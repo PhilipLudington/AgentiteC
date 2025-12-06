@@ -111,13 +111,31 @@ At ~1176 lines, barely over threshold. Components (world state, domain, planning
 conditions, effects) are tightly integrated via internal structures. Would require similar
 internal header approach as text.cpp. Lower priority given marginal benefit.
 
-### 4.2 C++ Migration Decision (Deferred)
-Choose one:
-- **Option A**: Full C++ adoption - use std::unique_ptr, std::optional, RAII
-- **Option B**: Revert to C - rename .cpp → .c, remove C++ includes
+### 4.2 C++ Migration Decision ✓ RESOLVED
+**Decision**: Keep current hybrid approach (C++17 compiler, C-style API)
 
-Current state is confusing: files are .cpp but code is pure C style.
-**Decision**: Deferred pending broader architecture discussion.
+This is intentional and optimal for **agentic game development** with Claude Code:
+
+**Why C++17 compilation:**
+- Stronger type checking catches AI-generated mistakes at compile time
+- `nullptr` instead of `NULL` (clearer intent)
+- Better compiler error messages
+- Scoped enums, `auto` for obvious types
+
+**Why C-style API design:**
+- Explicit resource management (create/destroy visible in code)
+- Predictable function naming patterns (easy for AI to pattern-match)
+- No hidden control flow (no constructors/destructors/exceptions)
+- Simple mental model (one way to do things)
+- Grep-able, searchable code patterns
+
+**Why not full C++ (STL, RAII, smart pointers):**
+- Implicit lifetime management harder for AI to reason about
+- Multiple overlapping mechanisms (many ways to allocate, manage errors, etc.)
+- Hidden operations in constructors/destructors
+- Template expansion requires mental model of instantiation
+
+The current design gives the best of both: C++ compiler safety + AI-friendly explicit API.
 
 ### 4.3 Add Recursion Limits ✓ COMPLETED
 - **File**: `src/core/formula.cpp`
@@ -165,7 +183,7 @@ AI systems:
 | Phase 1: Security | Completed | All strcpy→strncpy fixes done, path traversal validation added |
 | Phase 2: Memory Safety | Completed | Ownership docs added, NULL check fixes, RAII skipped (decision made) |
 | Phase 3: Performance | Partial | Sprite auto-flush done; pools/event optimization deferred pending profiling |
-| Phase 4: Organization | Partial | text.cpp split done, formula recursion limits added, htn/formula split deferred |
+| Phase 4: Organization | Completed | text.cpp split, recursion limits, C++/C-style decision resolved |
 | Phase 5: Testing | Not Started | |
 
 ---
