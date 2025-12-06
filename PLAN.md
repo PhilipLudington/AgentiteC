@@ -151,26 +151,28 @@ The current design gives the best of both: C++ compiler safety + AI-friendly exp
 
 ## Phase 5: Testing Infrastructure
 
-### 5.1 Test Framework Setup
-- [ ] Add test framework (Catch2 recommended for C++)
-- [ ] Create `tests/` directory structure
-- [ ] Add `make test` target to Makefile
+### 5.1 Test Framework Setup ✓ COMPLETED
+- [x] Add test framework (Catch2 v3.5.2 amalgamated)
+- [x] Create `tests/` directory structure (core/, strategy/, ai/)
+- [x] Add `make test` and `make test-verbose` targets to Makefile
 
-### 5.2 Unit Tests Priority
-Core systems (highest priority):
-- [ ] `tests/core/test_error.cpp` - Error handling
-- [ ] `tests/core/test_event.cpp` - Event dispatcher
+### 5.2 Unit Tests ✓ PARTIAL
+Core systems (completed):
+- [x] `tests/core/test_formula.cpp` - Formula evaluation (155 assertions)
+- [x] `tests/core/test_error.cpp` - Error handling
+- [x] `tests/core/test_event.cpp` - Event dispatcher
+
+Core systems (remaining):
 - [ ] `tests/core/test_command.cpp` - Command queue
-- [ ] `tests/core/test_formula.cpp` - Formula evaluation
 
-Strategy systems:
+Strategy systems (remaining):
 - [ ] `tests/strategy/test_save.cpp` - Save/load (especially path validation)
 - [ ] `tests/strategy/test_resource.cpp` - Resource management
 
-AI systems:
+AI systems (remaining):
 - [ ] `tests/ai/test_pathfinding.cpp` - A* correctness
 
-### 5.3 Integration Tests
+### 5.3 Integration Tests (Not Started)
 - [ ] Graphics pipeline (sprite batching, texture handling)
 - [ ] Full game loop (init → update → render → shutdown)
 
@@ -184,7 +186,7 @@ AI systems:
 | Phase 2: Memory Safety | Completed | Ownership docs added, NULL check fixes, RAII skipped (decision made) |
 | Phase 3: Performance | Partial | Sprite auto-flush done; pools/event optimization deferred pending profiling |
 | Phase 4: Organization | Completed | text.cpp split, recursion limits, C++/C-style decision resolved |
-| Phase 5: Testing | Not Started | |
+| Phase 5: Testing | Partial | Framework setup done, 3 core test suites (221 assertions, 29 test cases) |
 
 ---
 

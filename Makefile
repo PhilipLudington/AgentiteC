@@ -199,6 +199,50 @@ example-strategy-sim: dirs $(BUILD_DIR)/examples/strategy-sim/main.o $(patsubst 
 	./$(BUILD_DIR)/example-strategy-sim
 
 #============================================================================
+# Test targets
+#============================================================================
+
+TESTS_DIR := tests
+
+# Test source files
+TEST_SRCS := $(wildcard $(TESTS_DIR)/core/*.cpp) \
+             $(wildcard $(TESTS_DIR)/strategy/*.cpp) \
+             $(wildcard $(TESTS_DIR)/ai/*.cpp)
+
+# Test objects (engine + test files + catch2)
+TEST_OBJS := $(patsubst $(TESTS_DIR)/%.cpp,$(BUILD_DIR)/tests/%.o,$(TEST_SRCS)) \
+             $(BUILD_DIR)/tests/test_main.o \
+             $(BUILD_DIR)/catch2.o \
+             $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS))
+
+# Catch2 object
+$(BUILD_DIR)/catch2.o: $(LIB_DIR)/catch_amalgamated.cpp
+	@mkdir -p $(BUILD_DIR)
+	$(CXX) -std=c++17 -O2 -I$(LIB_DIR) -c $< -o $@
+
+# Test main object
+$(BUILD_DIR)/tests/test_main.o: $(TESTS_DIR)/test_main.cpp
+	@mkdir -p $(BUILD_DIR)/tests
+	$(CXX) $(CXXFLAGS) -I$(LIB_DIR) -c $< -o $@
+
+# Compile test files
+$(BUILD_DIR)/tests/%.o: $(TESTS_DIR)/%.cpp
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -I$(LIB_DIR) -c $< -o $@
+
+# Build test executable
+$(BUILD_DIR)/test_runner: $(TEST_OBJS) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(TEST_OBJS) $(FLECS_OBJ) $(TOML_OBJ) -o $@ $(LDFLAGS)
+
+# Run tests
+test: dirs $(BUILD_DIR)/test_runner
+	./$(BUILD_DIR)/test_runner
+
+# Run tests with verbose output
+test-verbose: dirs $(BUILD_DIR)/test_runner
+	./$(BUILD_DIR)/test_runner --success
+
+#============================================================================
 # Utility targets
 #============================================================================
 
@@ -238,6 +282,10 @@ help:
 	@echo "  make run          - Build and run main game"
 	@echo "  make run-demo     - Build and run comprehensive demo"
 	@echo ""
+	@echo "Testing:"
+	@echo "  make test         - Build and run all tests"
+	@echo "  make test-verbose - Run tests with detailed output"
+	@echo ""
 	@echo "Examples:"
 	@echo "  make example-minimal   - Minimal window setup"
 	@echo "  make example-sprites   - Sprite rendering demo"
@@ -252,5 +300,5 @@ help:
 	@echo "  make info         - Show build configuration"
 	@echo "  make DEBUG=1      - Build with debug symbols"
 
-.PHONY: all dirs run run-demo clean install-deps-macos install-deps-linux info help
+.PHONY: all dirs run run-demo clean install-deps-macos install-deps-linux info help test test-verbose
 .PHONY: example-minimal example-sprites example-animation example-tilemap example-ui example-strategy example-strategy-sim
