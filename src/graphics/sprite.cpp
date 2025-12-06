@@ -28,6 +28,14 @@
 #define SPRITE_INDICES_PER_SPRITE 6
 #define SPRITE_VERTEX_CAPACITY (SPRITE_MAX_BATCH * SPRITE_VERTS_PER_SPRITE)
 #define SPRITE_INDEX_CAPACITY (SPRITE_MAX_BATCH * SPRITE_INDICES_PER_SPRITE)
+#define SPRITE_MAX_SUB_BATCHES 64       /* Max texture switches per batch */
+
+/* Sub-batch for tracking texture switches within a single batch */
+typedef struct SpriteBatchSegment {
+    Carbon_Texture *texture;
+    uint32_t start_index;   /* Starting index in index buffer */
+    uint32_t index_count;   /* Number of indices in this segment */
+} SpriteBatchSegment;
 
 /* ============================================================================
  * Embedded MSL Shader Source
@@ -108,6 +116,12 @@ struct Carbon_SpriteRenderer {
     /* Current batch state */
     Carbon_Texture *current_texture;
     bool batch_started;
+    SDL_GPUCommandBuffer *current_cmd;  /* Command buffer for auto-flush */
+
+    /* Sub-batch tracking for texture switches */
+    SpriteBatchSegment segments[SPRITE_MAX_SUB_BATCHES];
+    uint32_t segment_count;
+    uint32_t current_segment_start;  /* Starting index for current segment */
 
     /* Camera (optional - NULL = screen-space mode) */
     Carbon_Camera *camera;
@@ -585,13 +599,15 @@ void carbon_sprite_set_origin(Carbon_Sprite *sprite, float ox, float oy)
 
 void carbon_sprite_begin(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd)
 {
-    (void)cmd;  /* Not used yet, but kept for API consistency */
     if (!sr) return;
 
     sr->vertex_count = 0;
     sr->index_count = 0;
     sr->sprite_count = 0;
     sr->current_texture = NULL;
+    sr->current_cmd = cmd;  /* Store for reference */
+    sr->segment_count = 0;
+    sr->current_segment_start = 0;
     sr->batch_started = true;
 }
 
@@ -682,10 +698,19 @@ void carbon_sprite_draw_full(Carbon_SpriteRenderer *sr, const Carbon_Sprite *spr
 {
     if (!sr || !sprite || !sprite->texture || !sr->batch_started) return;
 
-    /* Auto-flush if texture changes */
+    /* Handle texture changes by creating new batch segments */
     if (sr->current_texture && sr->current_texture != sprite->texture) {
-        /* For now, just warn - proper texture switching needs flush support */
-        SDL_Log("Sprite: Warning - texture changed mid-batch, results may be incorrect");
+        /* Save current segment if it has content */
+        uint32_t current_indices = sr->index_count - sr->current_segment_start;
+        if (current_indices > 0 && sr->segment_count < SPRITE_MAX_SUB_BATCHES) {
+            sr->segments[sr->segment_count].texture = sr->current_texture;
+            sr->segments[sr->segment_count].start_index = sr->current_segment_start;
+            sr->segments[sr->segment_count].index_count = current_indices;
+            sr->segment_count++;
+            sr->current_segment_start = sr->index_count;
+        } else if (sr->segment_count >= SPRITE_MAX_SUB_BATCHES) {
+            SDL_Log("Sprite: Warning - too many texture switches, segment dropped");
+        }
     }
     sr->current_texture = sprite->texture;
 
@@ -960,11 +985,27 @@ void carbon_sprite_upload(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd)
     SDL_ReleaseGPUTransferBuffer(sr->gpu, transfer);
 }
 
+/* Internal: Render a single batch segment with specific texture and index range */
+static void sprite_render_segment(Carbon_SpriteRenderer *sr,
+                                   SDL_GPURenderPass *pass, Carbon_Texture *texture,
+                                   uint32_t start_index, uint32_t index_count)
+{
+    /* Bind texture */
+    SDL_GPUTextureSamplerBinding tex_binding = {
+        .texture = texture->gpu_texture,
+        .sampler = sr->sampler
+    };
+    SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
+
+    /* Draw this segment */
+    SDL_DrawGPUIndexedPrimitives(pass, index_count, 1, start_index, 0, 0);
+}
+
 /* Separate render function for proper render pass management */
 void carbon_sprite_render(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
                           SDL_GPURenderPass *pass)
 {
-    if (!sr || !cmd || !pass || sr->sprite_count == 0 || !sr->current_texture) return;
+    if (!sr || !cmd || !pass || sr->sprite_count == 0) return;
 
     /* Bind pipeline */
     SDL_BindGPUGraphicsPipeline(pass, sr->pipeline);
@@ -1010,15 +1051,24 @@ void carbon_sprite_render(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
 
     SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(uniforms));
 
-    /* Bind texture */
-    SDL_GPUTextureSamplerBinding tex_binding = {
-        .texture = sr->current_texture->gpu_texture,
-        .sampler = sr->sampler
-    };
-    SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
+    /* Render all saved segments (from texture switches) */
+    for (uint32_t i = 0; i < sr->segment_count; i++) {
+        sprite_render_segment(sr, pass,
+                              sr->segments[i].texture,
+                              sr->segments[i].start_index,
+                              sr->segments[i].index_count);
+    }
 
-    /* Draw */
-    SDL_DrawGPUIndexedPrimitives(pass, sr->index_count, 1, 0, 0, 0);
+    /* Render the final/current segment if it has content */
+    if (sr->current_texture) {
+        uint32_t final_indices = sr->index_count - sr->current_segment_start;
+        if (final_indices > 0) {
+            sprite_render_segment(sr, pass,
+                                  sr->current_texture,
+                                  sr->current_segment_start,
+                                  final_indices);
+        }
+    }
 }
 
 /* Set camera for sprite rendering (NULL for screen-space mode) */

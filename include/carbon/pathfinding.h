@@ -86,10 +86,13 @@ typedef struct Carbon_Pathfinder Carbon_Pathfinder;
  * Pathfinder Lifecycle
  * ============================================================================ */
 
-/* Create pathfinder for grid of given dimensions */
+/**
+ * Create pathfinder for grid of given dimensions.
+ * Caller OWNS the returned pointer and MUST call carbon_pathfinder_destroy().
+ */
 Carbon_Pathfinder *carbon_pathfinder_create(int width, int height);
 
-/* Destroy pathfinder and free resources */
+/* Destroy pathfinder and free all resources */
 void carbon_pathfinder_destroy(Carbon_Pathfinder *pf);
 
 /* Get pathfinder grid dimensions */
@@ -150,13 +153,20 @@ void carbon_pathfinder_sync_tilemap_ex(Carbon_Pathfinder *pf,
  * Pathfinding
  * ============================================================================ */
 
-/* Find path from start to end using default options
- * Returns NULL if no path exists */
+/**
+ * Find path from start to end using default options.
+ * Returns NULL if no path exists.
+ * Caller OWNS the returned pointer and MUST call carbon_path_destroy().
+ */
 Carbon_Path *carbon_pathfinder_find(Carbon_Pathfinder *pf,
                                      int start_x, int start_y,
                                      int end_x, int end_y);
 
-/* Find path with custom options */
+/**
+ * Find path with custom options.
+ * Returns NULL if no path exists.
+ * Caller OWNS the returned pointer and MUST call carbon_path_destroy().
+ */
 Carbon_Path *carbon_pathfinder_find_ex(Carbon_Pathfinder *pf,
                                         int start_x, int start_y,
                                         int end_x, int end_y,

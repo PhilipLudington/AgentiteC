@@ -209,7 +209,9 @@ typedef void (*Carbon_EventCallback)(const Carbon_Event *event, void *userdata);
 /**
  * Create a new event dispatcher.
  *
- * @return New dispatcher or NULL on failure
+ * @return New dispatcher or NULL on failure.
+ *         Caller OWNS the returned pointer and MUST call
+ *         carbon_event_dispatcher_destroy() to free it.
  */
 Carbon_EventDispatcher *carbon_event_dispatcher_create(void);
 

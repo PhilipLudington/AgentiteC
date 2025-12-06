@@ -86,10 +86,13 @@ typedef struct Carbon_TextEffects {
  * Lifecycle Functions
  * ============================================================================ */
 
-/* Initialize text rendering system */
+/**
+ * Initialize text rendering system.
+ * Caller OWNS the returned pointer and MUST call carbon_text_shutdown().
+ */
 Carbon_TextRenderer *carbon_text_init(SDL_GPUDevice *gpu, SDL_Window *window);
 
-/* Shutdown text rendering system */
+/* Shutdown text rendering system and free all resources */
 void carbon_text_shutdown(Carbon_TextRenderer *tr);
 
 /* Set screen dimensions (call when window resizes) */
@@ -99,15 +102,21 @@ void carbon_text_set_screen_size(Carbon_TextRenderer *tr, int width, int height)
  * Font Functions
  * ============================================================================ */
 
-/* Load font from TTF file at specified size */
+/**
+ * Load font from TTF file at specified size.
+ * Caller OWNS the returned pointer and MUST call carbon_font_destroy().
+ */
 Carbon_Font *carbon_font_load(Carbon_TextRenderer *tr, const char *path, float size);
 
-/* Load font from memory buffer at specified size */
+/**
+ * Load font from memory buffer at specified size.
+ * Caller OWNS the returned pointer and MUST call carbon_font_destroy().
+ */
 Carbon_Font *carbon_font_load_memory(Carbon_TextRenderer *tr,
                                       const void *data, int data_size,
                                       float size);
 
-/* Destroy font */
+/* Destroy font and free resources */
 void carbon_font_destroy(Carbon_TextRenderer *tr, Carbon_Font *font);
 
 /* Get font metrics */
@@ -184,14 +193,17 @@ void carbon_text_printf_colored(Carbon_TextRenderer *tr, Carbon_Font *font,
  * SDF/MSDF Font Functions
  * ============================================================================ */
 
-/* Load SDF/MSDF font from pre-generated atlas files (msdf-atlas-gen format)
+/**
+ * Load SDF/MSDF font from pre-generated atlas files (msdf-atlas-gen format).
  * atlas_path: Path to PNG atlas image
- * metrics_path: Path to JSON metrics file */
+ * metrics_path: Path to JSON metrics file
+ * Caller OWNS the returned pointer and MUST call carbon_sdf_font_destroy().
+ */
 Carbon_SDFFont *carbon_sdf_font_load(Carbon_TextRenderer *tr,
                                       const char *atlas_path,
                                       const char *metrics_path);
 
-/* Destroy SDF font */
+/* Destroy SDF font and free resources */
 void carbon_sdf_font_destroy(Carbon_TextRenderer *tr, Carbon_SDFFont *font);
 
 /* Get SDF font type (SDF or MSDF) */

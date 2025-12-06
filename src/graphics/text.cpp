@@ -1924,6 +1924,14 @@ Carbon_SDFFont *carbon_sdf_font_load(Carbon_TextRenderer *tr,
     if (bytes_per_pixel == 4 && channels < 4) {
         /* Need to expand to RGBA */
         upload_data = (unsigned char*)malloc(width * height * 4);
+        if (!upload_data) {
+            carbon_set_error("Text: Failed to allocate format conversion buffer");
+            SDL_ReleaseGPUTexture(tr->gpu, font->atlas_texture);
+            stbi_image_free(pixels);
+            free(font->glyphs);
+            free(font);
+            return NULL;
+        }
         free_upload_data = true;
         for (int i = 0; i < width * height; i++) {
             if (channels == 1) {
@@ -1941,6 +1949,14 @@ Carbon_SDFFont *carbon_sdf_font_load(Carbon_TextRenderer *tr,
     } else if (bytes_per_pixel == 1 && channels > 1) {
         /* Need to reduce to single channel */
         upload_data = (unsigned char*)malloc(width * height);
+        if (!upload_data) {
+            carbon_set_error("Text: Failed to allocate format conversion buffer");
+            SDL_ReleaseGPUTexture(tr->gpu, font->atlas_texture);
+            stbi_image_free(pixels);
+            free(font->glyphs);
+            free(font);
+            return NULL;
+        }
         free_upload_data = true;
         for (int i = 0; i < width * height; i++) {
             upload_data[i] = pixels[i * channels];

@@ -114,7 +114,8 @@ typedef bool (*Carbon_BlueprintCapturer)(
  * Create an empty blueprint.
  *
  * @param name Display name for the blueprint
- * @return New blueprint, or NULL on failure
+ * @return New blueprint, or NULL on failure.
+ *         Caller OWNS the returned pointer and MUST call carbon_blueprint_destroy().
  */
 Carbon_Blueprint *carbon_blueprint_create(const char *name);
 

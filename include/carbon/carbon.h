@@ -26,6 +26,53 @@
 #define CARBON_VERSION_MINOR 1
 #define CARBON_VERSION_PATCH 0
 
+/*============================================================================
+ * Memory Ownership Conventions
+ *============================================================================
+ *
+ * Carbon follows consistent memory ownership patterns across all APIs:
+ *
+ * 1. CREATE/DESTROY PAIRS:
+ *    Functions named `carbon_*_create()` or `carbon_*_init()` that return
+ *    pointers allocate memory. The caller OWNS the returned pointer and
+ *    MUST call the corresponding `carbon_*_destroy()` or `carbon_*_shutdown()`
+ *    function to free it.
+ *
+ *    Examples:
+ *      Carbon_Engine *engine = carbon_init(&config);        // Caller owns
+ *      carbon_shutdown(engine);                             // Must call
+ *
+ *      Carbon_TextRenderer *tr = carbon_text_init(gpu, win);  // Caller owns
+ *      carbon_text_shutdown(tr);                              // Must call
+ *
+ * 2. LOAD FUNCTIONS:
+ *    Functions named `carbon_*_load()` return allocated resources.
+ *    The caller OWNS the returned pointer and MUST call the corresponding
+ *    `carbon_*_destroy()` function.
+ *
+ *    Examples:
+ *      Carbon_Texture *tex = carbon_texture_load(sr, path);  // Caller owns
+ *      carbon_texture_destroy(sr, tex);                      // Must call
+ *
+ * 3. GET FUNCTIONS:
+ *    Functions named `carbon_*_get_*()` return pointers to internally-owned
+ *    data. The caller does NOT own these pointers and must NOT free them.
+ *    The pointer is valid until the parent object is destroyed.
+ *
+ *    Examples:
+ *      SDL_GPUDevice *gpu = carbon_get_gpu_device(engine);  // Engine owns
+ *      // Do NOT call SDL_DestroyGPUDevice(gpu)
+ *
+ * 4. CONST CHAR* RETURNS:
+ *    Functions returning `const char*` return either static strings or
+ *    pointers to internal buffers. The caller must NOT free these.
+ *
+ * 5. NULL ON FAILURE:
+ *    All allocating functions return NULL on failure. Always check return
+ *    values. Use carbon_get_last_error() for error details.
+ *
+ *============================================================================*/
+
 // Forward declarations
 typedef struct Carbon_Engine Carbon_Engine;
 typedef struct Carbon_Config Carbon_Config;

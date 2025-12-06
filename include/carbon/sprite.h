@@ -57,10 +57,13 @@ typedef struct Carbon_SpriteVertex {
  * Lifecycle Functions
  * ============================================================================ */
 
-/* Initialize sprite rendering system */
+/**
+ * Initialize sprite rendering system.
+ * Caller OWNS the returned pointer and MUST call carbon_sprite_shutdown().
+ */
 Carbon_SpriteRenderer *carbon_sprite_init(SDL_GPUDevice *gpu, SDL_Window *window);
 
-/* Shutdown sprite rendering system */
+/* Shutdown sprite rendering system and free all resources */
 void carbon_sprite_shutdown(Carbon_SpriteRenderer *sr);
 
 /* Set screen dimensions (call when window resizes) */
@@ -70,19 +73,28 @@ void carbon_sprite_set_screen_size(Carbon_SpriteRenderer *sr, int width, int hei
  * Texture Functions
  * ============================================================================ */
 
-/* Load texture from file (PNG, JPG, BMP, etc.) */
+/**
+ * Load texture from file (PNG, JPG, BMP, etc.).
+ * Caller OWNS the returned pointer and MUST call carbon_texture_destroy().
+ */
 Carbon_Texture *carbon_texture_load(Carbon_SpriteRenderer *sr, const char *path);
 
-/* Load texture from memory */
+/**
+ * Load texture from memory.
+ * Caller OWNS the returned pointer and MUST call carbon_texture_destroy().
+ */
 Carbon_Texture *carbon_texture_load_memory(Carbon_SpriteRenderer *sr,
                                            const void *data, int size);
 
-/* Create texture from raw RGBA pixels */
+/**
+ * Create texture from raw RGBA pixels.
+ * Caller OWNS the returned pointer and MUST call carbon_texture_destroy().
+ */
 Carbon_Texture *carbon_texture_create(Carbon_SpriteRenderer *sr,
                                       int width, int height,
                                       const void *pixels);
 
-/* Destroy texture */
+/* Destroy texture and free GPU resources */
 void carbon_texture_destroy(Carbon_SpriteRenderer *sr, Carbon_Texture *texture);
 
 /* Get texture dimensions */

@@ -72,26 +72,34 @@ typedef struct Carbon_AnimationPlayer {
  * Animation Creation
  * ============================================================================ */
 
-/* Create animation from array of sprites (copies the array) */
+/**
+ * Create animation from array of sprites (copies the array).
+ * Caller OWNS the returned pointer and MUST call carbon_animation_destroy().
+ */
 Carbon_Animation *carbon_animation_create(Carbon_Sprite *frames, uint32_t frame_count);
 
-/* Create animation from sprite sheet grid
+/**
+ * Create animation from sprite sheet grid.
  * - start_x, start_y: top-left of first frame in pixels
  * - frame_w, frame_h: size of each frame
  * - cols, rows: grid dimensions (total frames = cols * rows)
+ * Caller OWNS the returned pointer and MUST call carbon_animation_destroy().
  */
 Carbon_Animation *carbon_animation_from_grid(Carbon_Texture *texture,
                                               float start_x, float start_y,
                                               float frame_w, float frame_h,
                                               int cols, int rows);
 
-/* Create animation from horizontal strip (single row) */
+/**
+ * Create animation from horizontal strip (single row).
+ * Caller OWNS the returned pointer and MUST call carbon_animation_destroy().
+ */
 Carbon_Animation *carbon_animation_from_strip(Carbon_Texture *texture,
                                                float start_x, float start_y,
                                                float frame_w, float frame_h,
                                                int frame_count);
 
-/* Destroy animation */
+/* Destroy animation and free resources */
 void carbon_animation_destroy(Carbon_Animation *anim);
 
 /* ============================================================================
