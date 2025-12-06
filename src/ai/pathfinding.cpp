@@ -680,27 +680,20 @@ Carbon_Path *carbon_path_simplify(Carbon_Path *path)
 {
     if (!path || path->length <= 2) return path;
 
-    /* Count simplified points */
-    int count = 1;  /* Always include start */
+    /* Count simplified points: start + direction changes (excluding last) + end */
+    int count = 2;  /* Always include start and end */
     int prev_dx = 0, prev_dy = 0;
 
     for (int i = 1; i < path->length; i++) {
         int dx = path->points[i].x - path->points[i-1].x;
         int dy = path->points[i].y - path->points[i-1].y;
 
-        /* Direction changed? Keep this point */
-        if (dx != prev_dx || dy != prev_dy) {
+        /* Direction changed at non-final point? Keep this point */
+        if ((dx != prev_dx || dy != prev_dy) && i < path->length - 1) {
             count++;
-            prev_dx = dx;
-            prev_dy = dy;
         }
-    }
-
-    /* Always include end if not already */
-    if (count == 1 ||
-        path->points[path->length-1].x != path->points[count-1].x ||
-        path->points[path->length-1].y != path->points[count-1].y) {
-        /* End point will be handled below */
+        prev_dx = dx;
+        prev_dy = dy;
     }
 
     /* Allocate simplified path */
