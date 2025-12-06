@@ -156,21 +156,19 @@ The current design gives the best of both: C++ compiler safety + AI-friendly exp
 - [x] Create `tests/` directory structure (core/, strategy/, ai/)
 - [x] Add `make test` and `make test-verbose` targets to Makefile
 
-### 5.2 Unit Tests ✓ PARTIAL
-Core systems (completed):
+### 5.2 Unit Tests ✓ COMPLETED
+Core systems:
 - [x] `tests/core/test_formula.cpp` - Formula evaluation (155 assertions)
 - [x] `tests/core/test_error.cpp` - Error handling
 - [x] `tests/core/test_event.cpp` - Event dispatcher
+- [x] `tests/core/test_command.cpp` - Command queue (176 assertions)
 
-Core systems (remaining):
-- [ ] `tests/core/test_command.cpp` - Command queue
+Strategy systems:
+- [x] `tests/strategy/test_save.cpp` - Save/load with path validation security tests (80 assertions)
+- [x] `tests/strategy/test_resource.cpp` - Resource management (75 assertions)
 
-Strategy systems (remaining):
-- [ ] `tests/strategy/test_save.cpp` - Save/load (especially path validation)
-- [ ] `tests/strategy/test_resource.cpp` - Resource management
-
-AI systems (remaining):
-- [ ] `tests/ai/test_pathfinding.cpp` - A* correctness
+AI systems:
+- [x] `tests/ai/test_pathfinding.cpp` - A* correctness (268 assertions)
 
 ### 5.3 Integration Tests (Not Started)
 - [ ] Graphics pipeline (sprite batching, texture handling)
@@ -186,7 +184,7 @@ AI systems (remaining):
 | Phase 2: Memory Safety | Completed | Ownership docs added, NULL check fixes, RAII skipped (decision made) |
 | Phase 3: Performance | Partial | Sprite auto-flush done; pools/event optimization deferred pending profiling |
 | Phase 4: Organization | Completed | text.cpp split, recursion limits, C++/C-style decision resolved |
-| Phase 5: Testing | Partial | Framework setup done, 3 core test suites (221 assertions, 29 test cases) |
+| Phase 5: Testing | Completed | 7 test suites, 820 assertions, 79 test cases |
 
 ---
 
