@@ -180,14 +180,16 @@ static Carbon_AnomalyResult build_result(Carbon_AnomalyManager *mgr,
     result.success = success;
 
     if (!success) {
-        strcpy(result.message, "Research failed");
+        strncpy(result.message, "Research failed", sizeof(result.message) - 1);
+        result.message[sizeof(result.message) - 1] = '\0';
         return result;
     }
 
     const Carbon_AnomalyTypeDef *type = carbon_anomaly_get_type(mgr->registry,
                                                                   anomaly->type_id);
     if (!type) {
-        strcpy(result.message, "Unknown anomaly type");
+        strncpy(result.message, "Unknown anomaly type", sizeof(result.message) - 1);
+        result.message[sizeof(result.message) - 1] = '\0';
         return result;
     }
 
@@ -300,9 +302,12 @@ Carbon_AnomalyTypeDef carbon_anomaly_type_default(void) {
     Carbon_AnomalyTypeDef def;
     memset(&def, 0, sizeof(def));
 
-    strcpy(def.id, "unknown");
-    strcpy(def.name, "Unknown Anomaly");
-    strcpy(def.description, "An unidentified anomaly");
+    strncpy(def.id, "unknown", sizeof(def.id) - 1);
+    def.id[sizeof(def.id) - 1] = '\0';
+    strncpy(def.name, "Unknown Anomaly", sizeof(def.name) - 1);
+    def.name[sizeof(def.name) - 1] = '\0';
+    strncpy(def.description, "An unidentified anomaly", sizeof(def.description) - 1);
+    def.description[sizeof(def.description) - 1] = '\0';
 
     def.rarity = CARBON_ANOMALY_COMMON;
     def.research_time = 10.0f;
@@ -646,19 +651,22 @@ Carbon_AnomalyResult carbon_anomaly_complete_instant(Carbon_AnomalyManager *mgr,
     memset(&result, 0, sizeof(result));
 
     if (!mgr) {
-        strcpy(result.message, "Invalid manager");
+        strncpy(result.message, "Invalid manager", sizeof(result.message) - 1);
+        result.message[sizeof(result.message) - 1] = '\0';
         return result;
     }
 
     Carbon_Anomaly *anomaly = find_anomaly(mgr, id);
     if (!anomaly) {
-        strcpy(result.message, "Anomaly not found");
+        strncpy(result.message, "Anomaly not found", sizeof(result.message) - 1);
+        result.message[sizeof(result.message) - 1] = '\0';
         return result;
     }
 
     /* Must be at least discovered */
     if (anomaly->status == CARBON_ANOMALY_UNDISCOVERED) {
-        strcpy(result.message, "Anomaly not discovered");
+        strncpy(result.message, "Anomaly not discovered", sizeof(result.message) - 1);
+        result.message[sizeof(result.message) - 1] = '\0';
         return result;
     }
 
@@ -682,18 +690,21 @@ Carbon_AnomalyResult carbon_anomaly_collect_rewards(Carbon_AnomalyManager *mgr, 
     memset(&result, 0, sizeof(result));
 
     if (!mgr) {
-        strcpy(result.message, "Invalid manager");
+        strncpy(result.message, "Invalid manager", sizeof(result.message) - 1);
+        result.message[sizeof(result.message) - 1] = '\0';
         return result;
     }
 
     Carbon_Anomaly *anomaly = find_anomaly(mgr, id);
     if (!anomaly) {
-        strcpy(result.message, "Anomaly not found");
+        strncpy(result.message, "Anomaly not found", sizeof(result.message) - 1);
+        result.message[sizeof(result.message) - 1] = '\0';
         return result;
     }
 
     if (anomaly->status != CARBON_ANOMALY_COMPLETED) {
-        strcpy(result.message, "Anomaly not completed");
+        strncpy(result.message, "Anomaly not completed", sizeof(result.message) - 1);
+        result.message[sizeof(result.message) - 1] = '\0';
         return result;
     }
 

@@ -24,6 +24,16 @@ struct Carbon_SaveManager {
     int min_compatible;
 };
 
+// Validate save name to prevent path traversal attacks
+static bool is_valid_save_name(const char *name) {
+    if (!name || !*name) return false;
+    if (strchr(name, '/') || strchr(name, '\\')) return false;
+    if (strstr(name, "..")) return false;
+    // Reject names that are too long
+    if (strlen(name) > 64) return false;
+    return true;
+}
+
 // Create directory if it doesn't exist
 static bool ensure_directory(const char *path) {
     struct stat st = {0};
@@ -87,6 +97,12 @@ Carbon_SaveResult carbon_save_game(Carbon_SaveManager *sm,
         return result;
     }
 
+    if (!is_valid_save_name(save_name)) {
+        snprintf(result.error_message, sizeof(result.error_message),
+                 "Invalid save name: must not contain path separators or '..'");
+        return result;
+    }
+
     build_save_path(sm, save_name, result.filepath, sizeof(result.filepath));
 
     FILE *fp = fopen(result.filepath, "w");
@@ -113,7 +129,8 @@ Carbon_SaveResult carbon_save_game(Carbon_SaveManager *sm,
 
     // Write game_state section header
     fprintf(fp, "[game_state]\n");
-    strcpy(writer.current_section, "game_state");
+    strncpy(writer.current_section, "game_state", sizeof(writer.current_section) - 1);
+    writer.current_section[sizeof(writer.current_section) - 1] = '\0';
     writer.in_section = true;
 
     // Let game serialize its state
@@ -141,6 +158,12 @@ Carbon_SaveResult carbon_load_game(Carbon_SaveManager *sm,
     if (!sm || !save_name || !deserialize) {
         snprintf(result.error_message, sizeof(result.error_message),
                  "Invalid parameters");
+        return result;
+    }
+
+    if (!is_valid_save_name(save_name)) {
+        snprintf(result.error_message, sizeof(result.error_message),
+                 "Invalid save name: must not contain path separators or '..'");
         return result;
     }
 
@@ -322,6 +345,7 @@ void carbon_save_list_free(Carbon_SaveInfo *list) {
 
 bool carbon_save_delete(Carbon_SaveManager *sm, const char *save_name) {
     if (!sm || !save_name) return false;
+    if (!is_valid_save_name(save_name)) return false;
 
     char filepath[CARBON_SAVE_MAX_PATH];
     build_save_path(sm, save_name, filepath, sizeof(filepath));
@@ -331,6 +355,7 @@ bool carbon_save_delete(Carbon_SaveManager *sm, const char *save_name) {
 
 bool carbon_save_exists(const Carbon_SaveManager *sm, const char *save_name) {
     if (!sm || !save_name) return false;
+    if (!is_valid_save_name(save_name)) return false;
 
     char filepath[CARBON_SAVE_MAX_PATH];
     build_save_path(sm, save_name, filepath, sizeof(filepath));

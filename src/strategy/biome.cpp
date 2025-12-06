@@ -638,8 +638,10 @@ void carbon_biome_map_smooth(Carbon_BiomeMap *map, int passes) {
 Carbon_BiomeDef carbon_biome_default_def(void) {
     Carbon_BiomeDef def = {};
 
-    strcpy(def.id, "default");
-    strcpy(def.name, "Default");
+    strncpy(def.id, "default", sizeof(def.id) - 1);
+    def.id[sizeof(def.id) - 1] = '\0';
+    strncpy(def.name, "Default", sizeof(def.name) - 1);
+    def.name[sizeof(def.name) - 1] = '\0';
     def.color = 0xFF808080;  /* Gray */
     def.movement_cost = 1.0f;
     def.resource_multiplier = 1.0f;

@@ -177,25 +177,25 @@ static void next_token(ExprParser *p) {
     if (c == '>' && p->expr[p->pos + 1] == '=') {
         p->pos += 2;
         p->current.type = TOK_OPERATOR;
-        strcpy(p->current.text, ">=");
+        p->current.text[0] = '>'; p->current.text[1] = '='; p->current.text[2] = '\0';
         return;
     }
     if (c == '<' && p->expr[p->pos + 1] == '=') {
         p->pos += 2;
         p->current.type = TOK_OPERATOR;
-        strcpy(p->current.text, "<=");
+        p->current.text[0] = '<'; p->current.text[1] = '='; p->current.text[2] = '\0';
         return;
     }
     if (c == '=' && p->expr[p->pos + 1] == '=') {
         p->pos += 2;
         p->current.type = TOK_OPERATOR;
-        strcpy(p->current.text, "==");
+        p->current.text[0] = '='; p->current.text[1] = '='; p->current.text[2] = '\0';
         return;
     }
     if (c == '!' && p->expr[p->pos + 1] == '=') {
         p->pos += 2;
         p->current.type = TOK_OPERATOR;
-        strcpy(p->current.text, "!=");
+        p->current.text[0] = '!'; p->current.text[1] = '='; p->current.text[2] = '\0';
         return;
     }
 
@@ -248,7 +248,8 @@ static bool parse_comparison(ExprParser *p) {
 
     if (p->current.type == TOK_OPERATOR) {
         char op[3];
-        strcpy(op, p->current.text);
+        strncpy(op, p->current.text, sizeof(op) - 1);
+        op[sizeof(op) - 1] = '\0';
         next_token(p);
 
         float right;

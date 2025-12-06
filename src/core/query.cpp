@@ -648,7 +648,8 @@ bool carbon_query_remove_tag(Carbon_QuerySystem *sys, const char *name, const ch
         if (strcmp(q->tags[i], tag) == 0) {
             /* Remove by shifting */
             for (int j = i; j < q->tag_count - 1; j++) {
-                strcpy(q->tags[j], q->tags[j + 1]);
+                strncpy(q->tags[j], q->tags[j + 1], TAG_MAX_LEN - 1);
+                q->tags[j][TAG_MAX_LEN - 1] = '\0';
             }
             q->tag_count--;
             return true;
