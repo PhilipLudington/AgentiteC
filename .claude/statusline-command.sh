@@ -13,8 +13,8 @@ debug_log() {
 input=$(cat)
 
 # Extract values from JSON
-cwd=$(echo "$input" | jq -r '.workspace.current_directory' 2>/dev/null)
-project_dir=$(echo "$input" | jq -r '.workspace.project_directory' 2>/dev/null)
+cwd=$(echo "$input" | jq -r '.workspace.current_dir' 2>/dev/null)
+project_dir=$(echo "$input" | jq -r '.workspace.project_dir' 2>/dev/null)
 style=$(echo "$input" | jq -r '.output_style.name' 2>/dev/null)
 
 if [ -z "$cwd" ] || [ "$cwd" = "null" ]; then
@@ -74,10 +74,10 @@ if [ -d "$cwd/.git" ] || git -C "$cwd" rev-parse --git-dir >/dev/null 2>&1; then
 fi
 
 # C/Make build status indicator
-# Check if last build succeeded by looking for the executable
+# Check if last build succeeded by looking for the test_runner executable
 build_status=''
 if [ "$project_dir" != 'null' ] && [ -n "$project_dir" ]; then
-    if [ -f "${project_dir}/build/carbon" ]; then
+    if [ -f "${project_dir}/build/test_runner" ]; then
         build_status=" \033[2m[\033[0m\033[32mBuild ✓\033[0m\033[2m]\033[0m"
     elif [ -d "${project_dir}/build" ] && [ "$(ls -A ${project_dir}/build 2>/dev/null)" ]; then
         # Has build dir with files but no executable - might be building or failed
@@ -85,17 +85,17 @@ if [ "$project_dir" != 'null' ] && [ -n "$project_dir" ]; then
     fi
 fi
 
-# Test health indicator
-# Reads from .test-results file (updated by test runs)
+# Test health indicator - run tests directly (takes ~1s)
 test_status=''
 if [ "$project_dir" != 'null' ] && [ -n "$project_dir" ]; then
-    test_results_file="${project_dir}/.test-results"
-    if [ -f "$test_results_file" ]; then
-        test_result=$(cat "$test_results_file" 2>/dev/null)
-        if [ "$test_result" = "pass" ]; then
-            test_status=" \033[2m[\033[0m\033[32mTests ✓\033[0m\033[2m]\033[0m"
-        elif [ "$test_result" = "fail" ]; then
-            test_status=" \033[2m[\033[0m\033[31mTests ✗\033[0m\033[2m]\033[0m"
+    if [ -f "${project_dir}/build/test_runner" ]; then
+        test_output=$(cd "$project_dir" 2>/dev/null && timeout 5 ./build/test_runner 2>&1)
+        if echo "$test_output" | grep -q "All tests passed"; then
+            test_cases=$(echo "$test_output" | grep -oE '[0-9]+ test cases' | grep -oE '[0-9]+')
+            test_status=" \033[2m[\033[0m\033[32m${test_cases:-0}T ✓\033[0m\033[2m]\033[0m"
+        elif echo "$test_output" | grep -qE '[0-9]+ failed'; then
+            failed=$(echo "$test_output" | grep -oE '[0-9]+ failed' | head -1 | grep -oE '[0-9]+')
+            test_status=" \033[2m[\033[0m\033[31m${failed:-0}F\033[0m\033[2m]\033[0m"
         fi
     fi
 fi
