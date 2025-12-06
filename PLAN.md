@@ -90,36 +90,44 @@ Implement object pools for frequently allocated objects:
 
 ## Phase 4: Code Organization
 
-### 4.1 Split Large Files
+### 4.1 Split Large Files ✓ PARTIAL
 Break down files exceeding 1000 lines:
 
-**text.cpp (2269 lines)**:
-- [ ] `text_font.cpp` - Font loading and management
-- [ ] `text_render.cpp` - Text rendering and batching
-- [ ] `text_sdf.cpp` - SDF/MSDF specific code
+**text.cpp (2269 lines) → SPLIT COMPLETED**:
+- [x] `text_font.cpp` - Font loading and management
+- [x] `text_render.cpp` - Text rendering and batching
+- [x] `text_sdf.cpp` - SDF/MSDF specific code
+- [x] `text_internal.h` - Shared internal types
+- Core text.cpp reduced to: shaders, pipelines, lifecycle (~780 lines)
 
-**formula.cpp (1697 lines)**:
-- [ ] `formula_lexer.cpp` - Tokenization
-- [ ] `formula_parser.cpp` - AST construction
-- [ ] `formula_eval.cpp` - Evaluation and bytecode
-- [ ] `formula_builtins.cpp` - Built-in functions
+**formula.cpp (1697 lines) → SKIPPED (Decision Made)**:
+Rationale: Lexer, parser (two variants), and builtins are tightly coupled. Both direct-eval
+and bytecode-compile parsers share lexer tokens and builtin functions. Splitting would
+require excessive code duplication or complex internal headers with minimal benefit.
+Instead, added recursion limits (see 4.3).
 
-**htn.cpp (1176 lines)**:
-- [ ] `htn_planner.cpp` - Core planning algorithm
-- [ ] `htn_tasks.cpp` - Task definitions and management
-- [ ] `htn_conditions.cpp` - Condition evaluation
+**htn.cpp (1176 lines) → DEFERRED**:
+At ~1176 lines, barely over threshold. Components (world state, domain, planning, execution,
+conditions, effects) are tightly integrated via internal structures. Would require similar
+internal header approach as text.cpp. Lower priority given marginal benefit.
 
-### 4.2 C++ Migration Decision
+### 4.2 C++ Migration Decision (Deferred)
 Choose one:
 - **Option A**: Full C++ adoption - use std::unique_ptr, std::optional, RAII
 - **Option B**: Revert to C - rename .cpp → .c, remove C++ includes
 
 Current state is confusing: files are .cpp but code is pure C style.
+**Decision**: Deferred pending broader architecture discussion.
 
-### 4.3 Add Recursion Limits
+### 4.3 Add Recursion Limits ✓ COMPLETED
 - **File**: `src/core/formula.cpp`
 - **Issue**: Deep nesting can cause stack overflow
-- **Fix**: Add depth counter to parser, fail at reasonable limit (e.g., 64)
+- **Status**: Fixed
+- **Solution**:
+  - Added `CARBON_FORMULA_MAX_DEPTH` constant (64)
+  - Added `depth` field to Parser and CompileParser structs
+  - `parse_expression()` and `compile_expression()` check and track depth
+  - Clear error message on depth exceeded
 
 ---
 
@@ -157,7 +165,7 @@ AI systems:
 | Phase 1: Security | Completed | All strcpy→strncpy fixes done, path traversal validation added |
 | Phase 2: Memory Safety | Completed | Ownership docs added, NULL check fixes, RAII skipped (decision made) |
 | Phase 3: Performance | Partial | Sprite auto-flush done; pools/event optimization deferred pending profiling |
-| Phase 4: Organization | Not Started | |
+| Phase 4: Organization | Partial | text.cpp split done, formula recursion limits added, htn/formula split deferred |
 | Phase 5: Testing | Not Started | |
 
 ---

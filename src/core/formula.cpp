@@ -69,12 +69,16 @@ typedef struct {
     char ident[CARBON_FORMULA_VAR_NAME_LEN];
 } Token;
 
+/* Maximum recursion depth to prevent stack overflow */
+#define CARBON_FORMULA_MAX_DEPTH 64
+
 typedef struct {
     const char *expr;
     size_t pos;
     Token current;
     Carbon_FormulaContext *ctx;
     bool has_error;
+    int depth;
 } Parser;
 
 /* Compiled formula bytecode */
@@ -273,7 +277,16 @@ static void next_token(Parser *p) {
  *============================================================================*/
 
 static double parse_expression(Parser *p) {
-    return parse_ternary(p);
+    if (p->depth >= CARBON_FORMULA_MAX_DEPTH) {
+        snprintf(p->ctx->error, CARBON_FORMULA_ERROR_LEN,
+                 "Expression too deeply nested (max depth %d)", CARBON_FORMULA_MAX_DEPTH);
+        p->has_error = true;
+        return NAN;
+    }
+    p->depth++;
+    double result = parse_ternary(p);
+    p->depth--;
+    return result;
 }
 
 static double parse_ternary(Parser *p) {
@@ -1075,6 +1088,7 @@ typedef struct {
     Carbon_FormulaContext *ctx;
     bool has_error;
     Carbon_Formula *formula;
+    int depth;
 } CompileParser;
 
 static void compile_next_token(CompileParser *p);
@@ -1131,7 +1145,16 @@ static void compile_next_token(CompileParser *p) {
 }
 
 static bool compile_expression(CompileParser *p) {
-    return compile_ternary(p);
+    if (p->depth >= CARBON_FORMULA_MAX_DEPTH) {
+        snprintf(p->ctx->error, CARBON_FORMULA_ERROR_LEN,
+                 "Expression too deeply nested (max depth %d)", CARBON_FORMULA_MAX_DEPTH);
+        p->has_error = true;
+        return false;
+    }
+    p->depth++;
+    bool result = compile_ternary(p);
+    p->depth--;
+    return result;
 }
 
 static bool compile_ternary(CompileParser *p) {
