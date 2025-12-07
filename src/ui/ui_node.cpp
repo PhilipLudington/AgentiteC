@@ -836,7 +836,48 @@ static void cui_node_calculate_rect(CUI_Node *node, CUI_Rect parent_rect)
     node->global_rect.h = node->rect.h;
 }
 
-static void cui_node_layout_vbox(CUI_Node *node)
+/* Get minimum size for a node, using text metrics for labels/buttons */
+static void cui_node_get_content_min_size(CUI_Context *ctx, CUI_Node *node,
+                                           float *out_w, float *out_h)
+{
+    float min_w = node->custom_min_size_x;
+    float min_h = node->custom_min_size_y;
+
+    /* Calculate content-based minimum size for certain node types */
+    if (ctx) {
+        switch (node->type) {
+            case CUI_NODE_LABEL:
+                if (node->label.text[0]) {
+                    float tw = cui_text_width(ctx, node->label.text);
+                    float th = cui_text_height(ctx);
+                    if (tw > min_w) min_w = tw;
+                    if (th > min_h) min_h = th;
+                }
+                break;
+            case CUI_NODE_BUTTON:
+                if (node->button.text[0]) {
+                    float tw = cui_text_width(ctx, node->button.text);
+                    float th = cui_text_height(ctx);
+                    /* Add some button padding */
+                    if (tw + 20 > min_w) min_w = tw + 20;
+                    if (th + 10 > min_h) min_h = th + 10;
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    /* Add style padding */
+    min_w += node->style.padding.left + node->style.padding.right;
+    min_h += node->style.padding.top + node->style.padding.bottom;
+
+    /* Compare with node->min_size */
+    if (out_w) *out_w = fmaxf(min_w, node->min_size_x);
+    if (out_h) *out_h = fmaxf(min_h, node->min_size_y);
+}
+
+static void cui_node_layout_vbox_ctx(CUI_Context *ctx, CUI_Node *node)
 {
     if (!node || node->child_count == 0) return;
 
@@ -858,7 +899,7 @@ static void cui_node_layout_vbox(CUI_Node *node)
         if (!child->visible) continue;
 
         float child_min_w, child_min_h;
-        cui_node_get_min_size(child, &child_min_w, &child_min_h);
+        cui_node_get_content_min_size(ctx, child, &child_min_w, &child_min_h);
         total_min_h += child_min_h;
 
         if (child->v_size_flags & CUI_SIZE_EXPAND) {
@@ -886,7 +927,7 @@ static void cui_node_layout_vbox(CUI_Node *node)
         if (!child->visible) continue;
 
         float child_min_w, child_min_h;
-        cui_node_get_min_size(child, &child_min_w, &child_min_h);
+        cui_node_get_content_min_size(ctx, child, &child_min_w, &child_min_h);
 
         /* Calculate child width */
         float child_w = child_min_w;
@@ -923,6 +964,7 @@ static void cui_node_layout_vbox(CUI_Node *node)
         y += child_h + sep;
     }
 }
+
 
 static void cui_node_layout_hbox(CUI_Node *node)
 {
@@ -1010,18 +1052,32 @@ static void cui_node_layout_hbox(CUI_Node *node)
     }
 }
 
-static void cui_node_layout_children(CUI_Node *node)
+/* Returns true if this container type manages child layout directly */
+static bool cui_node_is_layout_container(CUI_Node *node)
+{
+    if (!node) return false;
+    switch (node->type) {
+        case CUI_NODE_VBOX:
+        case CUI_NODE_HBOX:
+        case CUI_NODE_GRID:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static void cui_node_layout_children(CUI_Context *ctx, CUI_Node *node)
 {
     if (!node) return;
 
-    /* Container-specific layout */
+    /* Container-specific layout - these directly set child positions */
     switch (node->type) {
         case CUI_NODE_VBOX:
-            cui_node_layout_vbox(node);
+            cui_node_layout_vbox_ctx(ctx, node);
             return;
 
         case CUI_NODE_HBOX:
-            cui_node_layout_hbox(node);
+            cui_node_layout_hbox(node);  /* TODO: add ctx version */
             return;
 
         case CUI_NODE_GRID:
@@ -1032,36 +1088,51 @@ static void cui_node_layout_children(CUI_Node *node)
             break;
     }
 
-    /* Default: just calculate each child's rect from anchors */
+    /* Default: calculate each child's rect from anchors */
     for (CUI_Node *child = node->first_child; child; child = child->next_sibling) {
         if (!child->visible) continue;
         cui_node_calculate_rect(child, node->global_rect);
     }
 }
 
-static void cui_node_layout_recursive(CUI_Node *node, CUI_Rect parent_rect)
+static void cui_node_layout_recursive_internal(CUI_Context *ctx, CUI_Node *node,
+                                                 CUI_Rect parent_rect,
+                                                 bool parent_is_layout_container)
 {
     if (!node || !node->visible) return;
 
-    /* Calculate this node's rect */
-    cui_node_calculate_rect(node, parent_rect);
+    /* Only calculate rect from anchors if parent didn't already position us.
+     * Layout containers (VBox, HBox, Grid) set child positions directly,
+     * so we skip the anchor-based calculation for their children. */
+    if (!parent_is_layout_container) {
+        cui_node_calculate_rect(node, parent_rect);
+    }
 
-    /* Layout children */
-    cui_node_layout_children(node);
+    /* Layout children (this may directly set child positions for VBox/HBox/Grid) */
+    cui_node_layout_children(ctx, node);
 
     /* Call custom layout */
     if (node->on_layout) {
         node->on_layout(node);
     }
 
+    /* Check if this node is a layout container for children */
+    bool this_is_layout_container = cui_node_is_layout_container(node);
+
     /* Recurse to children */
     for (CUI_Node *child = node->first_child; child; child = child->next_sibling) {
         if (child->visible) {
-            cui_node_layout_recursive(child, node->global_rect);
+            cui_node_layout_recursive_internal(ctx, child, node->global_rect, this_is_layout_container);
         }
     }
 
     node->layout_dirty = false;
+}
+
+static void cui_node_layout_recursive(CUI_Context *ctx, CUI_Node *node, CUI_Rect parent_rect)
+{
+    /* Root node is never inside a layout container */
+    cui_node_layout_recursive_internal(ctx, node, parent_rect, false);
 }
 
 /* ============================================================================
@@ -1110,6 +1181,9 @@ bool cui_scene_process_event(CUI_Context *ctx, CUI_Node *root, const SDL_Event *
             s_last_hovered = hit;
         }
 
+        /* Track which node is currently pressed (must be outside block scope) */
+        static CUI_Node *s_pressed_node = NULL;
+
         /* Handle click */
         if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN && hit) {
             if (hit->focus_mode_click) {
@@ -1117,6 +1191,8 @@ bool cui_scene_process_event(CUI_Context *ctx, CUI_Node *root, const SDL_Event *
             }
 
             hit->pressed = true;
+            s_pressed_node = hit;  /* Store the pressed node */
+
             CUI_Signal sig;
             memset(&sig, 0, sizeof(sig));
             sig.type = CUI_SIGNAL_PRESSED;
@@ -1133,8 +1209,7 @@ bool cui_scene_process_event(CUI_Context *ctx, CUI_Node *root, const SDL_Event *
         }
 
         if (event->type == SDL_EVENT_MOUSE_BUTTON_UP) {
-            /* Find pressed node and emit released/clicked */
-            static CUI_Node *s_pressed_node = NULL;
+            /* Release pressed node and emit released/clicked */
             if (s_pressed_node) {
                 s_pressed_node->pressed = false;
                 cui_node_emit_simple(s_pressed_node, CUI_SIGNAL_RELEASED);
@@ -1165,10 +1240,10 @@ void cui_scene_render(CUI_Context *ctx, CUI_Node *root)
 {
     if (!ctx || !root) return;
 
-    /* Layout pass if needed */
+    /* Layout pass */
     cui_scene_layout(ctx, root);
 
-    /* Render pass */
+    /* Render the scene tree */
     cui_node_render_recursive(ctx, root);
 }
 
@@ -1178,7 +1253,7 @@ void cui_scene_layout(CUI_Context *ctx, CUI_Node *root)
 
     /* Create root rect from screen size */
     CUI_Rect screen_rect = {0, 0, (float)ctx->width, (float)ctx->height};
-    cui_node_layout_recursive(root, screen_rect);
+    cui_node_layout_recursive(ctx, root, screen_rect);
 }
 
 static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node)
@@ -1200,10 +1275,29 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node)
     /* Type-specific rendering */
     switch (node->type) {
         case CUI_NODE_LABEL:
-            cui_draw_text(ctx, node->label.text,
-                          node->global_rect.x + style.padding.left,
-                          node->global_rect.y + style.padding.top,
-                          node->label.color ? node->label.color : style.text_color);
+            {
+                float text_w = cui_text_width(ctx, node->label.text);
+                float text_h = cui_text_height(ctx);
+                float avail_w = node->global_rect.w - style.padding.left - style.padding.right;
+                float avail_h = node->global_rect.h - style.padding.top - style.padding.bottom;
+
+                /* Horizontal alignment based on size flags */
+                float text_x = node->global_rect.x + style.padding.left;
+                if (node->h_size_flags & CUI_SIZE_SHRINK_CENTER) {
+                    text_x = node->global_rect.x + style.padding.left +
+                             (avail_w - text_w) / 2;
+                } else if (node->h_size_flags & CUI_SIZE_SHRINK_END) {
+                    text_x = node->global_rect.x + node->global_rect.w -
+                             style.padding.right - text_w;
+                }
+
+                /* Center vertically */
+                float text_y = node->global_rect.y + style.padding.top +
+                               (avail_h - text_h) / 2;
+
+                cui_draw_text(ctx, node->label.text, text_x, text_y,
+                              node->label.color ? node->label.color : style.text_color);
+            }
             break;
 
         case CUI_NODE_BUTTON:

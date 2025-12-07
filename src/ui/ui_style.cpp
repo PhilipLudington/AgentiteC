@@ -642,6 +642,57 @@ void cui_draw_nineslice(CUI_Context *ctx, float x, float y, float w, float h,
     cui_draw_rect(ctx, x, y, w, h, 0x80808080);
 }
 
+/* Draw a filled quarter circle using horizontal scanlines */
+static void cui_draw_corner_filled(CUI_Context *ctx, float cx, float cy, float r,
+                                    int quadrant, uint32_t color)
+{
+    if (r < 1.0f) return;
+
+    /* Quadrants: 0=top-left, 1=top-right, 2=bottom-right, 3=bottom-left */
+    int steps = (int)r;
+    if (steps < 4) steps = 4;
+    if (steps > 16) steps = 16;
+
+    for (int i = 0; i <= steps; i++) {
+        float t = (float)i / steps;
+        float angle = t * 3.14159265f * 0.5f;
+        float dx = cosf(angle) * r;
+        float dy = sinf(angle) * r;
+
+        /* Draw horizontal line for this scanline of the arc */
+        float line_x, line_y, line_w, line_h = 1.0f;
+
+        switch (quadrant) {
+            case 0: /* Top-left: center is bottom-right of corner box */
+                line_x = cx - dx;
+                line_y = cy - dy;
+                line_w = dx;
+                break;
+            case 1: /* Top-right: center is bottom-left of corner box */
+                line_x = cx;
+                line_y = cy - dy;
+                line_w = dx;
+                break;
+            case 2: /* Bottom-right: center is top-left of corner box */
+                line_x = cx;
+                line_y = cy + dy - 1;
+                line_w = dx;
+                break;
+            case 3: /* Bottom-left: center is top-right of corner box */
+                line_x = cx - dx;
+                line_y = cy + dy - 1;
+                line_w = dx;
+                break;
+            default:
+                return;
+        }
+
+        if (line_w > 0) {
+            cui_draw_rect(ctx, line_x, line_y, line_w, line_h, color);
+        }
+    }
+}
+
 void cui_draw_rect_rounded_ex(CUI_Context *ctx, float x, float y, float w, float h,
                                uint32_t color, CUI_CornerRadius corners)
 {
@@ -663,61 +714,38 @@ void cui_draw_rect_rounded_ex(CUI_Context *ctx, float x, float y, float w, float
     float br = fminf(corners.bottom_right, half_min);
     float bl = fminf(corners.bottom_left, half_min);
 
-    /* Draw as multiple rects for simplified rounded corners */
-    /* Center rect */
-    float inner_x = x + fmaxf(tl, bl);
-    float inner_y = y + fmaxf(tl, tr);
-    float inner_w = w - fmaxf(tl, bl) - fmaxf(tr, br);
-    float inner_h = h - fmaxf(tl, tr) - fmaxf(bl, br);
-
-    if (inner_w > 0 && inner_h > 0) {
-        cui_draw_rect(ctx, inner_x, inner_y, inner_w, inner_h, color);
+    /* Draw main body as 3 horizontal rectangles (cross pattern) */
+    /* Middle horizontal band (full width, between top and bottom radii) */
+    float mid_top = fmaxf(tl, tr);
+    float mid_bot = fmaxf(bl, br);
+    float mid_h = h - mid_top - mid_bot;
+    if (mid_h > 0) {
+        cui_draw_rect(ctx, x, y + mid_top, w, mid_h, color);
     }
 
-    /* Top rect */
-    float top_x = x + tl;
-    float top_w = w - tl - tr;
-    if (top_w > 0 && fmaxf(tl, tr) > 0) {
-        cui_draw_rect(ctx, top_x, y, top_w, fmaxf(tl, tr), color);
-    }
-
-    /* Bottom rect */
-    float bot_x = x + bl;
-    float bot_w = w - bl - br;
-    float bot_h = fmaxf(bl, br);
-    if (bot_w > 0 && bot_h > 0) {
-        cui_draw_rect(ctx, bot_x, y + h - bot_h, bot_w, bot_h, color);
-    }
-
-    /* Left rect */
-    float left_y = y + tl;
-    float left_h = h - tl - bl;
-    if (left_h > 0 && fmaxf(tl, bl) > 0) {
-        cui_draw_rect(ctx, x, left_y, fmaxf(tl, bl), left_h, color);
-    }
-
-    /* Right rect */
-    float right_y = y + tr;
-    float right_h = h - tr - br;
-    float right_w = fmaxf(tr, br);
-    if (right_h > 0 && right_w > 0) {
-        cui_draw_rect(ctx, x + w - right_w, right_y, right_w, right_h, color);
-    }
-
-    /* Corner circles would go here - for now, fill with small rects */
-    /* Top-left corner */
-    if (tl > 0) {
-        int segments = (int)(tl / 2);
-        if (segments < 4) segments = 4;
-        for (int i = 0; i < segments; i++) {
-            float angle = 3.14159265f * 0.5f * (float)i / segments;
-            float cx = x + tl - cosf(angle) * tl;
-            float cy = y + tl - sinf(angle) * tl;
-            cui_draw_rect(ctx, cx, cy, 1, 1, color);
+    /* Top band (between left and right corners) */
+    if (mid_top > 0) {
+        float top_x = x + tl;
+        float top_w = w - tl - tr;
+        if (top_w > 0) {
+            cui_draw_rect(ctx, top_x, y, top_w, mid_top, color);
         }
     }
 
-    /* TODO: Proper arc rendering for corners */
+    /* Bottom band (between left and right corners) */
+    if (mid_bot > 0) {
+        float bot_x = x + bl;
+        float bot_w = w - bl - br;
+        if (bot_w > 0) {
+            cui_draw_rect(ctx, bot_x, y + h - mid_bot, bot_w, mid_bot, color);
+        }
+    }
+
+    /* Draw corner fills */
+    if (tl > 0) cui_draw_corner_filled(ctx, x + tl, y + tl, tl, 0, color);
+    if (tr > 0) cui_draw_corner_filled(ctx, x + w - tr, y + tr, tr, 1, color);
+    if (br > 0) cui_draw_corner_filled(ctx, x + w - br, y + h - br, br, 2, color);
+    if (bl > 0) cui_draw_corner_filled(ctx, x + bl, y + h - bl, bl, 3, color);
 }
 
 void cui_draw_rect_rounded_outline(CUI_Context *ctx, float x, float y, float w, float h,

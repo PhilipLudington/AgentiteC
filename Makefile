@@ -120,6 +120,7 @@ dirs:
 	@mkdir -p $(BUILD_DIR)/examples/animation
 	@mkdir -p $(BUILD_DIR)/examples/tilemap
 	@mkdir -p $(BUILD_DIR)/examples/ui
+	@mkdir -p $(BUILD_DIR)/examples/ui_node
 	@mkdir -p $(BUILD_DIR)/examples/strategy
 	@mkdir -p $(BUILD_DIR)/examples/strategy-sim
 
@@ -187,6 +188,11 @@ example-tilemap: dirs $(BUILD_DIR)/examples/tilemap/main.o $(patsubst $(SRC_DIR)
 example-ui: dirs $(BUILD_DIR)/examples/ui/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
 	$(CXX) $(BUILD_DIR)/examples/ui/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-ui $(LDFLAGS)
 	./$(BUILD_DIR)/example-ui
+
+# Build and run UI node (retained-mode) example
+example-ui-node: dirs $(BUILD_DIR)/examples/ui_node/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/ui_node/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-ui-node $(LDFLAGS)
+	./$(BUILD_DIR)/example-ui-node
 
 # Build and run strategy example
 example-strategy: dirs $(BUILD_DIR)/examples/strategy/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
