@@ -219,6 +219,7 @@ typedef struct CUI_PropertyTween {
 
 typedef struct CUI_TweenSequence {
     uint32_t id;
+    struct CUI_TweenManager *manager;  /* Owning tween manager */
     uint32_t *tween_ids;
     int tween_count;
     int tween_capacity;

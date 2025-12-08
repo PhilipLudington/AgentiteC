@@ -357,12 +357,32 @@ void cui_tween_manager_destroy(CUI_TweenManager *tm) {
 static float cui_tween_get_property_value(CUI_Node *node, CUI_TweenProperty prop) {
     if (!node) return 0.0f;
 
-    /* NOTE: This requires CUI_Node to be defined. For now, return 0.
-       When ui_node.h is integrated, this will access actual node properties. */
-    (void)prop;
-
-    /* Placeholder - will be implemented when CUI_Node is available */
-    return 0.0f;
+    switch (prop) {
+        case CUI_TWEEN_POSITION_X:
+        case CUI_TWEEN_OFFSET_LEFT:
+            return node->offsets.left;
+        case CUI_TWEEN_POSITION_Y:
+        case CUI_TWEEN_OFFSET_TOP:
+            return node->offsets.top;
+        case CUI_TWEEN_SIZE_X:
+            return node->custom_min_size_x;
+        case CUI_TWEEN_SIZE_Y:
+            return node->custom_min_size_y;
+        case CUI_TWEEN_OFFSET_RIGHT:
+            return node->offsets.right;
+        case CUI_TWEEN_OFFSET_BOTTOM:
+            return node->offsets.bottom;
+        case CUI_TWEEN_OPACITY:
+            return node->opacity;
+        case CUI_TWEEN_ROTATION:
+            return node->rotation;
+        case CUI_TWEEN_SCALE_X:
+            return node->scale_x;
+        case CUI_TWEEN_SCALE_Y:
+            return node->scale_y;
+        default:
+            return 0.0f;
+    }
 }
 
 /* Set a property value on a node */
@@ -370,12 +390,58 @@ static void cui_tween_set_property_value(CUI_Node *node, CUI_TweenProperty prop,
                                           float value) {
     if (!node) return;
 
-    /* NOTE: This requires CUI_Node to be defined.
-       When ui_node.h is integrated, this will set actual node properties. */
-    (void)prop;
-    (void)value;
-
-    /* Placeholder - will be implemented when CUI_Node is available */
+    switch (prop) {
+        case CUI_TWEEN_POSITION_X:
+            /* Position uses offsets.left for anchor-based nodes */
+            node->offsets.left = value;
+            node->layout_dirty = true;
+            break;
+        case CUI_TWEEN_POSITION_Y:
+            node->offsets.top = value;
+            node->layout_dirty = true;
+            break;
+        case CUI_TWEEN_SIZE_X:
+            node->custom_min_size_x = value;
+            node->layout_dirty = true;
+            break;
+        case CUI_TWEEN_SIZE_Y:
+            node->custom_min_size_y = value;
+            node->layout_dirty = true;
+            break;
+        case CUI_TWEEN_OFFSET_LEFT:
+            node->offsets.left = value;
+            node->layout_dirty = true;
+            break;
+        case CUI_TWEEN_OFFSET_TOP:
+            node->offsets.top = value;
+            node->layout_dirty = true;
+            break;
+        case CUI_TWEEN_OFFSET_RIGHT:
+            node->offsets.right = value;
+            node->layout_dirty = true;
+            break;
+        case CUI_TWEEN_OFFSET_BOTTOM:
+            node->offsets.bottom = value;
+            node->layout_dirty = true;
+            break;
+        case CUI_TWEEN_OPACITY:
+            node->opacity = value;
+            break;
+        case CUI_TWEEN_ROTATION:
+            node->rotation = value;
+            break;
+        case CUI_TWEEN_SCALE_X:
+            node->scale_x = value;
+            break;
+        case CUI_TWEEN_SCALE_Y:
+            node->scale_y = value;
+            break;
+        case CUI_TWEEN_CUSTOM:
+            /* Handled separately via custom_setter */
+            break;
+        default:
+            break;
+    }
 }
 
 /* ============================================================================
@@ -629,65 +695,85 @@ uint32_t cui_tween_fade_to(CUI_TweenManager *tm, CUI_Node *node,
 
 uint32_t cui_tween_slide_in(CUI_TweenManager *tm, CUI_Node *node,
                              CUI_Direction from, float duration) {
-    CUI_TweenProperty prop;
-    float start_offset = 100.0f;  /* Slide distance */
+    CUI_TweenProperty prop_a, prop_b;
+    float move_offset = 100.0f;  /* Amount to move back (opposite of slide_out) */
 
+    /* Move BOTH left+right or top+bottom to preserve size */
+    /* slide_in reverses slide_out: if slide_out moved left (-), slide_in moves right (+) */
     switch (from) {
         case CUI_DIR_LEFT:
-            prop = CUI_TWEEN_OFFSET_LEFT;
-            start_offset = -100.0f;
+            prop_a = CUI_TWEEN_OFFSET_LEFT;
+            prop_b = CUI_TWEEN_OFFSET_RIGHT;
+            move_offset = 100.0f;  /* Move right to return from left */
             break;
         case CUI_DIR_RIGHT:
-            prop = CUI_TWEEN_OFFSET_LEFT;
-            start_offset = 100.0f;
+            prop_a = CUI_TWEEN_OFFSET_LEFT;
+            prop_b = CUI_TWEEN_OFFSET_RIGHT;
+            move_offset = -100.0f;  /* Move left to return from right */
             break;
         case CUI_DIR_UP:
-            prop = CUI_TWEEN_OFFSET_TOP;
-            start_offset = -100.0f;
+            prop_a = CUI_TWEEN_OFFSET_TOP;
+            prop_b = CUI_TWEEN_OFFSET_BOTTOM;
+            move_offset = 100.0f;  /* Move down to return from up */
             break;
         case CUI_DIR_DOWN:
-            prop = CUI_TWEEN_OFFSET_TOP;
-            start_offset = 100.0f;
+            prop_a = CUI_TWEEN_OFFSET_TOP;
+            prop_b = CUI_TWEEN_OFFSET_BOTTOM;
+            move_offset = -100.0f;  /* Move up to return from down */
             break;
         default:
             return 0;
     }
 
-    float current = cui_tween_get_property_value(node, prop);
-    return cui_tween_property_from_to(tm, node, prop,
-                                       current + start_offset, current,
+    float current_a = cui_tween_get_property_value(node, prop_a);
+    float current_b = cui_tween_get_property_value(node, prop_b);
+    /* Animate from current to current + move_offset (moving back to original) */
+    cui_tween_property_from_to(tm, node, prop_b,
+                               current_b, current_b + move_offset,
+                               duration, CUI_EASE_OUT_CUBIC);
+    return cui_tween_property_from_to(tm, node, prop_a,
+                                       current_a, current_a + move_offset,
                                        duration, CUI_EASE_OUT_CUBIC);
 }
 
 uint32_t cui_tween_slide_out(CUI_TweenManager *tm, CUI_Node *node,
                               CUI_Direction to, float duration) {
-    CUI_TweenProperty prop;
+    CUI_TweenProperty prop_a, prop_b;
     float end_offset = 100.0f;
 
+    /* Move BOTH left+right or top+bottom to preserve size */
     switch (to) {
         case CUI_DIR_LEFT:
-            prop = CUI_TWEEN_OFFSET_LEFT;
+            prop_a = CUI_TWEEN_OFFSET_LEFT;
+            prop_b = CUI_TWEEN_OFFSET_RIGHT;
             end_offset = -100.0f;
             break;
         case CUI_DIR_RIGHT:
-            prop = CUI_TWEEN_OFFSET_LEFT;
+            prop_a = CUI_TWEEN_OFFSET_LEFT;
+            prop_b = CUI_TWEEN_OFFSET_RIGHT;
             end_offset = 100.0f;
             break;
         case CUI_DIR_UP:
-            prop = CUI_TWEEN_OFFSET_TOP;
+            prop_a = CUI_TWEEN_OFFSET_TOP;
+            prop_b = CUI_TWEEN_OFFSET_BOTTOM;
             end_offset = -100.0f;
             break;
         case CUI_DIR_DOWN:
-            prop = CUI_TWEEN_OFFSET_TOP;
+            prop_a = CUI_TWEEN_OFFSET_TOP;
+            prop_b = CUI_TWEEN_OFFSET_BOTTOM;
             end_offset = 100.0f;
             break;
         default:
             return 0;
     }
 
-    float current = cui_tween_get_property_value(node, prop);
-    return cui_tween_property_from_to(tm, node, prop,
-                                       current, current + end_offset,
+    float current_a = cui_tween_get_property_value(node, prop_a);
+    float current_b = cui_tween_get_property_value(node, prop_b);
+    cui_tween_property_from_to(tm, node, prop_b,
+                               current_b, current_b + end_offset,
+                               duration, CUI_EASE_IN_CUBIC);
+    return cui_tween_property_from_to(tm, node, prop_a,
+                                       current_a, current_a + end_offset,
                                        duration, CUI_EASE_IN_CUBIC);
 }
 
@@ -709,31 +795,75 @@ uint32_t cui_tween_scale_to(CUI_TweenManager *tm, CUI_Node *node,
     return tx;
 }
 
+/* Shake animation state - stored in userdata */
+typedef struct {
+    CUI_Node *node;
+    float base_left;
+    float base_right;
+    float intensity;
+    float duration;
+} CUI_ShakeData;
+
+static void cui_shake_update(CUI_Node *node, float progress, void *userdata) {
+    (void)node;  /* We use the node from shake_data instead */
+    CUI_ShakeData *data = (CUI_ShakeData *)userdata;
+    if (!data || !data->node) return;
+
+    /* Oscillating shake with decay: sin wave that decays over time */
+    float decay = 1.0f - progress;  /* Linear decay from 1 to 0 */
+    float freq = 6.0f;  /* Number of oscillations */
+    float offset = sinf(progress * freq * 2.0f * (float)M_PI) * data->intensity * decay;
+
+    /* Apply offset to both left and right to preserve size */
+    data->node->offsets.left = data->base_left + offset;
+    data->node->offsets.right = data->base_right + offset;
+    data->node->layout_dirty = true;
+}
+
 uint32_t cui_tween_shake(CUI_TweenManager *tm, CUI_Node *node,
                           float intensity, float duration) {
-    /* Create a sequence of quick back-and-forth movements */
-    CUI_TweenSequence *seq = cui_tween_sequence_create(tm);
-    if (!seq) return 0;
+    if (!tm || !node) return 0;
 
-    int shakes = (int)(duration / 0.05f);
-    if (shakes < 2) shakes = 2;
-    if (shakes > 10) shakes = 10;
+    /* Allocate shake data - will be freed when tween completes */
+    CUI_ShakeData *data = (CUI_ShakeData *)malloc(sizeof(CUI_ShakeData));
+    if (!data) return 0;
 
-    float shake_duration = duration / shakes;
-    float current = cui_tween_get_property_value(node, CUI_TWEEN_OFFSET_LEFT);
+    data->node = node;
+    data->base_left = node->offsets.left;
+    data->base_right = node->offsets.right;
+    data->intensity = intensity;
+    data->duration = duration;
 
-    for (int i = 0; i < shakes; i++) {
-        float offset = (i % 2 == 0) ? intensity : -intensity;
-        offset *= (1.0f - (float)i / shakes);  /* Decay */
+    /* Create a single custom tween that drives the shake */
+    CUI_TweenConfig config = {0};
+    config.target = node;
+    config.property = CUI_TWEEN_CUSTOM;
+    config.start_value = 0.0f;
+    config.end_value = 1.0f;  /* Progress from 0 to 1 */
+    config.duration = duration;
+    config.ease = CUI_EASE_LINEAR;
+    config.custom_userdata = data;
+    config.custom_setter = cui_shake_update;
 
-        uint32_t id = cui_tween_property_from_to(tm, node, CUI_TWEEN_OFFSET_LEFT,
-                                                  current + offset, current,
-                                                  shake_duration, CUI_EASE_OUT_QUAD);
-        cui_tween_sequence_add(seq, id);
+    uint32_t id = cui_tween_create(tm, &config);
+
+    /* Set completion callback to restore original position and free data */
+    CUI_PropertyTween *tween = cui_tween_get(tm, id);
+    if (tween) {
+        tween->config.on_complete = [](uint32_t, void *ud) {
+            CUI_ShakeData *d = (CUI_ShakeData *)ud;
+            if (d && d->node) {
+                /* Restore exact original position */
+                d->node->offsets.left = d->base_left;
+                d->node->offsets.right = d->base_right;
+                d->node->layout_dirty = true;
+            }
+            free(d);
+        };
+        tween->config.callback_userdata = data;
     }
 
-    cui_tween_sequence_play(seq);
-    return seq->id;
+    return id;
 }
 
 /* ============================================================================
@@ -835,6 +965,7 @@ CUI_TweenSequence *cui_tween_sequence_create(CUI_TweenManager *tm) {
     if (!seq) return NULL;
 
     seq->id = tm->next_id++;
+    seq->manager = tm;
     seq->tween_capacity = 16;
     seq->tween_ids = (uint32_t *)calloc(seq->tween_capacity, sizeof(uint32_t));
     if (!seq->tween_ids) {
@@ -884,16 +1015,39 @@ void cui_tween_sequence_set_loop(CUI_TweenSequence *seq, bool loop) {
 }
 
 void cui_tween_sequence_play(CUI_TweenSequence *seq) {
-    if (!seq) return;
+    if (!seq || !seq->manager) return;
 
     seq->active = true;
     seq->current_index = 0;
 
-    /* For sequential, tweens should start as idle, first one starts now */
-    /* For parallel, all tweens start immediately */
+    CUI_TweenManager *tm = seq->manager;
 
-    /* Note: Since tweens are created as RUNNING, we need to set them to IDLE
-       for sequential playback, then start the first one. */
+    if (seq->parallel) {
+        /* For parallel, all tweens run simultaneously - ensure all are running */
+        for (int i = 0; i < seq->tween_count; i++) {
+            CUI_PropertyTween *t = cui_tween_get(tm, seq->tween_ids[i]);
+            if (t) {
+                t->state = CUI_TWEEN_RUNNING;
+                t->elapsed = 0.0f;
+            }
+        }
+    } else {
+        /* For sequential, set all to IDLE except the first one */
+        for (int i = 0; i < seq->tween_count; i++) {
+            CUI_PropertyTween *t = cui_tween_get(tm, seq->tween_ids[i]);
+            if (t) {
+                t->state = CUI_TWEEN_IDLE;
+                t->elapsed = 0.0f;
+            }
+        }
+        /* Start the first one */
+        if (seq->tween_count > 0) {
+            CUI_PropertyTween *first = cui_tween_get(tm, seq->tween_ids[0]);
+            if (first) {
+                first->state = CUI_TWEEN_RUNNING;
+            }
+        }
+    }
 }
 
 void cui_tween_sequence_stop(CUI_TweenSequence *seq) {
