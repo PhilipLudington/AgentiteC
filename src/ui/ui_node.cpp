@@ -1390,28 +1390,37 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node, float in
     switch (node->type) {
         case CUI_NODE_LABEL:
             {
-                float text_w = cui_text_width(ctx, node->label.text);
-                float text_h = cui_text_height(ctx);
                 float avail_w = node->global_rect.w - style.padding.left - style.padding.right;
                 float avail_h = node->global_rect.h - style.padding.top - style.padding.bottom;
 
-                /* Horizontal alignment based on size flags */
                 float text_x = node->global_rect.x + style.padding.left;
-                if (node->h_size_flags & CUI_SIZE_SHRINK_CENTER) {
-                    text_x = node->global_rect.x + style.padding.left +
-                             (avail_w - text_w) / 2;
-                } else if (node->h_size_flags & CUI_SIZE_SHRINK_END) {
-                    text_x = node->global_rect.x + node->global_rect.w -
-                             style.padding.right - text_w;
-                }
-
-                /* Center vertically */
-                float text_y = node->global_rect.y + style.padding.top +
-                               (avail_h - text_h) / 2;
+                float text_y = node->global_rect.y + style.padding.top;
 
                 uint32_t text_color = node->label.color ? node->label.color : style.text_color;
-                cui_draw_text(ctx, node->label.text, text_x, text_y,
-                              cui_apply_opacity(text_color, effective_opacity));
+
+                /* Use styled text drawing with alignment, overflow, shadow etc. */
+                CUI_TextStyle text_style = style.text;
+
+                /* Apply size flags as alignment overrides if not explicitly set */
+                if (node->h_size_flags & CUI_SIZE_SHRINK_CENTER) {
+                    text_style.align = CUI_TEXT_ALIGN_CENTER;
+                } else if (node->h_size_flags & CUI_SIZE_SHRINK_END) {
+                    text_style.align = CUI_TEXT_ALIGN_RIGHT;
+                }
+
+                /* Apply label-specific settings */
+                if (node->label.autowrap) {
+                    text_style.wrap = true;
+                    text_style.overflow = CUI_TEXT_OVERFLOW_WRAP;
+                }
+                if (node->label.max_lines > 0) {
+                    text_style.max_lines = node->label.max_lines;
+                }
+
+                cui_draw_styled_text(ctx, node->label.text,
+                                     text_x, text_y, avail_w, avail_h,
+                                     cui_apply_opacity(text_color, effective_opacity),
+                                     &text_style);
             }
             break;
 
@@ -1434,15 +1443,17 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node, float in
                                           style.corner_radius.top_left);
                 }
 
-                /* Draw text centered */
-                float text_w = cui_text_width(ctx, node->button.text);
-                float text_x = node->global_rect.x +
-                               (node->global_rect.w - text_w) / 2;
-                float text_y = node->global_rect.y +
-                               (node->global_rect.h - cui_text_height(ctx)) / 2;
+                /* Draw text centered using styled text */
                 uint32_t btn_text_color = node->enabled ? style.text_color : style.text_color_disabled;
-                cui_draw_text(ctx, node->button.text, text_x, text_y,
-                              cui_apply_opacity(btn_text_color, effective_opacity));
+                CUI_TextStyle text_style = style.text;
+                text_style.align = CUI_TEXT_ALIGN_CENTER;
+                text_style.valign = CUI_TEXT_VALIGN_MIDDLE;
+
+                cui_draw_styled_text(ctx, node->button.text,
+                                     node->global_rect.x, node->global_rect.y,
+                                     node->global_rect.w, node->global_rect.h,
+                                     cui_apply_opacity(btn_text_color, effective_opacity),
+                                     &text_style);
             }
             break;
 

@@ -73,6 +73,7 @@ CUI_Style cui_style_default(void)
     style.text_color = 0xFFFFFFFF;          /* White text by default */
     style.text_color_hover = 0xFFFFFFFF;
     style.text_color_disabled = 0x888888FF; /* Gray for disabled */
+    style.text = cui_text_style_default();
     return style;
 }
 
@@ -160,6 +161,17 @@ void cui_style_merge(CUI_Style *dst, const CUI_Style *src)
     if (src->min_height > 0) dst->min_height = src->min_height;
     if (src->max_width > 0) dst->max_width = src->max_width;
     if (src->max_height > 0) dst->max_height = src->max_height;
+
+    /* Merge text style */
+    if (src->text.align != CUI_TEXT_ALIGN_LEFT) dst->text.align = src->text.align;
+    if (src->text.valign != CUI_TEXT_VALIGN_MIDDLE) dst->text.valign = src->text.valign;
+    if (src->text.overflow != CUI_TEXT_OVERFLOW_VISIBLE) dst->text.overflow = src->text.overflow;
+    if (src->text.line_height != 1.0f && src->text.line_height > 0) dst->text.line_height = src->text.line_height;
+    if (src->text.letter_spacing != 0) dst->text.letter_spacing = src->text.letter_spacing;
+    if (src->text.word_spacing != 0) dst->text.word_spacing = src->text.word_spacing;
+    if (src->text.shadow.enabled) dst->text.shadow = src->text.shadow;
+    if (src->text.wrap) dst->text.wrap = src->text.wrap;
+    if (src->text.max_lines > 0) dst->text.max_lines = src->text.max_lines;
 }
 
 /* ============================================================================
@@ -958,4 +970,363 @@ void cui_draw_styled_rect(CUI_Context *ctx, float x, float y, float w, float h,
                                            avg_width, style->corner_radius);
         }
     }
+}
+
+/* ============================================================================
+ * Styled Text Drawing Functions
+ * ============================================================================ */
+
+/* Static buffer for ellipsis truncation */
+static char s_ellipsis_buffer[1024];
+
+const char *cui_truncate_text_ellipsis(CUI_Context *ctx, const char *text,
+                                        float max_width)
+{
+    if (!ctx || !text || max_width <= 0) return text;
+
+    float text_w = cui_text_width(ctx, text);
+    if (text_w <= max_width) return text;
+
+    /* Binary search for the right truncation point */
+    size_t len = strlen(text);
+    if (len == 0) return text;
+
+    /* Measure ellipsis width */
+    float ellipsis_w = cui_text_width(ctx, "...");
+    float available = max_width - ellipsis_w;
+    if (available <= 0) {
+        s_ellipsis_buffer[0] = '.';
+        s_ellipsis_buffer[1] = '.';
+        s_ellipsis_buffer[2] = '.';
+        s_ellipsis_buffer[3] = '\0';
+        return s_ellipsis_buffer;
+    }
+
+    /* Find how many characters fit */
+    size_t fit = 0;
+    for (size_t i = 1; i <= len && i < sizeof(s_ellipsis_buffer) - 4; i++) {
+        strncpy(s_ellipsis_buffer, text, i);
+        s_ellipsis_buffer[i] = '\0';
+        if (cui_text_width(ctx, s_ellipsis_buffer) > available) {
+            break;
+        }
+        fit = i;
+    }
+
+    /* Build truncated string */
+    if (fit > 0) {
+        strncpy(s_ellipsis_buffer, text, fit);
+        s_ellipsis_buffer[fit] = '\0';
+        strcat(s_ellipsis_buffer, "...");
+    } else {
+        strcpy(s_ellipsis_buffer, "...");
+    }
+
+    return s_ellipsis_buffer;
+}
+
+/* Word wrap helper - splits text into lines that fit within max_width */
+typedef struct {
+    const char *start;
+    size_t length;
+} CUI_TextLine;
+
+#define CUI_MAX_WRAP_LINES 64
+
+static int cui_wrap_text(CUI_Context *ctx, const char *text, float max_width,
+                          float letter_spacing, float word_spacing,
+                          CUI_TextLine *lines, int max_lines_count)
+{
+    if (!ctx || !text || !lines || max_width <= 0) return 0;
+
+    int line_count = 0;
+    const char *line_start = text;
+    const char *word_start = text;
+    const char *p = text;
+
+    /* Temporary buffer for measuring */
+    char measure_buf[512];
+
+    while (*p && line_count < max_lines_count) {
+        /* Find next word boundary */
+        while (*p && *p != ' ' && *p != '\n') p++;
+
+        /* Measure line up to current word */
+        size_t line_len = p - line_start;
+        if (line_len >= sizeof(measure_buf)) line_len = sizeof(measure_buf) - 1;
+        strncpy(measure_buf, line_start, line_len);
+        measure_buf[line_len] = '\0';
+
+        /* Account for letter spacing (approximate) */
+        float line_w = cui_text_width(ctx, measure_buf);
+        if (letter_spacing != 0 && line_len > 1) {
+            line_w += letter_spacing * (line_len - 1);
+        }
+
+        /* Check if line fits */
+        if (line_w > max_width && word_start > line_start) {
+            /* Line too long, break at previous word */
+            lines[line_count].start = line_start;
+            lines[line_count].length = word_start - line_start;
+            if (lines[line_count].length > 0 &&
+                lines[line_count].start[lines[line_count].length - 1] == ' ') {
+                lines[line_count].length--;  /* Trim trailing space */
+            }
+            line_count++;
+            line_start = word_start;
+            /* Skip leading space */
+            while (*line_start == ' ') line_start++;
+            word_start = line_start;
+        }
+
+        /* Handle explicit newline */
+        if (*p == '\n') {
+            lines[line_count].start = line_start;
+            lines[line_count].length = p - line_start;
+            line_count++;
+            p++;
+            line_start = p;
+            word_start = p;
+            continue;
+        }
+
+        /* Move past spaces */
+        if (*p == ' ') {
+            p++;
+            word_start = p;
+        }
+    }
+
+    /* Add final line if there's remaining text */
+    if (line_start < p && line_count < max_lines_count) {
+        lines[line_count].start = line_start;
+        lines[line_count].length = p - line_start;
+        line_count++;
+    }
+
+    return line_count;
+}
+
+float cui_measure_styled_text(CUI_Context *ctx, const char *text,
+                              float max_width, const CUI_TextStyle *style,
+                              float *out_height)
+{
+    if (!ctx || !text) {
+        if (out_height) *out_height = 0;
+        return 0;
+    }
+
+    CUI_TextStyle default_style = cui_text_style_default();
+    if (!style) style = &default_style;
+
+    float base_height = cui_text_height(ctx);
+    float line_h = base_height * style->line_height;
+
+    /* Simple case: no wrapping */
+    if (!style->wrap && style->overflow != CUI_TEXT_OVERFLOW_WRAP) {
+        float w = cui_text_width(ctx, text);
+        /* Add letter spacing */
+        if (style->letter_spacing != 0) {
+            size_t len = strlen(text);
+            if (len > 1) w += style->letter_spacing * (len - 1);
+        }
+        if (out_height) *out_height = line_h;
+        return w;
+    }
+
+    /* Wrapping case */
+    CUI_TextLine lines[CUI_MAX_WRAP_LINES];
+    int line_count = cui_wrap_text(ctx, text, max_width,
+                                    style->letter_spacing, style->word_spacing,
+                                    lines, CUI_MAX_WRAP_LINES);
+
+    if (style->max_lines > 0 && line_count > style->max_lines) {
+        line_count = style->max_lines;
+    }
+
+    /* Find max width among lines */
+    float max_w = 0;
+    char line_buf[512];
+    for (int i = 0; i < line_count; i++) {
+        size_t len = lines[i].length;
+        if (len >= sizeof(line_buf)) len = sizeof(line_buf) - 1;
+        strncpy(line_buf, lines[i].start, len);
+        line_buf[len] = '\0';
+        float w = cui_text_width(ctx, line_buf);
+        if (w > max_w) max_w = w;
+    }
+
+    if (out_height) *out_height = line_count * line_h;
+    return max_w;
+}
+
+float cui_draw_styled_text(CUI_Context *ctx, const char *text,
+                           float x, float y, float max_width, float max_height,
+                           uint32_t color, const CUI_TextStyle *style)
+{
+    if (!ctx || !text || !text[0]) return 0;
+
+    CUI_TextStyle default_style = cui_text_style_default();
+    if (!style) style = &default_style;
+
+    float base_height = cui_text_height(ctx);
+    float line_h = base_height * style->line_height;
+
+    /* Handle overflow modes */
+    bool should_wrap = style->wrap || style->overflow == CUI_TEXT_OVERFLOW_WRAP;
+    bool should_clip = style->overflow == CUI_TEXT_OVERFLOW_CLIP;
+    bool should_ellipsis = style->overflow == CUI_TEXT_OVERFLOW_ELLIPSIS;
+
+    /* Build list of lines */
+    CUI_TextLine lines[CUI_MAX_WRAP_LINES];
+    int line_count = 1;
+    char single_line_buf[512];
+
+    if (should_wrap && max_width > 0) {
+        line_count = cui_wrap_text(ctx, text, max_width,
+                                    style->letter_spacing, style->word_spacing,
+                                    lines, CUI_MAX_WRAP_LINES);
+    } else {
+        /* Single line */
+        lines[0].start = text;
+        lines[0].length = strlen(text);
+    }
+
+    /* Apply max_lines limit */
+    if (style->max_lines > 0 && line_count > style->max_lines) {
+        line_count = style->max_lines;
+    }
+
+    /* Calculate total text height for vertical alignment */
+    float total_height = line_count * line_h;
+
+    /* Vertical alignment offset */
+    float y_offset = 0;
+    if (max_height > 0) {
+        switch (style->valign) {
+            case CUI_TEXT_VALIGN_TOP:
+                y_offset = 0;
+                break;
+            case CUI_TEXT_VALIGN_MIDDLE:
+                y_offset = (max_height - total_height) / 2;
+                break;
+            case CUI_TEXT_VALIGN_BOTTOM:
+                y_offset = max_height - total_height;
+                break;
+        }
+        if (y_offset < 0) y_offset = 0;
+    }
+
+    /* Set up clipping if needed */
+    bool pushed_scissor = false;
+    if (should_clip && max_width > 0 && max_height > 0) {
+        cui_push_scissor(ctx, x, y, max_width, max_height);
+        pushed_scissor = true;
+    }
+
+    /* Draw each line */
+    float current_y = y + y_offset;
+    char line_buf[512];
+
+    for (int i = 0; i < line_count; i++) {
+        /* Copy line to buffer */
+        size_t len = lines[i].length;
+        if (len >= sizeof(line_buf)) len = sizeof(line_buf) - 1;
+        strncpy(line_buf, lines[i].start, len);
+        line_buf[len] = '\0';
+
+        /* Handle ellipsis for last line if we hit max_lines */
+        if (should_ellipsis && max_width > 0) {
+            float line_w = cui_text_width(ctx, line_buf);
+            if (line_w > max_width) {
+                const char *truncated = cui_truncate_text_ellipsis(ctx, line_buf, max_width);
+                strncpy(line_buf, truncated, sizeof(line_buf) - 1);
+                line_buf[sizeof(line_buf) - 1] = '\0';
+            }
+        }
+
+        /* Measure line for horizontal alignment */
+        float line_w = cui_text_width(ctx, line_buf);
+        if (style->letter_spacing != 0 && len > 1) {
+            line_w += style->letter_spacing * (len - 1);
+        }
+
+        /* Horizontal alignment offset */
+        float x_offset = 0;
+        if (max_width > 0) {
+            switch (style->align) {
+                case CUI_TEXT_ALIGN_LEFT:
+                    x_offset = 0;
+                    break;
+                case CUI_TEXT_ALIGN_CENTER:
+                    x_offset = (max_width - line_w) / 2;
+                    break;
+                case CUI_TEXT_ALIGN_RIGHT:
+                    x_offset = max_width - line_w;
+                    break;
+                case CUI_TEXT_ALIGN_JUSTIFY:
+                    /* TODO: Implement justify by adjusting word_spacing */
+                    x_offset = 0;
+                    break;
+            }
+            if (x_offset < 0) x_offset = 0;
+        }
+
+        float draw_x = x + x_offset;
+        float draw_y = current_y;
+
+        /* Draw text shadow first */
+        if (style->shadow.enabled) {
+            float shadow_x = draw_x + style->shadow.offset_x;
+            float shadow_y = draw_y + style->shadow.offset_y;
+
+            /* For blur, we can approximate by drawing multiple times with slight offsets */
+            if (style->shadow.blur_radius > 0) {
+                float blur = style->shadow.blur_radius;
+                int passes = (int)(blur / 2);
+                if (passes < 1) passes = 1;
+                if (passes > 4) passes = 4;
+
+                uint32_t shadow_color = style->shadow.color;
+                uint8_t base_alpha = (shadow_color >> 24) & 0xFF;
+
+                for (int p = passes; p >= 1; p--) {
+                    float offset = blur * p / passes;
+                    uint8_t alpha = (uint8_t)(base_alpha / (p + 1));
+                    uint32_t c = (shadow_color & 0x00FFFFFF) | ((uint32_t)alpha << 24);
+
+                    /* Draw at offsets to simulate blur */
+                    cui_draw_text(ctx, line_buf, shadow_x - offset, shadow_y, c);
+                    cui_draw_text(ctx, line_buf, shadow_x + offset, shadow_y, c);
+                    cui_draw_text(ctx, line_buf, shadow_x, shadow_y - offset, c);
+                    cui_draw_text(ctx, line_buf, shadow_x, shadow_y + offset, c);
+                }
+            }
+
+            /* Core shadow */
+            cui_draw_text(ctx, line_buf, shadow_x, shadow_y, style->shadow.color);
+        }
+
+        /* Draw the actual text */
+        /* TODO: If letter_spacing is non-zero, draw character by character */
+        if (style->letter_spacing != 0) {
+            float char_x = draw_x;
+            char char_buf[2] = {0, 0};
+            for (size_t c = 0; c < len; c++) {
+                char_buf[0] = line_buf[c];
+                cui_draw_text(ctx, char_buf, char_x, draw_y, color);
+                char_x += cui_text_width(ctx, char_buf) + style->letter_spacing;
+            }
+        } else {
+            cui_draw_text(ctx, line_buf, draw_x, draw_y, color);
+        }
+
+        current_y += line_h;
+    }
+
+    if (pushed_scissor) {
+        cui_pop_scissor(ctx);
+    }
+
+    return total_height;
 }

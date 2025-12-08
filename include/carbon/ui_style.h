@@ -32,6 +32,62 @@ typedef struct CUI_Rect CUI_Rect;
 struct Carbon_Texture;
 
 /* ============================================================================
+ * Text Alignment
+ * ============================================================================ */
+
+typedef enum CUI_TextAlign {
+    CUI_TEXT_ALIGN_LEFT,
+    CUI_TEXT_ALIGN_CENTER,
+    CUI_TEXT_ALIGN_RIGHT,
+    CUI_TEXT_ALIGN_JUSTIFY
+} CUI_TextAlign;
+
+typedef enum CUI_TextVAlign {
+    CUI_TEXT_VALIGN_TOP,
+    CUI_TEXT_VALIGN_MIDDLE,
+    CUI_TEXT_VALIGN_BOTTOM
+} CUI_TextVAlign;
+
+/* ============================================================================
+ * Text Overflow
+ * ============================================================================ */
+
+typedef enum CUI_TextOverflow {
+    CUI_TEXT_OVERFLOW_VISIBLE,   /* Text can overflow container */
+    CUI_TEXT_OVERFLOW_CLIP,      /* Clip text at container edge */
+    CUI_TEXT_OVERFLOW_ELLIPSIS,  /* Show "..." when text overflows */
+    CUI_TEXT_OVERFLOW_WRAP       /* Wrap text to next line */
+} CUI_TextOverflow;
+
+/* ============================================================================
+ * Text Shadow
+ * ============================================================================ */
+
+typedef struct CUI_TextShadow {
+    float offset_x;
+    float offset_y;
+    float blur_radius;      /* Note: blur may be approximated */
+    uint32_t color;
+    bool enabled;
+} CUI_TextShadow;
+
+/* ============================================================================
+ * Text Style (consolidated text styling)
+ * ============================================================================ */
+
+typedef struct CUI_TextStyle {
+    CUI_TextAlign align;
+    CUI_TextVAlign valign;
+    CUI_TextOverflow overflow;
+    float line_height;          /* Multiplier, 1.0 = normal, 1.5 = 150% */
+    float letter_spacing;       /* Extra pixels between characters */
+    float word_spacing;         /* Extra pixels between words */
+    CUI_TextShadow shadow;
+    bool wrap;                  /* Enable word wrapping */
+    int max_lines;              /* 0 = unlimited */
+} CUI_TextStyle;
+
+/* ============================================================================
  * Box Model Types
  * ============================================================================ */
 
@@ -174,6 +230,7 @@ typedef struct CUI_Style {
     uint32_t text_color_active;
     uint32_t text_color_disabled;
     float font_size;           /* 0 = use default from context */
+    CUI_TextStyle text;        /* Text alignment, overflow, line height, etc. */
 
     /* Size constraints */
     float min_width, min_height;
@@ -470,6 +527,66 @@ void cui_draw_rect_rounded_ex(CUI_Context *ctx, float x, float y, float w, float
 void cui_draw_rect_rounded_outline(CUI_Context *ctx, float x, float y, float w, float h,
                                     uint32_t color, float thickness,
                                     CUI_CornerRadius corners);
+
+/* ============================================================================
+ * Helper Functions - Text Style
+ * ============================================================================ */
+
+/* Create a default text style */
+static inline CUI_TextStyle cui_text_style_default(void) {
+    CUI_TextStyle ts;
+    memset(&ts, 0, sizeof(ts));
+    ts.align = CUI_TEXT_ALIGN_LEFT;
+    ts.valign = CUI_TEXT_VALIGN_MIDDLE;
+    ts.overflow = CUI_TEXT_OVERFLOW_VISIBLE;
+    ts.line_height = 1.0f;
+    ts.letter_spacing = 0.0f;
+    ts.word_spacing = 0.0f;
+    ts.wrap = false;
+    ts.max_lines = 0;
+    return ts;
+}
+
+/* Create a text shadow */
+static inline CUI_TextShadow cui_text_shadow(float offset_x, float offset_y,
+                                              float blur, uint32_t color) {
+    return (CUI_TextShadow){
+        .offset_x = offset_x,
+        .offset_y = offset_y,
+        .blur_radius = blur,
+        .color = color,
+        .enabled = true
+    };
+}
+
+/* No text shadow */
+static inline CUI_TextShadow cui_text_shadow_none(void) {
+    CUI_TextShadow ts;
+    memset(&ts, 0, sizeof(ts));
+    ts.enabled = false;
+    return ts;
+}
+
+/* ============================================================================
+ * Styled Text Drawing Functions
+ * ============================================================================ */
+
+/* Draw text with full styling (alignment, overflow, shadow, etc.)
+ * Returns the actual height used (useful for wrapped text) */
+float cui_draw_styled_text(CUI_Context *ctx, const char *text,
+                           float x, float y, float max_width, float max_height,
+                           uint32_t color, const CUI_TextStyle *style);
+
+/* Measure text with styling applied
+ * Returns width, and optionally fills out_height with wrapped height */
+float cui_measure_styled_text(CUI_Context *ctx, const char *text,
+                              float max_width, const CUI_TextStyle *style,
+                              float *out_height);
+
+/* Truncate text with ellipsis to fit within max_width
+ * Returns pointer to static buffer containing truncated text */
+const char *cui_truncate_text_ellipsis(CUI_Context *ctx, const char *text,
+                                        float max_width);
 
 #ifdef __cplusplus
 }
