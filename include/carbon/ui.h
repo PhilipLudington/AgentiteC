@@ -373,6 +373,11 @@ void cui_draw_rect_outline(CUI_Context *ctx, float x, float y, float w, float h,
 void cui_draw_line(CUI_Context *ctx, float x1, float y1, float x2, float y2,
                    uint32_t color, float thickness);
 
+/* Triangles */
+void cui_draw_triangle(CUI_Context *ctx,
+                       float x0, float y0, float x1, float y1, float x2, float y2,
+                       uint32_t color);
+
 /* Text */
 float cui_draw_text(CUI_Context *ctx, const char *text, float x, float y,
                     uint32_t color);

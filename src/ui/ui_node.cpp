@@ -16,6 +16,15 @@
 static uint32_t s_next_node_id = 1;
 static CUI_Node *s_focused_node = NULL;
 
+/* Helper to apply opacity to a color (format: 0xAABBGGRR - alpha in high byte) */
+static inline uint32_t cui_apply_opacity(uint32_t color, float opacity) {
+    if (opacity >= 1.0f) return color;
+    if (opacity <= 0.0f) return color & 0x00FFFFFF;
+    uint8_t a = (uint8_t)((color >> 24) & 0xFF);
+    a = (uint8_t)(a * opacity);
+    return (color & 0x00FFFFFF) | ((uint32_t)a << 24);
+}
+
 /* ============================================================================
  * Anchor Preset Values
  * ============================================================================ */
@@ -99,7 +108,9 @@ CUI_Node *cui_node_create(CUI_Context *ctx, CUI_NodeType type, const char *name)
         case CUI_NODE_SLIDER:
             node->slider.min_value = 0.0f;
             node->slider.max_value = 100.0f;
-            node->slider.step = 1.0f;
+            node->slider.step = 0.0f;  /* No stepping by default for smooth dragging */
+            node->custom_min_size_x = 100;
+            node->custom_min_size_y = 24;
             break;
 
         case CUI_NODE_PROGRESS_BAR:
@@ -108,9 +119,15 @@ CUI_Node *cui_node_create(CUI_Context *ctx, CUI_NodeType type, const char *name)
             break;
 
         case CUI_NODE_BUTTON:
-        case CUI_NODE_CHECKBOX:
         case CUI_NODE_TEXTBOX:
             node->focus_mode_click = true;
+            break;
+
+        case CUI_NODE_CHECKBOX:
+            node->focus_mode_click = true;
+            /* Default min size: 18px box + 8px spacing + ~150px for text */
+            node->custom_min_size_x = 200;
+            node->custom_min_size_y = 24;
             break;
 
         default:
@@ -304,24 +321,49 @@ CUI_Node *cui_node_get_child_by_name(CUI_Node *node, const char *name)
     return NULL;
 }
 
+/* Recursive helper to find node by name anywhere in tree */
+static CUI_Node *cui_node_find_recursive(CUI_Node *node, const char *name)
+{
+    if (!node) return NULL;
+
+    /* Check this node */
+    if (strcmp(node->name, name) == 0) {
+        return node;
+    }
+
+    /* Search children */
+    for (CUI_Node *child = node->first_child; child; child = child->next_sibling) {
+        CUI_Node *found = cui_node_find_recursive(child, name);
+        if (found) return found;
+    }
+
+    return NULL;
+}
+
 CUI_Node *cui_node_find(CUI_Node *root, const char *path)
 {
     if (!root || !path) return NULL;
 
-    /* Make a copy to tokenize */
-    char path_copy[256];
-    strncpy(path_copy, path, sizeof(path_copy) - 1);
-    path_copy[sizeof(path_copy) - 1] = '\0';
+    /* If path contains '/', use path-based lookup */
+    if (strchr(path, '/')) {
+        /* Make a copy to tokenize */
+        char path_copy[256];
+        strncpy(path_copy, path, sizeof(path_copy) - 1);
+        path_copy[sizeof(path_copy) - 1] = '\0';
 
-    CUI_Node *current = root;
-    char *token = strtok(path_copy, "/");
+        CUI_Node *current = root;
+        char *token = strtok(path_copy, "/");
 
-    while (token && current) {
-        current = cui_node_get_child_by_name(current, token);
-        token = strtok(NULL, "/");
+        while (token && current) {
+            current = cui_node_get_child_by_name(current, token);
+            token = strtok(NULL, "/");
+        }
+
+        return current;
     }
 
-    return current;
+    /* Otherwise, search recursively by name */
+    return cui_node_find_recursive(root, path);
 }
 
 CUI_Node *cui_node_get_root(CUI_Node *node)
@@ -892,7 +934,6 @@ static void cui_node_layout_vbox_ctx(CUI_Context *ctx, CUI_Node *node)
 
     /* First pass: calculate total minimum height and expanding children */
     float total_min_h = 0;
-    int expand_count = 0;
     float total_stretch = 0;
 
     for (CUI_Node *child = node->first_child; child; child = child->next_sibling) {
@@ -903,7 +944,6 @@ static void cui_node_layout_vbox_ctx(CUI_Context *ctx, CUI_Node *node)
         total_min_h += child_min_h;
 
         if (child->v_size_flags & CUI_SIZE_EXPAND) {
-            expand_count++;
             total_stretch += child->size_flags_stretch_ratio;
         }
     }
@@ -929,7 +969,7 @@ static void cui_node_layout_vbox_ctx(CUI_Context *ctx, CUI_Node *node)
         float child_min_w, child_min_h;
         cui_node_get_content_min_size(ctx, child, &child_min_w, &child_min_h);
 
-        /* Calculate child width */
+        /* Calculate child width - FILL takes full available width */
         float child_w = child_min_w;
         if (child->h_size_flags & CUI_SIZE_FILL) {
             child_w = available_w;
@@ -1216,8 +1256,81 @@ bool cui_scene_process_event(CUI_Context *ctx, CUI_Node *root, const SDL_Event *
 
                 if (hit == s_pressed_node) {
                     cui_node_emit_simple(hit, CUI_SIGNAL_CLICKED);
+
+                    /* Handle checkbox toggle */
+                    if (hit->type == CUI_NODE_CHECKBOX) {
+                        bool old_val = hit->checkbox.checked;
+                        hit->checkbox.checked = !hit->checkbox.checked;
+                        CUI_Signal sig;
+                        memset(&sig, 0, sizeof(sig));
+                        sig.type = CUI_SIGNAL_TOGGLED;
+                        sig.source = hit;
+                        sig.bool_change.old_value = old_val;
+                        sig.bool_change.new_value = hit->checkbox.checked;
+                        cui_node_emit(hit, CUI_SIGNAL_TOGGLED, &sig);
+                    }
                 }
                 s_pressed_node = NULL;
+            }
+        }
+
+        /* Handle slider dragging */
+        if (event->type == SDL_EVENT_MOUSE_MOTION && s_pressed_node &&
+            s_pressed_node->type == CUI_NODE_SLIDER) {
+            CUI_Node *slider = s_pressed_node;
+            float rel_x = mx - slider->global_rect.x;
+            float ratio = rel_x / slider->global_rect.w;
+            ratio = fmaxf(0.0f, fminf(1.0f, ratio));
+
+            float range = slider->slider.max_value - slider->slider.min_value;
+            float old_val = slider->slider.value;
+            float new_val = slider->slider.min_value + ratio * range;
+
+            /* Apply step if set */
+            if (slider->slider.step > 0) {
+                new_val = roundf(new_val / slider->slider.step) * slider->slider.step;
+            }
+            new_val = fmaxf(slider->slider.min_value,
+                           fminf(slider->slider.max_value, new_val));
+
+            if (new_val != old_val) {
+                slider->slider.value = new_val;
+                CUI_Signal sig;
+                memset(&sig, 0, sizeof(sig));
+                sig.type = CUI_SIGNAL_VALUE_CHANGED;
+                sig.source = slider;
+                sig.float_change.old_value = old_val;
+                sig.float_change.new_value = new_val;
+                cui_node_emit(slider, CUI_SIGNAL_VALUE_CHANGED, &sig);
+            }
+        }
+
+        /* Handle slider click to set value directly */
+        if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN && hit &&
+            hit->type == CUI_NODE_SLIDER) {
+            float rel_x = mx - hit->global_rect.x;
+            float ratio = rel_x / hit->global_rect.w;
+            ratio = fmaxf(0.0f, fminf(1.0f, ratio));
+
+            float range = hit->slider.max_value - hit->slider.min_value;
+            float old_val = hit->slider.value;
+            float new_val = hit->slider.min_value + ratio * range;
+
+            if (hit->slider.step > 0) {
+                new_val = roundf(new_val / hit->slider.step) * hit->slider.step;
+            }
+            new_val = fmaxf(hit->slider.min_value,
+                           fminf(hit->slider.max_value, new_val));
+
+            if (new_val != old_val) {
+                hit->slider.value = new_val;
+                CUI_Signal sig;
+                memset(&sig, 0, sizeof(sig));
+                sig.type = CUI_SIGNAL_VALUE_CHANGED;
+                sig.source = hit;
+                sig.float_change.old_value = old_val;
+                sig.float_change.new_value = new_val;
+                cui_node_emit(hit, CUI_SIGNAL_VALUE_CHANGED, &sig);
             }
         }
 
@@ -1234,7 +1347,7 @@ bool cui_scene_process_event(CUI_Context *ctx, CUI_Node *root, const SDL_Event *
     return false;
 }
 
-static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node);
+static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node, float inherited_opacity);
 
 void cui_scene_render(CUI_Context *ctx, CUI_Node *root)
 {
@@ -1244,7 +1357,7 @@ void cui_scene_render(CUI_Context *ctx, CUI_Node *root)
     cui_scene_layout(ctx, root);
 
     /* Render the scene tree */
-    cui_node_render_recursive(ctx, root);
+    cui_node_render_recursive(ctx, root, 1.0f);
 }
 
 void cui_scene_layout(CUI_Context *ctx, CUI_Node *root)
@@ -1256,15 +1369,16 @@ void cui_scene_layout(CUI_Context *ctx, CUI_Node *root)
     cui_node_layout_recursive(ctx, root, screen_rect);
 }
 
-static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node)
+static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node, float inherited_opacity)
 {
     if (!node || !node->visible) return;
 
     /* Get effective style */
     CUI_Style style = cui_node_get_effective_style(node);
 
-    /* Apply node opacity */
-    style.opacity *= node->opacity;
+    /* Calculate effective opacity (node opacity * inherited from ancestors) */
+    float effective_opacity = node->opacity * inherited_opacity;
+    style.opacity *= effective_opacity;
 
     /* Draw styled background */
     if (style.background.type != CUI_BG_NONE) {
@@ -1272,7 +1386,7 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node)
                               node->global_rect.w, node->global_rect.h, &style);
     }
 
-    /* Type-specific rendering */
+    /* Type-specific rendering (apply effective_opacity to all colors) */
     switch (node->type) {
         case CUI_NODE_LABEL:
             {
@@ -1295,8 +1409,9 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node)
                 float text_y = node->global_rect.y + style.padding.top +
                                (avail_h - text_h) / 2;
 
+                uint32_t text_color = node->label.color ? node->label.color : style.text_color;
                 cui_draw_text(ctx, node->label.text, text_x, text_y,
-                              node->label.color ? node->label.color : style.text_color);
+                              cui_apply_opacity(text_color, effective_opacity));
             }
             break;
 
@@ -1315,7 +1430,8 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node)
                 if (bg->type == CUI_BG_SOLID) {
                     cui_draw_rect_rounded(ctx, node->global_rect.x, node->global_rect.y,
                                           node->global_rect.w, node->global_rect.h,
-                                          bg->solid_color, style.corner_radius.top_left);
+                                          cui_apply_opacity(bg->solid_color, effective_opacity),
+                                          style.corner_radius.top_left);
                 }
 
                 /* Draw text centered */
@@ -1324,8 +1440,9 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node)
                                (node->global_rect.w - text_w) / 2;
                 float text_y = node->global_rect.y +
                                (node->global_rect.h - cui_text_height(ctx)) / 2;
+                uint32_t btn_text_color = node->enabled ? style.text_color : style.text_color_disabled;
                 cui_draw_text(ctx, node->button.text, text_x, text_y,
-                              node->enabled ? style.text_color : style.text_color_disabled);
+                              cui_apply_opacity(btn_text_color, effective_opacity));
             }
             break;
 
@@ -1334,7 +1451,7 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node)
                 /* Background */
                 cui_draw_rect(ctx, node->global_rect.x, node->global_rect.y,
                               node->global_rect.w, node->global_rect.h,
-                              style.background.solid_color);
+                              cui_apply_opacity(style.background.solid_color, effective_opacity));
 
                 /* Fill */
                 float range = node->progress.max_value - node->progress.min_value;
@@ -1342,10 +1459,95 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node)
                     (node->progress.value - node->progress.min_value) / range : 0;
                 fill_ratio = fmaxf(0, fminf(1, fill_ratio));
 
+                uint32_t fill_color = node->progress.fill_color ? node->progress.fill_color : ctx->theme.accent;
                 cui_draw_rect(ctx, node->global_rect.x, node->global_rect.y,
                               node->global_rect.w * fill_ratio, node->global_rect.h,
-                              node->progress.fill_color ? node->progress.fill_color :
-                              ctx->theme.accent);
+                              cui_apply_opacity(fill_color, effective_opacity));
+            }
+            break;
+
+        case CUI_NODE_SLIDER:
+            {
+                float x = node->global_rect.x;
+                float y = node->global_rect.y;
+                float w = node->global_rect.w;
+                float h = node->global_rect.h;
+
+                /* Track background */
+                float track_h = 6.0f;
+                float track_y = y + (h - track_h) / 2;
+                cui_draw_rect_rounded(ctx, x, track_y, w, track_h,
+                                      cui_apply_opacity(ctx->theme.slider_track, effective_opacity), 3.0f);
+
+                /* Calculate fill amount */
+                float range = node->slider.max_value - node->slider.min_value;
+                float fill_ratio = (range > 0) ?
+                    (node->slider.value - node->slider.min_value) / range : 0;
+                fill_ratio = fmaxf(0, fminf(1, fill_ratio));
+
+                /* Filled portion */
+                float fill_w = w * fill_ratio;
+                if (fill_w > 0) {
+                    cui_draw_rect_rounded(ctx, x, track_y, fill_w, track_h,
+                                          cui_apply_opacity(ctx->theme.accent, effective_opacity), 3.0f);
+                }
+
+                /* Grab handle */
+                float grab_r = 8.0f;
+                float grab_x = x + fill_w;
+                float grab_y = y + h / 2;
+                uint32_t grab_color = node->hovered || node->pressed ?
+                    ctx->theme.accent_hover : ctx->theme.slider_grab;
+                cui_draw_rect_rounded(ctx, grab_x - grab_r, grab_y - grab_r,
+                                      grab_r * 2, grab_r * 2,
+                                      cui_apply_opacity(grab_color, effective_opacity), grab_r);
+
+                /* Value text if enabled - draw inside the track, right-aligned */
+                if (node->slider.show_value) {
+                    char val_text[16];
+                    snprintf(val_text, sizeof(val_text), "%.0f%%",
+                             fill_ratio * 100);
+                    float text_w = cui_text_width(ctx, val_text);
+                    float text_x = x + w - text_w - 4;  /* Right-aligned with 4px padding */
+                    cui_draw_text(ctx, val_text, text_x, y + (h - cui_text_height(ctx)) / 2,
+                                  cui_apply_opacity(style.text_color, effective_opacity));
+                }
+            }
+            break;
+
+        case CUI_NODE_CHECKBOX:
+            {
+                float x = node->global_rect.x;
+                float y = node->global_rect.y;
+                float h = node->global_rect.h;
+
+                /* Checkbox box */
+                float box_size = 18.0f;
+                float box_y = y + (h - box_size) / 2;
+                uint32_t box_bg = node->hovered ? ctx->theme.bg_widget_hover :
+                                  ctx->theme.bg_widget;
+                cui_draw_rect_rounded(ctx, x, box_y, box_size, box_size,
+                                      cui_apply_opacity(box_bg, effective_opacity), 3.0f);
+                cui_draw_rect_outline(ctx, x, box_y, box_size, box_size,
+                                      cui_apply_opacity(ctx->theme.border, effective_opacity), 1.0f);
+
+                /* Checkmark if checked */
+                if (node->checkbox.checked) {
+                    /* Draw simple checkmark using lines */
+                    float cx = x + box_size / 2;
+                    float cy = box_y + box_size / 2;
+                    /* Simple filled square for now */
+                    float inner = box_size - 8;
+                    cui_draw_rect(ctx, cx - inner/2, cy - inner/2, inner, inner,
+                                  cui_apply_opacity(ctx->theme.checkbox_check, effective_opacity));
+                }
+
+                /* Label text */
+                float text_x = x + box_size + 8;
+                float text_y = y + (h - cui_text_height(ctx)) / 2;
+                uint32_t cb_text_color = node->enabled ? style.text_color : style.text_color_disabled;
+                cui_draw_text(ctx, node->checkbox.text, text_x, text_y,
+                              cui_apply_opacity(cb_text_color, effective_opacity));
             }
             break;
 
@@ -1365,7 +1567,7 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node)
     }
 
     for (CUI_Node *child = node->first_child; child; child = child->next_sibling) {
-        cui_node_render_recursive(ctx, child);
+        cui_node_render_recursive(ctx, child, effective_opacity);
     }
 
     if (node->clip_contents) {
@@ -1463,8 +1665,11 @@ CUI_Node *cui_scroll_create(CUI_Context *ctx, const char *name)
 CUI_Node *cui_panel_create(CUI_Context *ctx, const char *name, const char *title)
 {
     CUI_Node *node = cui_node_create(ctx, CUI_NODE_PANEL, name);
-    if (node && title) {
-        strncpy(node->panel.title, title, sizeof(node->panel.title) - 1);
+    if (node) {
+        node->clip_contents = true;  /* Panels clip their contents by default */
+        if (title) {
+            strncpy(node->panel.title, title, sizeof(node->panel.title) - 1);
+        }
     }
     return node;
 }

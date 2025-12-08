@@ -143,7 +143,7 @@ static CUI_Node *create_main_menu(CUI_Context *ctx, CUI_TweenManager *tm)
     /* VBox for menu buttons */
     CUI_Node *menu_vbox = cui_vbox_create(ctx, "menu_buttons");
     cui_node_set_anchor_preset(menu_vbox, CUI_ANCHOR_FULL_RECT);
-    cui_node_set_offsets(menu_vbox, 20, 50, -20, -20);
+    cui_node_set_offsets(menu_vbox, 20, 20, -20, -20);  /* 20px padding all sides */
     cui_box_set_separation(menu_vbox, 12.0f);
     cui_node_add_child(menu_panel, menu_vbox);
 
@@ -231,10 +231,10 @@ static CUI_Node *create_main_menu(CUI_Context *ctx, CUI_TweenManager *tm)
     cui_node_connect(brightness, CUI_SIGNAL_VALUE_CHANGED, on_slider_changed, NULL);
     cui_node_add_child(settings_vbox, brightness);
 
-    /* Close button at bottom of settings */
+    /* Close button at bottom of settings - positioned inside panel's rounded corners */
     CUI_Node *close_btn = cui_button_create(ctx, "close_settings", "Close");
     cui_node_set_anchor_preset(close_btn, CUI_ANCHOR_BOTTOM_CENTER);
-    cui_node_set_offsets(close_btn, -50, -40, 50, -10);
+    cui_node_set_offsets(close_btn, -50, -45, 50, -15);  /* 15px from bottom to clear rounded corners */
     cui_node_set_style(close_btn, &button_style);
     cui_node_connect(close_btn, CUI_SIGNAL_CLICKED, on_close_clicked, tm);
     cui_node_add_child(settings, close_btn);
@@ -377,12 +377,11 @@ int main(int argc, char *argv[])
 
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            /* Process events through the UI scene tree */
-            if (cui_scene_process_event(ui, ui_root, &event)) {
-                continue;  /* UI consumed the event */
-            }
-
+            /* Always let input system see the event first for global shortcuts */
             carbon_input_process_event(input, &event);
+
+            /* Process events through the UI scene tree */
+            cui_scene_process_event(ui, ui_root, &event);
 
             if (event.type == SDL_EVENT_QUIT) {
                 carbon_quit(engine);

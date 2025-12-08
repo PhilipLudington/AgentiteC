@@ -459,6 +459,27 @@ void cui_draw_line(CUI_Context *ctx, float x1, float y1, float x2, float y2,
     i[5] = (uint16_t)(base + 3);
 }
 
+void cui_draw_triangle(CUI_Context *ctx,
+                       float x0, float y0, float x1, float y1, float x2, float y2,
+                       uint32_t color)
+{
+    if (!ctx) return;
+
+    uint32_t base;
+    if (!cui_reserve(ctx, 3, 3, &base)) return;
+
+    CUI_Vertex *v = &ctx->vertices[base];
+    uint16_t *idx = &ctx->indices[ctx->index_count - 3];
+
+    v[0].pos[0] = x0; v[0].pos[1] = y0; v[0].uv[0] = 0; v[0].uv[1] = 0; v[0].color = color;
+    v[1].pos[0] = x1; v[1].pos[1] = y1; v[1].uv[0] = 0; v[1].uv[1] = 0; v[1].color = color;
+    v[2].pos[0] = x2; v[2].pos[1] = y2; v[2].uv[0] = 0; v[2].uv[1] = 0; v[2].color = color;
+
+    idx[0] = (uint16_t)base;
+    idx[1] = (uint16_t)(base + 1);
+    idx[2] = (uint16_t)(base + 2);
+}
+
 /* ============================================================================
  * Scissor Stack
  * ============================================================================ */

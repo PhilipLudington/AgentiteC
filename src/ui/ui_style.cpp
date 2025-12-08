@@ -70,6 +70,9 @@ CUI_Style cui_style_default(void)
     style.background_hover.type = CUI_BG_NONE;
     style.background_active.type = CUI_BG_NONE;
     style.background_disabled.type = CUI_BG_NONE;
+    style.text_color = 0xFFFFFFFF;          /* White text by default */
+    style.text_color_hover = 0xFFFFFFFF;
+    style.text_color_disabled = 0x888888FF; /* Gray for disabled */
     return style;
 }
 
@@ -648,48 +651,31 @@ static void cui_draw_corner_filled(CUI_Context *ctx, float cx, float cy, float r
 {
     if (r < 1.0f) return;
 
-    /* Quadrants: 0=top-left, 1=top-right, 2=bottom-right, 3=bottom-left */
-    int steps = (int)r;
-    if (steps < 4) steps = 4;
-    if (steps > 16) steps = 16;
+    /* Use triangle fan to fill the corner - more consistent than scanlines */
+    int segments = 8;
+    float pi_half = 3.14159265f * 0.5f;
 
-    for (int i = 0; i <= steps; i++) {
-        float t = (float)i / steps;
-        float angle = t * 3.14159265f * 0.5f;
-        float dx = cosf(angle) * r;
-        float dy = sinf(angle) * r;
+    /* Starting angle for each quadrant */
+    float start_angle;
+    switch (quadrant) {
+        case 0: start_angle = pi_half;          break; /* Top-left: 90° to 180° */
+        case 1: start_angle = 0.0f;             break; /* Top-right: 0° to 90° */
+        case 2: start_angle = -pi_half;         break; /* Bottom-right: -90° to 0° */
+        case 3: start_angle = 3.14159265f;      break; /* Bottom-left: 180° to 270° */
+        default: return;
+    }
 
-        /* Draw horizontal line for this scanline of the arc */
-        float line_x, line_y, line_w, line_h = 1.0f;
+    for (int i = 0; i < segments; i++) {
+        float a0 = start_angle + pi_half * i / segments;
+        float a1 = start_angle + pi_half * (i + 1) / segments;
 
-        switch (quadrant) {
-            case 0: /* Top-left: center is bottom-right of corner box */
-                line_x = cx - dx;
-                line_y = cy - dy;
-                line_w = dx;
-                break;
-            case 1: /* Top-right: center is bottom-left of corner box */
-                line_x = cx;
-                line_y = cy - dy;
-                line_w = dx;
-                break;
-            case 2: /* Bottom-right: center is top-left of corner box */
-                line_x = cx;
-                line_y = cy + dy - 1;
-                line_w = dx;
-                break;
-            case 3: /* Bottom-left: center is top-right of corner box */
-                line_x = cx - dx;
-                line_y = cy + dy - 1;
-                line_w = dx;
-                break;
-            default:
-                return;
-        }
+        float x0 = cx + cosf(a0) * r;
+        float y0 = cy - sinf(a0) * r;
+        float x1 = cx + cosf(a1) * r;
+        float y1 = cy - sinf(a1) * r;
 
-        if (line_w > 0) {
-            cui_draw_rect(ctx, line_x, line_y, line_w, line_h, color);
-        }
+        /* Draw triangle from center to arc edge */
+        cui_draw_triangle(ctx, cx, cy, x0, y0, x1, y1, color);
     }
 }
 
@@ -754,8 +740,6 @@ void cui_draw_rect_rounded_outline(CUI_Context *ctx, float x, float y, float w, 
 {
     if (!ctx || w <= 0 || h <= 0 || thickness <= 0) return;
 
-    /* Draw outer rounded rect, then inner (cut out) */
-    /* Simplified: draw as lines */
     float t = thickness;
 
     /* Check if corners are significant */
@@ -767,24 +751,114 @@ void cui_draw_rect_rounded_outline(CUI_Context *ctx, float x, float y, float w, 
         return;
     }
 
-    float tl = corners.top_left;
-    float tr = corners.top_right;
-    float br = corners.bottom_right;
-    float bl = corners.bottom_left;
+    /* Clamp radii to half the smaller dimension */
+    float half_min = fminf(w, h) * 0.5f;
+    float tl = fminf(corners.top_left, half_min);
+    float tr = fminf(corners.top_right, half_min);
+    float br = fminf(corners.bottom_right, half_min);
+    float bl = fminf(corners.bottom_left, half_min);
+
+    /* For rounded outline, we draw it as the difference between outer and inner rounded rects.
+     * But for simplicity, we'll draw the outline using the straight edges and filled corner arcs
+     * that create the visual appearance of a rounded outline. */
+
+    /* Draw the outline by tracing the perimeter with filled shapes */
 
     /* Top edge */
-    cui_draw_rect(ctx, x + tl, y, w - tl - tr, t, color);
+    if (w - tl - tr > 0)
+        cui_draw_rect(ctx, x + tl, y, w - tl - tr, t, color);
 
     /* Bottom edge */
-    cui_draw_rect(ctx, x + bl, y + h - t, w - bl - br, t, color);
+    if (w - bl - br > 0)
+        cui_draw_rect(ctx, x + bl, y + h - t, w - bl - br, t, color);
 
     /* Left edge */
-    cui_draw_rect(ctx, x, y + tl, t, h - tl - bl, color);
+    if (h - tl - bl > 0)
+        cui_draw_rect(ctx, x, y + tl, t, h - tl - bl, color);
 
     /* Right edge */
-    cui_draw_rect(ctx, x + w - t, y + tr, t, h - tr - br, color);
+    if (h - tr - br > 0)
+        cui_draw_rect(ctx, x + w - t, y + tr, t, h - tr - br, color);
 
-    /* TODO: Draw corner arcs */
+    /* Draw corner arcs using small filled segments */
+    int segments = 8;
+    float pi_half = 3.14159265f * 0.5f;
+
+    /* Top-left corner */
+    if (tl > 0) {
+        float cx = x + tl, cy = y + tl;
+        for (int i = 0; i < segments; i++) {
+            float a0 = pi_half + pi_half * i / segments;
+            float a1 = pi_half + pi_half * (i + 1) / segments;
+            float ox0 = cosf(a0) * tl, oy0 = sinf(a0) * tl;
+            float ox1 = cosf(a1) * tl, oy1 = sinf(a1) * tl;
+            float ix0 = cosf(a0) * (tl - t), iy0 = sinf(a0) * (tl - t);
+            float ix1 = cosf(a1) * (tl - t), iy1 = sinf(a1) * (tl - t);
+            if (tl > t) {
+                cui_draw_triangle(ctx, cx + ox0, cy - oy0, cx + ox1, cy - oy1, cx + ix1, cy - iy1, color);
+                cui_draw_triangle(ctx, cx + ox0, cy - oy0, cx + ix1, cy - iy1, cx + ix0, cy - iy0, color);
+            } else {
+                cui_draw_triangle(ctx, cx + ox0, cy - oy0, cx + ox1, cy - oy1, cx, cy, color);
+            }
+        }
+    }
+
+    /* Top-right corner */
+    if (tr > 0) {
+        float cx = x + w - tr, cy = y + tr;
+        for (int i = 0; i < segments; i++) {
+            float a0 = pi_half * i / segments;
+            float a1 = pi_half * (i + 1) / segments;
+            float ox0 = cosf(a0) * tr, oy0 = sinf(a0) * tr;
+            float ox1 = cosf(a1) * tr, oy1 = sinf(a1) * tr;
+            float ix0 = cosf(a0) * (tr - t), iy0 = sinf(a0) * (tr - t);
+            float ix1 = cosf(a1) * (tr - t), iy1 = sinf(a1) * (tr - t);
+            if (tr > t) {
+                cui_draw_triangle(ctx, cx + ox0, cy - oy0, cx + ox1, cy - oy1, cx + ix1, cy - iy1, color);
+                cui_draw_triangle(ctx, cx + ox0, cy - oy0, cx + ix1, cy - iy1, cx + ix0, cy - iy0, color);
+            } else {
+                cui_draw_triangle(ctx, cx + ox0, cy - oy0, cx + ox1, cy - oy1, cx, cy, color);
+            }
+        }
+    }
+
+    /* Bottom-right corner */
+    if (br > 0) {
+        float cx = x + w - br, cy = y + h - br;
+        for (int i = 0; i < segments; i++) {
+            float a0 = pi_half * i / segments;
+            float a1 = pi_half * (i + 1) / segments;
+            float ox0 = cosf(a0) * br, oy0 = sinf(a0) * br;
+            float ox1 = cosf(a1) * br, oy1 = sinf(a1) * br;
+            float ix0 = cosf(a0) * (br - t), iy0 = sinf(a0) * (br - t);
+            float ix1 = cosf(a1) * (br - t), iy1 = sinf(a1) * (br - t);
+            if (br > t) {
+                cui_draw_triangle(ctx, cx + ox0, cy + oy0, cx + ox1, cy + oy1, cx + ix1, cy + iy1, color);
+                cui_draw_triangle(ctx, cx + ox0, cy + oy0, cx + ix1, cy + iy1, cx + ix0, cy + iy0, color);
+            } else {
+                cui_draw_triangle(ctx, cx + ox0, cy + oy0, cx + ox1, cy + oy1, cx, cy, color);
+            }
+        }
+    }
+
+    /* Bottom-left corner */
+    if (bl > 0) {
+        float cx = x + bl, cy = y + h - bl;
+        for (int i = 0; i < segments; i++) {
+            float a0 = pi_half + pi_half * i / segments;
+            float a1 = pi_half + pi_half * (i + 1) / segments;
+            float ox0 = cosf(a0) * bl, oy0 = sinf(a0) * bl;
+            float ox1 = cosf(a1) * bl, oy1 = sinf(a1) * bl;
+            float ix0 = cosf(a0) * (bl - t), iy0 = sinf(a0) * (bl - t);
+            float ix1 = cosf(a1) * (bl - t), iy1 = sinf(a1) * (bl - t);
+            if (bl > t) {
+                cui_draw_triangle(ctx, cx + ox0, cy + oy0, cx + ox1, cy + oy1, cx + ix1, cy + iy1, color);
+                cui_draw_triangle(ctx, cx + ox0, cy + oy0, cx + ix1, cy + iy1, cx + ix0, cy + iy0, color);
+            } else {
+                cui_draw_triangle(ctx, cx + ox0, cy + oy0, cx + ox1, cy + oy1, cx, cy, color);
+            }
+        }
+    }
 }
 
 void cui_draw_styled_rect(CUI_Context *ctx, float x, float y, float w, float h,
