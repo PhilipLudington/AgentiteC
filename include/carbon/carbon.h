@@ -119,7 +119,9 @@ SDL_GPUCommandBuffer *carbon_acquire_command_buffer(Carbon_Engine *engine);
 
 // Render pass management
 bool carbon_begin_render_pass(Carbon_Engine *engine, float r, float g, float b, float a);
-void carbon_end_render_pass(Carbon_Engine *engine);
+bool carbon_begin_render_pass_no_clear(Carbon_Engine *engine);
+void carbon_end_render_pass_no_submit(Carbon_Engine *engine);  // End render pass but keep cmd buffer
+void carbon_end_render_pass(Carbon_Engine *engine);  // End render pass and submit
 
 // Get current render pass and command buffer (for UI rendering)
 SDL_GPURenderPass *carbon_get_render_pass(Carbon_Engine *engine);

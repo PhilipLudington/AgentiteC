@@ -259,6 +259,16 @@ bool carbon_game_context_begin_render_pass(Carbon_GameContext *ctx,
     return carbon_begin_render_pass(ctx->engine, r, g, b, a);
 }
 
+bool carbon_game_context_begin_render_pass_no_clear(Carbon_GameContext *ctx) {
+    if (!ctx || !ctx->engine) return false;
+    return carbon_begin_render_pass_no_clear(ctx->engine);
+}
+
+void carbon_game_context_end_render_pass_no_submit(Carbon_GameContext *ctx) {
+    if (!ctx || !ctx->engine) return;
+    carbon_end_render_pass_no_submit(ctx->engine);
+}
+
 void carbon_game_context_end_render_pass(Carbon_GameContext *ctx) {
     if (!ctx || !ctx->engine) return;
     carbon_end_render_pass(ctx->engine);

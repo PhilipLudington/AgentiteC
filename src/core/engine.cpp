@@ -15,6 +15,7 @@ struct Carbon_Engine {
     // Current frame rendering state
     SDL_GPUCommandBuffer *cmd_buffer;
     SDL_GPURenderPass *render_pass;
+    SDL_GPUTexture *swapchain_texture;  // Cached for multiple render passes
 };
 
 Carbon_Engine *carbon_init(const Carbon_Config *config) {
@@ -229,6 +230,9 @@ bool carbon_begin_render_pass(Carbon_Engine *engine, float r, float g, float b, 
         return false;
     }
 
+    // Cache texture for subsequent render passes
+    engine->swapchain_texture = swapchain_texture;
+
     // Set up color target with clear color
     SDL_GPUColorTargetInfo color_target = {
         .texture = swapchain_texture,
@@ -249,10 +253,54 @@ bool carbon_begin_render_pass(Carbon_Engine *engine, float r, float g, float b, 
         carbon_set_error_from_sdl("Failed to begin render pass");
         SDL_CancelGPUCommandBuffer(engine->cmd_buffer);
         engine->cmd_buffer = NULL;
+        engine->swapchain_texture = NULL;
         return false;
     }
 
     return true;
+}
+
+bool carbon_begin_render_pass_no_clear(Carbon_Engine *engine) {
+    if (!engine || !engine->gpu_device) return false;
+
+    // Must have command buffer and swapchain texture from previous render pass
+    if (!engine->cmd_buffer || !engine->swapchain_texture) {
+        carbon_set_error("No command buffer or swapchain texture - call carbon_begin_render_pass first");
+        return false;
+    }
+
+    // Set up color target with LOAD (preserve existing content)
+    SDL_GPUColorTargetInfo color_target = {
+        .texture = engine->swapchain_texture,
+        .load_op = SDL_GPU_LOADOP_LOAD,
+        .store_op = SDL_GPU_STOREOP_STORE,
+        .clear_color = { 0, 0, 0, 0 }  // Not used with LOAD
+    };
+
+    // Begin render pass
+    engine->render_pass = SDL_BeginGPURenderPass(
+        engine->cmd_buffer,
+        &color_target,
+        1,
+        NULL
+    );
+
+    if (!engine->render_pass) {
+        carbon_set_error_from_sdl("Failed to begin render pass (no clear)");
+        return false;
+    }
+
+    return true;
+}
+
+void carbon_end_render_pass_no_submit(Carbon_Engine *engine) {
+    if (!engine) return;
+
+    if (engine->render_pass) {
+        SDL_EndGPURenderPass(engine->render_pass);
+        engine->render_pass = NULL;
+    }
+    // Keep cmd_buffer and swapchain_texture for next render pass
 }
 
 void carbon_end_render_pass(Carbon_Engine *engine) {
@@ -267,6 +315,7 @@ void carbon_end_render_pass(Carbon_Engine *engine) {
         SDL_SubmitGPUCommandBuffer(engine->cmd_buffer);
         engine->cmd_buffer = NULL;
     }
+    engine->swapchain_texture = NULL;
 }
 
 SDL_GPURenderPass *carbon_get_render_pass(Carbon_Engine *engine) {

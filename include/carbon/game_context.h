@@ -226,6 +226,23 @@ bool carbon_game_context_begin_render_pass(Carbon_GameContext *ctx,
                                             float r, float g, float b, float a);
 
 /**
+ * Begin a render pass without clearing (preserves existing content).
+ * Use this for subsequent render passes that overlay on existing content.
+ *
+ * @param ctx Game context
+ * @return true on success, false on failure
+ */
+bool carbon_game_context_begin_render_pass_no_clear(Carbon_GameContext *ctx);
+
+/**
+ * End the current render pass but don't submit the command buffer.
+ * Use this between multiple render passes (e.g., world pass then UI pass).
+ *
+ * @param ctx Game context
+ */
+void carbon_game_context_end_render_pass_no_submit(Carbon_GameContext *ctx);
+
+/**
  * End the render pass and submit.
  * Call this after all render operations are complete.
  *
