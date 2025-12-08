@@ -382,6 +382,23 @@ struct CUI_Node {
     bool mouse_filter_stop;    /* Stop mouse events from propagating */
     bool mouse_filter_ignore;  /* Let mouse events pass through */
 
+    /* Style transition state */
+    struct {
+        bool prev_hovered;             /* Was hovered last frame */
+        bool prev_pressed;             /* Was pressed last frame */
+        float progress;                /* Transition progress 0-1 */
+        uint32_t from_bg_color;        /* Start background color */
+        uint32_t to_bg_color;          /* Target background color */
+        uint32_t current_bg_color;     /* Current interpolated color */
+        uint32_t from_text_color;      /* Start text color */
+        uint32_t to_text_color;        /* Target text color */
+        uint32_t current_text_color;   /* Current interpolated color */
+        uint32_t from_border_color;    /* Start border color */
+        uint32_t to_border_color;      /* Target border color */
+        uint32_t current_border_color; /* Current interpolated color */
+        bool active;                   /* Is a transition in progress */
+    } transition_state;
+
     /* Focus */
     bool focus_mode_click;
     bool focus_mode_all;

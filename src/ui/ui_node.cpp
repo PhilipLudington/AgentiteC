@@ -5,6 +5,7 @@
 #include "carbon/ui_node.h"
 #include "carbon/ui.h"
 #include "carbon/ui_style.h"
+#include "carbon/ui_tween.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -23,6 +24,98 @@ static inline uint32_t cui_apply_opacity(uint32_t color, float opacity) {
     uint8_t a = (uint8_t)((color >> 24) & 0xFF);
     a = (uint8_t)(a * opacity);
     return (color & 0x00FFFFFF) | ((uint32_t)a << 24);
+}
+
+/* Get target background color based on node state */
+static uint32_t cui_node_get_target_bg_color(CUI_Node *node, const CUI_Style *style) {
+    if (!node->enabled && style->background_disabled.type == CUI_BG_SOLID) {
+        return style->background_disabled.solid_color;
+    }
+    if (node->pressed && style->background_active.type == CUI_BG_SOLID) {
+        return style->background_active.solid_color;
+    }
+    if (node->hovered && style->background_hover.type == CUI_BG_SOLID) {
+        return style->background_hover.solid_color;
+    }
+    if (style->background.type == CUI_BG_SOLID) {
+        return style->background.solid_color;
+    }
+    return 0;  /* Transparent/no background */
+}
+
+/* Get target text color based on node state */
+static uint32_t cui_node_get_target_text_color(CUI_Node *node, const CUI_Style *style) {
+    if (!node->enabled) return style->text_color_disabled;
+    if (node->pressed && style->text_color_active != 0) return style->text_color_active;
+    if (node->hovered && style->text_color_hover != 0) return style->text_color_hover;
+    return style->text_color;
+}
+
+/* Update style transitions for a node */
+static void cui_node_update_transitions(CUI_Node *node, float delta_time) {
+    if (!node) return;
+
+    CUI_Style style = cui_node_get_effective_style(node);
+    float duration = style.transition.duration;
+
+    /* Check if state changed */
+    bool state_changed = (node->hovered != node->transition_state.prev_hovered) ||
+                         (node->pressed != node->transition_state.prev_pressed);
+
+    /* Get target colors for current state */
+    uint32_t target_bg = cui_node_get_target_bg_color(node, &style);
+    uint32_t target_text = cui_node_get_target_text_color(node, &style);
+    uint32_t target_border = style.border.color;
+
+    if (state_changed && duration > 0) {
+        /* Start a new transition */
+        /* Use current interpolated color as start (handles mid-transition changes) */
+        node->transition_state.from_bg_color = node->transition_state.current_bg_color;
+        node->transition_state.from_text_color = node->transition_state.current_text_color;
+        node->transition_state.from_border_color = node->transition_state.current_border_color;
+
+        node->transition_state.to_bg_color = target_bg;
+        node->transition_state.to_text_color = target_text;
+        node->transition_state.to_border_color = target_border;
+        node->transition_state.progress = 0.0f;
+        node->transition_state.active = true;
+    }
+
+    /* Update transition progress */
+    if (node->transition_state.active && duration > 0) {
+        node->transition_state.progress += delta_time / duration;
+
+        if (node->transition_state.progress >= 1.0f) {
+            node->transition_state.progress = 1.0f;
+            node->transition_state.active = false;
+            node->transition_state.current_bg_color = node->transition_state.to_bg_color;
+            node->transition_state.current_text_color = node->transition_state.to_text_color;
+            node->transition_state.current_border_color = node->transition_state.to_border_color;
+        } else {
+            /* Apply easing */
+            float t = cui_ease((CUI_EaseType)style.transition.ease, node->transition_state.progress);
+
+            /* Interpolate colors */
+            node->transition_state.current_bg_color = cui_color_lerp(
+                node->transition_state.from_bg_color,
+                node->transition_state.to_bg_color, t);
+            node->transition_state.current_text_color = cui_color_lerp(
+                node->transition_state.from_text_color,
+                node->transition_state.to_text_color, t);
+            node->transition_state.current_border_color = cui_color_lerp(
+                node->transition_state.from_border_color,
+                node->transition_state.to_border_color, t);
+        }
+    } else if (!node->transition_state.active) {
+        /* No active transition - set current colors directly */
+        node->transition_state.current_bg_color = target_bg;
+        node->transition_state.current_text_color = target_text;
+        node->transition_state.current_border_color = target_border;
+    }
+
+    /* Store previous state for next frame */
+    node->transition_state.prev_hovered = node->hovered;
+    node->transition_state.prev_pressed = node->pressed;
 }
 
 /* ============================================================================
@@ -1183,6 +1276,9 @@ void cui_scene_update(CUI_Context *ctx, CUI_Node *root, float delta_time)
 {
     if (!ctx || !root) return;
 
+    /* Update style transitions */
+    cui_node_update_transitions(root, delta_time);
+
     /* Process nodes recursively */
     if (root->on_process) {
         root->on_process(root, delta_time);
@@ -1425,26 +1521,37 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node, float in
             break;
 
         case CUI_NODE_BUTTON:
-            /* Draw button with state-appropriate background */
+            /* Draw button with transition-aware background */
             {
-                CUI_Background *bg = &style.background;
-                if (!node->enabled) {
-                    bg = &style.background_disabled;
-                } else if (node->pressed) {
-                    bg = &style.background_active;
-                } else if (node->hovered) {
-                    bg = &style.background_hover;
+                uint32_t bg_color;
+                uint32_t text_color;
+
+                /* Use transition state colors if style has transitions enabled */
+                if (style.transition.duration > 0 && node->transition_state.current_bg_color != 0) {
+                    bg_color = node->transition_state.current_bg_color;
+                    text_color = node->transition_state.current_text_color;
+                } else {
+                    /* Fallback to instant switching */
+                    CUI_Background *bg = &style.background;
+                    if (!node->enabled) {
+                        bg = &style.background_disabled;
+                    } else if (node->pressed) {
+                        bg = &style.background_active;
+                    } else if (node->hovered) {
+                        bg = &style.background_hover;
+                    }
+                    bg_color = (bg->type == CUI_BG_SOLID) ? bg->solid_color : 0;
+                    text_color = node->enabled ? style.text_color : style.text_color_disabled;
                 }
 
-                if (bg->type == CUI_BG_SOLID) {
+                if (bg_color != 0) {
                     cui_draw_rect_rounded(ctx, node->global_rect.x, node->global_rect.y,
                                           node->global_rect.w, node->global_rect.h,
-                                          cui_apply_opacity(bg->solid_color, effective_opacity),
+                                          cui_apply_opacity(bg_color, effective_opacity),
                                           style.corner_radius.top_left);
                 }
 
                 /* Draw text centered using styled text */
-                uint32_t btn_text_color = node->enabled ? style.text_color : style.text_color_disabled;
                 CUI_TextStyle text_style = style.text;
                 text_style.align = CUI_TEXT_ALIGN_CENTER;
                 text_style.valign = CUI_TEXT_VALIGN_MIDDLE;
@@ -1452,7 +1559,7 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node, float in
                 cui_draw_styled_text(ctx, node->button.text,
                                      node->global_rect.x, node->global_rect.y,
                                      node->global_rect.w, node->global_rect.h,
-                                     cui_apply_opacity(btn_text_color, effective_opacity),
+                                     cui_apply_opacity(text_color, effective_opacity),
                                      &text_style);
             }
             break;

@@ -103,6 +103,10 @@ static CUI_Style create_button_style(void)
     style.text_color_hover = 0xFFFFFFFF;
     style.text_color_disabled = 0x888888FF;
     style.padding = cui_edges_uniform(8.0f);
+
+    /* Enable smooth hover/active transitions */
+    style.transition = cui_transition(0.15f, CUI_TRANS_EASE_OUT_QUAD);
+
     return style;
 }
 

@@ -199,6 +199,37 @@ typedef struct CUI_Shadow {
 } CUI_Shadow;
 
 /* ============================================================================
+ * Style Transitions
+ * ============================================================================ */
+
+/* Which style properties can be transitioned */
+typedef enum CUI_TransitionProperty {
+    CUI_TRANSITION_NONE         = 0,
+    CUI_TRANSITION_BG_COLOR     = 1 << 0,   /* Background color */
+    CUI_TRANSITION_TEXT_COLOR   = 1 << 1,   /* Text color */
+    CUI_TRANSITION_BORDER_COLOR = 1 << 2,   /* Border color */
+    CUI_TRANSITION_OPACITY      = 1 << 3,   /* Overall opacity */
+    CUI_TRANSITION_ALL          = 0xFFFF    /* All properties */
+} CUI_TransitionProperty;
+
+/* Easing types for transitions (matches CUI_EaseType from ui_tween.h) */
+typedef enum CUI_TransitionEase {
+    CUI_TRANS_EASE_LINEAR = 0,
+    CUI_TRANS_EASE_IN_QUAD = 4,
+    CUI_TRANS_EASE_OUT_QUAD = 5,
+    CUI_TRANS_EASE_IN_OUT_QUAD = 6,
+    CUI_TRANS_EASE_OUT_CUBIC = 8,
+    CUI_TRANS_EASE_IN_OUT_CUBIC = 9
+} CUI_TransitionEase;
+
+/* Transition configuration */
+typedef struct CUI_StyleTransition {
+    float duration;              /* Transition duration in seconds (0 = instant) */
+    CUI_TransitionEase ease;     /* Easing function */
+    uint32_t properties;         /* Bitmask of CUI_TransitionProperty flags */
+} CUI_StyleTransition;
+
+/* ============================================================================
  * Complete Style Definition
  * ============================================================================ */
 
@@ -235,6 +266,9 @@ typedef struct CUI_Style {
     /* Size constraints */
     float min_width, min_height;
     float max_width, max_height;  /* 0 = no max */
+
+    /* Transitions */
+    CUI_StyleTransition transition;  /* Transition configuration for state changes */
 } CUI_Style;
 
 /* ============================================================================
@@ -587,6 +621,62 @@ float cui_measure_styled_text(CUI_Context *ctx, const char *text,
  * Returns pointer to static buffer containing truncated text */
 const char *cui_truncate_text_ellipsis(CUI_Context *ctx, const char *text,
                                         float max_width);
+
+/* ============================================================================
+ * Helper Functions - Style Transitions
+ * ============================================================================ */
+
+/* Create a transition with all properties */
+static inline CUI_StyleTransition cui_transition(float duration, CUI_TransitionEase ease) {
+    return (CUI_StyleTransition){
+        .duration = duration,
+        .ease = ease,
+        .properties = CUI_TRANSITION_ALL
+    };
+}
+
+/* Create a transition for specific properties */
+static inline CUI_StyleTransition cui_transition_props(float duration, CUI_TransitionEase ease,
+                                                        uint32_t properties) {
+    return (CUI_StyleTransition){
+        .duration = duration,
+        .ease = ease,
+        .properties = properties
+    };
+}
+
+/* No transition (instant changes) */
+static inline CUI_StyleTransition cui_transition_none(void) {
+    CUI_StyleTransition t;
+    memset(&t, 0, sizeof(t));
+    return t;
+}
+
+/* Common transition presets */
+#define CUI_TRANSITION_FAST   cui_transition(0.1f, CUI_TRANS_EASE_OUT_QUAD)
+#define CUI_TRANSITION_NORMAL cui_transition(0.2f, CUI_TRANS_EASE_OUT_QUAD)
+#define CUI_TRANSITION_SLOW   cui_transition(0.4f, CUI_TRANS_EASE_IN_OUT_QUAD)
+
+/* ============================================================================
+ * Color Utilities for Transitions
+ * ============================================================================ */
+
+/* Interpolate between two RGBA colors */
+uint32_t cui_color_lerp(uint32_t from, uint32_t to, float t);
+
+/* Extract RGBA components from a color (format: 0xAABBGGRR) */
+static inline void cui_color_unpack(uint32_t color, uint8_t *r, uint8_t *g,
+                                     uint8_t *b, uint8_t *a) {
+    if (r) *r = (uint8_t)(color & 0xFF);
+    if (g) *g = (uint8_t)((color >> 8) & 0xFF);
+    if (b) *b = (uint8_t)((color >> 16) & 0xFF);
+    if (a) *a = (uint8_t)((color >> 24) & 0xFF);
+}
+
+/* Pack RGBA components into a color */
+static inline uint32_t cui_color_pack(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    return (uint32_t)r | ((uint32_t)g << 8) | ((uint32_t)b << 16) | ((uint32_t)a << 24);
+}
 
 #ifdef __cplusplus
 }
