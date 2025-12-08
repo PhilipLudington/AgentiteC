@@ -62,6 +62,9 @@ float carbon_camera_get_zoom(Carbon_Camera *cam);
 /* Get rotation in degrees */
 float carbon_camera_get_rotation(Carbon_Camera *cam);
 
+/* Get viewport dimensions */
+void carbon_camera_get_viewport(Carbon_Camera *cam, float *w, float *h);
+
 /* ============================================================================
  * Matrix Access (for sprite renderer)
  * ============================================================================ */

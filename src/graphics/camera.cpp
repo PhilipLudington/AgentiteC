@@ -174,6 +174,13 @@ float carbon_camera_get_rotation(Carbon_Camera *cam)
     return cam->rotation / 0.01745329251994329576923690768489f;
 }
 
+void carbon_camera_get_viewport(Carbon_Camera *cam, float *w, float *h)
+{
+    if (!cam) return;
+    if (w) *w = cam->viewport_w;
+    if (h) *h = cam->viewport_h;
+}
+
 /* ============================================================================
  * Matrix Access
  * ============================================================================ */
