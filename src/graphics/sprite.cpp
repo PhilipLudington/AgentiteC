@@ -84,6 +84,61 @@ static const char sprite_shader_msl[] =
 "    return tex_color * in.color;\n"
 "}\n";
 
+/* Vignette post-process shader */
+static const char vignette_shader_msl[] =
+"#include <metal_stdlib>\n"
+"using namespace metal;\n"
+"\n"
+"struct Uniforms {\n"
+"    float4x4 view_projection;\n"
+"    float2 screen_size;\n"
+"    float2 padding;\n"
+"};\n"
+"\n"
+"struct VertexIn {\n"
+"    float2 position [[attribute(0)]];\n"
+"    float2 texcoord [[attribute(1)]];\n"
+"    float4 color [[attribute(2)]];\n"
+"};\n"
+"\n"
+"struct VertexOut {\n"
+"    float4 position [[position]];\n"
+"    float2 texcoord;\n"
+"    float4 color;\n"
+"};\n"
+"\n"
+"vertex VertexOut vignette_vertex(\n"
+"    VertexIn in [[stage_in]],\n"
+"    constant Uniforms& uniforms [[buffer(0)]]\n"
+") {\n"
+"    VertexOut out;\n"
+"    float4 world_pos = float4(in.position, 0.0, 1.0);\n"
+"    out.position = uniforms.view_projection * world_pos;\n"
+"    out.texcoord = in.texcoord;\n"
+"    out.color = in.color;\n"
+"    return out;\n"
+"}\n"
+"\n"
+"fragment float4 vignette_fragment(\n"
+"    VertexOut in [[stage_in]],\n"
+"    texture2d<float> scene_texture [[texture(0)]],\n"
+"    sampler scene_sampler [[sampler(0)]]\n"
+") {\n"
+"    float4 scene_color = scene_texture.sample(scene_sampler, in.texcoord);\n"
+"    \n"
+"    /* Calculate vignette based on distance from center */\n"
+"    float2 uv = in.texcoord - float2(0.5, 0.5);\n"
+"    float dist = length(uv * float2(2.0, 2.0));\n"
+"    \n"
+"    /* Smooth vignette falloff: start darkening at 0.6, full effect at 1.4 */\n"
+"    float vignette = 1.0 - smoothstep(0.6, 1.4, dist);\n"
+"    \n"
+"    /* Mix with max darkness of 0.4 */\n"
+"    vignette = mix(0.6, 1.0, vignette);\n"
+"    \n"
+"    return float4(scene_color.rgb * vignette, scene_color.a);\n"
+"}\n";
+
 /* ============================================================================
  * Internal Types
  * ============================================================================ */
@@ -102,9 +157,11 @@ struct Carbon_SpriteRenderer {
 
     /* GPU resources */
     SDL_GPUGraphicsPipeline *pipeline;
+    SDL_GPUGraphicsPipeline *vignette_pipeline;  /* Post-process vignette */
     SDL_GPUBuffer *vertex_buffer;
     SDL_GPUBuffer *index_buffer;
     SDL_GPUSampler *sampler;
+    SDL_GPUSampler *linear_sampler;  /* For post-process texture sampling */
 
     /* CPU-side batch buffers */
     Carbon_SpriteVertex *vertices;
@@ -278,6 +335,131 @@ static bool sprite_create_pipeline(Carbon_SpriteRenderer *sr)
     return true;
 }
 
+/* Create vignette post-process pipeline */
+static bool sprite_create_vignette_pipeline(Carbon_SpriteRenderer *sr)
+{
+    if (!sr || !sr->gpu) return false;
+
+    SDL_GPUShaderFormat formats = SDL_GetGPUShaderFormats(sr->gpu);
+
+    SDL_GPUShader *vertex_shader = NULL;
+    SDL_GPUShader *fragment_shader = NULL;
+
+    if (formats & SDL_GPU_SHADERFORMAT_MSL) {
+        SDL_GPUShaderCreateInfo vs_info = {
+            .code = (const Uint8 *)vignette_shader_msl,
+            .code_size = sizeof(vignette_shader_msl),
+            .entrypoint = "vignette_vertex",
+            .format = SDL_GPU_SHADERFORMAT_MSL,
+            .stage = SDL_GPU_SHADERSTAGE_VERTEX,
+            .num_samplers = 0,
+            .num_storage_textures = 0,
+            .num_storage_buffers = 0,
+            .num_uniform_buffers = 1,
+        };
+        vertex_shader = SDL_CreateGPUShader(sr->gpu, &vs_info);
+        if (!vertex_shader) {
+            SDL_Log("Vignette: Failed to create vertex shader: %s", SDL_GetError());
+            return false;
+        }
+
+        SDL_GPUShaderCreateInfo fs_info = {
+            .code = (const Uint8 *)vignette_shader_msl,
+            .code_size = sizeof(vignette_shader_msl),
+            .entrypoint = "vignette_fragment",
+            .format = SDL_GPU_SHADERFORMAT_MSL,
+            .stage = SDL_GPU_SHADERSTAGE_FRAGMENT,
+            .num_samplers = 1,
+            .num_storage_textures = 0,
+            .num_storage_buffers = 0,
+            .num_uniform_buffers = 0,
+        };
+        fragment_shader = SDL_CreateGPUShader(sr->gpu, &fs_info);
+        if (!fragment_shader) {
+            SDL_Log("Vignette: Failed to create fragment shader: %s", SDL_GetError());
+            SDL_ReleaseGPUShader(sr->gpu, vertex_shader);
+            return false;
+        }
+    } else {
+        return false;
+    }
+
+    SDL_GPUVertexAttribute attributes[] = {
+        { .location = 0, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
+          .offset = offsetof(Carbon_SpriteVertex, pos) },
+        { .location = 1, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
+          .offset = offsetof(Carbon_SpriteVertex, uv) },
+        { .location = 2, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
+          .offset = offsetof(Carbon_SpriteVertex, color) }
+    };
+
+    SDL_GPUVertexBufferDescription vb_desc = {
+        .slot = 0,
+        .pitch = sizeof(Carbon_SpriteVertex),
+        .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
+        .instance_step_rate = 0
+    };
+
+    SDL_GPUVertexInputState vertex_input = {
+        .vertex_buffer_descriptions = &vb_desc,
+        .num_vertex_buffers = 1,
+        .vertex_attributes = attributes,
+        .num_vertex_attributes = 3
+    };
+
+    SDL_GPUColorTargetBlendState blend_state = {
+        .enable_blend = false,
+        .color_write_mask = SDL_GPU_COLORCOMPONENT_R | SDL_GPU_COLORCOMPONENT_G |
+                           SDL_GPU_COLORCOMPONENT_B | SDL_GPU_COLORCOMPONENT_A
+    };
+
+    SDL_GPUColorTargetDescription color_target = {
+        .format = SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM,
+        .blend_state = blend_state
+    };
+
+    SDL_GPUGraphicsPipelineCreateInfo pipeline_info = {
+        .vertex_shader = vertex_shader,
+        .fragment_shader = fragment_shader,
+        .vertex_input_state = vertex_input,
+        .primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
+        .rasterizer_state = {
+            .fill_mode = SDL_GPU_FILLMODE_FILL,
+            .cull_mode = SDL_GPU_CULLMODE_NONE,
+            .front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE,
+            .enable_depth_clip = false
+        },
+        .multisample_state = {
+            .sample_count = SDL_GPU_SAMPLECOUNT_1,
+            .sample_mask = 0
+        },
+        .depth_stencil_state = {
+            .enable_depth_test = false,
+            .enable_depth_write = false,
+            .enable_stencil_test = false
+        },
+        .target_info = {
+            .color_target_descriptions = &color_target,
+            .num_color_targets = 1,
+            .depth_stencil_format = SDL_GPU_TEXTUREFORMAT_INVALID,
+            .has_depth_stencil_target = false
+        }
+    };
+
+    sr->vignette_pipeline = SDL_CreateGPUGraphicsPipeline(sr->gpu, &pipeline_info);
+
+    SDL_ReleaseGPUShader(sr->gpu, vertex_shader);
+    SDL_ReleaseGPUShader(sr->gpu, fragment_shader);
+
+    if (!sr->vignette_pipeline) {
+        SDL_Log("Vignette: Failed to create graphics pipeline: %s", SDL_GetError());
+        return false;
+    }
+
+    SDL_Log("Vignette: Graphics pipeline created successfully");
+    return true;
+}
+
 /* ============================================================================
  * Lifecycle Functions
  * ============================================================================ */
@@ -344,7 +526,7 @@ Carbon_SpriteRenderer *carbon_sprite_init(SDL_GPUDevice *gpu, SDL_Window *window
         return NULL;
     }
 
-    /* Create sampler */
+    /* Create sampler (nearest for pixel art) */
     SDL_GPUSamplerCreateInfo sampler_info = {
         .min_filter = SDL_GPU_FILTER_NEAREST,  /* Pixel art friendly */
         .mag_filter = SDL_GPU_FILTER_NEAREST,
@@ -360,10 +542,32 @@ Carbon_SpriteRenderer *carbon_sprite_init(SDL_GPUDevice *gpu, SDL_Window *window
         return NULL;
     }
 
+    /* Create linear sampler (for post-process effects) */
+    SDL_GPUSamplerCreateInfo linear_sampler_info = {
+        .min_filter = SDL_GPU_FILTER_LINEAR,
+        .mag_filter = SDL_GPU_FILTER_LINEAR,
+        .mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR,
+        .address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
+        .address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
+        .address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
+    };
+    sr->linear_sampler = SDL_CreateGPUSampler(gpu, &linear_sampler_info);
+    if (!sr->linear_sampler) {
+        carbon_set_error_from_sdl("Sprite: Failed to create linear sampler");
+        carbon_sprite_shutdown(sr);
+        return NULL;
+    }
+
     /* Create pipeline */
     if (!sprite_create_pipeline(sr)) {
         carbon_sprite_shutdown(sr);
         return NULL;
+    }
+
+    /* Create vignette post-process pipeline */
+    if (!sprite_create_vignette_pipeline(sr)) {
+        SDL_Log("Sprite: Warning - vignette pipeline creation failed, effect disabled");
+        /* Non-fatal - continue without vignette */
     }
 
     SDL_Log("Sprite: Renderer initialized (%dx%d)", sr->screen_width, sr->screen_height);
@@ -377,6 +581,9 @@ void carbon_sprite_shutdown(Carbon_SpriteRenderer *sr)
     if (sr->pipeline) {
         SDL_ReleaseGPUGraphicsPipeline(sr->gpu, sr->pipeline);
     }
+    if (sr->vignette_pipeline) {
+        SDL_ReleaseGPUGraphicsPipeline(sr->gpu, sr->vignette_pipeline);
+    }
     if (sr->vertex_buffer) {
         SDL_ReleaseGPUBuffer(sr->gpu, sr->vertex_buffer);
     }
@@ -385,6 +592,9 @@ void carbon_sprite_shutdown(Carbon_SpriteRenderer *sr)
     }
     if (sr->sampler) {
         SDL_ReleaseGPUSampler(sr->gpu, sr->sampler);
+    }
+    if (sr->linear_sampler) {
+        SDL_ReleaseGPUSampler(sr->gpu, sr->linear_sampler);
     }
 
     free(sr->vertices);
@@ -1083,4 +1293,246 @@ void carbon_sprite_set_camera(Carbon_SpriteRenderer *sr, Carbon_Camera *camera)
 Carbon_Camera *carbon_sprite_get_camera(Carbon_SpriteRenderer *sr)
 {
     return sr ? sr->camera : NULL;
+}
+
+/* ============================================================================
+ * Render-to-Texture Functions
+ * ============================================================================ */
+
+Carbon_Texture *carbon_texture_create_render_target(Carbon_SpriteRenderer *sr,
+                                                     int width, int height)
+{
+    if (!sr || width <= 0 || height <= 0) return NULL;
+
+    Carbon_Texture *texture = (Carbon_Texture *)calloc(1, sizeof(Carbon_Texture));
+    if (!texture) return NULL;
+
+    texture->width = width;
+    texture->height = height;
+
+    /* Create GPU texture with render target usage */
+    SDL_GPUTextureCreateInfo tex_info = {
+        .type = SDL_GPU_TEXTURETYPE_2D,
+        .format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
+        .usage = SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
+        .width = (Uint32)width,
+        .height = (Uint32)height,
+        .layer_count_or_depth = 1,
+        .num_levels = 1,
+        .sample_count = SDL_GPU_SAMPLECOUNT_1,
+        .props = 0
+    };
+    texture->gpu_texture = SDL_CreateGPUTexture(sr->gpu, &tex_info);
+    if (!texture->gpu_texture) {
+        SDL_Log("Sprite: Failed to create render target texture: %s", SDL_GetError());
+        free(texture);
+        return NULL;
+    }
+
+    SDL_Log("Sprite: Created render target texture (%dx%d)", width, height);
+    return texture;
+}
+
+SDL_GPURenderPass *carbon_sprite_begin_render_to_texture(Carbon_SpriteRenderer *sr,
+                                                          Carbon_Texture *target,
+                                                          SDL_GPUCommandBuffer *cmd,
+                                                          float clear_r, float clear_g,
+                                                          float clear_b, float clear_a)
+{
+    if (!sr || !target || !cmd) return NULL;
+
+    SDL_GPUColorTargetInfo color_target = {
+        .texture = target->gpu_texture,
+        .mip_level = 0,
+        .layer_or_depth_plane = 0,
+        .clear_color = { clear_r, clear_g, clear_b, clear_a },
+        .load_op = SDL_GPU_LOADOP_CLEAR,
+        .store_op = SDL_GPU_STOREOP_STORE,
+        .resolve_texture = NULL,
+        .resolve_mip_level = 0,
+        .resolve_layer = 0,
+        .cycle = false,
+        .cycle_resolve_texture = false
+    };
+
+    SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &color_target, 1, NULL);
+    if (!pass) {
+        SDL_Log("Sprite: Failed to begin render-to-texture pass: %s", SDL_GetError());
+        return NULL;
+    }
+
+    /* Set viewport to texture size */
+    SDL_GPUViewport viewport = {
+        .x = 0.0f,
+        .y = 0.0f,
+        .w = (float)target->width,
+        .h = (float)target->height,
+        .min_depth = 0.0f,
+        .max_depth = 1.0f
+    };
+    SDL_SetGPUViewport(pass, &viewport);
+
+    return pass;
+}
+
+void carbon_sprite_render_to_texture(Carbon_SpriteRenderer *sr,
+                                      SDL_GPUCommandBuffer *cmd,
+                                      SDL_GPURenderPass *pass)
+{
+    /* Same as carbon_sprite_render */
+    carbon_sprite_render(sr, cmd, pass);
+}
+
+void carbon_sprite_end_render_to_texture(SDL_GPURenderPass *pass)
+{
+    if (pass) {
+        SDL_EndGPURenderPass(pass);
+    }
+}
+
+/* ============================================================================
+ * Vignette Post-Process Functions
+ * ============================================================================ */
+
+bool carbon_sprite_has_vignette(Carbon_SpriteRenderer *sr)
+{
+    return sr && sr->vignette_pipeline != NULL;
+}
+
+void carbon_sprite_render_vignette(Carbon_SpriteRenderer *sr,
+                                    SDL_GPUCommandBuffer *cmd,
+                                    SDL_GPURenderPass *pass,
+                                    Carbon_Texture *scene_texture)
+{
+    if (!sr || !cmd || !pass || !scene_texture || !sr->vignette_pipeline) return;
+
+    /* Bind vignette pipeline */
+    SDL_BindGPUGraphicsPipeline(pass, sr->vignette_pipeline);
+
+    /* Bind vertex buffer */
+    SDL_GPUBufferBinding vb_binding = {
+        .buffer = sr->vertex_buffer,
+        .offset = 0
+    };
+    SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
+
+    /* Bind index buffer */
+    SDL_GPUBufferBinding ib_binding = {
+        .buffer = sr->index_buffer,
+        .offset = 0
+    };
+    SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
+
+    /* Build uniforms: ortho projection for screen-space quad */
+    struct {
+        float view_projection[16];
+        float screen_size[2];
+        float padding[2];
+    } uniforms;
+
+    glm_ortho(0.0f, (float)sr->screen_width, (float)sr->screen_height, 0.0f,
+              -1.0f, 1.0f, (vec4 *)uniforms.view_projection);
+
+    uniforms.screen_size[0] = (float)sr->screen_width;
+    uniforms.screen_size[1] = (float)sr->screen_height;
+    uniforms.padding[0] = 0.0f;
+    uniforms.padding[1] = 0.0f;
+
+    SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(uniforms));
+
+    /* Bind scene texture with linear sampler */
+    SDL_GPUTextureSamplerBinding tex_binding = {
+        .texture = scene_texture->gpu_texture,
+        .sampler = sr->linear_sampler
+    };
+    SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
+
+    /* Draw a single fullscreen quad (first 6 indices) */
+    SDL_DrawGPUIndexedPrimitives(pass, 6, 1, 0, 0, 0);
+}
+
+void carbon_sprite_prepare_fullscreen_quad(Carbon_SpriteRenderer *sr)
+{
+    if (!sr) return;
+
+    /* Set up a single fullscreen quad in the vertex buffer */
+    sr->vertex_count = 4;
+    sr->index_count = 6;
+    sr->sprite_count = 1;
+
+    float w = (float)sr->screen_width;
+    float h = (float)sr->screen_height;
+
+    /* Fullscreen quad vertices (position, UV, color) */
+    Carbon_SpriteVertex *v = sr->vertices;
+
+    /* Top-left */
+    v[0].pos[0] = 0.0f; v[0].pos[1] = 0.0f;
+    v[0].uv[0] = 0.0f; v[0].uv[1] = 0.0f;
+    v[0].color[0] = 1.0f; v[0].color[1] = 1.0f; v[0].color[2] = 1.0f; v[0].color[3] = 1.0f;
+
+    /* Top-right */
+    v[1].pos[0] = w; v[1].pos[1] = 0.0f;
+    v[1].uv[0] = 1.0f; v[1].uv[1] = 0.0f;
+    v[1].color[0] = 1.0f; v[1].color[1] = 1.0f; v[1].color[2] = 1.0f; v[1].color[3] = 1.0f;
+
+    /* Bottom-right */
+    v[2].pos[0] = w; v[2].pos[1] = h;
+    v[2].uv[0] = 1.0f; v[2].uv[1] = 1.0f;
+    v[2].color[0] = 1.0f; v[2].color[1] = 1.0f; v[2].color[2] = 1.0f; v[2].color[3] = 1.0f;
+
+    /* Bottom-left */
+    v[3].pos[0] = 0.0f; v[3].pos[1] = h;
+    v[3].uv[0] = 0.0f; v[3].uv[1] = 1.0f;
+    v[3].color[0] = 1.0f; v[3].color[1] = 1.0f; v[3].color[2] = 1.0f; v[3].color[3] = 1.0f;
+}
+
+void carbon_sprite_upload_fullscreen_quad(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd)
+{
+    if (!sr || !cmd) return;
+
+    /* Upload vertex data for fullscreen quad */
+    SDL_GPUTransferBufferCreateInfo transfer_info = {
+        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+        .size = (Uint32)(4 * sizeof(Carbon_SpriteVertex) + 6 * sizeof(uint16_t)),
+        .props = 0
+    };
+    SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(sr->gpu, &transfer_info);
+    if (!transfer) return;
+
+    void *mapped = SDL_MapGPUTransferBuffer(sr->gpu, transfer, false);
+    if (mapped) {
+        memcpy(mapped, sr->vertices, 4 * sizeof(Carbon_SpriteVertex));
+        memcpy((uint8_t *)mapped + 4 * sizeof(Carbon_SpriteVertex),
+               sr->indices, 6 * sizeof(uint16_t));
+        SDL_UnmapGPUTransferBuffer(sr->gpu, transfer);
+    }
+
+    SDL_GPUCopyPass *copy_pass = SDL_BeginGPUCopyPass(cmd);
+    if (copy_pass) {
+        /* Upload vertices */
+        SDL_GPUTransferBufferLocation src_vert = { .transfer_buffer = transfer, .offset = 0 };
+        SDL_GPUBufferRegion dst_vert = {
+            .buffer = sr->vertex_buffer,
+            .offset = 0,
+            .size = (Uint32)(4 * sizeof(Carbon_SpriteVertex))
+        };
+        SDL_UploadToGPUBuffer(copy_pass, &src_vert, &dst_vert, false);
+
+        /* Upload indices */
+        SDL_GPUTransferBufferLocation src_idx = {
+            .transfer_buffer = transfer,
+            .offset = (Uint32)(4 * sizeof(Carbon_SpriteVertex))
+        };
+        SDL_GPUBufferRegion dst_idx = {
+            .buffer = sr->index_buffer,
+            .offset = 0,
+            .size = (Uint32)(6 * sizeof(uint16_t))
+        };
+        SDL_UploadToGPUBuffer(copy_pass, &src_idx, &dst_idx, false);
+
+        SDL_EndGPUCopyPass(copy_pass);
+    }
+
+    SDL_ReleaseGPUTransferBuffer(sr->gpu, transfer);
 }

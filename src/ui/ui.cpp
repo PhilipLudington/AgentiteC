@@ -407,7 +407,8 @@ bool cui_process_event(CUI_Context *ctx, const SDL_Event *event)
     case SDL_EVENT_MOUSE_WHEEL:
         ctx->input.scroll_x = event->wheel.x;
         ctx->input.scroll_y = event->wheel.y;
-        return ctx->hot != CUI_ID_NONE;
+        /* Never consume scroll events - let game handle camera zoom even over UI */
+        return false;
 
     case SDL_EVENT_KEY_DOWN:
         if (event->key.scancode < 512) {

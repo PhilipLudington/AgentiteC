@@ -178,6 +178,51 @@ void carbon_sprite_set_camera(Carbon_SpriteRenderer *sr, Carbon_Camera *camera);
 /* Get current camera */
 Carbon_Camera *carbon_sprite_get_camera(Carbon_SpriteRenderer *sr);
 
+/* ============================================================================
+ * Render-to-Texture Functions
+ * ============================================================================ */
+
+/**
+ * Create a render target texture (can be rendered to).
+ * Caller OWNS the returned pointer and MUST call carbon_texture_destroy().
+ */
+Carbon_Texture *carbon_texture_create_render_target(Carbon_SpriteRenderer *sr,
+                                                     int width, int height);
+
+/* Begin rendering to a texture (instead of screen) */
+SDL_GPURenderPass *carbon_sprite_begin_render_to_texture(Carbon_SpriteRenderer *sr,
+                                                          Carbon_Texture *target,
+                                                          SDL_GPUCommandBuffer *cmd,
+                                                          float clear_r, float clear_g,
+                                                          float clear_b, float clear_a);
+
+/* Render sprites to the current texture target */
+void carbon_sprite_render_to_texture(Carbon_SpriteRenderer *sr,
+                                      SDL_GPUCommandBuffer *cmd,
+                                      SDL_GPURenderPass *pass);
+
+/* End render-to-texture pass */
+void carbon_sprite_end_render_to_texture(SDL_GPURenderPass *pass);
+
+/* ============================================================================
+ * Vignette Post-Process Functions
+ * ============================================================================ */
+
+/* Check if vignette pipeline is available */
+bool carbon_sprite_has_vignette(Carbon_SpriteRenderer *sr);
+
+/* Render scene texture with vignette effect applied */
+void carbon_sprite_render_vignette(Carbon_SpriteRenderer *sr,
+                                    SDL_GPUCommandBuffer *cmd,
+                                    SDL_GPURenderPass *pass,
+                                    Carbon_Texture *scene_texture);
+
+/* Prepare a fullscreen quad in CPU buffers (call before upload) */
+void carbon_sprite_prepare_fullscreen_quad(Carbon_SpriteRenderer *sr);
+
+/* Upload fullscreen quad to GPU (call before render pass) */
+void carbon_sprite_upload_fullscreen_quad(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd);
+
 #ifdef __cplusplus
 }
 #endif
