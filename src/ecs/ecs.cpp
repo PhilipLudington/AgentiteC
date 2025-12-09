@@ -42,6 +42,12 @@ void carbon_ecs_shutdown(Carbon_World *world) {
     if (!world) return;
 
     if (world->world) {
+        /* Flush any pending deferred operations before shutdown */
+        /* This prevents crashes in flecs_stack_fini */
+        if (ecs_is_deferred(world->world)) {
+            ecs_defer_end(world->world);
+        }
+
         ecs_fini(world->world);
     }
 
