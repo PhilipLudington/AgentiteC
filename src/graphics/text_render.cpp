@@ -107,9 +107,12 @@ void carbon_text_draw_ex(Carbon_TextRenderer *tr, Carbon_Font *font,
 {
     if (!tr || !font || !text || !tr->batch_started) return;
 
-    /* Warn if font changes (like sprite renderer) */
+    /* Auto-batch: if font changes, end current batch and start a new one */
     if (tr->current_font && tr->current_font != font) {
-        SDL_Log("Text: Warning - font changed mid-batch, results may be incorrect");
+        /* End current batch (queues it) */
+        carbon_text_end(tr);
+        /* Start new batch */
+        carbon_text_begin(tr);
     }
     tr->current_font = font;
 

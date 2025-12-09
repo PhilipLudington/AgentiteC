@@ -546,12 +546,13 @@ void carbon_sdf_text_draw_ex(Carbon_TextRenderer *tr, Carbon_SDFFont *font,
 {
     if (!tr || !font || !text || !tr->batch_started) return;
 
-    /* Warn if mixing bitmap and SDF fonts */
-    if (tr->current_font && !tr->is_sdf_batch) {
-        SDL_Log("Text: Warning - mixing bitmap and SDF fonts in batch");
-    }
-    if (tr->current_sdf_font && tr->current_sdf_font != font) {
-        SDL_Log("Text: Warning - SDF font changed mid-batch");
+    /* Auto-batch: if switching between bitmap and SDF, or SDF font changes, start new batch */
+    if ((tr->current_font && !tr->is_sdf_batch) ||
+        (tr->current_sdf_font && tr->current_sdf_font != font)) {
+        /* End current batch (queues it) */
+        carbon_text_end(tr);
+        /* Start new batch */
+        carbon_text_begin(tr);
     }
 
     tr->current_sdf_font = font;

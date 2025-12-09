@@ -33,7 +33,7 @@ extern "C" {
 #define TEXT_INDICES_PER_GLYPH 6
 #define TEXT_VERTEX_CAPACITY (TEXT_MAX_BATCH * TEXT_VERTS_PER_GLYPH)
 #define TEXT_INDEX_CAPACITY (TEXT_MAX_BATCH * TEXT_INDICES_PER_GLYPH)
-#define TEXT_MAX_QUEUED_BATCHES 8       /* Max batches that can be queued per frame */
+#define TEXT_MAX_QUEUED_BATCHES 64      /* Max batches that can be queued per frame */
 
 #define ATLAS_SIZE 1024                 /* Font atlas texture size */
 #define FIRST_CHAR 32                   /* Space */
