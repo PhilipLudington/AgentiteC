@@ -498,6 +498,246 @@ void carbon_sdf_font_destroy(Carbon_TextRenderer *tr, Carbon_SDFFont *font)
     free(font);
 }
 
+/* ============================================================================
+ * Runtime MSDF Font Generation
+ * ============================================================================ */
+
+#include "carbon/msdf.h"
+
+Carbon_SDFFont *carbon_sdf_font_generate(Carbon_TextRenderer *tr,
+                                          const char *ttf_path,
+                                          const Carbon_SDFFontGenConfig *config)
+{
+    if (!tr || !ttf_path) return NULL;
+
+    /* Use defaults if no config provided */
+    Carbon_SDFFontGenConfig default_config = CARBON_SDF_FONT_GEN_CONFIG_DEFAULT;
+    if (!config) config = &default_config;
+
+    /* Load TTF file */
+    SDL_IOStream *file = SDL_IOFromFile(ttf_path, "rb");
+    if (!file) {
+        carbon_set_error("Text: Failed to open font file '%s': %s", ttf_path, SDL_GetError());
+        return NULL;
+    }
+
+    Sint64 file_size = SDL_GetIOSize(file);
+    if (file_size <= 0) {
+        carbon_set_error("Text: Invalid font file size");
+        SDL_CloseIO(file);
+        return NULL;
+    }
+
+    unsigned char *font_data = (unsigned char *)malloc((size_t)file_size);
+    if (!font_data) {
+        SDL_CloseIO(file);
+        return NULL;
+    }
+
+    size_t read_size = SDL_ReadIO(file, font_data, (size_t)file_size);
+    SDL_CloseIO(file);
+
+    if ((Sint64)read_size != file_size) {
+        free(font_data);
+        carbon_set_error("Text: Failed to read font file");
+        return NULL;
+    }
+
+    /* Create MSDF atlas */
+    MSDF_AtlasConfig atlas_config = MSDF_ATLAS_CONFIG_DEFAULT;
+    atlas_config.font_data = font_data;
+    atlas_config.font_data_size = (int)file_size;
+    atlas_config.copy_font_data = false; /* We'll keep our copy */
+    atlas_config.atlas_width = config->atlas_width;
+    atlas_config.atlas_height = config->atlas_height;
+    atlas_config.glyph_scale = config->glyph_scale;
+    atlas_config.pixel_range = config->pixel_range;
+    atlas_config.format = config->generate_msdf ? MSDF_BITMAP_RGB : MSDF_BITMAP_GRAY;
+
+    MSDF_Atlas *atlas = msdf_atlas_create(&atlas_config);
+    if (!atlas) {
+        free(font_data);
+        return NULL;
+    }
+
+    /* Add characters based on config */
+    if (config->charset && config->charset[0]) {
+        msdf_atlas_add_string(atlas, config->charset);
+    } else {
+        msdf_atlas_add_ascii(atlas);
+    }
+
+    /* Generate atlas */
+    if (!msdf_atlas_generate(atlas)) {
+        msdf_atlas_destroy(atlas);
+        free(font_data);
+        return NULL;
+    }
+
+    /* Get atlas bitmap and metrics */
+    const MSDF_Bitmap *bitmap = msdf_atlas_get_bitmap(atlas);
+    MSDF_FontMetrics metrics;
+    msdf_atlas_get_metrics(atlas, &metrics);
+
+    /* Allocate Carbon_SDFFont */
+    Carbon_SDFFont *font = CARBON_ALLOC(Carbon_SDFFont);
+    if (!font) {
+        msdf_atlas_destroy(atlas);
+        free(font_data);
+        return NULL;
+    }
+
+    /* Set font properties */
+    font->type = config->generate_msdf ? CARBON_SDF_TYPE_MSDF : CARBON_SDF_TYPE_SDF;
+    font->em_size = metrics.em_size;
+    font->font_size = config->glyph_scale;
+    font->distance_range = config->pixel_range;
+    font->line_height = metrics.line_height;
+    font->ascender = metrics.ascender;
+    font->descender = metrics.descender;
+    font->atlas_width = metrics.atlas_width;
+    font->atlas_height = metrics.atlas_height;
+
+    /* Copy glyph data */
+    int glyph_count = msdf_atlas_get_glyph_count(atlas);
+    font->glyphs = (SDFGlyphInfo *)malloc(glyph_count * sizeof(SDFGlyphInfo));
+    if (!font->glyphs) {
+        free(font);
+        msdf_atlas_destroy(atlas);
+        free(font_data);
+        return NULL;
+    }
+    font->glyph_count = glyph_count;
+
+    /* Convert MSDF glyph info to Carbon format */
+    for (int i = 0; i < glyph_count; i++) {
+        /* We need to iterate through all possible codepoints we added */
+        /* Since we added ASCII, iterate through those */
+        uint32_t codepoint = (config->charset && config->charset[0])
+            ? (uint8_t)config->charset[i]
+            : (32 + i);
+
+        MSDF_GlyphInfo msdf_glyph;
+        if (msdf_atlas_get_glyph(atlas, codepoint, &msdf_glyph)) {
+            font->glyphs[i].codepoint = msdf_glyph.codepoint;
+            font->glyphs[i].advance = msdf_glyph.advance;
+            font->glyphs[i].plane_left = msdf_glyph.plane_left;
+            font->glyphs[i].plane_bottom = msdf_glyph.plane_bottom;
+            font->glyphs[i].plane_right = msdf_glyph.plane_right;
+            font->glyphs[i].plane_top = msdf_glyph.plane_top;
+
+            /* Convert normalized UV to pixel coordinates for compatibility */
+            font->glyphs[i].atlas_left = msdf_glyph.atlas_left * metrics.atlas_width;
+            font->glyphs[i].atlas_bottom = msdf_glyph.atlas_bottom * metrics.atlas_height;
+            font->glyphs[i].atlas_right = msdf_glyph.atlas_right * metrics.atlas_width;
+            font->glyphs[i].atlas_top = msdf_glyph.atlas_top * metrics.atlas_height;
+        }
+    }
+
+    /* Create GPU texture */
+    SDL_GPUTextureFormat format = config->generate_msdf
+        ? SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM
+        : SDL_GPU_TEXTUREFORMAT_R8_UNORM;
+    uint32_t bytes_per_pixel = config->generate_msdf ? 4 : 1;
+
+    SDL_GPUTextureCreateInfo tex_info = {
+        .type = SDL_GPU_TEXTURETYPE_2D,
+        .format = format,
+        .usage = SDL_GPU_TEXTUREUSAGE_SAMPLER,
+        .width = (Uint32)metrics.atlas_width,
+        .height = (Uint32)metrics.atlas_height,
+        .layer_count_or_depth = 1,
+        .num_levels = 1,
+        .sample_count = SDL_GPU_SAMPLECOUNT_1,
+        .props = 0
+    };
+
+    font->atlas_texture = SDL_CreateGPUTexture(tr->gpu, &tex_info);
+    if (!font->atlas_texture) {
+        carbon_set_error_from_sdl("Text: Failed to create generated atlas texture");
+        free(font->glyphs);
+        free(font);
+        msdf_atlas_destroy(atlas);
+        free(font_data);
+        return NULL;
+    }
+
+    /* Convert bitmap to upload format */
+    uint32_t data_size = metrics.atlas_width * metrics.atlas_height * bytes_per_pixel;
+    unsigned char *upload_data = (unsigned char *)malloc(data_size);
+    if (!upload_data) {
+        SDL_ReleaseGPUTexture(tr->gpu, font->atlas_texture);
+        free(font->glyphs);
+        free(font);
+        msdf_atlas_destroy(atlas);
+        free(font_data);
+        return NULL;
+    }
+
+    if (config->generate_msdf) {
+        msdf_atlas_get_bitmap_rgba8(atlas, upload_data);
+    } else {
+        /* Single channel - just convert float to uint8 */
+        for (int i = 0; i < metrics.atlas_width * metrics.atlas_height; i++) {
+            float v = bitmap->data[i];
+            if (v < 0) v = 0;
+            if (v > 1) v = 1;
+            upload_data[i] = (unsigned char)(v * 255.0f);
+        }
+    }
+
+    /* Upload to GPU */
+    SDL_GPUTransferBufferCreateInfo transfer_info = {
+        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+        .size = data_size,
+        .props = 0
+    };
+    SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(tr->gpu, &transfer_info);
+    if (transfer) {
+        void *mapped = SDL_MapGPUTransferBuffer(tr->gpu, transfer, false);
+        if (mapped) {
+            memcpy(mapped, upload_data, data_size);
+            SDL_UnmapGPUTransferBuffer(tr->gpu, transfer);
+        }
+
+        SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(tr->gpu);
+        if (cmd) {
+            SDL_GPUCopyPass *copy_pass = SDL_BeginGPUCopyPass(cmd);
+            if (copy_pass) {
+                SDL_GPUTextureTransferInfo src = {
+                    .transfer_buffer = transfer,
+                    .offset = 0,
+                    .pixels_per_row = (Uint32)metrics.atlas_width,
+                    .rows_per_layer = (Uint32)metrics.atlas_height
+                };
+                SDL_GPUTextureRegion dst = {
+                    .texture = font->atlas_texture,
+                    .mip_level = 0,
+                    .layer = 0,
+                    .x = 0, .y = 0, .z = 0,
+                    .w = (Uint32)metrics.atlas_width,
+                    .h = (Uint32)metrics.atlas_height,
+                    .d = 1
+                };
+                SDL_UploadToGPUTexture(copy_pass, &src, &dst, false);
+                SDL_EndGPUCopyPass(copy_pass);
+            }
+            SDL_SubmitGPUCommandBuffer(cmd);
+        }
+        SDL_ReleaseGPUTransferBuffer(tr->gpu, transfer);
+    }
+
+    free(upload_data);
+    msdf_atlas_destroy(atlas);
+    free(font_data);
+
+    SDL_Log("Text: Generated %s font from '%s' with %d glyphs (%dx%d atlas)",
+            font->type == CARBON_SDF_TYPE_MSDF ? "MSDF" : "SDF",
+            ttf_path, font->glyph_count, font->atlas_width, font->atlas_height);
+
+    return font;
+}
+
 Carbon_SDFFontType carbon_sdf_font_get_type(Carbon_SDFFont *font)
 {
     return font ? font->type : CARBON_SDF_TYPE_SDF;

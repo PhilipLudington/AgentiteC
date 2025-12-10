@@ -203,6 +203,39 @@ Carbon_SDFFont *carbon_sdf_font_load(Carbon_TextRenderer *tr,
                                       const char *atlas_path,
                                       const char *metrics_path);
 
+/* Configuration for runtime MSDF font generation */
+typedef struct Carbon_SDFFontGenConfig {
+    int atlas_width;            /* Atlas texture width (default: 1024) */
+    int atlas_height;           /* Atlas texture height (default: 1024) */
+    float glyph_scale;          /* Glyph rendering size in pixels (default: 48) */
+    float pixel_range;          /* SDF range in pixels (default: 4) */
+    bool generate_msdf;         /* True for MSDF, false for single-channel SDF */
+    const char *charset;        /* Custom character set (NULL for ASCII) */
+} Carbon_SDFFontGenConfig;
+
+/* Default configuration for runtime font generation */
+#define CARBON_SDF_FONT_GEN_CONFIG_DEFAULT { \
+    .atlas_width = 1024, \
+    .atlas_height = 1024, \
+    .glyph_scale = 48.0f, \
+    .pixel_range = 4.0f, \
+    .generate_msdf = true, \
+    .charset = NULL \
+}
+
+/**
+ * Generate SDF/MSDF font at runtime from a TTF file.
+ * This eliminates the need for external tools like msdf-atlas-gen.
+ *
+ * @param tr  Text renderer
+ * @param ttf_path  Path to TTF font file
+ * @param config  Generation configuration (NULL for defaults)
+ * @return  New font, or NULL on failure. Caller must free with carbon_sdf_font_destroy().
+ */
+Carbon_SDFFont *carbon_sdf_font_generate(Carbon_TextRenderer *tr,
+                                          const char *ttf_path,
+                                          const Carbon_SDFFontGenConfig *config);
+
 /* Destroy SDF font and free resources */
 void carbon_sdf_font_destroy(Carbon_TextRenderer *tr, Carbon_SDFFont *font);
 
