@@ -9,6 +9,7 @@
 #include "stb_truetype.h"
 #include <cmath>
 #include <cstdio>
+#include <chrono>
 
 using Catch::Approx;
 
@@ -566,6 +567,49 @@ TEST_CASE("MSDF atlas ASCII generation", "[msdf][atlas]") {
     REQUIRE(metrics.em_size > 0);
     REQUIRE(metrics.ascender > 0);
     REQUIRE(metrics.line_height > 0);
+
+    msdf_atlas_destroy(atlas);
+}
+
+/* ============================================================================
+ * Benchmark Tests
+ * ============================================================================ */
+
+TEST_CASE("MSDF atlas generation benchmark", "[msdf][benchmark]") {
+    int font_size = 0;
+    unsigned char *font_data = load_test_font("assets/fonts/Roboto-Regular.ttf", &font_size);
+
+    if (!font_data) {
+        WARN("Skipping benchmark - font file not found");
+        return;
+    }
+
+    MSDF_AtlasConfig config = MSDF_ATLAS_CONFIG_DEFAULT;
+    config.font_data = font_data;
+    config.font_data_size = font_size;
+    config.atlas_width = 1024;
+    config.atlas_height = 1024;
+    config.glyph_scale = 48.0f;  /* 48px glyphs for benchmark */
+
+    MSDF_Atlas *atlas = msdf_atlas_create(&config);
+    REQUIRE(atlas != nullptr);
+    free(font_data);
+
+    /* Add ASCII characters */
+    REQUIRE(msdf_atlas_add_ascii(atlas));
+
+    /* Time the generation */
+    auto start = std::chrono::high_resolution_clock::now();
+
+    REQUIRE(msdf_atlas_generate(atlas));
+
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+
+    /* Report timing (WARN so it always shows) */
+    int glyph_count = msdf_atlas_get_glyph_count(atlas);
+    double avg_ms = (double)duration.count() / glyph_count;
+    WARN("BENCHMARK: Atlas generation: " << duration.count() << "ms for " << glyph_count << " glyphs (" << avg_ms << "ms/glyph)");
 
     msdf_atlas_destroy(atlas);
 }

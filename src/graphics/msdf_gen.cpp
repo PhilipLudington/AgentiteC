@@ -217,18 +217,34 @@ static double shape_signed_distance(const MSDF_Shape *shape, MSDF_Vector2 point)
     return min_dist;
 }
 
-/* Calculate per-channel signed distances for MSDF */
-static void shape_multi_distance(const MSDF_Shape *shape, MSDF_Vector2 point,
-                                  double *out_r, double *out_g, double *out_b)
+/* Check if a point could potentially be within 'range' of an edge's bounding box */
+static inline bool bounds_could_contain(const MSDF_Bounds *bounds, MSDF_Vector2 point, double range)
+{
+    return point.x >= bounds->left - range && point.x <= bounds->right + range &&
+           point.y >= bounds->bottom - range && point.y <= bounds->top + range;
+}
+
+/* Calculate per-channel signed distances for MSDF with spatial culling */
+static void shape_multi_distance_culled(const MSDF_Shape *shape, MSDF_Vector2 point,
+                                         const MSDF_Bounds *edge_bounds, double cull_range,
+                                         double *out_r, double *out_g, double *out_b)
 {
     MSDF_SignedDistance min_r = { DBL_MAX, 0 };
     MSDF_SignedDistance min_g = { DBL_MAX, 0 };
     MSDF_SignedDistance min_b = { DBL_MAX, 0 };
 
+    int bounds_idx = 0;
     for (int c = 0; c < shape->contour_count; c++) {
         MSDF_Contour *contour = &shape->contours[c];
 
         for (int e = 0; e < contour->edge_count; e++) {
+            /* Early-out: skip edges whose bounding box is too far */
+            if (edge_bounds && !bounds_could_contain(&edge_bounds[bounds_idx], point, cull_range)) {
+                bounds_idx++;
+                continue;
+            }
+            bounds_idx++;
+
             MSDF_EdgeSegment *edge = &contour->edges[e];
             double param;
             MSDF_SignedDistance sd = msdf_edge_signed_distance(edge, point, &param);
@@ -249,6 +265,40 @@ static void shape_multi_distance(const MSDF_Shape *shape, MSDF_Vector2 point,
     *out_r = min_r.distance;
     *out_g = min_g.distance;
     *out_b = min_b.distance;
+}
+
+/* Calculate per-channel signed distances for MSDF (no culling - for compatibility) */
+static void shape_multi_distance(const MSDF_Shape *shape, MSDF_Vector2 point,
+                                  double *out_r, double *out_g, double *out_b)
+{
+    shape_multi_distance_culled(shape, point, NULL, 0, out_r, out_g, out_b);
+}
+
+/* Pre-compute bounding boxes for all edges in a shape */
+static MSDF_Bounds *precompute_edge_bounds(const MSDF_Shape *shape, int *out_count)
+{
+    int total_edges = msdf_shape_edge_count(shape);
+    if (total_edges == 0) {
+        *out_count = 0;
+        return NULL;
+    }
+
+    MSDF_Bounds *bounds = (MSDF_Bounds *)malloc(total_edges * sizeof(MSDF_Bounds));
+    if (!bounds) {
+        *out_count = 0;
+        return NULL;
+    }
+
+    int idx = 0;
+    for (int c = 0; c < shape->contour_count; c++) {
+        MSDF_Contour *contour = &shape->contours[c];
+        for (int e = 0; e < contour->edge_count; e++) {
+            bounds[idx++] = msdf_edge_get_bounds(&contour->edges[e]);
+        }
+    }
+
+    *out_count = total_edges;
+    return bounds;
 }
 
 /* Transform bitmap coordinates to shape coordinates */
@@ -306,13 +356,18 @@ void msdf_generate_msdf(const MSDF_Shape *shape,
 
     double range = pixel_range / projection->scale_x;
 
+    /* Pre-compute edge bounds for spatial culling */
+    int edge_count = 0;
+    MSDF_Bounds *edge_bounds = precompute_edge_bounds(shape, &edge_count);
+    (void)edge_count; /* Unused, bounds array is iterated by shape structure */
+
     for (int y = 0; y < bitmap->height; y++) {
         for (int x = 0; x < bitmap->width; x++) {
             /* Sample at pixel center */
             MSDF_Vector2 point = unproject(projection, x + 0.5, y + 0.5);
 
             double r, g, b;
-            shape_multi_distance(shape, point, &r, &g, &b);
+            shape_multi_distance_culled(shape, point, edge_bounds, range, &r, &g, &b);
 
             /* Map distances to [0, 1] range */
             float *pixel = msdf_bitmap_pixel(bitmap, x, y);
@@ -328,6 +383,8 @@ void msdf_generate_msdf(const MSDF_Shape *shape,
             }
         }
     }
+
+    free(edge_bounds);
 }
 
 void msdf_generate_mtsdf(const MSDF_Shape *shape,
@@ -343,14 +400,19 @@ void msdf_generate_mtsdf(const MSDF_Shape *shape,
 
     double range = pixel_range / projection->scale_x;
 
+    /* Pre-compute edge bounds for spatial culling */
+    int edge_count = 0;
+    MSDF_Bounds *edge_bounds = precompute_edge_bounds(shape, &edge_count);
+    (void)edge_count;
+
     for (int y = 0; y < bitmap->height; y++) {
         for (int x = 0; x < bitmap->width; x++) {
             /* Sample at pixel center */
             MSDF_Vector2 point = unproject(projection, x + 0.5, y + 0.5);
 
-            /* MSDF channels */
+            /* MSDF channels with spatial culling */
             double r, g, b;
-            shape_multi_distance(shape, point, &r, &g, &b);
+            shape_multi_distance_culled(shape, point, edge_bounds, range, &r, &g, &b);
 
             /* True SDF for alpha */
             double true_sdf = shape_signed_distance(shape, point);
@@ -371,6 +433,8 @@ void msdf_generate_mtsdf(const MSDF_Shape *shape,
             }
         }
     }
+
+    free(edge_bounds);
 }
 
 void msdf_generate_ex(const MSDF_Shape *shape,

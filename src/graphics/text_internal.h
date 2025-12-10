@@ -17,6 +17,10 @@
 #include <stdarg.h>
 #include <stdio.h>
 
+/* STB rect_pack must be included BEFORE stb_truetype to ensure the proper
+ * rectangle packing implementation is used (not the internal fallback) */
+#include "stb_rect_pack.h"
+
 /* STB TrueType for font rasterization */
 #include "stb_truetype.h"
 
