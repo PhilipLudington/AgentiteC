@@ -60,3 +60,6 @@ build/
 
 # Test artifacts
 test_saves/
+
+# Planning files
+PLAN.md
