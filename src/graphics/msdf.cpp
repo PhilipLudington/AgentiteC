@@ -1,0 +1,967 @@
+/*
+ * Carbon MSDF Generator - Core Implementation
+ *
+ * Pure C11 implementation of Multi-channel Signed Distance Field generation.
+ * Based on the msdfgen algorithm by Viktor Chlumsky.
+ *
+ * This file contains:
+ * - Shape construction and memory management
+ * - Shape extraction from stb_truetype
+ * - Shape utilities (bounds, winding, normalize)
+ */
+
+#include "carbon/msdf.h"
+#include "carbon/carbon.h"
+#include "carbon/error.h"
+
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <float.h>
+
+/* Include stb_truetype header (implementation is in text_font.cpp) */
+#include "stb_truetype.h"
+
+/* ============================================================================
+ * Internal Constants
+ * ============================================================================ */
+
+#define INITIAL_CONTOUR_CAPACITY 4
+#define INITIAL_EDGE_CAPACITY 16
+
+/* ============================================================================
+ * Shape Construction
+ * ============================================================================ */
+
+MSDF_Shape *msdf_shape_create(void)
+{
+    MSDF_Shape *shape = CARBON_ALLOC(MSDF_Shape);
+    if (!shape) {
+        carbon_set_error("Failed to allocate MSDF shape");
+        return NULL;
+    }
+
+    shape->contours = NULL;
+    shape->contour_count = 0;
+    shape->contour_capacity = 0;
+    shape->inverse_y_axis = false;
+
+    return shape;
+}
+
+void msdf_shape_free(MSDF_Shape *shape)
+{
+    if (!shape) return;
+
+    for (int i = 0; i < shape->contour_count; i++) {
+        free(shape->contours[i].edges);
+    }
+    free(shape->contours);
+    free(shape);
+}
+
+MSDF_Contour *msdf_shape_add_contour(MSDF_Shape *shape)
+{
+    if (!shape) return NULL;
+
+    /* Grow contour array if needed */
+    if (shape->contour_count >= shape->contour_capacity) {
+        int new_capacity = shape->contour_capacity == 0
+            ? INITIAL_CONTOUR_CAPACITY
+            : shape->contour_capacity * 2;
+
+        MSDF_Contour *new_contours = CARBON_REALLOC(
+            shape->contours, MSDF_Contour, new_capacity);
+        if (!new_contours) {
+            carbon_set_error("Failed to grow contour array");
+            return NULL;
+        }
+
+        shape->contours = new_contours;
+        shape->contour_capacity = new_capacity;
+    }
+
+    /* Initialize new contour */
+    MSDF_Contour *contour = &shape->contours[shape->contour_count];
+    contour->edges = NULL;
+    contour->edge_count = 0;
+    contour->edge_capacity = 0;
+
+    shape->contour_count++;
+    return contour;
+}
+
+void msdf_contour_add_edge(MSDF_Contour *contour, const MSDF_EdgeSegment *edge)
+{
+    if (!contour || !edge) return;
+
+    /* Grow edge array if needed */
+    if (contour->edge_count >= contour->edge_capacity) {
+        int new_capacity = contour->edge_capacity == 0
+            ? INITIAL_EDGE_CAPACITY
+            : contour->edge_capacity * 2;
+
+        MSDF_EdgeSegment *new_edges = CARBON_REALLOC(
+            contour->edges, MSDF_EdgeSegment, new_capacity);
+        if (!new_edges) {
+            carbon_set_error("Failed to grow edge array");
+            return;
+        }
+
+        contour->edges = new_edges;
+        contour->edge_capacity = new_capacity;
+    }
+
+    contour->edges[contour->edge_count] = *edge;
+    contour->edge_count++;
+}
+
+void msdf_contour_add_line(MSDF_Contour *contour, MSDF_Vector2 p0, MSDF_Vector2 p1)
+{
+    MSDF_EdgeSegment edge = {
+        .type = MSDF_EDGE_LINEAR,
+        .color = MSDF_COLOR_WHITE,
+        .p = { p0, p1, {0, 0}, {0, 0} }
+    };
+    msdf_contour_add_edge(contour, &edge);
+}
+
+void msdf_contour_add_quadratic(MSDF_Contour *contour,
+                                 MSDF_Vector2 p0, MSDF_Vector2 p1, MSDF_Vector2 p2)
+{
+    MSDF_EdgeSegment edge = {
+        .type = MSDF_EDGE_QUADRATIC,
+        .color = MSDF_COLOR_WHITE,
+        .p = { p0, p1, p2, {0, 0} }
+    };
+    msdf_contour_add_edge(contour, &edge);
+}
+
+void msdf_contour_add_cubic(MSDF_Contour *contour,
+                             MSDF_Vector2 p0, MSDF_Vector2 p1,
+                             MSDF_Vector2 p2, MSDF_Vector2 p3)
+{
+    MSDF_EdgeSegment edge = {
+        .type = MSDF_EDGE_CUBIC,
+        .color = MSDF_COLOR_WHITE,
+        .p = { p0, p1, p2, p3 }
+    };
+    msdf_contour_add_edge(contour, &edge);
+}
+
+/* ============================================================================
+ * Shape Extraction from stb_truetype
+ * ============================================================================ */
+
+MSDF_Shape *msdf_shape_from_glyph(const stbtt_fontinfo *font_info,
+                                   int glyph_index,
+                                   double scale)
+{
+    if (!font_info) {
+        carbon_set_error("NULL font_info");
+        return NULL;
+    }
+
+    /* Get glyph shape from stb_truetype */
+    stbtt_vertex *vertices = NULL;
+    int num_vertices = stbtt_GetGlyphShape(font_info, glyph_index, &vertices);
+
+    if (num_vertices <= 0 || !vertices) {
+        /* Empty glyph (e.g., space character) - return empty shape */
+        return msdf_shape_create();
+    }
+
+    MSDF_Shape *shape = msdf_shape_create();
+    if (!shape) {
+        stbtt_FreeShape(font_info, vertices);
+        return NULL;
+    }
+
+    /* stb_truetype uses Y-up coordinates, same as our default */
+    shape->inverse_y_axis = false;
+
+    MSDF_Contour *current_contour = NULL;
+    MSDF_Vector2 last_point = {0, 0};
+    MSDF_Vector2 contour_start = {0, 0};
+
+    for (int i = 0; i < num_vertices; i++) {
+        stbtt_vertex *v = &vertices[i];
+
+        /* Scale coordinates */
+        double x = v->x * scale;
+        double y = v->y * scale;
+        double cx = v->cx * scale;
+        double cy = v->cy * scale;
+        double cx1 = v->cx1 * scale;
+        double cy1 = v->cy1 * scale;
+
+        switch (v->type) {
+            case STBTT_vmove:
+                /* Start a new contour */
+                current_contour = msdf_shape_add_contour(shape);
+                if (!current_contour) {
+                    msdf_shape_free(shape);
+                    stbtt_FreeShape(font_info, vertices);
+                    return NULL;
+                }
+                last_point = msdf_vec2(x, y);
+                contour_start = last_point;
+                break;
+
+            case STBTT_vline:
+                /* Line segment from last_point to (x, y) */
+                if (current_contour) {
+                    MSDF_Vector2 end = msdf_vec2(x, y);
+                    /* Skip degenerate edges */
+                    if (msdf_vec2_length_squared(msdf_vec2_sub(end, last_point)) > MSDF_EPSILON) {
+                        msdf_contour_add_line(current_contour, last_point, end);
+                    }
+                    last_point = end;
+                }
+                break;
+
+            case STBTT_vcurve:
+                /* Quadratic bezier: last_point -> (cx, cy) -> (x, y) */
+                if (current_contour) {
+                    MSDF_Vector2 control = msdf_vec2(cx, cy);
+                    MSDF_Vector2 end = msdf_vec2(x, y);
+                    msdf_contour_add_quadratic(current_contour, last_point, control, end);
+                    last_point = end;
+                }
+                break;
+
+            case STBTT_vcubic:
+                /* Cubic bezier: last_point -> (cx, cy) -> (cx1, cy1) -> (x, y) */
+                if (current_contour) {
+                    MSDF_Vector2 control1 = msdf_vec2(cx, cy);
+                    MSDF_Vector2 control2 = msdf_vec2(cx1, cy1);
+                    MSDF_Vector2 end = msdf_vec2(x, y);
+                    msdf_contour_add_cubic(current_contour, last_point, control1, control2, end);
+                    last_point = end;
+                }
+                break;
+        }
+    }
+
+    /* Close any open contours by adding a line back to start if needed */
+    for (int i = 0; i < shape->contour_count; i++) {
+        MSDF_Contour *contour = &shape->contours[i];
+        if (contour->edge_count > 0) {
+            MSDF_EdgeSegment *first_edge = &contour->edges[0];
+            MSDF_EdgeSegment *last_edge = &contour->edges[contour->edge_count - 1];
+
+            /* Get end point of last edge and start point of first edge */
+            MSDF_Vector2 end_point;
+            switch (last_edge->type) {
+                case MSDF_EDGE_LINEAR:    end_point = last_edge->p[1]; break;
+                case MSDF_EDGE_QUADRATIC: end_point = last_edge->p[2]; break;
+                case MSDF_EDGE_CUBIC:     end_point = last_edge->p[3]; break;
+                default: end_point = last_edge->p[0]; break;
+            }
+
+            MSDF_Vector2 start_point = first_edge->p[0];
+
+            /* Add closing line if not already closed */
+            double gap = msdf_vec2_length_squared(msdf_vec2_sub(end_point, start_point));
+            if (gap > MSDF_EPSILON) {
+                msdf_contour_add_line(contour, end_point, start_point);
+            }
+        }
+    }
+
+    stbtt_FreeShape(font_info, vertices);
+    return shape;
+}
+
+MSDF_Shape *msdf_shape_from_codepoint(const stbtt_fontinfo *font_info,
+                                       int codepoint,
+                                       double scale)
+{
+    if (!font_info) {
+        carbon_set_error("NULL font_info");
+        return NULL;
+    }
+
+    int glyph_index = stbtt_FindGlyphIndex(font_info, codepoint);
+    return msdf_shape_from_glyph(font_info, glyph_index, scale);
+}
+
+/* ============================================================================
+ * Shape Utilities
+ * ============================================================================ */
+
+int msdf_shape_edge_count(const MSDF_Shape *shape)
+{
+    if (!shape) return 0;
+
+    int count = 0;
+    for (int i = 0; i < shape->contour_count; i++) {
+        count += shape->contours[i].edge_count;
+    }
+    return count;
+}
+
+bool msdf_shape_is_empty(const MSDF_Shape *shape)
+{
+    return !shape || msdf_shape_edge_count(shape) == 0;
+}
+
+MSDF_Bounds msdf_shape_get_bounds(const MSDF_Shape *shape)
+{
+    MSDF_Bounds bounds = {
+        .left = DBL_MAX,
+        .bottom = DBL_MAX,
+        .right = -DBL_MAX,
+        .top = -DBL_MAX
+    };
+
+    if (!shape) return bounds;
+
+    for (int i = 0; i < shape->contour_count; i++) {
+        MSDF_Contour *contour = &shape->contours[i];
+
+        for (int j = 0; j < contour->edge_count; j++) {
+            MSDF_Bounds edge_bounds = msdf_edge_get_bounds(&contour->edges[j]);
+
+            if (edge_bounds.left < bounds.left) bounds.left = edge_bounds.left;
+            if (edge_bounds.bottom < bounds.bottom) bounds.bottom = edge_bounds.bottom;
+            if (edge_bounds.right > bounds.right) bounds.right = edge_bounds.right;
+            if (edge_bounds.top > bounds.top) bounds.top = edge_bounds.top;
+        }
+    }
+
+    return bounds;
+}
+
+int msdf_contour_winding(const MSDF_Contour *contour)
+{
+    if (!contour || contour->edge_count == 0) return 0;
+
+    /* Calculate signed area using shoelace formula */
+    double area = 0.0;
+
+    for (int i = 0; i < contour->edge_count; i++) {
+        MSDF_EdgeSegment *edge = &contour->edges[i];
+
+        /* Sample edge at multiple points for curved edges */
+        int samples = (edge->type == MSDF_EDGE_LINEAR) ? 1 : 8;
+
+        for (int s = 0; s < samples; s++) {
+            double t0 = (double)s / samples;
+            double t1 = (double)(s + 1) / samples;
+
+            MSDF_Vector2 p0 = msdf_edge_point_at(edge, t0);
+            MSDF_Vector2 p1 = msdf_edge_point_at(edge, t1);
+
+            area += (p1.x - p0.x) * (p1.y + p0.y);
+        }
+    }
+
+    /* Positive area = clockwise, negative = counter-clockwise */
+    if (area > 0) return 1;
+    if (area < 0) return -1;
+    return 0;
+}
+
+void msdf_contour_reverse(MSDF_Contour *contour)
+{
+    if (!contour || contour->edge_count <= 1) return;
+
+    /* Reverse array order */
+    for (int i = 0; i < contour->edge_count / 2; i++) {
+        int j = contour->edge_count - 1 - i;
+        MSDF_EdgeSegment temp = contour->edges[i];
+        contour->edges[i] = contour->edges[j];
+        contour->edges[j] = temp;
+    }
+
+    /* Reverse each edge's control points */
+    for (int i = 0; i < contour->edge_count; i++) {
+        MSDF_EdgeSegment *edge = &contour->edges[i];
+
+        switch (edge->type) {
+            case MSDF_EDGE_LINEAR: {
+                MSDF_Vector2 temp = edge->p[0];
+                edge->p[0] = edge->p[1];
+                edge->p[1] = temp;
+                break;
+            }
+            case MSDF_EDGE_QUADRATIC: {
+                MSDF_Vector2 temp = edge->p[0];
+                edge->p[0] = edge->p[2];
+                edge->p[2] = temp;
+                /* p[1] (control point) stays in place */
+                break;
+            }
+            case MSDF_EDGE_CUBIC: {
+                MSDF_Vector2 temp0 = edge->p[0];
+                MSDF_Vector2 temp1 = edge->p[1];
+                edge->p[0] = edge->p[3];
+                edge->p[1] = edge->p[2];
+                edge->p[2] = temp1;
+                edge->p[3] = temp0;
+                break;
+            }
+        }
+    }
+}
+
+void msdf_shape_normalize(MSDF_Shape *shape)
+{
+    if (!shape || msdf_shape_is_empty(shape)) return;
+
+    MSDF_Bounds bounds = msdf_shape_get_bounds(shape);
+    double width = bounds.right - bounds.left;
+    double height = bounds.top - bounds.bottom;
+
+    if (width <= 0 || height <= 0) return;
+
+    double scale = 1.0 / ((width > height) ? width : height);
+    double offset_x = -bounds.left - width * 0.5;
+    double offset_y = -bounds.bottom - height * 0.5;
+
+    /* Transform all control points */
+    for (int i = 0; i < shape->contour_count; i++) {
+        MSDF_Contour *contour = &shape->contours[i];
+
+        for (int j = 0; j < contour->edge_count; j++) {
+            MSDF_EdgeSegment *edge = &contour->edges[j];
+
+            int num_points;
+            switch (edge->type) {
+                case MSDF_EDGE_LINEAR:    num_points = 2; break;
+                case MSDF_EDGE_QUADRATIC: num_points = 3; break;
+                case MSDF_EDGE_CUBIC:     num_points = 4; break;
+                default: num_points = 0; break;
+            }
+
+            for (int k = 0; k < num_points; k++) {
+                edge->p[k].x = (edge->p[k].x + offset_x) * scale;
+                edge->p[k].y = (edge->p[k].y + offset_y) * scale;
+            }
+        }
+    }
+}
+
+/* ============================================================================
+ * Edge Segment Math
+ * ============================================================================ */
+
+MSDF_Vector2 msdf_edge_point_at(const MSDF_EdgeSegment *edge, double t)
+{
+    if (!edge) return msdf_vec2(0, 0);
+
+    switch (edge->type) {
+        case MSDF_EDGE_LINEAR: {
+            /* Linear interpolation: P = (1-t)*P0 + t*P1 */
+            return msdf_vec2_add(
+                msdf_vec2_mul(edge->p[0], 1.0 - t),
+                msdf_vec2_mul(edge->p[1], t)
+            );
+        }
+
+        case MSDF_EDGE_QUADRATIC: {
+            /* Quadratic bezier: P = (1-t)^2*P0 + 2*(1-t)*t*P1 + t^2*P2 */
+            double t2 = t * t;
+            double mt = 1.0 - t;
+            double mt2 = mt * mt;
+
+            return msdf_vec2_add(
+                msdf_vec2_add(
+                    msdf_vec2_mul(edge->p[0], mt2),
+                    msdf_vec2_mul(edge->p[1], 2.0 * mt * t)
+                ),
+                msdf_vec2_mul(edge->p[2], t2)
+            );
+        }
+
+        case MSDF_EDGE_CUBIC: {
+            /* Cubic bezier: P = (1-t)^3*P0 + 3*(1-t)^2*t*P1 + 3*(1-t)*t^2*P2 + t^3*P3 */
+            double t2 = t * t;
+            double t3 = t2 * t;
+            double mt = 1.0 - t;
+            double mt2 = mt * mt;
+            double mt3 = mt2 * mt;
+
+            return msdf_vec2_add(
+                msdf_vec2_add(
+                    msdf_vec2_mul(edge->p[0], mt3),
+                    msdf_vec2_mul(edge->p[1], 3.0 * mt2 * t)
+                ),
+                msdf_vec2_add(
+                    msdf_vec2_mul(edge->p[2], 3.0 * mt * t2),
+                    msdf_vec2_mul(edge->p[3], t3)
+                )
+            );
+        }
+    }
+
+    return msdf_vec2(0, 0);
+}
+
+MSDF_Vector2 msdf_edge_direction_at(const MSDF_EdgeSegment *edge, double t)
+{
+    if (!edge) return msdf_vec2(0, 0);
+
+    switch (edge->type) {
+        case MSDF_EDGE_LINEAR: {
+            /* Constant direction: P1 - P0 */
+            return msdf_vec2_sub(edge->p[1], edge->p[0]);
+        }
+
+        case MSDF_EDGE_QUADRATIC: {
+            /* Derivative: 2*(1-t)*(P1-P0) + 2*t*(P2-P1) */
+            MSDF_Vector2 d0 = msdf_vec2_sub(edge->p[1], edge->p[0]);
+            MSDF_Vector2 d1 = msdf_vec2_sub(edge->p[2], edge->p[1]);
+
+            MSDF_Vector2 tangent = msdf_vec2_add(
+                msdf_vec2_mul(d0, 2.0 * (1.0 - t)),
+                msdf_vec2_mul(d1, 2.0 * t)
+            );
+
+            /* Handle degenerate case at endpoints */
+            if (msdf_vec2_length_squared(tangent) < MSDF_EPSILON) {
+                return msdf_vec2_sub(edge->p[2], edge->p[0]);
+            }
+            return tangent;
+        }
+
+        case MSDF_EDGE_CUBIC: {
+            /* Derivative: 3*(1-t)^2*(P1-P0) + 6*(1-t)*t*(P2-P1) + 3*t^2*(P3-P2) */
+            MSDF_Vector2 d0 = msdf_vec2_sub(edge->p[1], edge->p[0]);
+            MSDF_Vector2 d1 = msdf_vec2_sub(edge->p[2], edge->p[1]);
+            MSDF_Vector2 d2 = msdf_vec2_sub(edge->p[3], edge->p[2]);
+
+            double mt = 1.0 - t;
+
+            MSDF_Vector2 tangent = msdf_vec2_add(
+                msdf_vec2_add(
+                    msdf_vec2_mul(d0, 3.0 * mt * mt),
+                    msdf_vec2_mul(d1, 6.0 * mt * t)
+                ),
+                msdf_vec2_mul(d2, 3.0 * t * t)
+            );
+
+            /* Handle degenerate case */
+            if (msdf_vec2_length_squared(tangent) < MSDF_EPSILON) {
+                /* Try second derivative or fallback to chord */
+                tangent = msdf_vec2_sub(edge->p[3], edge->p[0]);
+            }
+            return tangent;
+        }
+    }
+
+    return msdf_vec2(0, 0);
+}
+
+MSDF_Bounds msdf_edge_get_bounds(const MSDF_EdgeSegment *edge)
+{
+    MSDF_Bounds bounds = {
+        .left = DBL_MAX,
+        .bottom = DBL_MAX,
+        .right = -DBL_MAX,
+        .top = -DBL_MAX
+    };
+
+    if (!edge) return bounds;
+
+    /* Include all control points */
+    int num_points;
+    switch (edge->type) {
+        case MSDF_EDGE_LINEAR:    num_points = 2; break;
+        case MSDF_EDGE_QUADRATIC: num_points = 3; break;
+        case MSDF_EDGE_CUBIC:     num_points = 4; break;
+        default: return bounds;
+    }
+
+    for (int i = 0; i < num_points; i++) {
+        if (edge->p[i].x < bounds.left) bounds.left = edge->p[i].x;
+        if (edge->p[i].x > bounds.right) bounds.right = edge->p[i].x;
+        if (edge->p[i].y < bounds.bottom) bounds.bottom = edge->p[i].y;
+        if (edge->p[i].y > bounds.top) bounds.top = edge->p[i].y;
+    }
+
+    /* For bezier curves, sample additional points to catch extrema */
+    if (edge->type != MSDF_EDGE_LINEAR) {
+        for (int i = 1; i < 8; i++) {
+            double t = i / 8.0;
+            MSDF_Vector2 p = msdf_edge_point_at(edge, t);
+
+            if (p.x < bounds.left) bounds.left = p.x;
+            if (p.x > bounds.right) bounds.right = p.x;
+            if (p.y < bounds.bottom) bounds.bottom = p.y;
+            if (p.y > bounds.top) bounds.top = p.y;
+        }
+    }
+
+    return bounds;
+}
+
+/* ============================================================================
+ * Signed Distance Calculation
+ * ============================================================================ */
+
+/* Helper: solve quadratic equation ax^2 + bx + c = 0, return number of real roots */
+static int solve_quadratic(double a, double b, double c, double roots[2])
+{
+    if (fabs(a) < MSDF_EPSILON) {
+        /* Linear equation */
+        if (fabs(b) < MSDF_EPSILON) {
+            return 0;
+        }
+        roots[0] = -c / b;
+        return 1;
+    }
+
+    double discriminant = b * b - 4.0 * a * c;
+    if (discriminant < 0) {
+        return 0;
+    }
+
+    if (discriminant < MSDF_EPSILON) {
+        roots[0] = -b / (2.0 * a);
+        return 1;
+    }
+
+    double sqrt_d = sqrt(discriminant);
+    roots[0] = (-b - sqrt_d) / (2.0 * a);
+    roots[1] = (-b + sqrt_d) / (2.0 * a);
+    return 2;
+}
+
+/* Helper: solve cubic equation t^3 + a*t^2 + b*t + c = 0 (depressed form) */
+static int solve_cubic_normalized(double a, double b, double c, double roots[3])
+{
+    /* Convert to depressed cubic: t = x - a/3 */
+    double a2 = a * a;
+    double q = (3.0 * b - a2) / 9.0;
+    double r = (9.0 * a * b - 27.0 * c - 2.0 * a2 * a) / 54.0;
+    double q3 = q * q * q;
+    double d = q3 + r * r;
+
+    double a_over_3 = a / 3.0;
+
+    if (d >= 0) {
+        /* One or two real roots */
+        double sqrt_d = sqrt(d);
+        double s = cbrt(r + sqrt_d);
+        double t = cbrt(r - sqrt_d);
+
+        roots[0] = s + t - a_over_3;
+
+        if (fabs(d) < MSDF_EPSILON) {
+            /* Two real roots (one is repeated) */
+            roots[1] = -0.5 * (s + t) - a_over_3;
+            return 2;
+        }
+        return 1;
+    }
+
+    /* Three real roots */
+    double theta = acos(r / sqrt(-q3));
+    double sqrt_q = 2.0 * sqrt(-q);
+
+    roots[0] = sqrt_q * cos(theta / 3.0) - a_over_3;
+    roots[1] = sqrt_q * cos((theta + 2.0 * M_PI) / 3.0) - a_over_3;
+    roots[2] = sqrt_q * cos((theta + 4.0 * M_PI) / 3.0) - a_over_3;
+    return 3;
+}
+
+/* Signed distance to linear segment */
+static MSDF_SignedDistance linear_signed_distance(const MSDF_EdgeSegment *edge,
+                                                    MSDF_Vector2 point,
+                                                    double *out_param)
+{
+    MSDF_Vector2 p0 = edge->p[0];
+    MSDF_Vector2 p1 = edge->p[1];
+
+    MSDF_Vector2 aq = msdf_vec2_sub(point, p0);
+    MSDF_Vector2 ab = msdf_vec2_sub(p1, p0);
+
+    double param = msdf_vec2_dot(aq, ab) / msdf_vec2_dot(ab, ab);
+
+    /* Clamp to segment */
+    if (param < 0) param = 0;
+    else if (param > 1) param = 1;
+
+    MSDF_Vector2 closest = msdf_vec2_add(p0, msdf_vec2_mul(ab, param));
+    MSDF_Vector2 to_point = msdf_vec2_sub(point, closest);
+
+    double distance = msdf_vec2_length(to_point);
+
+    /* Sign based on which side of the line the point is on */
+    double cross = msdf_vec2_cross(ab, aq);
+    if (cross < 0) distance = -distance;
+
+    /* Dot product for disambiguation */
+    MSDF_Vector2 dir = msdf_vec2_normalize(ab);
+    MSDF_Vector2 to_point_norm = msdf_vec2_length(to_point) > MSDF_EPSILON
+        ? msdf_vec2_normalize(to_point)
+        : msdf_vec2(0, 0);
+    double dot = fabs(msdf_vec2_dot(dir, to_point_norm));
+
+    if (out_param) *out_param = param;
+
+    return (MSDF_SignedDistance){ distance, dot };
+}
+
+/* Signed distance to quadratic bezier */
+static MSDF_SignedDistance quadratic_signed_distance(const MSDF_EdgeSegment *edge,
+                                                       MSDF_Vector2 point,
+                                                       double *out_param)
+{
+    MSDF_Vector2 p0 = edge->p[0];
+    MSDF_Vector2 p1 = edge->p[1];
+    MSDF_Vector2 p2 = edge->p[2];
+
+    /* Coefficients for the bezier curve */
+    MSDF_Vector2 qa = msdf_vec2_sub(point, p0);
+    MSDF_Vector2 ab = msdf_vec2_sub(p1, p0);
+    MSDF_Vector2 bc = msdf_vec2_sub(p2, p1);
+    MSDF_Vector2 qc = msdf_vec2_sub(p2, point);
+    MSDF_Vector2 ac = msdf_vec2_sub(p2, p0);
+
+    double a = msdf_vec2_dot(bc, bc);
+    double b = 3.0 * msdf_vec2_dot(ab, bc);
+    double c = 2.0 * msdf_vec2_dot(ab, ab) + msdf_vec2_dot(qa, bc);
+    double d = msdf_vec2_dot(qa, ab);
+
+    /* Solve cubic for parameter t */
+    double roots[3];
+    int num_roots = 0;
+
+    if (fabs(a) > MSDF_EPSILON) {
+        /* Normalize to t^3 + ... form */
+        num_roots = solve_cubic_normalized(b / a, c / a, d / a, roots);
+    } else if (fabs(b) > MSDF_EPSILON) {
+        /* Quadratic */
+        num_roots = solve_quadratic(b, c, d, roots);
+    } else if (fabs(c) > MSDF_EPSILON) {
+        /* Linear */
+        roots[0] = -d / c;
+        num_roots = 1;
+    }
+
+    /* Find closest point among roots and endpoints */
+    double min_dist_sq = DBL_MAX;
+    double best_param = 0;
+    MSDF_Vector2 best_point = p0;
+
+    /* Check endpoints */
+    double dist_p0 = msdf_vec2_length_squared(qa);
+    double dist_p2 = msdf_vec2_length_squared(qc);
+
+    if (dist_p0 < min_dist_sq) {
+        min_dist_sq = dist_p0;
+        best_param = 0;
+        best_point = p0;
+    }
+    if (dist_p2 < min_dist_sq) {
+        min_dist_sq = dist_p2;
+        best_param = 1;
+        best_point = p2;
+    }
+
+    /* Check roots in [0, 1] */
+    for (int i = 0; i < num_roots; i++) {
+        double t = roots[i];
+        if (t > MSDF_EPSILON && t < 1.0 - MSDF_EPSILON) {
+            MSDF_Vector2 p = msdf_edge_point_at(edge, t);
+            MSDF_Vector2 diff = msdf_vec2_sub(point, p);
+            double dist_sq = msdf_vec2_length_squared(diff);
+
+            if (dist_sq < min_dist_sq) {
+                min_dist_sq = dist_sq;
+                best_param = t;
+                best_point = p;
+            }
+        }
+    }
+
+    /* Calculate signed distance */
+    MSDF_Vector2 to_point = msdf_vec2_sub(point, best_point);
+    double distance = sqrt(min_dist_sq);
+
+    /* Sign based on curve orientation at closest point */
+    MSDF_Vector2 tangent = msdf_edge_direction_at(edge, best_param);
+    double cross = msdf_vec2_cross(tangent, to_point);
+    if (cross < 0) distance = -distance;
+
+    /* Dot product for disambiguation */
+    MSDF_Vector2 tangent_norm = msdf_vec2_normalize(tangent);
+    MSDF_Vector2 to_point_norm = distance != 0
+        ? msdf_vec2_normalize(to_point)
+        : msdf_vec2(0, 0);
+    double dot = fabs(msdf_vec2_dot(tangent_norm, to_point_norm));
+
+    if (out_param) *out_param = best_param;
+
+    return (MSDF_SignedDistance){ distance, dot };
+}
+
+/* Signed distance to cubic bezier (Newton-Raphson iteration) */
+static MSDF_SignedDistance cubic_signed_distance(const MSDF_EdgeSegment *edge,
+                                                   MSDF_Vector2 point,
+                                                   double *out_param)
+{
+    /* For cubic beziers, we use iterative refinement starting from samples */
+    double min_dist_sq = DBL_MAX;
+    double best_param = 0;
+    MSDF_Vector2 best_point = edge->p[0];
+
+    /* Sample at multiple points and refine */
+    const int num_samples = MSDF_CUBIC_SEARCH_ITERATIONS;
+
+    for (int i = 0; i <= num_samples; i++) {
+        double t = (double)i / num_samples;
+        MSDF_Vector2 p = msdf_edge_point_at(edge, t);
+        MSDF_Vector2 diff = msdf_vec2_sub(point, p);
+        double dist_sq = msdf_vec2_length_squared(diff);
+
+        if (dist_sq < min_dist_sq) {
+            min_dist_sq = dist_sq;
+            best_param = t;
+            best_point = p;
+        }
+    }
+
+    /* Newton-Raphson refinement */
+    for (int iter = 0; iter < MSDF_CUBIC_SEARCH_ITERATIONS; iter++) {
+        MSDF_Vector2 p = msdf_edge_point_at(edge, best_param);
+        MSDF_Vector2 d = msdf_edge_direction_at(edge, best_param);
+
+        MSDF_Vector2 diff = msdf_vec2_sub(point, p);
+        double numerator = msdf_vec2_dot(diff, d);
+        double denominator = msdf_vec2_dot(d, d);
+
+        if (fabs(denominator) < MSDF_EPSILON) break;
+
+        double delta = numerator / denominator;
+        double new_param = best_param + delta;
+
+        /* Clamp to [0, 1] */
+        if (new_param < 0) new_param = 0;
+        else if (new_param > 1) new_param = 1;
+
+        if (fabs(new_param - best_param) < MSDF_EPSILON) break;
+        best_param = new_param;
+
+        best_point = msdf_edge_point_at(edge, best_param);
+        diff = msdf_vec2_sub(point, best_point);
+        min_dist_sq = msdf_vec2_length_squared(diff);
+    }
+
+    /* Check endpoints (may be closer than iterative result) */
+    MSDF_Vector2 diff_p0 = msdf_vec2_sub(point, edge->p[0]);
+    MSDF_Vector2 diff_p3 = msdf_vec2_sub(point, edge->p[3]);
+
+    double dist_p0_sq = msdf_vec2_length_squared(diff_p0);
+    double dist_p3_sq = msdf_vec2_length_squared(diff_p3);
+
+    if (dist_p0_sq < min_dist_sq) {
+        min_dist_sq = dist_p0_sq;
+        best_param = 0;
+        best_point = edge->p[0];
+    }
+    if (dist_p3_sq < min_dist_sq) {
+        min_dist_sq = dist_p3_sq;
+        best_param = 1;
+        best_point = edge->p[3];
+    }
+
+    /* Calculate signed distance */
+    MSDF_Vector2 to_point = msdf_vec2_sub(point, best_point);
+    double distance = sqrt(min_dist_sq);
+
+    /* Sign based on curve orientation */
+    MSDF_Vector2 tangent = msdf_edge_direction_at(edge, best_param);
+    double cross = msdf_vec2_cross(tangent, to_point);
+    if (cross < 0) distance = -distance;
+
+    /* Dot product for disambiguation */
+    MSDF_Vector2 tangent_norm = msdf_vec2_normalize(tangent);
+    MSDF_Vector2 to_point_norm = distance != 0
+        ? msdf_vec2_normalize(to_point)
+        : msdf_vec2(0, 0);
+    double dot = fabs(msdf_vec2_dot(tangent_norm, to_point_norm));
+
+    if (out_param) *out_param = best_param;
+
+    return (MSDF_SignedDistance){ distance, dot };
+}
+
+MSDF_SignedDistance msdf_edge_signed_distance(const MSDF_EdgeSegment *edge,
+                                                MSDF_Vector2 point,
+                                                double *out_param)
+{
+    if (!edge) {
+        if (out_param) *out_param = 0;
+        return (MSDF_SignedDistance){ DBL_MAX, 0 };
+    }
+
+    switch (edge->type) {
+        case MSDF_EDGE_LINEAR:
+            return linear_signed_distance(edge, point, out_param);
+        case MSDF_EDGE_QUADRATIC:
+            return quadratic_signed_distance(edge, point, out_param);
+        case MSDF_EDGE_CUBIC:
+            return cubic_signed_distance(edge, point, out_param);
+    }
+
+    if (out_param) *out_param = 0;
+    return (MSDF_SignedDistance){ DBL_MAX, 0 };
+}
+
+/* ============================================================================
+ * Bitmap Operations
+ * ============================================================================ */
+
+bool msdf_bitmap_alloc(MSDF_Bitmap *bitmap, int width, int height, MSDF_BitmapFormat format)
+{
+    if (!bitmap || width <= 0 || height <= 0) {
+        carbon_set_error("Invalid bitmap parameters");
+        return false;
+    }
+
+    size_t size = (size_t)width * height * format * sizeof(float);
+    bitmap->data = (float *)malloc(size);
+    if (!bitmap->data) {
+        carbon_set_error("Failed to allocate bitmap");
+        return false;
+    }
+
+    /* Initialize to zero */
+    memset(bitmap->data, 0, size);
+
+    bitmap->width = width;
+    bitmap->height = height;
+    bitmap->format = format;
+
+    return true;
+}
+
+void msdf_bitmap_free(MSDF_Bitmap *bitmap)
+{
+    if (bitmap && bitmap->data) {
+        free(bitmap->data);
+        bitmap->data = NULL;
+        bitmap->width = 0;
+        bitmap->height = 0;
+    }
+}
+
+float *msdf_bitmap_pixel(MSDF_Bitmap *bitmap, int x, int y)
+{
+    if (!bitmap || !bitmap->data) return NULL;
+    if (x < 0 || x >= bitmap->width || y < 0 || y >= bitmap->height) return NULL;
+
+    return &bitmap->data[(y * bitmap->width + x) * bitmap->format];
+}
+
+const float *msdf_bitmap_pixel_const(const MSDF_Bitmap *bitmap, int x, int y)
+{
+    if (!bitmap || !bitmap->data) return NULL;
+    if (x < 0 || x >= bitmap->width || y < 0 || y >= bitmap->height) return NULL;
+
+    return &bitmap->data[(y * bitmap->width + x) * bitmap->format];
+}

@@ -213,7 +213,8 @@ TESTS_DIR := tests
 # Test source files
 TEST_SRCS := $(wildcard $(TESTS_DIR)/core/*.cpp) \
              $(wildcard $(TESTS_DIR)/strategy/*.cpp) \
-             $(wildcard $(TESTS_DIR)/ai/*.cpp)
+             $(wildcard $(TESTS_DIR)/ai/*.cpp) \
+             $(wildcard $(TESTS_DIR)/graphics/*.cpp)
 
 # Test objects (engine + test files + catch2)
 TEST_OBJS := $(patsubst $(TESTS_DIR)/%.cpp,$(BUILD_DIR)/tests/%.o,$(TEST_SRCS)) \
