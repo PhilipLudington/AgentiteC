@@ -395,6 +395,151 @@ void msdf_error_correction(MSDF_Bitmap *bitmap,
                             const MSDF_ErrorCorrectionConfig *config);
 
 /* ============================================================================
+ * Atlas Generation
+ * ============================================================================ */
+
+/* Opaque atlas handle */
+typedef struct MSDF_Atlas MSDF_Atlas;
+
+/* Atlas configuration */
+typedef struct MSDF_AtlasConfig {
+    const void *font_data;      /* TTF font data */
+    int font_data_size;         /* Size of font data */
+    bool copy_font_data;        /* If true, atlas copies font data internally */
+
+    int atlas_width;            /* Atlas texture width (default: 1024) */
+    int atlas_height;           /* Atlas texture height (default: 1024) */
+    float glyph_scale;          /* Glyph rendering size in pixels (default: 48) */
+    float pixel_range;          /* SDF range in pixels (default: 4) */
+    int padding;                /* Padding between glyphs (default: 2) */
+    MSDF_BitmapFormat format;   /* Output format (default: RGB) */
+} MSDF_AtlasConfig;
+
+/* Glyph info for rendering */
+typedef struct MSDF_GlyphInfo {
+    uint32_t codepoint;
+    float advance;              /* Horizontal advance (em units) */
+
+    /* Glyph quad bounds relative to baseline (em units) */
+    float plane_left, plane_bottom;
+    float plane_right, plane_top;
+
+    /* Atlas UV coordinates (normalized 0-1) */
+    float atlas_left, atlas_bottom;
+    float atlas_right, atlas_top;
+} MSDF_GlyphInfo;
+
+/* Font metrics */
+typedef struct MSDF_FontMetrics {
+    float em_size;
+    float ascender;
+    float descender;
+    float line_height;
+    int atlas_width;
+    int atlas_height;
+} MSDF_FontMetrics;
+
+/* Default configuration */
+#define MSDF_ATLAS_CONFIG_DEFAULT { \
+    .font_data = NULL, \
+    .font_data_size = 0, \
+    .copy_font_data = true, \
+    .atlas_width = 1024, \
+    .atlas_height = 1024, \
+    .glyph_scale = 48.0f, \
+    .pixel_range = 4.0f, \
+    .padding = 2, \
+    .format = MSDF_BITMAP_RGB \
+}
+
+/**
+ * Create an atlas generator from font data.
+ *
+ * @param config  Atlas configuration
+ * @return  New atlas, or NULL on failure. Caller must free with msdf_atlas_destroy().
+ */
+MSDF_Atlas *msdf_atlas_create(const MSDF_AtlasConfig *config);
+
+/**
+ * Destroy atlas and free all resources.
+ */
+void msdf_atlas_destroy(MSDF_Atlas *atlas);
+
+/**
+ * Add a single codepoint to the atlas.
+ *
+ * @param atlas  Atlas handle
+ * @param codepoint  Unicode codepoint to add
+ * @return  true if successful
+ */
+bool msdf_atlas_add_codepoint(MSDF_Atlas *atlas, uint32_t codepoint);
+
+/**
+ * Add ASCII printable characters (32-126) to the atlas.
+ */
+bool msdf_atlas_add_ascii(MSDF_Atlas *atlas);
+
+/**
+ * Add a range of codepoints to the atlas.
+ *
+ * @param atlas  Atlas handle
+ * @param first  First codepoint (inclusive)
+ * @param last   Last codepoint (inclusive)
+ */
+bool msdf_atlas_add_range(MSDF_Atlas *atlas, uint32_t first, uint32_t last);
+
+/**
+ * Add all characters from a string to the atlas.
+ * Currently supports ASCII; extend for UTF-8 if needed.
+ */
+bool msdf_atlas_add_string(MSDF_Atlas *atlas, const char *str);
+
+/**
+ * Generate the atlas bitmap.
+ * Must be called after adding all desired glyphs.
+ *
+ * @param atlas  Atlas handle
+ * @return  true if successful
+ */
+bool msdf_atlas_generate(MSDF_Atlas *atlas);
+
+/**
+ * Get glyph information for rendering.
+ *
+ * @param atlas  Atlas handle
+ * @param codepoint  Unicode codepoint
+ * @param out_info  Output glyph info
+ * @return  true if glyph exists
+ */
+bool msdf_atlas_get_glyph(const MSDF_Atlas *atlas, uint32_t codepoint,
+                          MSDF_GlyphInfo *out_info);
+
+/**
+ * Get number of glyphs in atlas.
+ */
+int msdf_atlas_get_glyph_count(const MSDF_Atlas *atlas);
+
+/**
+ * Get the generated atlas bitmap.
+ * Returns NULL if atlas hasn't been generated yet.
+ */
+const MSDF_Bitmap *msdf_atlas_get_bitmap(const MSDF_Atlas *atlas);
+
+/**
+ * Get font metrics.
+ */
+void msdf_atlas_get_metrics(const MSDF_Atlas *atlas, MSDF_FontMetrics *out_metrics);
+
+/**
+ * Export atlas bitmap to RGBA8 format for GPU upload.
+ *
+ * @param atlas  Atlas handle
+ * @param out_data  Output buffer (must be atlas_width * atlas_height * 4 bytes)
+ * @return  true if successful
+ */
+bool msdf_atlas_get_bitmap_rgba8(const MSDF_Atlas *atlas, unsigned char *out_data);
+
+/* ============================================================================
  * Utility Functions
  * ============================================================================ */
 

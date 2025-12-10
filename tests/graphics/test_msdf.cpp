@@ -460,3 +460,112 @@ TEST_CASE("MSDF projection from bounds", "[msdf][projection]") {
     REQUIRE(proj.translate_x == Approx(2.0)); /* padding */
     REQUIRE(proj.translate_y == Approx(2.0));
 }
+
+/* ============================================================================
+ * Atlas Tests (requires font file)
+ * ============================================================================ */
+
+/* Helper to load a font file for testing */
+static unsigned char *load_test_font(const char *path, int *out_size)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    unsigned char *data = (unsigned char *)malloc(size);
+    if (!data) {
+        fclose(f);
+        return NULL;
+    }
+
+    size_t read = fread(data, 1, size, f);
+    fclose(f);
+
+    if ((long)read != size) {
+        free(data);
+        return NULL;
+    }
+
+    *out_size = (int)size;
+    return data;
+}
+
+TEST_CASE("MSDF atlas creation and destruction", "[msdf][atlas]") {
+    /* Try to load test font */
+    int font_size = 0;
+    unsigned char *font_data = load_test_font("assets/fonts/Roboto-Regular.ttf", &font_size);
+
+    if (!font_data) {
+        /* Skip test if font not available */
+        WARN("Skipping atlas test - font file not found");
+        return;
+    }
+
+    MSDF_AtlasConfig config = MSDF_ATLAS_CONFIG_DEFAULT;
+    config.font_data = font_data;
+    config.font_data_size = font_size;
+    config.copy_font_data = true;
+
+    MSDF_Atlas *atlas = msdf_atlas_create(&config);
+    REQUIRE(atlas != nullptr);
+
+    /* Can free original data since we copied */
+    free(font_data);
+
+    msdf_atlas_destroy(atlas);
+}
+
+TEST_CASE("MSDF atlas ASCII generation", "[msdf][atlas]") {
+    int font_size = 0;
+    unsigned char *font_data = load_test_font("assets/fonts/Roboto-Regular.ttf", &font_size);
+
+    if (!font_data) {
+        WARN("Skipping atlas test - font file not found");
+        return;
+    }
+
+    MSDF_AtlasConfig config = MSDF_ATLAS_CONFIG_DEFAULT;
+    config.font_data = font_data;
+    config.font_data_size = font_size;
+    config.atlas_width = 512;
+    config.atlas_height = 512;
+    config.glyph_scale = 32.0f;
+
+    MSDF_Atlas *atlas = msdf_atlas_create(&config);
+    REQUIRE(atlas != nullptr);
+    free(font_data);
+
+    /* Add ASCII characters */
+    REQUIRE(msdf_atlas_add_ascii(atlas));
+    REQUIRE(msdf_atlas_get_glyph_count(atlas) == 95); /* 126 - 32 + 1 */
+
+    /* Generate atlas */
+    REQUIRE(msdf_atlas_generate(atlas));
+
+    /* Check bitmap was created */
+    const MSDF_Bitmap *bitmap = msdf_atlas_get_bitmap(atlas);
+    REQUIRE(bitmap != nullptr);
+    REQUIRE(bitmap->width == 512);
+    REQUIRE(bitmap->height == 512);
+    REQUIRE(bitmap->format == MSDF_BITMAP_RGB);
+
+    /* Check glyph lookup */
+    MSDF_GlyphInfo info;
+    REQUIRE(msdf_atlas_get_glyph(atlas, 'A', &info));
+    REQUIRE(info.codepoint == 'A');
+    REQUIRE(info.advance > 0);
+    REQUIRE(info.atlas_right > info.atlas_left);
+    REQUIRE(info.atlas_top > info.atlas_bottom);
+
+    /* Check metrics */
+    MSDF_FontMetrics metrics;
+    msdf_atlas_get_metrics(atlas, &metrics);
+    REQUIRE(metrics.em_size > 0);
+    REQUIRE(metrics.ascender > 0);
+    REQUIRE(metrics.line_height > 0);
+
+    msdf_atlas_destroy(atlas);
+}
