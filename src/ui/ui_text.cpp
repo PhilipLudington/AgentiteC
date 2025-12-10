@@ -437,8 +437,12 @@ static float cui_draw_bitmap_text(CUI_Context *ctx, CUI_Font *font, const char *
     Carbon_Font *bf = font->bitmap_font;
     float start_x = x;
 
-    /* Adjust y to baseline */
-    y += bf->ascent * scale;
+    /* y is the top of the line box. Glyphs are positioned using their yoff
+     * which is relative to the baseline. To convert:
+     * - baseline = y + ascent
+     * - glyph_top = baseline + yoff = y + ascent + yoff
+     * Since g->y0 = yoff, glyph_top = y + ascent + g->y0
+     */
 
     while (*text) {
         unsigned char c = (unsigned char)*text;
@@ -446,9 +450,9 @@ static float cui_draw_bitmap_text(CUI_Context *ctx, CUI_Font *font, const char *
             GlyphInfo *g = &bf->glyphs[c - FIRST_CHAR];
 
             float x0 = x + g->x0 * scale;
-            float y0 = y + (g->y0 - bf->ascent) * scale;
+            float y0 = y + (bf->ascent + g->y0) * scale;
             float x1 = x + g->x1 * scale;
-            float y1 = y + (g->y1 - bf->ascent) * scale;
+            float y1 = y + (bf->ascent + g->y1) * scale;
 
             cui_draw_textured_quad_ex(ctx, bf->atlas_texture,
                                        x0, y0, x1, y1,
