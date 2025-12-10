@@ -647,7 +647,9 @@ static void cui_flush_draw_cmd(CUI_Context *ctx)
 
     /* Create draw command */
     CUI_DrawCmd *cmd = &ctx->draw_cmds[ctx->draw_cmd_count++];
-    cmd->type = ctx->current_texture ? CUI_DRAW_CMD_BITMAP_TEXT : CUI_DRAW_CMD_SOLID;
+    /* Detect solid primitives: white_texture or no texture means solid color */
+    bool is_solid = !ctx->current_texture || (ctx->current_texture == ctx->white_texture);
+    cmd->type = is_solid ? CUI_DRAW_CMD_SOLID : CUI_DRAW_CMD_BITMAP_TEXT;
     cmd->texture = ctx->current_texture ? ctx->current_texture : ctx->white_texture;
     cmd->layer = ctx->current_layer;
     cmd->vertex_offset = ctx->cmd_vertex_start;
@@ -1120,13 +1122,12 @@ static int cui_draw_cmd_compare(const void *a, const void *b)
         return cmd_a->layer - cmd_b->layer;
     }
 
-    /* Within same layer, sort by texture to maximize batching */
-    if (cmd_a->texture != cmd_b->texture) {
-        return (cmd_a->texture < cmd_b->texture) ? -1 : 1;
-    }
-
-    /* Preserve original order for same layer and texture */
-    return (int)(cmd_a->vertex_offset - cmd_b->vertex_offset);
+    /* Within same layer, preserve original draw order to maintain correct
+     * front-to-back ordering (painter's algorithm). Texture batching would
+     * break this ordering and cause primitives to overdraw incorrectly. */
+    if (cmd_a->vertex_offset < cmd_b->vertex_offset) return -1;
+    if (cmd_a->vertex_offset > cmd_b->vertex_offset) return 1;
+    return 0;
 }
 
 /* ============================================================================
