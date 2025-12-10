@@ -978,3 +978,141 @@ void cui_tooltip(CUI_Context *ctx, const char *text)
                           ctx->theme.border, 1.0f);
     cui_draw_text(ctx, text, x + pad, y + pad, ctx->theme.text);
 }
+
+/* ============================================================================
+ * Multi-Select
+ * ============================================================================ */
+
+#include <stdlib.h>
+
+CUI_MultiSelectState cui_multi_select_create(int capacity)
+{
+    CUI_MultiSelectState state = {0};
+    state.capacity = capacity;
+    state.selected_indices = (int *)calloc(capacity, sizeof(int));
+    state.anchor_index = -1;
+    state.last_clicked = -1;
+    return state;
+}
+
+void cui_multi_select_destroy(CUI_MultiSelectState *state)
+{
+    if (!state) return;
+    free(state->selected_indices);
+    state->selected_indices = NULL;
+    state->capacity = 0;
+    state->selected_count = 0;
+}
+
+void cui_multi_select_clear(CUI_MultiSelectState *state)
+{
+    if (!state) return;
+    state->selected_count = 0;
+    state->anchor_index = -1;
+    state->last_clicked = -1;
+}
+
+bool cui_multi_select_is_selected(CUI_MultiSelectState *state, int index)
+{
+    if (!state) return false;
+    for (int i = 0; i < state->selected_count; i++) {
+        if (state->selected_indices[i] == index) return true;
+    }
+    return false;
+}
+
+/* Internal: add index to selection if not already selected */
+static void cui_multi_select_add(CUI_MultiSelectState *state, int index)
+{
+    if (!state || state->selected_count >= state->capacity) return;
+    if (cui_multi_select_is_selected(state, index)) return;
+    state->selected_indices[state->selected_count++] = index;
+}
+
+/* Internal: remove index from selection */
+static void cui_multi_select_remove(CUI_MultiSelectState *state, int index)
+{
+    if (!state) return;
+    for (int i = 0; i < state->selected_count; i++) {
+        if (state->selected_indices[i] == index) {
+            /* Shift remaining elements */
+            for (int j = i; j < state->selected_count - 1; j++) {
+                state->selected_indices[j] = state->selected_indices[j + 1];
+            }
+            state->selected_count--;
+            return;
+        }
+    }
+}
+
+/* Internal: toggle selection of index */
+static void cui_multi_select_toggle(CUI_MultiSelectState *state, int index)
+{
+    if (cui_multi_select_is_selected(state, index)) {
+        cui_multi_select_remove(state, index);
+    } else {
+        cui_multi_select_add(state, index);
+    }
+}
+
+void cui_multi_select_begin(CUI_Context *ctx, CUI_MultiSelectState *state)
+{
+    if (!ctx || !state) return;
+    ctx->multi_select = state;
+}
+
+bool cui_multi_select_item(CUI_Context *ctx, CUI_MultiSelectState *state,
+                           int index, bool *is_selected)
+{
+    if (!ctx || !state) return false;
+
+    bool changed = false;
+
+    /* Check for click interaction */
+    /* This should be called after the item's visual rect is determined */
+    /* For now, we just handle the selection logic when clicked */
+
+    /* Determine selection behavior based on modifiers */
+    if (ctx->input.mouse_pressed[0]) {
+        /* We need to be called from within an actual clickable item context */
+        /* The calling code should check if this item was clicked */
+        /* For simplicity, we assume the caller has determined a click occurred */
+
+        if (ctx->input.ctrl) {
+            /* Ctrl+Click: toggle single item */
+            cui_multi_select_toggle(state, index);
+            state->anchor_index = index;
+            changed = true;
+        } else if (ctx->input.shift && state->anchor_index >= 0) {
+            /* Shift+Click: select range from anchor to clicked */
+            int start = state->anchor_index < index ? state->anchor_index : index;
+            int end = state->anchor_index > index ? state->anchor_index : index;
+
+            /* Clear existing selection */
+            state->selected_count = 0;
+
+            /* Select range */
+            for (int i = start; i <= end && state->selected_count < state->capacity; i++) {
+                state->selected_indices[state->selected_count++] = i;
+            }
+            changed = true;
+        } else {
+            /* Regular click: select single, clear others */
+            state->selected_count = 0;
+            cui_multi_select_add(state, index);
+            state->anchor_index = index;
+            changed = true;
+        }
+
+        state->last_clicked = index;
+    }
+
+    if (is_selected) *is_selected = cui_multi_select_is_selected(state, index);
+    return changed;
+}
+
+void cui_multi_select_end(CUI_Context *ctx)
+{
+    if (!ctx) return;
+    ctx->multi_select = NULL;
+}

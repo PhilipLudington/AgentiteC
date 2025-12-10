@@ -147,6 +147,21 @@ typedef struct CUI_Input {
 
 /* Glyph data is stored as opaque pointer, actual type is stbtt_bakedchar* */
 
+/* Table sort specification (forward declared for use in context) */
+typedef struct CUI_TableSortSpec {
+    int column_index;
+    bool descending;
+} CUI_TableSortSpec;
+
+/* Multi-select state (forward declared for use in context) */
+typedef struct CUI_MultiSelectState {
+    int *selected_indices;      /* Array of selected indices */
+    int selected_count;         /* Number of selected items */
+    int capacity;               /* Capacity of selected_indices array */
+    int anchor_index;           /* Anchor for shift-click range selection */
+    int last_clicked;           /* Last clicked index */
+} CUI_MultiSelectState;
+
 /* Main UI context */
 typedef struct CUI_Context {
     /* GPU resources */
@@ -214,6 +229,44 @@ typedef struct CUI_Context {
     /* Text input tracking */
     CUI_Id prev_focused;            /* Previous frame's focused widget */
     SDL_Window *window;             /* Window for text input control */
+
+    /* Path building state */
+    float *path_points;             /* Array of (x, y) pairs */
+    uint32_t path_count;            /* Number of points */
+    uint32_t path_capacity;         /* Capacity of path_points array */
+
+    /* Table state (active table during begin/end) */
+    struct {
+        CUI_Id id;                  /* Current table ID */
+        int column_count;           /* Number of columns */
+        int current_column;         /* Current column index */
+        int current_row;            /* Current row index */
+        uint32_t flags;             /* Table flags */
+        CUI_Rect bounds;            /* Table bounds */
+        float row_height;           /* Height of each row */
+        float *column_widths;       /* Array of column widths */
+        const char **column_labels; /* Array of column labels */
+        uint32_t *column_flags;     /* Array of column flags */
+        int columns_setup;          /* Number of columns set up */
+        float scroll_x, scroll_y;   /* Scroll position */
+        float content_width;        /* Total content width */
+        float content_height;       /* Total content height */
+        CUI_TableSortSpec sort_spec;/* Current sort specification */
+        bool sort_specs_changed;    /* Whether sort changed this frame */
+    } table;
+
+    /* Active multi-select state pointer (set during begin/end) */
+    CUI_MultiSelectState *multi_select;
+
+    /* Draw channel state for layer sorting */
+    struct {
+        int channel_count;          /* Number of channels (0 = not split) */
+        int current_channel;        /* Current active channel */
+        uint32_t *channel_starts;   /* Start vertex index for each channel */
+        uint32_t *channel_counts;   /* Vertex count for each channel */
+        uint32_t *channel_idx_starts; /* Start index index for each channel */
+        uint32_t *channel_idx_counts; /* Index count for each channel */
+    } channels;
 } CUI_Context;
 
 /* Panel flags */
@@ -223,6 +276,31 @@ typedef struct CUI_Context {
 #define CUI_PANEL_TITLE_BAR     (1 << 3)
 #define CUI_PANEL_NO_SCROLLBAR  (1 << 4)
 #define CUI_PANEL_BORDER        (1 << 5)
+
+/* Table flags */
+#define CUI_TABLE_RESIZABLE     (1 << 0)
+#define CUI_TABLE_REORDERABLE   (1 << 1)
+#define CUI_TABLE_SORTABLE      (1 << 2)
+#define CUI_TABLE_HIDEABLE      (1 << 3)
+#define CUI_TABLE_BORDERS       (1 << 4)
+#define CUI_TABLE_ROW_HIGHLIGHT (1 << 5)
+#define CUI_TABLE_SCROLL_X      (1 << 6)
+#define CUI_TABLE_SCROLL_Y      (1 << 7)
+
+/* Table column flags */
+#define CUI_TABLE_COLUMN_DEFAULT_SORT   (1 << 0)
+#define CUI_TABLE_COLUMN_NO_SORT        (1 << 1)
+#define CUI_TABLE_COLUMN_NO_RESIZE      (1 << 2)
+#define CUI_TABLE_COLUMN_NO_HIDE        (1 << 3)
+
+/* Color picker flags */
+#define CUI_COLORPICKER_NO_ALPHA     (1 << 0)
+#define CUI_COLORPICKER_HDR          (1 << 1)
+#define CUI_COLORPICKER_WHEEL        (1 << 2)  /* Use color wheel instead of square */
+#define CUI_COLORPICKER_INPUT_RGB    (1 << 3)  /* Show RGB input fields */
+#define CUI_COLORPICKER_INPUT_HSV    (1 << 4)  /* Show HSV input fields */
+#define CUI_COLORPICKER_INPUT_HEX    (1 << 5)  /* Show hex input field */
+#define CUI_COLORPICKER_PALETTE      (1 << 6)  /* Show saved color palette */
 
 /* ============================================================================
  * Lifecycle Functions
@@ -347,6 +425,46 @@ void cui_progress_bar_colored(CUI_Context *ctx, float value, float min, float ma
 /* Collapsible sections */
 bool cui_collapsing_header(CUI_Context *ctx, const char *label);
 
+/* Tables */
+bool cui_begin_table(CUI_Context *ctx, const char *id, int columns,
+                     uint32_t flags, float width, float height);
+void cui_table_setup_column(CUI_Context *ctx, const char *label,
+                            uint32_t flags, float init_width);
+void cui_table_headers_row(CUI_Context *ctx);
+void cui_table_next_row(CUI_Context *ctx);
+bool cui_table_next_column(CUI_Context *ctx);
+bool cui_table_set_column(CUI_Context *ctx, int column);
+CUI_TableSortSpec *cui_table_get_sort_specs(CUI_Context *ctx, int *count);
+bool cui_table_sort_specs_changed(CUI_Context *ctx);
+void cui_end_table(CUI_Context *ctx);
+
+/* Multi-Select */
+CUI_MultiSelectState cui_multi_select_create(int capacity);
+void cui_multi_select_destroy(CUI_MultiSelectState *state);
+void cui_multi_select_clear(CUI_MultiSelectState *state);
+bool cui_multi_select_is_selected(CUI_MultiSelectState *state, int index);
+void cui_multi_select_begin(CUI_Context *ctx, CUI_MultiSelectState *state);
+bool cui_multi_select_item(CUI_Context *ctx, CUI_MultiSelectState *state,
+                           int index, bool *is_selected);
+void cui_multi_select_end(CUI_Context *ctx);
+
+/* Color Picker */
+bool cui_color_picker(CUI_Context *ctx, const char *label,
+                      float *rgba, uint32_t flags);
+bool cui_color_button(CUI_Context *ctx, const char *label,
+                      float *rgba, float size);
+bool cui_color_edit3(CUI_Context *ctx, const char *label, float *rgb);
+bool cui_color_edit4(CUI_Context *ctx, const char *label, float *rgba);
+
+/* Color conversion utilities */
+void cui_rgb_to_hsv(float r, float g, float b, float *h, float *s, float *v);
+void cui_hsv_to_rgb(float h, float s, float v, float *r, float *g, float *b);
+
+/* Draw List Channels (Layer Sorting) */
+void cui_draw_split_begin(CUI_Context *ctx, int channel_count);
+void cui_draw_set_channel(CUI_Context *ctx, int channel);
+void cui_draw_split_merge(CUI_Context *ctx);
+
 /* Panels/Windows */
 bool cui_begin_panel(CUI_Context *ctx, const char *name,
                      float x, float y, float w, float h, uint32_t flags);
@@ -372,6 +490,30 @@ void cui_draw_rect_outline(CUI_Context *ctx, float x, float y, float w, float h,
 /* Lines */
 void cui_draw_line(CUI_Context *ctx, float x1, float y1, float x2, float y2,
                    uint32_t color, float thickness);
+
+/* Bezier Curves */
+void cui_draw_bezier_cubic(CUI_Context *ctx,
+                           float x1, float y1,   /* Start point */
+                           float cx1, float cy1, /* Control point 1 */
+                           float cx2, float cy2, /* Control point 2 */
+                           float x2, float y2,   /* End point */
+                           uint32_t color, float thickness);
+
+void cui_draw_bezier_quadratic(CUI_Context *ctx,
+                               float x1, float y1,  /* Start point */
+                               float cx, float cy,  /* Control point */
+                               float x2, float y2,  /* End point */
+                               uint32_t color, float thickness);
+
+/* Path API for complex shapes */
+void cui_path_begin(CUI_Context *ctx);
+void cui_path_line_to(CUI_Context *ctx, float x, float y);
+void cui_path_bezier_cubic_to(CUI_Context *ctx, float cx1, float cy1,
+                               float cx2, float cy2, float x, float y);
+void cui_path_bezier_quadratic_to(CUI_Context *ctx, float cx, float cy,
+                                   float x, float y);
+void cui_path_stroke(CUI_Context *ctx, uint32_t color, float thickness);
+void cui_path_fill(CUI_Context *ctx, uint32_t color);
 
 /* Triangles */
 void cui_draw_triangle(CUI_Context *ctx,

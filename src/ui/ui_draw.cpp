@@ -619,3 +619,341 @@ void cui_draw_textured_quad(CUI_Context *ctx,
 {
     cui_add_quad(ctx, x0, y0, x1, y1, u0, v0, u1, v1, color);
 }
+
+/* ============================================================================
+ * Bezier Curve Drawing
+ * ============================================================================ */
+
+/* De Casteljau's algorithm to evaluate a cubic bezier at parameter t */
+static void cui_bezier_cubic_point(float x1, float y1,
+                                    float cx1, float cy1,
+                                    float cx2, float cy2,
+                                    float x2, float y2,
+                                    float t, float *out_x, float *out_y)
+{
+    float u = 1.0f - t;
+    float tt = t * t;
+    float uu = u * u;
+    float uuu = uu * u;
+    float ttt = tt * t;
+
+    *out_x = uuu * x1 + 3.0f * uu * t * cx1 + 3.0f * u * tt * cx2 + ttt * x2;
+    *out_y = uuu * y1 + 3.0f * uu * t * cy1 + 3.0f * u * tt * cy2 + ttt * y2;
+}
+
+/* De Casteljau's algorithm to evaluate a quadratic bezier at parameter t */
+static void cui_bezier_quadratic_point(float x1, float y1,
+                                        float cx, float cy,
+                                        float x2, float y2,
+                                        float t, float *out_x, float *out_y)
+{
+    float u = 1.0f - t;
+    float tt = t * t;
+    float uu = u * u;
+
+    *out_x = uu * x1 + 2.0f * u * t * cx + tt * x2;
+    *out_y = uu * y1 + 2.0f * u * t * cy + tt * y2;
+}
+
+/* Calculate the number of segments needed based on curve length/curvature */
+static int cui_bezier_segment_count(float x1, float y1, float x2, float y2,
+                                     float cx1, float cy1, float cx2, float cy2)
+{
+    /* Estimate curve length using control polygon */
+    float d1 = sqrtf((cx1 - x1) * (cx1 - x1) + (cy1 - y1) * (cy1 - y1));
+    float d2 = sqrtf((cx2 - cx1) * (cx2 - cx1) + (cy2 - cy1) * (cy2 - cy1));
+    float d3 = sqrtf((x2 - cx2) * (x2 - cx2) + (y2 - cy2) * (y2 - cy2));
+    float length = d1 + d2 + d3;
+
+    /* Use ~1 segment per 10 pixels, with min 4 and max 64 */
+    int segments = (int)(length / 10.0f);
+    if (segments < 4) segments = 4;
+    if (segments > 64) segments = 64;
+    return segments;
+}
+
+void cui_draw_bezier_cubic(CUI_Context *ctx,
+                           float x1, float y1,
+                           float cx1, float cy1,
+                           float cx2, float cy2,
+                           float x2, float y2,
+                           uint32_t color, float thickness)
+{
+    if (!ctx) return;
+
+    int segments = cui_bezier_segment_count(x1, y1, x2, y2, cx1, cy1, cx2, cy2);
+    float step = 1.0f / (float)segments;
+
+    float prev_x = x1;
+    float prev_y = y1;
+
+    for (int i = 1; i <= segments; i++) {
+        float t = step * (float)i;
+        float curr_x, curr_y;
+        cui_bezier_cubic_point(x1, y1, cx1, cy1, cx2, cy2, x2, y2, t, &curr_x, &curr_y);
+
+        cui_draw_line(ctx, prev_x, prev_y, curr_x, curr_y, color, thickness);
+
+        prev_x = curr_x;
+        prev_y = curr_y;
+    }
+}
+
+void cui_draw_bezier_quadratic(CUI_Context *ctx,
+                               float x1, float y1,
+                               float cx, float cy,
+                               float x2, float y2,
+                               uint32_t color, float thickness)
+{
+    if (!ctx) return;
+
+    /* Estimate segment count for quadratic */
+    float d1 = sqrtf((cx - x1) * (cx - x1) + (cy - y1) * (cy - y1));
+    float d2 = sqrtf((x2 - cx) * (x2 - cx) + (y2 - cy) * (y2 - cy));
+    float length = d1 + d2;
+
+    int segments = (int)(length / 10.0f);
+    if (segments < 4) segments = 4;
+    if (segments > 64) segments = 64;
+
+    float step = 1.0f / (float)segments;
+
+    float prev_x = x1;
+    float prev_y = y1;
+
+    for (int i = 1; i <= segments; i++) {
+        float t = step * (float)i;
+        float curr_x, curr_y;
+        cui_bezier_quadratic_point(x1, y1, cx, cy, x2, y2, t, &curr_x, &curr_y);
+
+        cui_draw_line(ctx, prev_x, prev_y, curr_x, curr_y, color, thickness);
+
+        prev_x = curr_x;
+        prev_y = curr_y;
+    }
+}
+
+/* ============================================================================
+ * Path API
+ * ============================================================================ */
+
+#define CUI_PATH_INITIAL_CAPACITY 64
+
+static void cui_path_ensure_capacity(CUI_Context *ctx, uint32_t needed)
+{
+    if (ctx->path_capacity >= needed) return;
+
+    uint32_t new_capacity = ctx->path_capacity ? ctx->path_capacity * 2 : CUI_PATH_INITIAL_CAPACITY;
+    while (new_capacity < needed) new_capacity *= 2;
+
+    float *new_points = (float *)realloc(ctx->path_points, new_capacity * 2 * sizeof(float));
+    if (new_points) {
+        ctx->path_points = new_points;
+        ctx->path_capacity = new_capacity;
+    }
+}
+
+void cui_path_begin(CUI_Context *ctx)
+{
+    if (!ctx) return;
+    ctx->path_count = 0;
+}
+
+static void cui_path_add_point(CUI_Context *ctx, float x, float y)
+{
+    cui_path_ensure_capacity(ctx, ctx->path_count + 1);
+    if (ctx->path_count < ctx->path_capacity) {
+        ctx->path_points[ctx->path_count * 2] = x;
+        ctx->path_points[ctx->path_count * 2 + 1] = y;
+        ctx->path_count++;
+    }
+}
+
+void cui_path_line_to(CUI_Context *ctx, float x, float y)
+{
+    if (!ctx) return;
+    cui_path_add_point(ctx, x, y);
+}
+
+void cui_path_bezier_cubic_to(CUI_Context *ctx, float cx1, float cy1,
+                               float cx2, float cy2, float x, float y)
+{
+    if (!ctx || ctx->path_count == 0) return;
+
+    /* Get current point */
+    float x1 = ctx->path_points[(ctx->path_count - 1) * 2];
+    float y1 = ctx->path_points[(ctx->path_count - 1) * 2 + 1];
+
+    /* Tessellate the bezier curve */
+    int segments = cui_bezier_segment_count(x1, y1, x, y, cx1, cy1, cx2, cy2);
+    float step = 1.0f / (float)segments;
+
+    for (int i = 1; i <= segments; i++) {
+        float t = step * (float)i;
+        float px, py;
+        cui_bezier_cubic_point(x1, y1, cx1, cy1, cx2, cy2, x, y, t, &px, &py);
+        cui_path_add_point(ctx, px, py);
+    }
+}
+
+void cui_path_bezier_quadratic_to(CUI_Context *ctx, float cx, float cy,
+                                   float x, float y)
+{
+    if (!ctx || ctx->path_count == 0) return;
+
+    /* Get current point */
+    float x1 = ctx->path_points[(ctx->path_count - 1) * 2];
+    float y1 = ctx->path_points[(ctx->path_count - 1) * 2 + 1];
+
+    /* Estimate segment count */
+    float d1 = sqrtf((cx - x1) * (cx - x1) + (cy - y1) * (cy - y1));
+    float d2 = sqrtf((x - cx) * (x - cx) + (y - cy) * (y - cy));
+    float length = d1 + d2;
+
+    int segments = (int)(length / 10.0f);
+    if (segments < 4) segments = 4;
+    if (segments > 64) segments = 64;
+
+    float step = 1.0f / (float)segments;
+
+    for (int i = 1; i <= segments; i++) {
+        float t = step * (float)i;
+        float px, py;
+        cui_bezier_quadratic_point(x1, y1, cx, cy, x, y, t, &px, &py);
+        cui_path_add_point(ctx, px, py);
+    }
+}
+
+void cui_path_stroke(CUI_Context *ctx, uint32_t color, float thickness)
+{
+    if (!ctx || ctx->path_count < 2) return;
+
+    for (uint32_t i = 0; i < ctx->path_count - 1; i++) {
+        float x1 = ctx->path_points[i * 2];
+        float y1 = ctx->path_points[i * 2 + 1];
+        float x2 = ctx->path_points[(i + 1) * 2];
+        float y2 = ctx->path_points[(i + 1) * 2 + 1];
+
+        cui_draw_line(ctx, x1, y1, x2, y2, color, thickness);
+    }
+
+    ctx->path_count = 0;
+}
+
+void cui_path_fill(CUI_Context *ctx, uint32_t color)
+{
+    if (!ctx || ctx->path_count < 3) return;
+
+    /* Simple fan triangulation from first vertex */
+    float x0 = ctx->path_points[0];
+    float y0 = ctx->path_points[1];
+
+    for (uint32_t i = 1; i < ctx->path_count - 1; i++) {
+        float x1 = ctx->path_points[i * 2];
+        float y1 = ctx->path_points[i * 2 + 1];
+        float x2 = ctx->path_points[(i + 1) * 2];
+        float y2 = ctx->path_points[(i + 1) * 2 + 1];
+
+        cui_draw_triangle(ctx, x0, y0, x1, y1, x2, y2, color);
+    }
+
+    ctx->path_count = 0;
+}
+
+/* ============================================================================
+ * Draw List Channels (Layer Sorting)
+ * ============================================================================ */
+
+#define CUI_MAX_CHANNELS 16
+
+void cui_draw_split_begin(CUI_Context *ctx, int channel_count)
+{
+    if (!ctx || channel_count <= 0 || channel_count > CUI_MAX_CHANNELS) return;
+    if (ctx->channels.channel_count > 0) return;  /* Already split */
+
+    /* Allocate channel tracking arrays */
+    ctx->channels.channel_starts = (uint32_t *)malloc(channel_count * sizeof(uint32_t));
+    ctx->channels.channel_counts = (uint32_t *)malloc(channel_count * sizeof(uint32_t));
+    ctx->channels.channel_idx_starts = (uint32_t *)malloc(channel_count * sizeof(uint32_t));
+    ctx->channels.channel_idx_counts = (uint32_t *)malloc(channel_count * sizeof(uint32_t));
+
+    if (!ctx->channels.channel_starts || !ctx->channels.channel_counts ||
+        !ctx->channels.channel_idx_starts || !ctx->channels.channel_idx_counts) {
+        free(ctx->channels.channel_starts);
+        free(ctx->channels.channel_counts);
+        free(ctx->channels.channel_idx_starts);
+        free(ctx->channels.channel_idx_counts);
+        ctx->channels.channel_starts = NULL;
+        ctx->channels.channel_counts = NULL;
+        ctx->channels.channel_idx_starts = NULL;
+        ctx->channels.channel_idx_counts = NULL;
+        return;
+    }
+
+    /* Initialize all channels starting at current position */
+    for (int i = 0; i < channel_count; i++) {
+        ctx->channels.channel_starts[i] = ctx->vertex_count;
+        ctx->channels.channel_counts[i] = 0;
+        ctx->channels.channel_idx_starts[i] = ctx->index_count;
+        ctx->channels.channel_idx_counts[i] = 0;
+    }
+
+    ctx->channels.channel_count = channel_count;
+    ctx->channels.current_channel = 0;
+}
+
+void cui_draw_set_channel(CUI_Context *ctx, int channel)
+{
+    if (!ctx || ctx->channels.channel_count <= 0) return;
+    if (channel < 0 || channel >= ctx->channels.channel_count) return;
+
+    /* Save current channel's count */
+    int old_channel = ctx->channels.current_channel;
+    ctx->channels.channel_counts[old_channel] =
+        ctx->vertex_count - ctx->channels.channel_starts[old_channel];
+    ctx->channels.channel_idx_counts[old_channel] =
+        ctx->index_count - ctx->channels.channel_idx_starts[old_channel];
+
+    /* Switch to new channel - append at current position */
+    ctx->channels.channel_starts[channel] = ctx->vertex_count;
+    ctx->channels.channel_idx_starts[channel] = ctx->index_count;
+    ctx->channels.current_channel = channel;
+}
+
+void cui_draw_split_merge(CUI_Context *ctx)
+{
+    if (!ctx || ctx->channels.channel_count <= 0) return;
+
+    /* Save final channel counts */
+    int current = ctx->channels.current_channel;
+    ctx->channels.channel_counts[current] =
+        ctx->vertex_count - ctx->channels.channel_starts[current];
+    ctx->channels.channel_idx_counts[current] =
+        ctx->index_count - ctx->channels.channel_idx_starts[current];
+
+    /* For a simple implementation, we don't actually need to reorder
+     * if channels were written in order. The vertex/index buffers
+     * already contain the data in the order it was added.
+     *
+     * A more sophisticated implementation would allocate separate buffers
+     * per channel and then merge them in order. For now, we rely on
+     * users calling set_channel in the correct order (background first,
+     * foreground last) to achieve the layering effect.
+     *
+     * Future enhancement: Actually reorder vertices/indices by channel
+     * to support arbitrary channel order during drawing.
+     */
+
+    /* Clean up */
+    free(ctx->channels.channel_starts);
+    free(ctx->channels.channel_counts);
+    free(ctx->channels.channel_idx_starts);
+    free(ctx->channels.channel_idx_counts);
+
+    ctx->channels.channel_starts = NULL;
+    ctx->channels.channel_counts = NULL;
+    ctx->channels.channel_idx_starts = NULL;
+    ctx->channels.channel_idx_counts = NULL;
+    ctx->channels.channel_count = 0;
+    ctx->channels.current_channel = 0;
+}

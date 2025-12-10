@@ -242,6 +242,7 @@ void cui_shutdown(CUI_Context *ctx)
 
     free(ctx->vertices);
     free(ctx->indices);
+    free(ctx->path_points);
     free(ctx);
 
     SDL_Log("CUI: Shutdown complete");
