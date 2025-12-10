@@ -9,10 +9,10 @@
  * i.e., when distance <= radius1 + radius2 (Chebyshev distance).
  */
 
-#include "carbon/carbon.h"
-#include "carbon/network.h"
-#include "carbon/error.h"
-#include "carbon/validate.h"
+#include "agentite/agentite.h"
+#include "agentite/network.h"
+#include "agentite/error.h"
+#include "agentite/validate.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -26,7 +26,7 @@
  * @brief Internal node structure with union-find data
  */
 typedef struct NetworkNodeInternal {
-    Carbon_NetworkNode node;    /**< Public node data */
+    Agentite_NetworkNode node;    /**< Public node data */
     uint32_t parent;            /**< Union-find parent (self = root) */
     int rank;                   /**< Union-find rank (for union by rank) */
     bool in_use;                /**< Whether this slot is in use */
@@ -35,7 +35,7 @@ typedef struct NetworkNodeInternal {
 /**
  * @brief Network system structure
  */
-struct Carbon_NetworkSystem {
+struct Agentite_NetworkSystem {
     NetworkNodeInternal *nodes;     /**< Node array */
     int capacity;                   /**< Maximum nodes */
     int count;                      /**< Current node count */
@@ -44,12 +44,12 @@ struct Carbon_NetworkSystem {
     bool dirty;                     /**< True if needs recalculation */
 
     /* Group data (calculated during update) */
-    Carbon_NetworkGroup *groups;    /**< Group array */
+    Agentite_NetworkGroup *groups;    /**< Group array */
     int group_count;                /**< Number of groups */
     int group_capacity;             /**< Group array capacity */
 
     /* Callback */
-    Carbon_NetworkCallback callback;
+    Agentite_NetworkCallback callback;
     void *callback_userdata;
 };
 
@@ -69,8 +69,8 @@ static inline int chebyshev_distance(int x1, int y1, int x2, int y2) {
 /**
  * @brief Find node slot by ID
  */
-static NetworkNodeInternal *find_node(Carbon_NetworkSystem *network, uint32_t node_id) {
-    if (node_id == CARBON_NETWORK_INVALID || node_id >= network->next_id) {
+static NetworkNodeInternal *find_node(Agentite_NetworkSystem *network, uint32_t node_id) {
+    if (node_id == AGENTITE_NETWORK_INVALID || node_id >= network->next_id) {
         return NULL;
     }
 
@@ -86,7 +86,7 @@ static NetworkNodeInternal *find_node(Carbon_NetworkSystem *network, uint32_t no
 /**
  * @brief Find first empty slot
  */
-static int find_empty_slot(Carbon_NetworkSystem *network) {
+static int find_empty_slot(Agentite_NetworkSystem *network) {
     for (int i = 0; i < network->capacity; i++) {
         if (!network->nodes[i].in_use) {
             return i;
@@ -102,9 +102,9 @@ static int find_empty_slot(Carbon_NetworkSystem *network) {
 /**
  * @brief Find root of node with path compression
  */
-static uint32_t uf_find(Carbon_NetworkSystem *network, uint32_t node_id) {
+static uint32_t uf_find(Agentite_NetworkSystem *network, uint32_t node_id) {
     NetworkNodeInternal *node = find_node(network, node_id);
-    if (!node) return CARBON_NETWORK_INVALID;
+    if (!node) return AGENTITE_NETWORK_INVALID;
 
     /* Path compression: make every node on path point to root */
     if (node->parent != node_id) {
@@ -116,11 +116,11 @@ static uint32_t uf_find(Carbon_NetworkSystem *network, uint32_t node_id) {
 /**
  * @brief Union two nodes into same group (union by rank)
  */
-static void uf_union(Carbon_NetworkSystem *network, uint32_t id1, uint32_t id2) {
+static void uf_union(Agentite_NetworkSystem *network, uint32_t id1, uint32_t id2) {
     uint32_t root1 = uf_find(network, id1);
     uint32_t root2 = uf_find(network, id2);
 
-    if (root1 == CARBON_NETWORK_INVALID || root2 == CARBON_NETWORK_INVALID) return;
+    if (root1 == AGENTITE_NETWORK_INVALID || root2 == AGENTITE_NETWORK_INVALID) return;
     if (root1 == root2) return;  /* Already in same group */
 
     NetworkNodeInternal *r1 = find_node(network, root1);
@@ -141,7 +141,7 @@ static void uf_union(Carbon_NetworkSystem *network, uint32_t id1, uint32_t id2) 
 /**
  * @brief Reset union-find structure for all nodes
  */
-static void uf_reset(Carbon_NetworkSystem *network) {
+static void uf_reset(Agentite_NetworkSystem *network) {
     for (int i = 0; i < network->capacity; i++) {
         if (network->nodes[i].in_use) {
             network->nodes[i].parent = network->nodes[i].node.id;
@@ -157,7 +157,7 @@ static void uf_reset(Carbon_NetworkSystem *network) {
 /**
  * @brief Check if two nodes can connect (coverage overlap)
  */
-static bool nodes_can_connect(const Carbon_NetworkNode *a, const Carbon_NetworkNode *b) {
+static bool nodes_can_connect(const Agentite_NetworkNode *a, const Agentite_NetworkNode *b) {
     if (!a->active || !b->active) return false;
 
     int dist = chebyshev_distance(a->x, a->y, b->x, b->y);
@@ -167,7 +167,7 @@ static bool nodes_can_connect(const Carbon_NetworkNode *a, const Carbon_NetworkN
 /**
  * @brief Build connected components
  */
-static void build_connectivity(Carbon_NetworkSystem *network) {
+static void build_connectivity(Agentite_NetworkSystem *network) {
     /* Reset union-find */
     uf_reset(network);
 
@@ -188,7 +188,7 @@ static void build_connectivity(Carbon_NetworkSystem *network) {
 /**
  * @brief Build group information from union-find results
  */
-static void build_groups(Carbon_NetworkSystem *network) {
+static void build_groups(Agentite_NetworkSystem *network) {
     /* Clear existing groups */
     network->group_count = 0;
 
@@ -214,8 +214,8 @@ static void build_groups(Carbon_NetworkSystem *network) {
                 /* Grow groups array */
                 int new_cap = network->group_capacity * 2;
                 if (new_cap < 16) new_cap = 16;
-                Carbon_NetworkGroup *new_groups = (Carbon_NetworkGroup*)realloc(network->groups,
-                                                           new_cap * sizeof(Carbon_NetworkGroup));
+                Agentite_NetworkGroup *new_groups = (Agentite_NetworkGroup*)realloc(network->groups,
+                                                           new_cap * sizeof(Agentite_NetworkGroup));
                 if (!new_groups) continue;
                 network->groups = new_groups;
                 network->group_capacity = new_cap;
@@ -248,17 +248,17 @@ static void build_groups(Carbon_NetworkSystem *network) {
  * Creation and Destruction
  * ========================================================================= */
 
-Carbon_NetworkSystem *carbon_network_create(void) {
-    Carbon_NetworkSystem *network = CARBON_ALLOC(Carbon_NetworkSystem);
+Agentite_NetworkSystem *agentite_network_create(void) {
+    Agentite_NetworkSystem *network = AGENTITE_ALLOC(Agentite_NetworkSystem);
     if (!network) {
-        carbon_set_error("Network: Failed to allocate system");
+        agentite_set_error("Network: Failed to allocate system");
         return NULL;
     }
 
     int initial_capacity = 64;
-    network->nodes = CARBON_ALLOC_ARRAY(NetworkNodeInternal, initial_capacity);
+    network->nodes = AGENTITE_ALLOC_ARRAY(NetworkNodeInternal, initial_capacity);
     if (!network->nodes) {
-        carbon_set_error("Network: Failed to allocate nodes");
+        agentite_set_error("Network: Failed to allocate nodes");
         free(network);
         return NULL;
     }
@@ -278,15 +278,15 @@ Carbon_NetworkSystem *carbon_network_create(void) {
     return network;
 }
 
-void carbon_network_destroy(Carbon_NetworkSystem *network) {
+void agentite_network_destroy(Agentite_NetworkSystem *network) {
     if (!network) return;
     free(network->nodes);
     free(network->groups);
     free(network);
 }
 
-void carbon_network_clear(Carbon_NetworkSystem *network) {
-    CARBON_VALIDATE_PTR(network);
+void agentite_network_clear(Agentite_NetworkSystem *network) {
+    AGENTITE_VALIDATE_PTR(network);
 
     for (int i = 0; i < network->capacity; i++) {
         network->nodes[i].in_use = false;
@@ -300,8 +300,8 @@ void carbon_network_clear(Carbon_NetworkSystem *network) {
  * Node Management
  * ========================================================================= */
 
-uint32_t carbon_network_add_node(Carbon_NetworkSystem *network, int x, int y, int radius) {
-    CARBON_VALIDATE_PTR_RET(network, CARBON_NETWORK_INVALID);
+uint32_t agentite_network_add_node(Agentite_NetworkSystem *network, int x, int y, int radius) {
+    AGENTITE_VALIDATE_PTR_RET(network, AGENTITE_NETWORK_INVALID);
 
     /* Check if we need to grow */
     if (network->count >= network->capacity) {
@@ -309,8 +309,8 @@ uint32_t carbon_network_add_node(Carbon_NetworkSystem *network, int x, int y, in
         NetworkNodeInternal *new_nodes = (NetworkNodeInternal*)realloc(network->nodes,
                                                   new_cap * sizeof(NetworkNodeInternal));
         if (!new_nodes) {
-            carbon_set_error("Network: Failed to grow node array");
-            return CARBON_NETWORK_INVALID;
+            agentite_set_error("Network: Failed to grow node array");
+            return AGENTITE_NETWORK_INVALID;
         }
 
         /* Initialize new slots */
@@ -323,8 +323,8 @@ uint32_t carbon_network_add_node(Carbon_NetworkSystem *network, int x, int y, in
 
     int slot = find_empty_slot(network);
     if (slot < 0) {
-        carbon_set_error("Network: No empty slot");
-        return CARBON_NETWORK_INVALID;
+        agentite_set_error("Network: No empty slot");
+        return AGENTITE_NETWORK_INVALID;
     }
 
     uint32_t id = network->next_id++;
@@ -348,8 +348,8 @@ uint32_t carbon_network_add_node(Carbon_NetworkSystem *network, int x, int y, in
     return id;
 }
 
-bool carbon_network_remove_node(Carbon_NetworkSystem *network, uint32_t node_id) {
-    CARBON_VALIDATE_PTR_RET(network, false);
+bool agentite_network_remove_node(Agentite_NetworkSystem *network, uint32_t node_id) {
+    AGENTITE_VALIDATE_PTR_RET(network, false);
 
     NetworkNodeInternal *node = find_node(network, node_id);
     if (!node) return false;
@@ -361,8 +361,8 @@ bool carbon_network_remove_node(Carbon_NetworkSystem *network, uint32_t node_id)
     return true;
 }
 
-bool carbon_network_move_node(Carbon_NetworkSystem *network, uint32_t node_id, int new_x, int new_y) {
-    CARBON_VALIDATE_PTR_RET(network, false);
+bool agentite_network_move_node(Agentite_NetworkSystem *network, uint32_t node_id, int new_x, int new_y) {
+    AGENTITE_VALIDATE_PTR_RET(network, false);
 
     NetworkNodeInternal *node = find_node(network, node_id);
     if (!node) return false;
@@ -374,8 +374,8 @@ bool carbon_network_move_node(Carbon_NetworkSystem *network, uint32_t node_id, i
     return true;
 }
 
-bool carbon_network_set_radius(Carbon_NetworkSystem *network, uint32_t node_id, int radius) {
-    CARBON_VALIDATE_PTR_RET(network, false);
+bool agentite_network_set_radius(Agentite_NetworkSystem *network, uint32_t node_id, int radius) {
+    AGENTITE_VALIDATE_PTR_RET(network, false);
 
     NetworkNodeInternal *node = find_node(network, node_id);
     if (!node) return false;
@@ -386,8 +386,8 @@ bool carbon_network_set_radius(Carbon_NetworkSystem *network, uint32_t node_id, 
     return true;
 }
 
-bool carbon_network_set_active(Carbon_NetworkSystem *network, uint32_t node_id, bool active) {
-    CARBON_VALIDATE_PTR_RET(network, false);
+bool agentite_network_set_active(Agentite_NetworkSystem *network, uint32_t node_id, bool active) {
+    AGENTITE_VALIDATE_PTR_RET(network, false);
 
     NetworkNodeInternal *node = find_node(network, node_id);
     if (!node) return false;
@@ -400,8 +400,8 @@ bool carbon_network_set_active(Carbon_NetworkSystem *network, uint32_t node_id, 
     return true;
 }
 
-const Carbon_NetworkNode *carbon_network_get_node(Carbon_NetworkSystem *network, uint32_t node_id) {
-    CARBON_VALIDATE_PTR_RET(network, NULL);
+const Agentite_NetworkNode *agentite_network_get_node(Agentite_NetworkSystem *network, uint32_t node_id) {
+    AGENTITE_VALIDATE_PTR_RET(network, NULL);
 
     NetworkNodeInternal *node = find_node(network, node_id);
     return node ? &node->node : NULL;
@@ -411,8 +411,8 @@ const Carbon_NetworkNode *carbon_network_get_node(Carbon_NetworkSystem *network,
  * Resource Management
  * ========================================================================= */
 
-bool carbon_network_set_production(Carbon_NetworkSystem *network, uint32_t node_id, int32_t production) {
-    CARBON_VALIDATE_PTR_RET(network, false);
+bool agentite_network_set_production(Agentite_NetworkSystem *network, uint32_t node_id, int32_t production) {
+    AGENTITE_VALIDATE_PTR_RET(network, false);
 
     NetworkNodeInternal *node = find_node(network, node_id);
     if (!node) return false;
@@ -422,8 +422,8 @@ bool carbon_network_set_production(Carbon_NetworkSystem *network, uint32_t node_
     return true;
 }
 
-bool carbon_network_set_consumption(Carbon_NetworkSystem *network, uint32_t node_id, int32_t consumption) {
-    CARBON_VALIDATE_PTR_RET(network, false);
+bool agentite_network_set_consumption(Agentite_NetworkSystem *network, uint32_t node_id, int32_t consumption) {
+    AGENTITE_VALIDATE_PTR_RET(network, false);
 
     NetworkNodeInternal *node = find_node(network, node_id);
     if (!node) return false;
@@ -433,8 +433,8 @@ bool carbon_network_set_consumption(Carbon_NetworkSystem *network, uint32_t node
     return true;
 }
 
-int32_t carbon_network_add_production(Carbon_NetworkSystem *network, uint32_t node_id, int32_t amount) {
-    CARBON_VALIDATE_PTR_RET(network, 0);
+int32_t agentite_network_add_production(Agentite_NetworkSystem *network, uint32_t node_id, int32_t amount) {
+    AGENTITE_VALIDATE_PTR_RET(network, 0);
 
     NetworkNodeInternal *node = find_node(network, node_id);
     if (!node) return 0;
@@ -444,8 +444,8 @@ int32_t carbon_network_add_production(Carbon_NetworkSystem *network, uint32_t no
     return node->node.production;
 }
 
-int32_t carbon_network_add_consumption(Carbon_NetworkSystem *network, uint32_t node_id, int32_t amount) {
-    CARBON_VALIDATE_PTR_RET(network, 0);
+int32_t agentite_network_add_consumption(Agentite_NetworkSystem *network, uint32_t node_id, int32_t amount) {
+    AGENTITE_VALIDATE_PTR_RET(network, 0);
 
     NetworkNodeInternal *node = find_node(network, node_id);
     if (!node) return 0;
@@ -459,15 +459,15 @@ int32_t carbon_network_add_consumption(Carbon_NetworkSystem *network, uint32_t n
  * Network Update and Queries
  * ========================================================================= */
 
-void carbon_network_update(Carbon_NetworkSystem *network) {
-    CARBON_VALIDATE_PTR(network);
+void agentite_network_update(Agentite_NetworkSystem *network) {
+    AGENTITE_VALIDATE_PTR(network);
 
     if (!network->dirty) return;
-    carbon_network_recalculate(network);
+    agentite_network_recalculate(network);
 }
 
-void carbon_network_recalculate(Carbon_NetworkSystem *network) {
-    CARBON_VALIDATE_PTR(network);
+void agentite_network_recalculate(Agentite_NetworkSystem *network) {
+    AGENTITE_VALIDATE_PTR(network);
 
     /* Store old groups for callback */
     uint32_t *old_groups = NULL;
@@ -502,25 +502,25 @@ void carbon_network_recalculate(Carbon_NetworkSystem *network) {
     }
 }
 
-bool carbon_network_is_dirty(Carbon_NetworkSystem *network) {
-    CARBON_VALIDATE_PTR_RET(network, false);
+bool agentite_network_is_dirty(Agentite_NetworkSystem *network) {
+    AGENTITE_VALIDATE_PTR_RET(network, false);
     return network->dirty;
 }
 
-uint32_t carbon_network_get_group(Carbon_NetworkSystem *network, uint32_t node_id) {
-    CARBON_VALIDATE_PTR_RET(network, CARBON_NETWORK_INVALID);
+uint32_t agentite_network_get_group(Agentite_NetworkSystem *network, uint32_t node_id) {
+    AGENTITE_VALIDATE_PTR_RET(network, AGENTITE_NETWORK_INVALID);
 
     NetworkNodeInternal *node = find_node(network, node_id);
-    if (!node) return CARBON_NETWORK_INVALID;
+    if (!node) return AGENTITE_NETWORK_INVALID;
 
     return node->node.group;
 }
 
-bool carbon_network_get_group_info(Carbon_NetworkSystem *network,
+bool agentite_network_get_group_info(Agentite_NetworkSystem *network,
                                     uint32_t group_id,
-                                    Carbon_NetworkGroup *out_group) {
-    CARBON_VALIDATE_PTR_RET(network, false);
-    CARBON_VALIDATE_PTR_RET(out_group, false);
+                                    Agentite_NetworkGroup *out_group) {
+    AGENTITE_VALIDATE_PTR_RET(network, false);
+    AGENTITE_VALIDATE_PTR_RET(out_group, false);
 
     for (int g = 0; g < network->group_count; g++) {
         if (network->groups[g].id == group_id) {
@@ -531,8 +531,8 @@ bool carbon_network_get_group_info(Carbon_NetworkSystem *network,
     return false;
 }
 
-bool carbon_network_is_powered(Carbon_NetworkSystem *network, uint32_t group_id) {
-    CARBON_VALIDATE_PTR_RET(network, false);
+bool agentite_network_is_powered(Agentite_NetworkSystem *network, uint32_t group_id) {
+    AGENTITE_VALIDATE_PTR_RET(network, false);
 
     for (int g = 0; g < network->group_count; g++) {
         if (network->groups[g].id == group_id) {
@@ -542,21 +542,21 @@ bool carbon_network_is_powered(Carbon_NetworkSystem *network, uint32_t group_id)
     return false;
 }
 
-bool carbon_network_node_is_powered(Carbon_NetworkSystem *network, uint32_t node_id) {
-    CARBON_VALIDATE_PTR_RET(network, false);
+bool agentite_network_node_is_powered(Agentite_NetworkSystem *network, uint32_t node_id) {
+    AGENTITE_VALIDATE_PTR_RET(network, false);
 
     NetworkNodeInternal *node = find_node(network, node_id);
     if (!node || !node->node.active) return false;
 
-    return carbon_network_is_powered(network, node->node.group);
+    return agentite_network_is_powered(network, node->node.group);
 }
 
 /* ============================================================================
  * Coverage Queries
  * ========================================================================= */
 
-bool carbon_network_covers_cell(Carbon_NetworkSystem *network, int x, int y) {
-    CARBON_VALIDATE_PTR_RET(network, false);
+bool agentite_network_covers_cell(Agentite_NetworkSystem *network, int x, int y) {
+    AGENTITE_VALIDATE_PTR_RET(network, false);
 
     for (int i = 0; i < network->capacity; i++) {
         if (!network->nodes[i].in_use || !network->nodes[i].node.active) continue;
@@ -569,8 +569,8 @@ bool carbon_network_covers_cell(Carbon_NetworkSystem *network, int x, int y) {
     return false;
 }
 
-bool carbon_network_cell_is_powered(Carbon_NetworkSystem *network, int x, int y) {
-    CARBON_VALIDATE_PTR_RET(network, false);
+bool agentite_network_cell_is_powered(Agentite_NetworkSystem *network, int x, int y) {
+    AGENTITE_VALIDATE_PTR_RET(network, false);
 
     for (int i = 0; i < network->capacity; i++) {
         if (!network->nodes[i].in_use || !network->nodes[i].node.active) continue;
@@ -578,7 +578,7 @@ bool carbon_network_cell_is_powered(Carbon_NetworkSystem *network, int x, int y)
         int dist = chebyshev_distance(x, y, network->nodes[i].node.x, network->nodes[i].node.y);
         if (dist <= network->nodes[i].node.radius) {
             /* Check if this node's group is powered */
-            if (carbon_network_is_powered(network, network->nodes[i].node.group)) {
+            if (agentite_network_is_powered(network, network->nodes[i].node.group)) {
                 return true;
             }
         }
@@ -586,10 +586,10 @@ bool carbon_network_cell_is_powered(Carbon_NetworkSystem *network, int x, int y)
     return false;
 }
 
-int carbon_network_get_coverage(Carbon_NetworkSystem *network, int x, int y,
-                                 Carbon_NetworkCoverage *out_coverage, int max_results) {
-    CARBON_VALIDATE_PTR_RET(network, 0);
-    CARBON_VALIDATE_PTR_RET(out_coverage, 0);
+int agentite_network_get_coverage(Agentite_NetworkSystem *network, int x, int y,
+                                 Agentite_NetworkCoverage *out_coverage, int max_results) {
+    AGENTITE_VALIDATE_PTR_RET(network, 0);
+    AGENTITE_VALIDATE_PTR_RET(out_coverage, 0);
     if (max_results <= 0) return 0;
 
     int count = 0;
@@ -608,10 +608,10 @@ int carbon_network_get_coverage(Carbon_NetworkSystem *network, int x, int y,
     return count;
 }
 
-uint32_t carbon_network_get_nearest_node(Carbon_NetworkSystem *network, int x, int y, int max_distance) {
-    CARBON_VALIDATE_PTR_RET(network, CARBON_NETWORK_INVALID);
+uint32_t agentite_network_get_nearest_node(Agentite_NetworkSystem *network, int x, int y, int max_distance) {
+    AGENTITE_VALIDATE_PTR_RET(network, AGENTITE_NETWORK_INVALID);
 
-    uint32_t nearest_id = CARBON_NETWORK_INVALID;
+    uint32_t nearest_id = AGENTITE_NETWORK_INVALID;
     int nearest_dist = (max_distance < 0) ? INT32_MAX : max_distance + 1;
 
     for (int i = 0; i < network->capacity; i++) {
@@ -626,11 +626,11 @@ uint32_t carbon_network_get_nearest_node(Carbon_NetworkSystem *network, int x, i
     return nearest_id;
 }
 
-int carbon_network_get_node_coverage(Carbon_NetworkSystem *network, uint32_t node_id,
+int agentite_network_get_node_coverage(Agentite_NetworkSystem *network, uint32_t node_id,
                                       int32_t *out_x, int32_t *out_y, int max_cells) {
-    CARBON_VALIDATE_PTR_RET(network, 0);
-    CARBON_VALIDATE_PTR_RET(out_x, 0);
-    CARBON_VALIDATE_PTR_RET(out_y, 0);
+    AGENTITE_VALIDATE_PTR_RET(network, 0);
+    AGENTITE_VALIDATE_PTR_RET(out_x, 0);
+    AGENTITE_VALIDATE_PTR_RET(out_y, 0);
     if (max_cells <= 0) return 0;
 
     NetworkNodeInternal *node = find_node(network, node_id);
@@ -656,10 +656,10 @@ int carbon_network_get_node_coverage(Carbon_NetworkSystem *network, uint32_t nod
  * Node Iteration
  * ========================================================================= */
 
-int carbon_network_get_group_nodes(Carbon_NetworkSystem *network, uint32_t group_id,
+int agentite_network_get_group_nodes(Agentite_NetworkSystem *network, uint32_t group_id,
                                     uint32_t *out_nodes, int max_nodes) {
-    CARBON_VALIDATE_PTR_RET(network, 0);
-    CARBON_VALIDATE_PTR_RET(out_nodes, 0);
+    AGENTITE_VALIDATE_PTR_RET(network, 0);
+    AGENTITE_VALIDATE_PTR_RET(out_nodes, 0);
     if (max_nodes <= 0) return 0;
 
     int count = 0;
@@ -673,10 +673,10 @@ int carbon_network_get_group_nodes(Carbon_NetworkSystem *network, uint32_t group
     return count;
 }
 
-int carbon_network_get_all_groups(Carbon_NetworkSystem *network,
+int agentite_network_get_all_groups(Agentite_NetworkSystem *network,
                                    uint32_t *out_groups, int max_groups) {
-    CARBON_VALIDATE_PTR_RET(network, 0);
-    CARBON_VALIDATE_PTR_RET(out_groups, 0);
+    AGENTITE_VALIDATE_PTR_RET(network, 0);
+    AGENTITE_VALIDATE_PTR_RET(out_groups, 0);
     if (max_groups <= 0) return 0;
 
     int count = 0;
@@ -686,10 +686,10 @@ int carbon_network_get_all_groups(Carbon_NetworkSystem *network,
     return count;
 }
 
-int carbon_network_get_all_nodes(Carbon_NetworkSystem *network,
+int agentite_network_get_all_nodes(Agentite_NetworkSystem *network,
                                   uint32_t *out_nodes, int max_nodes) {
-    CARBON_VALIDATE_PTR_RET(network, 0);
-    CARBON_VALIDATE_PTR_RET(out_nodes, 0);
+    AGENTITE_VALIDATE_PTR_RET(network, 0);
+    AGENTITE_VALIDATE_PTR_RET(out_nodes, 0);
     if (max_nodes <= 0) return 0;
 
     int count = 0;
@@ -705,18 +705,18 @@ int carbon_network_get_all_nodes(Carbon_NetworkSystem *network,
  * Statistics
  * ========================================================================= */
 
-int carbon_network_node_count(Carbon_NetworkSystem *network) {
-    CARBON_VALIDATE_PTR_RET(network, 0);
+int agentite_network_node_count(Agentite_NetworkSystem *network) {
+    AGENTITE_VALIDATE_PTR_RET(network, 0);
     return network->count;
 }
 
-int carbon_network_group_count(Carbon_NetworkSystem *network) {
-    CARBON_VALIDATE_PTR_RET(network, 0);
+int agentite_network_group_count(Agentite_NetworkSystem *network) {
+    AGENTITE_VALIDATE_PTR_RET(network, 0);
     return network->group_count;
 }
 
-int32_t carbon_network_total_production(Carbon_NetworkSystem *network) {
-    CARBON_VALIDATE_PTR_RET(network, 0);
+int32_t agentite_network_total_production(Agentite_NetworkSystem *network) {
+    AGENTITE_VALIDATE_PTR_RET(network, 0);
 
     int32_t total = 0;
     for (int i = 0; i < network->capacity; i++) {
@@ -727,8 +727,8 @@ int32_t carbon_network_total_production(Carbon_NetworkSystem *network) {
     return total;
 }
 
-int32_t carbon_network_total_consumption(Carbon_NetworkSystem *network) {
-    CARBON_VALIDATE_PTR_RET(network, 0);
+int32_t agentite_network_total_consumption(Agentite_NetworkSystem *network) {
+    AGENTITE_VALIDATE_PTR_RET(network, 0);
 
     int32_t total = 0;
     for (int i = 0; i < network->capacity; i++) {
@@ -739,19 +739,19 @@ int32_t carbon_network_total_consumption(Carbon_NetworkSystem *network) {
     return total;
 }
 
-int32_t carbon_network_total_balance(Carbon_NetworkSystem *network) {
-    CARBON_VALIDATE_PTR_RET(network, 0);
-    return carbon_network_total_production(network) - carbon_network_total_consumption(network);
+int32_t agentite_network_total_balance(Agentite_NetworkSystem *network) {
+    AGENTITE_VALIDATE_PTR_RET(network, 0);
+    return agentite_network_total_production(network) - agentite_network_total_consumption(network);
 }
 
 /* ============================================================================
  * Callbacks
  * ========================================================================= */
 
-void carbon_network_set_callback(Carbon_NetworkSystem *network,
-                                  Carbon_NetworkCallback callback,
+void agentite_network_set_callback(Agentite_NetworkSystem *network,
+                                  Agentite_NetworkCallback callback,
                                   void *userdata) {
-    CARBON_VALIDATE_PTR(network);
+    AGENTITE_VALIDATE_PTR(network);
     network->callback = callback;
     network->callback_userdata = userdata;
 }
@@ -760,10 +760,10 @@ void carbon_network_set_callback(Carbon_NetworkSystem *network,
  * Debug/Visualization
  * ========================================================================= */
 
-void carbon_network_get_stats(Carbon_NetworkSystem *network,
+void agentite_network_get_stats(Agentite_NetworkSystem *network,
                                int *out_nodes, int *out_active,
                                int *out_groups, int *out_powered) {
-    CARBON_VALIDATE_PTR(network);
+    AGENTITE_VALIDATE_PTR(network);
 
     int nodes = 0;
     int active = 0;

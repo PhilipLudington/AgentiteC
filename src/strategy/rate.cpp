@@ -3,10 +3,10 @@
  * @brief Rate Tracking / Metrics History System implementation
  */
 
-#include "carbon/carbon.h"
-#include "carbon/rate.h"
-#include "carbon/error.h"
-#include "carbon/validate.h"
+#include "agentite/agentite.h"
+#include "agentite/rate.h"
+#include "agentite/error.h"
+#include "agentite/validate.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -19,7 +19,7 @@
 /**
  * @brief Per-metric tracking data
  */
-typedef struct Carbon_MetricTracker {
+typedef struct Agentite_MetricTracker {
     char name[32];                              /**< Metric name */
 
     /* Current accumulator (before next sample) */
@@ -27,16 +27,16 @@ typedef struct Carbon_MetricTracker {
     int32_t pending_consumed;
 
     /* Circular buffer of samples */
-    Carbon_RateSample *samples;
+    Agentite_RateSample *samples;
     int sample_head;                            /**< Next write position */
     int sample_count;                           /**< Current number of samples */
-} Carbon_MetricTracker;
+} Agentite_MetricTracker;
 
 /**
  * @brief Rate tracker structure
  */
-struct Carbon_RateTracker {
-    Carbon_MetricTracker *metrics;
+struct Agentite_RateTracker {
+    Agentite_MetricTracker *metrics;
     int metric_count;
 
     float sample_interval;                      /**< Seconds between samples */
@@ -53,14 +53,14 @@ struct Carbon_RateTracker {
 /**
  * @brief Take a sample for all metrics
  */
-static void take_sample(Carbon_RateTracker *tracker) {
+static void take_sample(Agentite_RateTracker *tracker) {
     float timestamp = tracker->total_time;
 
     for (int i = 0; i < tracker->metric_count; i++) {
-        Carbon_MetricTracker *m = &tracker->metrics[i];
+        Agentite_MetricTracker *m = &tracker->metrics[i];
 
         /* Create sample from accumulated values */
-        Carbon_RateSample sample;
+        Agentite_RateSample sample;
         sample.timestamp = timestamp;
         sample.produced = m->pending_produced;
         sample.consumed = m->pending_consumed;
@@ -81,7 +81,7 @@ static void take_sample(Carbon_RateTracker *tracker) {
 /**
  * @brief Get sample at index (0 = oldest)
  */
-static Carbon_RateSample *get_sample(Carbon_MetricTracker *m, int index, int history_size) {
+static Agentite_RateSample *get_sample(Agentite_MetricTracker *m, int index, int history_size) {
     if (index < 0 || index >= m->sample_count) return NULL;
 
     /* Calculate actual position in circular buffer */
@@ -95,7 +95,7 @@ static Carbon_RateSample *get_sample(Carbon_MetricTracker *m, int index, int his
  *
  * @return Index of first sample in window (oldest), or -1 if none
  */
-static int find_window_start(Carbon_MetricTracker *m, int history_size, float current_time, float time_window) {
+static int find_window_start(Agentite_MetricTracker *m, int history_size, float current_time, float time_window) {
     if (m->sample_count == 0) return -1;
     if (time_window <= 0.0f) return 0;  /* All history */
 
@@ -108,7 +108,7 @@ static int find_window_start(Carbon_MetricTracker *m, int history_size, float cu
 
     while (lo <= hi) {
         int mid = (lo + hi) / 2;
-        Carbon_RateSample *s = get_sample(m, mid, history_size);
+        Agentite_RateSample *s = get_sample(m, mid, history_size);
         if (s && s->timestamp >= cutoff) {
             result = mid;
             hi = mid - 1;
@@ -124,31 +124,31 @@ static int find_window_start(Carbon_MetricTracker *m, int history_size, float cu
  * Creation and Destruction
  * ========================================================================= */
 
-Carbon_RateTracker *carbon_rate_create(int metric_count, float sample_interval, int history_size) {
+Agentite_RateTracker *agentite_rate_create(int metric_count, float sample_interval, int history_size) {
     if (metric_count <= 0) metric_count = 1;
-    if (metric_count > CARBON_RATE_MAX_METRICS) metric_count = CARBON_RATE_MAX_METRICS;
+    if (metric_count > AGENTITE_RATE_MAX_METRICS) metric_count = AGENTITE_RATE_MAX_METRICS;
     if (history_size <= 0) history_size = 64;
-    if (history_size > CARBON_RATE_MAX_SAMPLES) history_size = CARBON_RATE_MAX_SAMPLES;
+    if (history_size > AGENTITE_RATE_MAX_SAMPLES) history_size = AGENTITE_RATE_MAX_SAMPLES;
     if (sample_interval < 0.01f) sample_interval = 0.01f;
 
-    Carbon_RateTracker *tracker = CARBON_ALLOC(Carbon_RateTracker);
+    Agentite_RateTracker *tracker = AGENTITE_ALLOC(Agentite_RateTracker);
     if (!tracker) {
-        carbon_set_error("Rate: Failed to allocate tracker");
+        agentite_set_error("Rate: Failed to allocate tracker");
         return NULL;
     }
 
-    tracker->metrics = CARBON_ALLOC_ARRAY(Carbon_MetricTracker, metric_count);
+    tracker->metrics = AGENTITE_ALLOC_ARRAY(Agentite_MetricTracker, metric_count);
     if (!tracker->metrics) {
-        carbon_set_error("Rate: Failed to allocate metrics");
+        agentite_set_error("Rate: Failed to allocate metrics");
         free(tracker);
         return NULL;
     }
 
     /* Allocate sample buffers for each metric */
     for (int i = 0; i < metric_count; i++) {
-        tracker->metrics[i].samples = CARBON_ALLOC_ARRAY(Carbon_RateSample, history_size);
+        tracker->metrics[i].samples = AGENTITE_ALLOC_ARRAY(Agentite_RateSample, history_size);
         if (!tracker->metrics[i].samples) {
-            carbon_set_error("Rate: Failed to allocate sample buffer");
+            agentite_set_error("Rate: Failed to allocate sample buffer");
             for (int j = 0; j < i; j++) {
                 free(tracker->metrics[j].samples);
             }
@@ -169,7 +169,7 @@ Carbon_RateTracker *carbon_rate_create(int metric_count, float sample_interval, 
     return tracker;
 }
 
-void carbon_rate_destroy(Carbon_RateTracker *tracker) {
+void agentite_rate_destroy(Agentite_RateTracker *tracker) {
     if (!tracker) return;
 
     if (tracker->metrics) {
@@ -181,16 +181,16 @@ void carbon_rate_destroy(Carbon_RateTracker *tracker) {
     free(tracker);
 }
 
-void carbon_rate_reset(Carbon_RateTracker *tracker) {
-    CARBON_VALIDATE_PTR(tracker);
+void agentite_rate_reset(Agentite_RateTracker *tracker) {
+    AGENTITE_VALIDATE_PTR(tracker);
 
     for (int i = 0; i < tracker->metric_count; i++) {
-        Carbon_MetricTracker *m = &tracker->metrics[i];
+        Agentite_MetricTracker *m = &tracker->metrics[i];
         m->pending_produced = 0;
         m->pending_consumed = 0;
         m->sample_head = 0;
         m->sample_count = 0;
-        memset(m->samples, 0, tracker->history_size * sizeof(Carbon_RateSample));
+        memset(m->samples, 0, tracker->history_size * sizeof(Agentite_RateSample));
     }
 
     tracker->time_accumulator = 0.0f;
@@ -201,23 +201,23 @@ void carbon_rate_reset(Carbon_RateTracker *tracker) {
  * Metric Configuration
  * ========================================================================= */
 
-void carbon_rate_set_name(Carbon_RateTracker *tracker, int metric_id, const char *name) {
-    CARBON_VALIDATE_PTR(tracker);
-    CARBON_VALIDATE_PTR(name);
+void agentite_rate_set_name(Agentite_RateTracker *tracker, int metric_id, const char *name) {
+    AGENTITE_VALIDATE_PTR(tracker);
+    AGENTITE_VALIDATE_PTR(name);
     if (metric_id < 0 || metric_id >= tracker->metric_count) return;
 
     strncpy(tracker->metrics[metric_id].name, name, sizeof(tracker->metrics[metric_id].name) - 1);
     tracker->metrics[metric_id].name[sizeof(tracker->metrics[metric_id].name) - 1] = '\0';
 }
 
-const char *carbon_rate_get_name(Carbon_RateTracker *tracker, int metric_id) {
-    CARBON_VALIDATE_PTR_RET(tracker, "");
+const char *agentite_rate_get_name(Agentite_RateTracker *tracker, int metric_id) {
+    AGENTITE_VALIDATE_PTR_RET(tracker, "");
     if (metric_id < 0 || metric_id >= tracker->metric_count) return "";
     return tracker->metrics[metric_id].name;
 }
 
-int carbon_rate_get_metric_count(Carbon_RateTracker *tracker) {
-    CARBON_VALIDATE_PTR_RET(tracker, 0);
+int agentite_rate_get_metric_count(Agentite_RateTracker *tracker) {
+    AGENTITE_VALIDATE_PTR_RET(tracker, 0);
     return tracker->metric_count;
 }
 
@@ -225,8 +225,8 @@ int carbon_rate_get_metric_count(Carbon_RateTracker *tracker) {
  * Recording
  * ========================================================================= */
 
-void carbon_rate_update(Carbon_RateTracker *tracker, float delta_time) {
-    CARBON_VALIDATE_PTR(tracker);
+void agentite_rate_update(Agentite_RateTracker *tracker, float delta_time) {
+    AGENTITE_VALIDATE_PTR(tracker);
     if (delta_time < 0.0f) delta_time = 0.0f;
 
     tracker->time_accumulator += delta_time;
@@ -239,33 +239,33 @@ void carbon_rate_update(Carbon_RateTracker *tracker, float delta_time) {
     }
 }
 
-void carbon_rate_record_production(Carbon_RateTracker *tracker, int metric_id, int32_t amount) {
-    CARBON_VALIDATE_PTR(tracker);
+void agentite_rate_record_production(Agentite_RateTracker *tracker, int metric_id, int32_t amount) {
+    AGENTITE_VALIDATE_PTR(tracker);
     if (metric_id < 0 || metric_id >= tracker->metric_count) return;
     if (amount < 0) amount = 0;
 
     tracker->metrics[metric_id].pending_produced += amount;
 }
 
-void carbon_rate_record_consumption(Carbon_RateTracker *tracker, int metric_id, int32_t amount) {
-    CARBON_VALIDATE_PTR(tracker);
+void agentite_rate_record_consumption(Agentite_RateTracker *tracker, int metric_id, int32_t amount) {
+    AGENTITE_VALIDATE_PTR(tracker);
     if (metric_id < 0 || metric_id >= tracker->metric_count) return;
     if (amount < 0) amount = 0;
 
     tracker->metrics[metric_id].pending_consumed += amount;
 }
 
-void carbon_rate_record(Carbon_RateTracker *tracker, int metric_id,
+void agentite_rate_record(Agentite_RateTracker *tracker, int metric_id,
                         int32_t produced, int32_t consumed) {
-    CARBON_VALIDATE_PTR(tracker);
+    AGENTITE_VALIDATE_PTR(tracker);
     if (metric_id < 0 || metric_id >= tracker->metric_count) return;
 
     if (produced > 0) tracker->metrics[metric_id].pending_produced += produced;
     if (consumed > 0) tracker->metrics[metric_id].pending_consumed += consumed;
 }
 
-void carbon_rate_force_sample(Carbon_RateTracker *tracker) {
-    CARBON_VALIDATE_PTR(tracker);
+void agentite_rate_force_sample(Agentite_RateTracker *tracker) {
+    AGENTITE_VALIDATE_PTR(tracker);
     take_sample(tracker);
     tracker->time_accumulator = 0.0f;
 }
@@ -274,28 +274,28 @@ void carbon_rate_force_sample(Carbon_RateTracker *tracker) {
  * Rate Queries
  * ========================================================================= */
 
-float carbon_rate_get_production_rate(Carbon_RateTracker *tracker, int metric_id, float time_window) {
-    Carbon_RateStats stats = carbon_rate_get_stats(tracker, metric_id, time_window);
+float agentite_rate_get_production_rate(Agentite_RateTracker *tracker, int metric_id, float time_window) {
+    Agentite_RateStats stats = agentite_rate_get_stats(tracker, metric_id, time_window);
     return stats.production_rate;
 }
 
-float carbon_rate_get_consumption_rate(Carbon_RateTracker *tracker, int metric_id, float time_window) {
-    Carbon_RateStats stats = carbon_rate_get_stats(tracker, metric_id, time_window);
+float agentite_rate_get_consumption_rate(Agentite_RateTracker *tracker, int metric_id, float time_window) {
+    Agentite_RateStats stats = agentite_rate_get_stats(tracker, metric_id, time_window);
     return stats.consumption_rate;
 }
 
-float carbon_rate_get_net_rate(Carbon_RateTracker *tracker, int metric_id, float time_window) {
-    Carbon_RateStats stats = carbon_rate_get_stats(tracker, metric_id, time_window);
+float agentite_rate_get_net_rate(Agentite_RateTracker *tracker, int metric_id, float time_window) {
+    Agentite_RateStats stats = agentite_rate_get_stats(tracker, metric_id, time_window);
     return stats.net_rate;
 }
 
-Carbon_RateStats carbon_rate_get_stats(Carbon_RateTracker *tracker, int metric_id, float time_window) {
-    Carbon_RateStats stats = {0};
+Agentite_RateStats agentite_rate_get_stats(Agentite_RateTracker *tracker, int metric_id, float time_window) {
+    Agentite_RateStats stats = {0};
 
-    CARBON_VALIDATE_PTR_RET(tracker, stats);
+    AGENTITE_VALIDATE_PTR_RET(tracker, stats);
     if (metric_id < 0 || metric_id >= tracker->metric_count) return stats;
 
-    Carbon_MetricTracker *m = &tracker->metrics[metric_id];
+    Agentite_MetricTracker *m = &tracker->metrics[metric_id];
     if (m->sample_count == 0) return stats;
 
     int start = find_window_start(m, tracker->history_size, tracker->total_time, time_window);
@@ -311,7 +311,7 @@ Carbon_RateStats carbon_rate_get_stats(Carbon_RateTracker *tracker, int metric_i
     float first_time = 0.0f;
 
     for (int i = start; i < m->sample_count; i++) {
-        Carbon_RateSample *s = get_sample(m, i, tracker->history_size);
+        Agentite_RateSample *s = get_sample(m, i, tracker->history_size);
         if (!s) continue;
 
         if (stats.sample_count == 0) {
@@ -355,28 +355,28 @@ Carbon_RateStats carbon_rate_get_stats(Carbon_RateTracker *tracker, int metric_i
  * Aggregate Queries
  * ========================================================================= */
 
-int32_t carbon_rate_get_total_production(Carbon_RateTracker *tracker, int metric_id, float time_window) {
-    Carbon_RateStats stats = carbon_rate_get_stats(tracker, metric_id, time_window);
+int32_t agentite_rate_get_total_production(Agentite_RateTracker *tracker, int metric_id, float time_window) {
+    Agentite_RateStats stats = agentite_rate_get_stats(tracker, metric_id, time_window);
     return stats.total_produced;
 }
 
-int32_t carbon_rate_get_total_consumption(Carbon_RateTracker *tracker, int metric_id, float time_window) {
-    Carbon_RateStats stats = carbon_rate_get_stats(tracker, metric_id, time_window);
+int32_t agentite_rate_get_total_consumption(Agentite_RateTracker *tracker, int metric_id, float time_window) {
+    Agentite_RateStats stats = agentite_rate_get_stats(tracker, metric_id, time_window);
     return stats.total_consumed;
 }
 
-int32_t carbon_rate_get_min_production(Carbon_RateTracker *tracker, int metric_id, float time_window) {
-    Carbon_RateStats stats = carbon_rate_get_stats(tracker, metric_id, time_window);
+int32_t agentite_rate_get_min_production(Agentite_RateTracker *tracker, int metric_id, float time_window) {
+    Agentite_RateStats stats = agentite_rate_get_stats(tracker, metric_id, time_window);
     return stats.min_production;
 }
 
-int32_t carbon_rate_get_max_production(Carbon_RateTracker *tracker, int metric_id, float time_window) {
-    Carbon_RateStats stats = carbon_rate_get_stats(tracker, metric_id, time_window);
+int32_t agentite_rate_get_max_production(Agentite_RateTracker *tracker, int metric_id, float time_window) {
+    Agentite_RateStats stats = agentite_rate_get_stats(tracker, metric_id, time_window);
     return stats.max_production;
 }
 
-float carbon_rate_get_avg_production(Carbon_RateTracker *tracker, int metric_id, float time_window) {
-    Carbon_RateStats stats = carbon_rate_get_stats(tracker, metric_id, time_window);
+float agentite_rate_get_avg_production(Agentite_RateTracker *tracker, int metric_id, float time_window) {
+    Agentite_RateStats stats = agentite_rate_get_stats(tracker, metric_id, time_window);
     if (stats.sample_count == 0) return 0.0f;
     return (float)stats.total_produced / (float)stats.sample_count;
 }
@@ -385,14 +385,14 @@ float carbon_rate_get_avg_production(Carbon_RateTracker *tracker, int metric_id,
  * History Access
  * ========================================================================= */
 
-int carbon_rate_get_history(Carbon_RateTracker *tracker, int metric_id, float time_window,
-                            Carbon_RateSample *out_samples, int max_samples) {
-    CARBON_VALIDATE_PTR_RET(tracker, 0);
-    CARBON_VALIDATE_PTR_RET(out_samples, 0);
+int agentite_rate_get_history(Agentite_RateTracker *tracker, int metric_id, float time_window,
+                            Agentite_RateSample *out_samples, int max_samples) {
+    AGENTITE_VALIDATE_PTR_RET(tracker, 0);
+    AGENTITE_VALIDATE_PTR_RET(out_samples, 0);
     if (metric_id < 0 || metric_id >= tracker->metric_count) return 0;
     if (max_samples <= 0) return 0;
 
-    Carbon_MetricTracker *m = &tracker->metrics[metric_id];
+    Agentite_MetricTracker *m = &tracker->metrics[metric_id];
     if (m->sample_count == 0) return 0;
 
     int start = find_window_start(m, tracker->history_size, tracker->total_time, time_window);
@@ -400,7 +400,7 @@ int carbon_rate_get_history(Carbon_RateTracker *tracker, int metric_id, float ti
 
     int count = 0;
     for (int i = start; i < m->sample_count && count < max_samples; i++) {
-        Carbon_RateSample *s = get_sample(m, i, tracker->history_size);
+        Agentite_RateSample *s = get_sample(m, i, tracker->history_size);
         if (s) {
             out_samples[count++] = *s;
         }
@@ -409,16 +409,16 @@ int carbon_rate_get_history(Carbon_RateTracker *tracker, int metric_id, float ti
     return count;
 }
 
-bool carbon_rate_get_latest_sample(Carbon_RateTracker *tracker, int metric_id,
-                                   Carbon_RateSample *out_sample) {
-    CARBON_VALIDATE_PTR_RET(tracker, false);
-    CARBON_VALIDATE_PTR_RET(out_sample, false);
+bool agentite_rate_get_latest_sample(Agentite_RateTracker *tracker, int metric_id,
+                                   Agentite_RateSample *out_sample) {
+    AGENTITE_VALIDATE_PTR_RET(tracker, false);
+    AGENTITE_VALIDATE_PTR_RET(out_sample, false);
     if (metric_id < 0 || metric_id >= tracker->metric_count) return false;
 
-    Carbon_MetricTracker *m = &tracker->metrics[metric_id];
+    Agentite_MetricTracker *m = &tracker->metrics[metric_id];
     if (m->sample_count == 0) return false;
 
-    Carbon_RateSample *s = get_sample(m, m->sample_count - 1, tracker->history_size);
+    Agentite_RateSample *s = get_sample(m, m->sample_count - 1, tracker->history_size);
     if (s) {
         *out_sample = *s;
         return true;
@@ -426,8 +426,8 @@ bool carbon_rate_get_latest_sample(Carbon_RateTracker *tracker, int metric_id,
     return false;
 }
 
-int carbon_rate_get_sample_count(Carbon_RateTracker *tracker, int metric_id) {
-    CARBON_VALIDATE_PTR_RET(tracker, 0);
+int agentite_rate_get_sample_count(Agentite_RateTracker *tracker, int metric_id) {
+    AGENTITE_VALIDATE_PTR_RET(tracker, 0);
     if (metric_id < 0 || metric_id >= tracker->metric_count) return 0;
     return tracker->metrics[metric_id].sample_count;
 }
@@ -436,22 +436,22 @@ int carbon_rate_get_sample_count(Carbon_RateTracker *tracker, int metric_id) {
  * Configuration Queries
  * ========================================================================= */
 
-float carbon_rate_get_interval(Carbon_RateTracker *tracker) {
-    CARBON_VALIDATE_PTR_RET(tracker, 0.0f);
+float agentite_rate_get_interval(Agentite_RateTracker *tracker) {
+    AGENTITE_VALIDATE_PTR_RET(tracker, 0.0f);
     return tracker->sample_interval;
 }
 
-int carbon_rate_get_history_size(Carbon_RateTracker *tracker) {
-    CARBON_VALIDATE_PTR_RET(tracker, 0);
+int agentite_rate_get_history_size(Agentite_RateTracker *tracker) {
+    AGENTITE_VALIDATE_PTR_RET(tracker, 0);
     return tracker->history_size;
 }
 
-float carbon_rate_get_max_time_window(Carbon_RateTracker *tracker) {
-    CARBON_VALIDATE_PTR_RET(tracker, 0.0f);
+float agentite_rate_get_max_time_window(Agentite_RateTracker *tracker) {
+    AGENTITE_VALIDATE_PTR_RET(tracker, 0.0f);
     return tracker->sample_interval * (float)tracker->history_size;
 }
 
-float carbon_rate_get_current_time(Carbon_RateTracker *tracker) {
-    CARBON_VALIDATE_PTR_RET(tracker, 0.0f);
+float agentite_rate_get_current_time(Agentite_RateTracker *tracker) {
+    AGENTITE_VALIDATE_PTR_RET(tracker, 0.0f);
     return tracker->total_time;
 }

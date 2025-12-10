@@ -1,7 +1,7 @@
 #ifndef GAME_H
 #define GAME_H
 
-#include "carbon/game_context.h"
+#include "agentite/game_context.h"
 #include "components.h"
 #include "states/state.h"
 
@@ -13,7 +13,7 @@
  *
  * Usage:
  *   Game *game = game_init(ctx);
- *   while (carbon_game_context_is_running(ctx)) {
+ *   while (agentite_game_context_is_running(ctx)) {
  *       game_update(game, ctx->delta_time);
  *       game_render(game, ctx);
  *   }
@@ -39,7 +39,7 @@ typedef struct Game {
  * @param ctx Game context with all engine systems
  * @return Initialized game, or NULL on failure
  */
-Game *game_init(Carbon_GameContext *ctx);
+Game *game_init(Agentite_GameContext *ctx);
 
 /**
  * Shutdown the game and free resources.
@@ -55,7 +55,7 @@ void game_shutdown(Game *game);
  * @param game Game instance
  * @param ctx Game context
  */
-void game_update(Game *game, Carbon_GameContext *ctx);
+void game_update(Game *game, Agentite_GameContext *ctx);
 
 /**
  * Render the game.
@@ -66,7 +66,7 @@ void game_update(Game *game, Carbon_GameContext *ctx);
  * @param cmd GPU command buffer
  * @param pass Render pass
  */
-void game_render(Game *game, Carbon_GameContext *ctx,
+void game_render(Game *game, Agentite_GameContext *ctx,
                  SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass);
 
 /**

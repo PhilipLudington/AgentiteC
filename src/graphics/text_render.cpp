@@ -10,7 +10,7 @@
  * Internal: Glyph Rendering
  * ============================================================================ */
 
-void text_add_glyph(Carbon_TextRenderer *tr,
+void text_add_glyph(Agentite_TextRenderer *tr,
                     float x0, float y0, float x1, float y1,
                     float u0, float v0, float u1, float v1,
                     float r, float g, float b, float a)
@@ -53,7 +53,7 @@ void text_add_glyph(Carbon_TextRenderer *tr,
  * Rendering Functions
  * ============================================================================ */
 
-void carbon_text_begin(Carbon_TextRenderer *tr)
+void agentite_text_begin(Agentite_TextRenderer *tr)
 {
     if (!tr) return;
 
@@ -76,53 +76,53 @@ void carbon_text_begin(Carbon_TextRenderer *tr)
     tr->batch_started = true;
 }
 
-void carbon_text_draw(Carbon_TextRenderer *tr, Carbon_Font *font,
+void agentite_text_draw(Agentite_TextRenderer *tr, Agentite_Font *font,
                       const char *text, float x, float y)
 {
-    carbon_text_draw_ex(tr, font, text, x, y, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
-                        CARBON_TEXT_ALIGN_LEFT);
+    agentite_text_draw_ex(tr, font, text, x, y, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+                        AGENTITE_TEXT_ALIGN_LEFT);
 }
 
-void carbon_text_draw_colored(Carbon_TextRenderer *tr, Carbon_Font *font,
+void agentite_text_draw_colored(Agentite_TextRenderer *tr, Agentite_Font *font,
                               const char *text, float x, float y,
                               float r, float g, float b, float a)
 {
-    carbon_text_draw_ex(tr, font, text, x, y, 1.0f, r, g, b, a,
-                        CARBON_TEXT_ALIGN_LEFT);
+    agentite_text_draw_ex(tr, font, text, x, y, 1.0f, r, g, b, a,
+                        AGENTITE_TEXT_ALIGN_LEFT);
 }
 
-void carbon_text_draw_scaled(Carbon_TextRenderer *tr, Carbon_Font *font,
+void agentite_text_draw_scaled(Agentite_TextRenderer *tr, Agentite_Font *font,
                              const char *text, float x, float y,
                              float scale)
 {
-    carbon_text_draw_ex(tr, font, text, x, y, scale, 1.0f, 1.0f, 1.0f, 1.0f,
-                        CARBON_TEXT_ALIGN_LEFT);
+    agentite_text_draw_ex(tr, font, text, x, y, scale, 1.0f, 1.0f, 1.0f, 1.0f,
+                        AGENTITE_TEXT_ALIGN_LEFT);
 }
 
-void carbon_text_draw_ex(Carbon_TextRenderer *tr, Carbon_Font *font,
+void agentite_text_draw_ex(Agentite_TextRenderer *tr, Agentite_Font *font,
                          const char *text, float x, float y,
                          float scale,
                          float r, float g, float b, float a,
-                         Carbon_TextAlign align)
+                         Agentite_TextAlign align)
 {
     if (!tr || !font || !text || !tr->batch_started) return;
 
     /* Auto-batch: if font changes, end current batch and start a new one */
     if (tr->current_font && tr->current_font != font) {
         /* End current batch (queues it) */
-        carbon_text_end(tr);
+        agentite_text_end(tr);
         /* Start new batch */
-        carbon_text_begin(tr);
+        agentite_text_begin(tr);
     }
     tr->current_font = font;
 
     /* Handle alignment */
     float offset_x = 0.0f;
-    if (align != CARBON_TEXT_ALIGN_LEFT) {
-        float text_width = carbon_text_measure(font, text) * scale;
-        if (align == CARBON_TEXT_ALIGN_CENTER) {
+    if (align != AGENTITE_TEXT_ALIGN_LEFT) {
+        float text_width = agentite_text_measure(font, text) * scale;
+        if (align == AGENTITE_TEXT_ALIGN_CENTER) {
             offset_x = -text_width / 2.0f;
-        } else if (align == CARBON_TEXT_ALIGN_RIGHT) {
+        } else if (align == AGENTITE_TEXT_ALIGN_RIGHT) {
             offset_x = -text_width;
         }
     }
@@ -162,7 +162,7 @@ void carbon_text_draw_ex(Carbon_TextRenderer *tr, Carbon_Font *font,
     }
 }
 
-void carbon_text_upload(Carbon_TextRenderer *tr, SDL_GPUCommandBuffer *cmd)
+void agentite_text_upload(Agentite_TextRenderer *tr, SDL_GPUCommandBuffer *cmd)
 {
     if (!tr || !cmd || tr->queued_batch_count == 0 || tr->vertex_count == 0) return;
 
@@ -217,7 +217,7 @@ void carbon_text_upload(Carbon_TextRenderer *tr, SDL_GPUCommandBuffer *cmd)
     SDL_ReleaseGPUTransferBuffer(tr->gpu, transfer);
 }
 
-void carbon_text_render(Carbon_TextRenderer *tr, SDL_GPUCommandBuffer *cmd,
+void agentite_text_render(Agentite_TextRenderer *tr, SDL_GPUCommandBuffer *cmd,
                         SDL_GPURenderPass *pass)
 {
     if (!tr || !cmd || !pass || tr->queued_batch_count == 0) return;
@@ -341,7 +341,7 @@ void carbon_text_render(Carbon_TextRenderer *tr, SDL_GPUCommandBuffer *cmd,
     tr->queued_batch_count = 0;
 }
 
-void carbon_text_end(Carbon_TextRenderer *tr)
+void agentite_text_end(Agentite_TextRenderer *tr)
 {
     if (!tr) return;
     if (!tr->batch_started) return;
@@ -367,7 +367,7 @@ void carbon_text_end(Carbon_TextRenderer *tr)
     batch->index_count = batch_index_count;
 
     if (tr->is_sdf_batch && tr->current_sdf_font) {
-        batch->type = (tr->current_sdf_font->type == CARBON_SDF_TYPE_MSDF)
+        batch->type = (tr->current_sdf_font->type == AGENTITE_SDF_TYPE_MSDF)
                       ? TEXT_BATCH_MSDF : TEXT_BATCH_SDF;
         batch->sdf_font = tr->current_sdf_font;
         batch->sdf_scale = tr->current_sdf_scale;
@@ -389,7 +389,7 @@ void carbon_text_end(Carbon_TextRenderer *tr)
  * Formatted Text (printf-style)
  * ============================================================================ */
 
-void carbon_text_printf(Carbon_TextRenderer *tr, Carbon_Font *font,
+void agentite_text_printf(Agentite_TextRenderer *tr, Agentite_Font *font,
                         float x, float y,
                         const char *fmt, ...)
 {
@@ -399,10 +399,10 @@ void carbon_text_printf(Carbon_TextRenderer *tr, Carbon_Font *font,
     vsnprintf(buffer, sizeof(buffer), fmt, args);
     va_end(args);
 
-    carbon_text_draw(tr, font, buffer, x, y);
+    agentite_text_draw(tr, font, buffer, x, y);
 }
 
-void carbon_text_printf_colored(Carbon_TextRenderer *tr, Carbon_Font *font,
+void agentite_text_printf_colored(Agentite_TextRenderer *tr, Agentite_Font *font,
                                 float x, float y,
                                 float r, float g, float b, float a,
                                 const char *fmt, ...)
@@ -413,5 +413,5 @@ void carbon_text_printf_colored(Carbon_TextRenderer *tr, Carbon_Font *font,
     vsnprintf(buffer, sizeof(buffer), fmt, args);
     va_end(args);
 
-    carbon_text_draw_colored(tr, font, buffer, x, y, r, g, b, a);
+    agentite_text_draw_colored(tr, font, buffer, x, y, r, g, b, a);
 }

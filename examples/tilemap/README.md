@@ -31,17 +31,17 @@ make example-tilemap
 ### Creating Tilemaps
 ```c
 // Load tileset texture (grid of tiles)
-Carbon_Texture *tex = carbon_texture_load(sr, "tileset.png");
+Agentite_Texture *tex = agentite_texture_load(sr, "tileset.png");
 
 // Create tileset (texture, tile_width, tile_height)
-Carbon_Tileset *tileset = carbon_tileset_create(tex, 32, 32);
+Agentite_Tileset *tileset = agentite_tileset_create(tex, 32, 32);
 
 // Create tilemap (tileset, map_width, map_height in tiles)
-Carbon_Tilemap *tilemap = carbon_tilemap_create(tileset, 100, 100);
+Agentite_Tilemap *tilemap = agentite_tilemap_create(tileset, 100, 100);
 
 // Add layers (rendered back to front)
-int ground = carbon_tilemap_add_layer(tilemap, "ground");
-int objects = carbon_tilemap_add_layer(tilemap, "objects");
+int ground = agentite_tilemap_add_layer(tilemap, "ground");
+int objects = agentite_tilemap_add_layer(tilemap, "objects");
 ```
 
 ### Setting Tiles
@@ -49,44 +49,44 @@ int objects = carbon_tilemap_add_layer(tilemap, "objects");
 // Tile ID 0 = empty, 1+ = tiles from tileset (left-to-right, top-to-bottom)
 
 // Fill region with tile
-carbon_tilemap_fill(tilemap, ground, x, y, width, height, tile_id);
+agentite_tilemap_fill(tilemap, ground, x, y, width, height, tile_id);
 
 // Set single tile
-carbon_tilemap_set_tile(tilemap, objects, x, y, tile_id);
+agentite_tilemap_set_tile(tilemap, objects, x, y, tile_id);
 
 // Get tile at position
-Carbon_TileID tile = carbon_tilemap_get_tile(tilemap, ground, x, y);
+Agentite_TileID tile = agentite_tilemap_get_tile(tilemap, ground, x, y);
 ```
 
 ### Layer Properties
 ```c
 // Visibility
-carbon_tilemap_set_layer_visible(tilemap, objects, false);
+agentite_tilemap_set_layer_visible(tilemap, objects, false);
 
 // Opacity (0.0 - 1.0)
-carbon_tilemap_set_layer_opacity(tilemap, objects, 0.8f);
+agentite_tilemap_set_layer_opacity(tilemap, objects, 0.8f);
 ```
 
 ### Rendering
 ```c
 // During sprite batch, before upload
-carbon_sprite_begin(sprites, NULL);
-carbon_tilemap_render(tilemap, sprites, camera);  // Frustum culled
+agentite_sprite_begin(sprites, NULL);
+agentite_tilemap_render(tilemap, sprites, camera);  // Frustum culled
 // ... other sprites ...
-carbon_sprite_upload(sprites, cmd);
+agentite_sprite_upload(sprites, cmd);
 // ... render pass ...
-carbon_sprite_render(sprites, cmd, pass);
+agentite_sprite_render(sprites, cmd, pass);
 ```
 
 ### Coordinate Conversion
 ```c
 // World position to tile coordinates
 int tile_x, tile_y;
-carbon_tilemap_world_to_tile(tilemap, world_x, world_y, &tile_x, &tile_y);
+agentite_tilemap_world_to_tile(tilemap, world_x, world_y, &tile_x, &tile_y);
 
 // Tile to world position
 float world_x, world_y;
-carbon_tilemap_tile_to_world(tilemap, tile_x, tile_y, &world_x, &world_y);
+agentite_tilemap_tile_to_world(tilemap, tile_x, tile_y, &world_x, &world_y);
 ```
 
 ## Performance Notes

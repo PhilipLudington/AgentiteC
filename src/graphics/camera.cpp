@@ -2,8 +2,8 @@
  * Carbon 2D Camera Implementation
  */
 
-#include "carbon/carbon.h"
-#include "carbon/camera.h"
+#include "agentite/agentite.h"
+#include "agentite/camera.h"
 #include <cglm/cglm.h>
 #include <stdlib.h>
 #include <math.h>
@@ -14,7 +14,7 @@
  * Internal Structure
  * ============================================================================ */
 
-struct Carbon_Camera {
+struct Agentite_Camera {
     float x, y;              /* Position (world coords of view center) */
     float zoom;              /* 1.0 = normal, 2.0 = 2x magnification */
     float rotation;          /* Radians */
@@ -30,7 +30,7 @@ struct Carbon_Camera {
  * Internal: Matrix Computation
  * ============================================================================ */
 
-static void camera_compute_matrices(Carbon_Camera *cam)
+static void camera_compute_matrices(Agentite_Camera *cam)
 {
     if (!cam || !cam->dirty) return;
 
@@ -82,9 +82,9 @@ static void camera_compute_matrices(Carbon_Camera *cam)
  * Lifecycle
  * ============================================================================ */
 
-Carbon_Camera *carbon_camera_create(float viewport_w, float viewport_h)
+Agentite_Camera *agentite_camera_create(float viewport_w, float viewport_h)
 {
-    Carbon_Camera *cam = CARBON_ALLOC(Carbon_Camera);
+    Agentite_Camera *cam = AGENTITE_ALLOC(Agentite_Camera);
     if (!cam) return NULL;
 
     cam->x = 0.0f;
@@ -101,7 +101,7 @@ Carbon_Camera *carbon_camera_create(float viewport_w, float viewport_h)
     return cam;
 }
 
-void carbon_camera_destroy(Carbon_Camera *camera)
+void agentite_camera_destroy(Agentite_Camera *camera)
 {
     free(camera);
 }
@@ -110,7 +110,7 @@ void carbon_camera_destroy(Carbon_Camera *camera)
  * Transform Setters
  * ============================================================================ */
 
-void carbon_camera_set_position(Carbon_Camera *cam, float x, float y)
+void agentite_camera_set_position(Agentite_Camera *cam, float x, float y)
 {
     if (!cam) return;
     cam->x = x;
@@ -118,7 +118,7 @@ void carbon_camera_set_position(Carbon_Camera *cam, float x, float y)
     cam->dirty = true;
 }
 
-void carbon_camera_move(Carbon_Camera *cam, float dx, float dy)
+void agentite_camera_move(Agentite_Camera *cam, float dx, float dy)
 {
     if (!cam) return;
     cam->x += dx;
@@ -126,7 +126,7 @@ void carbon_camera_move(Carbon_Camera *cam, float dx, float dy)
     cam->dirty = true;
 }
 
-void carbon_camera_set_zoom(Carbon_Camera *cam, float zoom)
+void agentite_camera_set_zoom(Agentite_Camera *cam, float zoom)
 {
     if (!cam) return;
     /* Clamp zoom to reasonable range */
@@ -136,14 +136,14 @@ void carbon_camera_set_zoom(Carbon_Camera *cam, float zoom)
     cam->dirty = true;
 }
 
-void carbon_camera_set_rotation(Carbon_Camera *cam, float degrees)
+void agentite_camera_set_rotation(Agentite_Camera *cam, float degrees)
 {
     if (!cam) return;
     cam->rotation = DEG_TO_RAD(degrees);
     cam->dirty = true;
 }
 
-void carbon_camera_set_viewport(Carbon_Camera *cam, float w, float h)
+void agentite_camera_set_viewport(Agentite_Camera *cam, float w, float h)
 {
     if (!cam) return;
     cam->viewport_w = w;
@@ -155,26 +155,26 @@ void carbon_camera_set_viewport(Carbon_Camera *cam, float w, float h)
  * Getters
  * ============================================================================ */
 
-void carbon_camera_get_position(Carbon_Camera *cam, float *x, float *y)
+void agentite_camera_get_position(Agentite_Camera *cam, float *x, float *y)
 {
     if (!cam) return;
     if (x) *x = cam->x;
     if (y) *y = cam->y;
 }
 
-float carbon_camera_get_zoom(Carbon_Camera *cam)
+float agentite_camera_get_zoom(Agentite_Camera *cam)
 {
     return cam ? cam->zoom : 1.0f;
 }
 
-float carbon_camera_get_rotation(Carbon_Camera *cam)
+float agentite_camera_get_rotation(Agentite_Camera *cam)
 {
     if (!cam) return 0.0f;
     /* Convert back to degrees */
     return cam->rotation / 0.01745329251994329576923690768489f;
 }
 
-void carbon_camera_get_viewport(Carbon_Camera *cam, float *w, float *h)
+void agentite_camera_get_viewport(Agentite_Camera *cam, float *w, float *h)
 {
     if (!cam) return;
     if (w) *w = cam->viewport_w;
@@ -185,12 +185,12 @@ void carbon_camera_get_viewport(Carbon_Camera *cam, float *w, float *h)
  * Matrix Access
  * ============================================================================ */
 
-void carbon_camera_update(Carbon_Camera *cam)
+void agentite_camera_update(Agentite_Camera *cam)
 {
     camera_compute_matrices(cam);
 }
 
-const float *carbon_camera_get_vp_matrix(Carbon_Camera *cam)
+const float *agentite_camera_get_vp_matrix(Agentite_Camera *cam)
 {
     if (!cam) return NULL;
     camera_compute_matrices(cam);
@@ -201,7 +201,7 @@ const float *carbon_camera_get_vp_matrix(Carbon_Camera *cam)
  * Coordinate Conversion
  * ============================================================================ */
 
-void carbon_camera_screen_to_world(Carbon_Camera *cam,
+void agentite_camera_screen_to_world(Agentite_Camera *cam,
                                    float screen_x, float screen_y,
                                    float *world_x, float *world_y)
 {
@@ -226,7 +226,7 @@ void carbon_camera_screen_to_world(Carbon_Camera *cam,
     if (world_y) *world_y = world_pos[1];
 }
 
-void carbon_camera_world_to_screen(Carbon_Camera *cam,
+void agentite_camera_world_to_screen(Agentite_Camera *cam,
                                    float world_x, float world_y,
                                    float *screen_x, float *screen_y)
 {
@@ -248,7 +248,7 @@ void carbon_camera_world_to_screen(Carbon_Camera *cam,
     if (screen_y) *screen_y = (1.0f - ndc_pos[1]) * 0.5f * cam->viewport_h;
 }
 
-void carbon_camera_get_bounds(Carbon_Camera *cam,
+void agentite_camera_get_bounds(Agentite_Camera *cam,
                               float *left, float *right,
                               float *top, float *bottom)
 {

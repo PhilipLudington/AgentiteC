@@ -1,11 +1,11 @@
 /*
- * Carbon UI - Retained Mode Node System Implementation
+ * Agentite UI - Retained Mode Node System Implementation
  */
 
-#include "carbon/ui_node.h"
-#include "carbon/ui.h"
-#include "carbon/ui_style.h"
-#include "carbon/ui_tween.h"
+#include "agentite/ui_node.h"
+#include "agentite/ui.h"
+#include "agentite/ui_style.h"
+#include "agentite/ui_tween.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -15,10 +15,10 @@
  * ============================================================================ */
 
 static uint32_t s_next_node_id = 1;
-static CUI_Node *s_focused_node = NULL;
+static AUI_Node *s_focused_node = NULL;
 
 /* Helper to apply opacity to a color (format: 0xAABBGGRR - alpha in high byte) */
-static inline uint32_t cui_apply_opacity(uint32_t color, float opacity) {
+static inline uint32_t aui_apply_opacity(uint32_t color, float opacity) {
     if (opacity >= 1.0f) return color;
     if (opacity <= 0.0f) return color & 0x00FFFFFF;
     uint8_t a = (uint8_t)((color >> 24) & 0xFF);
@@ -27,24 +27,24 @@ static inline uint32_t cui_apply_opacity(uint32_t color, float opacity) {
 }
 
 /* Get target background color based on node state */
-static uint32_t cui_node_get_target_bg_color(CUI_Node *node, const CUI_Style *style) {
-    if (!node->enabled && style->background_disabled.type == CUI_BG_SOLID) {
+static uint32_t aui_node_get_target_bg_color(AUI_Node *node, const AUI_Style *style) {
+    if (!node->enabled && style->background_disabled.type == AUI_BG_SOLID) {
         return style->background_disabled.solid_color;
     }
-    if (node->pressed && style->background_active.type == CUI_BG_SOLID) {
+    if (node->pressed && style->background_active.type == AUI_BG_SOLID) {
         return style->background_active.solid_color;
     }
-    if (node->hovered && style->background_hover.type == CUI_BG_SOLID) {
+    if (node->hovered && style->background_hover.type == AUI_BG_SOLID) {
         return style->background_hover.solid_color;
     }
-    if (style->background.type == CUI_BG_SOLID) {
+    if (style->background.type == AUI_BG_SOLID) {
         return style->background.solid_color;
     }
     return 0;  /* Transparent/no background */
 }
 
 /* Get target text color based on node state */
-static uint32_t cui_node_get_target_text_color(CUI_Node *node, const CUI_Style *style) {
+static uint32_t aui_node_get_target_text_color(AUI_Node *node, const AUI_Style *style) {
     if (!node->enabled) return style->text_color_disabled;
     if (node->pressed && style->text_color_active != 0) return style->text_color_active;
     if (node->hovered && style->text_color_hover != 0) return style->text_color_hover;
@@ -52,10 +52,10 @@ static uint32_t cui_node_get_target_text_color(CUI_Node *node, const CUI_Style *
 }
 
 /* Update style transitions for a node */
-static void cui_node_update_transitions(CUI_Node *node, float delta_time) {
+static void aui_node_update_transitions(AUI_Node *node, float delta_time) {
     if (!node) return;
 
-    CUI_Style style = cui_node_get_effective_style(node);
+    AUI_Style style = aui_node_get_effective_style(node);
     float duration = style.transition.duration;
 
     /* Check if state changed */
@@ -63,8 +63,8 @@ static void cui_node_update_transitions(CUI_Node *node, float delta_time) {
                          (node->pressed != node->transition_state.prev_pressed);
 
     /* Get target colors for current state */
-    uint32_t target_bg = cui_node_get_target_bg_color(node, &style);
-    uint32_t target_text = cui_node_get_target_text_color(node, &style);
+    uint32_t target_bg = aui_node_get_target_bg_color(node, &style);
+    uint32_t target_text = aui_node_get_target_text_color(node, &style);
     uint32_t target_border = style.border.color;
 
     if (state_changed && duration > 0) {
@@ -93,16 +93,16 @@ static void cui_node_update_transitions(CUI_Node *node, float delta_time) {
             node->transition_state.current_border_color = node->transition_state.to_border_color;
         } else {
             /* Apply easing */
-            float t = cui_ease((CUI_EaseType)style.transition.ease, node->transition_state.progress);
+            float t = aui_ease((AUI_EaseType)style.transition.ease, node->transition_state.progress);
 
             /* Interpolate colors */
-            node->transition_state.current_bg_color = cui_color_lerp(
+            node->transition_state.current_bg_color = aui_color_lerp(
                 node->transition_state.from_bg_color,
                 node->transition_state.to_bg_color, t);
-            node->transition_state.current_text_color = cui_color_lerp(
+            node->transition_state.current_text_color = aui_color_lerp(
                 node->transition_state.from_text_color,
                 node->transition_state.to_text_color, t);
-            node->transition_state.current_border_color = cui_color_lerp(
+            node->transition_state.current_border_color = aui_color_lerp(
                 node->transition_state.from_border_color,
                 node->transition_state.to_border_color, t);
         }
@@ -123,11 +123,11 @@ static void cui_node_update_transitions(CUI_Node *node, float delta_time) {
  * ============================================================================ */
 
 typedef struct {
-    CUI_Anchors anchors;
+    AUI_Anchors anchors;
     bool use_offset_as_size;  /* If true, offsets define size from anchor point */
-} CUI_AnchorPresetData;
+} AUI_AnchorPresetData;
 
-static const CUI_AnchorPresetData s_anchor_presets[CUI_ANCHOR_PRESET_COUNT] = {
+static const AUI_AnchorPresetData s_anchor_presets[AUI_ANCHOR_PRESET_COUNT] = {
     /* TOP_LEFT */      {{0.0f, 0.0f, 0.0f, 0.0f}, true},
     /* TOP_CENTER */    {{0.5f, 0.0f, 0.5f, 0.0f}, true},
     /* TOP_RIGHT */     {{1.0f, 0.0f, 1.0f, 0.0f}, true},
@@ -150,11 +150,11 @@ static const CUI_AnchorPresetData s_anchor_presets[CUI_ANCHOR_PRESET_COUNT] = {
  * Node Lifecycle
  * ============================================================================ */
 
-CUI_Node *cui_node_create(CUI_Context *ctx, CUI_NodeType type, const char *name)
+AUI_Node *aui_node_create(AUI_Context *ctx, AUI_NodeType type, const char *name)
 {
     (void)ctx;
 
-    CUI_Node *node = (CUI_Node *)calloc(1, sizeof(CUI_Node));
+    AUI_Node *node = (AUI_Node *)calloc(1, sizeof(AUI_Node));
     if (!node) return NULL;
 
     node->id = s_next_node_id++;
@@ -174,31 +174,31 @@ CUI_Node *cui_node_create(CUI_Context *ctx, CUI_NodeType type, const char *name)
     node->size_flags_stretch_ratio = 1.0f;
 
     /* Default anchors (top-left) */
-    node->anchors = (CUI_Anchors){0, 0, 0, 0};
+    node->anchors = (AUI_Anchors){0, 0, 0, 0};
 
     /* Default style */
-    node->style = cui_style_default();
+    node->style = aui_style_default();
 
     /* Type-specific initialization */
     switch (type) {
-        case CUI_NODE_VBOX:
-        case CUI_NODE_HBOX:
+        case AUI_NODE_VBOX:
+        case AUI_NODE_HBOX:
             node->box.separation = 4.0f;
             break;
 
-        case CUI_NODE_GRID:
+        case AUI_NODE_GRID:
             node->grid.columns = 2;
             node->grid.h_separation = 4.0f;
             node->grid.v_separation = 4.0f;
             break;
 
-        case CUI_NODE_SCROLL:
+        case AUI_NODE_SCROLL:
             node->scroll.h_scroll_enabled = false;
             node->scroll.v_scroll_enabled = true;
             node->clip_contents = true;
             break;
 
-        case CUI_NODE_SLIDER:
+        case AUI_NODE_SLIDER:
             node->slider.min_value = 0.0f;
             node->slider.max_value = 100.0f;
             node->slider.step = 0.0f;  /* No stepping by default for smooth dragging */
@@ -206,17 +206,17 @@ CUI_Node *cui_node_create(CUI_Context *ctx, CUI_NodeType type, const char *name)
             node->custom_min_size_y = 24;
             break;
 
-        case CUI_NODE_PROGRESS_BAR:
+        case AUI_NODE_PROGRESS_BAR:
             node->progress.min_value = 0.0f;
             node->progress.max_value = 1.0f;
             break;
 
-        case CUI_NODE_BUTTON:
-        case CUI_NODE_TEXTBOX:
+        case AUI_NODE_BUTTON:
+        case AUI_NODE_TEXTBOX:
             node->focus_mode_click = true;
             break;
 
-        case CUI_NODE_CHECKBOX:
+        case AUI_NODE_CHECKBOX:
             node->focus_mode_click = true;
             /* Default min size: 18px box + 8px spacing + ~150px for text */
             node->custom_min_size_x = 200;
@@ -231,7 +231,7 @@ CUI_Node *cui_node_create(CUI_Context *ctx, CUI_NodeType type, const char *name)
     return node;
 }
 
-void cui_node_destroy(CUI_Node *node)
+void aui_node_destroy(AUI_Node *node)
 {
     if (!node) return;
 
@@ -241,17 +241,17 @@ void cui_node_destroy(CUI_Node *node)
     }
 
     /* Emit tree exit signal */
-    cui_node_emit_simple(node, CUI_SIGNAL_TREE_EXITED);
+    aui_node_emit_simple(node, AUI_SIGNAL_TREE_EXITED);
 
     /* Remove from parent */
-    cui_node_remove(node);
+    aui_node_remove(node);
 
     /* Destroy all children */
-    CUI_Node *child = node->first_child;
+    AUI_Node *child = node->first_child;
     while (child) {
-        CUI_Node *next = child->next_sibling;
+        AUI_Node *next = child->next_sibling;
         child->parent = NULL;  /* Prevent double-remove */
-        cui_node_destroy(child);
+        aui_node_destroy(child);
         child = next;
     }
 
@@ -261,18 +261,18 @@ void cui_node_destroy(CUI_Node *node)
     }
 
     /* Free textbox buffer if allocated */
-    if (node->type == CUI_NODE_TEXTBOX && node->textbox.buffer) {
+    if (node->type == AUI_NODE_TEXTBOX && node->textbox.buffer) {
         /* Buffer is user-provided, don't free */
     }
 
     free(node);
 }
 
-CUI_Node *cui_node_duplicate(CUI_Node *node)
+AUI_Node *aui_node_duplicate(AUI_Node *node)
 {
     if (!node) return NULL;
 
-    CUI_Node *copy = (CUI_Node *)malloc(sizeof(CUI_Node));
+    AUI_Node *copy = (AUI_Node *)malloc(sizeof(AUI_Node));
     if (!copy) return NULL;
 
     *copy = *node;
@@ -286,10 +286,10 @@ CUI_Node *cui_node_duplicate(CUI_Node *node)
     copy->connection_count = 0;  /* Don't copy connections */
 
     /* Duplicate children */
-    for (CUI_Node *child = node->first_child; child; child = child->next_sibling) {
-        CUI_Node *child_copy = cui_node_duplicate(child);
+    for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
+        AUI_Node *child_copy = aui_node_duplicate(child);
         if (child_copy) {
-            cui_node_add_child(copy, child_copy);
+            aui_node_add_child(copy, child_copy);
         }
     }
 
@@ -300,13 +300,13 @@ CUI_Node *cui_node_duplicate(CUI_Node *node)
  * Hierarchy Management
  * ============================================================================ */
 
-void cui_node_add_child(CUI_Node *parent, CUI_Node *child)
+void aui_node_add_child(AUI_Node *parent, AUI_Node *child)
 {
     if (!parent || !child) return;
     if (child->parent == parent) return;
 
     /* Remove from current parent */
-    cui_node_remove(child);
+    aui_node_remove(child);
 
     /* Add to new parent */
     child->parent = parent;
@@ -324,21 +324,21 @@ void cui_node_add_child(CUI_Node *parent, CUI_Node *child)
     parent->layout_dirty = true;
 
     /* Emit signals */
-    CUI_Signal sig;
+    AUI_Signal sig;
     memset(&sig, 0, sizeof(sig));
-    sig.type = CUI_SIGNAL_CHILD_ADDED;
+    sig.type = AUI_SIGNAL_CHILD_ADDED;
     sig.source = parent;
     sig.child.child = child;
-    cui_node_emit(parent, CUI_SIGNAL_CHILD_ADDED, &sig);
+    aui_node_emit(parent, AUI_SIGNAL_CHILD_ADDED, &sig);
 
-    cui_node_emit_simple(child, CUI_SIGNAL_TREE_ENTERED);
+    aui_node_emit_simple(child, AUI_SIGNAL_TREE_ENTERED);
 
     if (child->on_enter_tree) {
         child->on_enter_tree(child);
     }
 }
 
-void cui_node_remove_child(CUI_Node *parent, CUI_Node *child)
+void aui_node_remove_child(AUI_Node *parent, AUI_Node *child)
 {
     if (!parent || !child || child->parent != parent) return;
 
@@ -364,49 +364,49 @@ void cui_node_remove_child(CUI_Node *parent, CUI_Node *child)
     parent->layout_dirty = true;
 
     /* Emit signals */
-    CUI_Signal sig;
+    AUI_Signal sig;
     memset(&sig, 0, sizeof(sig));
-    sig.type = CUI_SIGNAL_CHILD_REMOVED;
+    sig.type = AUI_SIGNAL_CHILD_REMOVED;
     sig.source = parent;
     sig.child.child = child;
-    cui_node_emit(parent, CUI_SIGNAL_CHILD_REMOVED, &sig);
+    aui_node_emit(parent, AUI_SIGNAL_CHILD_REMOVED, &sig);
 
     if (child->on_exit_tree) {
         child->on_exit_tree(child);
     }
 }
 
-void cui_node_remove(CUI_Node *node)
+void aui_node_remove(AUI_Node *node)
 {
     if (!node || !node->parent) return;
-    cui_node_remove_child(node->parent, node);
+    aui_node_remove_child(node->parent, node);
 }
 
-void cui_node_reparent(CUI_Node *node, CUI_Node *new_parent)
+void aui_node_reparent(AUI_Node *node, AUI_Node *new_parent)
 {
     if (!node) return;
-    cui_node_remove(node);
+    aui_node_remove(node);
     if (new_parent) {
-        cui_node_add_child(new_parent, node);
+        aui_node_add_child(new_parent, node);
     }
 }
 
-CUI_Node *cui_node_get_child(CUI_Node *node, int index)
+AUI_Node *aui_node_get_child(AUI_Node *node, int index)
 {
     if (!node || index < 0 || index >= node->child_count) return NULL;
 
-    CUI_Node *child = node->first_child;
+    AUI_Node *child = node->first_child;
     for (int i = 0; i < index && child; i++) {
         child = child->next_sibling;
     }
     return child;
 }
 
-CUI_Node *cui_node_get_child_by_name(CUI_Node *node, const char *name)
+AUI_Node *aui_node_get_child_by_name(AUI_Node *node, const char *name)
 {
     if (!node || !name) return NULL;
 
-    for (CUI_Node *child = node->first_child; child; child = child->next_sibling) {
+    for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
         if (strcmp(child->name, name) == 0) {
             return child;
         }
@@ -415,7 +415,7 @@ CUI_Node *cui_node_get_child_by_name(CUI_Node *node, const char *name)
 }
 
 /* Recursive helper to find node by name anywhere in tree */
-static CUI_Node *cui_node_find_recursive(CUI_Node *node, const char *name)
+static AUI_Node *aui_node_find_recursive(AUI_Node *node, const char *name)
 {
     if (!node) return NULL;
 
@@ -425,15 +425,15 @@ static CUI_Node *cui_node_find_recursive(CUI_Node *node, const char *name)
     }
 
     /* Search children */
-    for (CUI_Node *child = node->first_child; child; child = child->next_sibling) {
-        CUI_Node *found = cui_node_find_recursive(child, name);
+    for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
+        AUI_Node *found = aui_node_find_recursive(child, name);
         if (found) return found;
     }
 
     return NULL;
 }
 
-CUI_Node *cui_node_find(CUI_Node *root, const char *path)
+AUI_Node *aui_node_find(AUI_Node *root, const char *path)
 {
     if (!root || !path) return NULL;
 
@@ -444,11 +444,11 @@ CUI_Node *cui_node_find(CUI_Node *root, const char *path)
         strncpy(path_copy, path, sizeof(path_copy) - 1);
         path_copy[sizeof(path_copy) - 1] = '\0';
 
-        CUI_Node *current = root;
+        AUI_Node *current = root;
         char *token = strtok(path_copy, "/");
 
         while (token && current) {
-            current = cui_node_get_child_by_name(current, token);
+            current = aui_node_get_child_by_name(current, token);
             token = strtok(NULL, "/");
         }
 
@@ -456,10 +456,10 @@ CUI_Node *cui_node_find(CUI_Node *root, const char *path)
     }
 
     /* Otherwise, search recursively by name */
-    return cui_node_find_recursive(root, path);
+    return aui_node_find_recursive(root, path);
 }
 
-CUI_Node *cui_node_get_root(CUI_Node *node)
+AUI_Node *aui_node_get_root(AUI_Node *node)
 {
     if (!node) return NULL;
     while (node->parent) {
@@ -468,11 +468,11 @@ CUI_Node *cui_node_get_root(CUI_Node *node)
     return node;
 }
 
-bool cui_node_is_ancestor_of(CUI_Node *node, CUI_Node *descendant)
+bool aui_node_is_ancestor_of(AUI_Node *node, AUI_Node *descendant)
 {
     if (!node || !descendant) return false;
 
-    CUI_Node *current = descendant->parent;
+    AUI_Node *current = descendant->parent;
     while (current) {
         if (current == node) return true;
         current = current->parent;
@@ -480,19 +480,19 @@ bool cui_node_is_ancestor_of(CUI_Node *node, CUI_Node *descendant)
     return false;
 }
 
-int cui_node_get_index(CUI_Node *node)
+int aui_node_get_index(AUI_Node *node)
 {
     if (!node || !node->parent) return -1;
 
     int index = 0;
-    for (CUI_Node *child = node->parent->first_child; child; child = child->next_sibling) {
+    for (AUI_Node *child = node->parent->first_child; child; child = child->next_sibling) {
         if (child == node) return index;
         index++;
     }
     return -1;
 }
 
-void cui_node_move_child(CUI_Node *parent, CUI_Node *child, int new_index)
+void aui_node_move_child(AUI_Node *parent, AUI_Node *child, int new_index)
 {
     if (!parent || !child || child->parent != parent) return;
     if (new_index < 0) new_index = 0;
@@ -522,7 +522,7 @@ void cui_node_move_child(CUI_Node *parent, CUI_Node *child, int new_index)
             parent->last_child = child;
         }
     } else {
-        CUI_Node *prev = cui_node_get_child(parent, new_index - 1);
+        AUI_Node *prev = aui_node_get_child(parent, new_index - 1);
         if (prev) {
             child->prev_sibling = prev;
             child->next_sibling = prev->next_sibling;
@@ -538,32 +538,32 @@ void cui_node_move_child(CUI_Node *parent, CUI_Node *child, int new_index)
     parent->layout_dirty = true;
 }
 
-void cui_node_move_to_front(CUI_Node *node)
+void aui_node_move_to_front(AUI_Node *node)
 {
     if (!node || !node->parent) return;
-    cui_node_move_child(node->parent, node, node->parent->child_count - 1);
+    aui_node_move_child(node->parent, node, node->parent->child_count - 1);
 }
 
-void cui_node_move_to_back(CUI_Node *node)
+void aui_node_move_to_back(AUI_Node *node)
 {
     if (!node || !node->parent) return;
-    cui_node_move_child(node->parent, node, 0);
+    aui_node_move_child(node->parent, node, 0);
 }
 
 /* ============================================================================
  * Layout
  * ============================================================================ */
 
-void cui_node_set_anchor_preset(CUI_Node *node, CUI_AnchorPreset preset)
+void aui_node_set_anchor_preset(AUI_Node *node, AUI_AnchorPreset preset)
 {
-    if (!node || preset < 0 || preset >= CUI_ANCHOR_PRESET_COUNT) return;
+    if (!node || preset < 0 || preset >= AUI_ANCHOR_PRESET_COUNT) return;
 
-    const CUI_AnchorPresetData *data = &s_anchor_presets[preset];
+    const AUI_AnchorPresetData *data = &s_anchor_presets[preset];
     node->anchors = data->anchors;
     node->layout_dirty = true;
 }
 
-void cui_node_set_anchors(CUI_Node *node, float left, float top,
+void aui_node_set_anchors(AUI_Node *node, float left, float top,
                            float right, float bottom)
 {
     if (!node) return;
@@ -574,7 +574,7 @@ void cui_node_set_anchors(CUI_Node *node, float left, float top,
     node->layout_dirty = true;
 }
 
-void cui_node_set_offsets(CUI_Node *node, float left, float top,
+void aui_node_set_offsets(AUI_Node *node, float left, float top,
                            float right, float bottom)
 {
     if (!node) return;
@@ -585,7 +585,7 @@ void cui_node_set_offsets(CUI_Node *node, float left, float top,
     node->layout_dirty = true;
 }
 
-void cui_node_set_size(CUI_Node *node, float width, float height)
+void aui_node_set_size(AUI_Node *node, float width, float height)
 {
     if (!node) return;
 
@@ -607,7 +607,7 @@ void cui_node_set_size(CUI_Node *node, float width, float height)
     node->layout_dirty = true;
 }
 
-void cui_node_set_position(CUI_Node *node, float x, float y)
+void aui_node_set_position(AUI_Node *node, float x, float y)
 {
     if (!node) return;
 
@@ -622,7 +622,7 @@ void cui_node_set_position(CUI_Node *node, float x, float y)
     node->layout_dirty = true;
 }
 
-void cui_node_get_size(CUI_Node *node, float *width, float *height)
+void aui_node_get_size(AUI_Node *node, float *width, float *height)
 {
     if (!node) {
         if (width) *width = 0;
@@ -633,7 +633,7 @@ void cui_node_get_size(CUI_Node *node, float *width, float *height)
     if (height) *height = node->rect.h;
 }
 
-void cui_node_get_position(CUI_Node *node, float *x, float *y)
+void aui_node_get_position(AUI_Node *node, float *x, float *y)
 {
     if (!node) {
         if (x) *x = 0;
@@ -644,7 +644,7 @@ void cui_node_get_position(CUI_Node *node, float *x, float *y)
     if (y) *y = node->rect.y;
 }
 
-void cui_node_get_global_position(CUI_Node *node, float *x, float *y)
+void aui_node_get_global_position(AUI_Node *node, float *x, float *y)
 {
     if (!node) {
         if (x) *x = 0;
@@ -655,28 +655,28 @@ void cui_node_get_global_position(CUI_Node *node, float *x, float *y)
     if (y) *y = node->global_rect.y;
 }
 
-void cui_node_set_h_size_flags(CUI_Node *node, uint8_t flags)
+void aui_node_set_h_size_flags(AUI_Node *node, uint8_t flags)
 {
     if (!node) return;
     node->h_size_flags = flags;
     node->layout_dirty = true;
 }
 
-void cui_node_set_v_size_flags(CUI_Node *node, uint8_t flags)
+void aui_node_set_v_size_flags(AUI_Node *node, uint8_t flags)
 {
     if (!node) return;
     node->v_size_flags = flags;
     node->layout_dirty = true;
 }
 
-void cui_node_set_stretch_ratio(CUI_Node *node, float ratio)
+void aui_node_set_stretch_ratio(AUI_Node *node, float ratio)
 {
     if (!node) return;
     node->size_flags_stretch_ratio = ratio;
     node->layout_dirty = true;
 }
 
-void cui_node_set_custom_min_size(CUI_Node *node, float width, float height)
+void aui_node_set_custom_min_size(AUI_Node *node, float width, float height)
 {
     if (!node) return;
     node->custom_min_size_x = width;
@@ -684,7 +684,7 @@ void cui_node_set_custom_min_size(CUI_Node *node, float width, float height)
     node->layout_dirty = true;
 }
 
-void cui_node_get_min_size(CUI_Node *node, float *width, float *height)
+void aui_node_get_min_size(AUI_Node *node, float *width, float *height)
 {
     if (!node) {
         if (width) *width = 0;
@@ -703,7 +703,7 @@ void cui_node_get_min_size(CUI_Node *node, float *width, float *height)
     if (height) *height = fmaxf(min_h, node->min_size_y);
 }
 
-void cui_node_queue_layout(CUI_Node *node)
+void aui_node_queue_layout(AUI_Node *node)
 {
     if (!node) return;
     node->layout_dirty = true;
@@ -718,37 +718,37 @@ void cui_node_queue_layout(CUI_Node *node)
  * Styling
  * ============================================================================ */
 
-void cui_node_set_style(CUI_Node *node, const CUI_Style *style)
+void aui_node_set_style(AUI_Node *node, const AUI_Style *style)
 {
     if (!node || !style) return;
     node->style = *style;
 }
 
-void cui_node_set_style_class(CUI_Node *node, const char *class_name)
+void aui_node_set_style_class(AUI_Node *node, const char *class_name)
 {
     if (!node) return;
     node->style_class_name = class_name;
 }
 
-CUI_Style cui_node_get_effective_style(CUI_Node *node)
+AUI_Style aui_node_get_effective_style(AUI_Node *node)
 {
-    CUI_Style style = cui_style_default();
+    AUI_Style style = aui_style_default();
     if (!node) return style;
 
     /* Start with style class if set */
     if (node->style_class_name) {
-        CUI_StyleClass *sc = cui_get_style_class(NULL, node->style_class_name);
+        AUI_StyleClass *sc = aui_get_style_class(NULL, node->style_class_name);
         if (sc) {
-            style = cui_resolve_style_class(sc);
+            style = aui_resolve_style_class(sc);
         }
     }
 
     /* Merge node's direct style */
-    cui_style_merge(&style, &node->style);
+    aui_style_merge(&style, &node->style);
 
     /* Merge runtime override */
     if (node->style_override) {
-        cui_style_merge(&style, node->style_override);
+        aui_style_merge(&style, node->style_override);
     }
 
     return style;
@@ -758,32 +758,32 @@ CUI_Style cui_node_get_effective_style(CUI_Node *node)
  * State
  * ============================================================================ */
 
-void cui_node_set_visible(CUI_Node *node, bool visible)
+void aui_node_set_visible(AUI_Node *node, bool visible)
 {
     if (!node || node->visible == visible) return;
 
     bool old = node->visible;
     node->visible = visible;
 
-    CUI_Signal sig;
+    AUI_Signal sig;
     memset(&sig, 0, sizeof(sig));
-    sig.type = CUI_SIGNAL_VISIBILITY_CHANGED;
+    sig.type = AUI_SIGNAL_VISIBILITY_CHANGED;
     sig.source = node;
     sig.bool_change.old_value = old;
     sig.bool_change.new_value = visible;
-    cui_node_emit(node, CUI_SIGNAL_VISIBILITY_CHANGED, &sig);
+    aui_node_emit(node, AUI_SIGNAL_VISIBILITY_CHANGED, &sig);
 
     if (node->parent) {
         node->parent->layout_dirty = true;
     }
 }
 
-bool cui_node_is_visible(CUI_Node *node)
+bool aui_node_is_visible(AUI_Node *node)
 {
     return node ? node->visible : false;
 }
 
-bool cui_node_is_visible_in_tree(CUI_Node *node)
+bool aui_node_is_visible_in_tree(AUI_Node *node)
 {
     while (node) {
         if (!node->visible) return false;
@@ -792,59 +792,59 @@ bool cui_node_is_visible_in_tree(CUI_Node *node)
     return true;
 }
 
-void cui_node_set_enabled(CUI_Node *node, bool enabled)
+void aui_node_set_enabled(AUI_Node *node, bool enabled)
 {
     if (node) node->enabled = enabled;
 }
 
-bool cui_node_is_enabled(CUI_Node *node)
+bool aui_node_is_enabled(AUI_Node *node)
 {
     return node ? node->enabled : false;
 }
 
-void cui_node_grab_focus(CUI_Node *node)
+void aui_node_grab_focus(AUI_Node *node)
 {
     if (!node) return;
 
     if (s_focused_node && s_focused_node != node) {
-        CUI_Node *old = s_focused_node;
+        AUI_Node *old = s_focused_node;
         old->focused = false;
-        cui_node_emit_simple(old, CUI_SIGNAL_UNFOCUSED);
+        aui_node_emit_simple(old, AUI_SIGNAL_UNFOCUSED);
     }
 
     s_focused_node = node;
     node->focused = true;
-    cui_node_emit_simple(node, CUI_SIGNAL_FOCUSED);
+    aui_node_emit_simple(node, AUI_SIGNAL_FOCUSED);
 }
 
-void cui_node_release_focus(CUI_Node *node)
+void aui_node_release_focus(AUI_Node *node)
 {
     if (!node || s_focused_node != node) return;
 
     node->focused = false;
     s_focused_node = NULL;
-    cui_node_emit_simple(node, CUI_SIGNAL_UNFOCUSED);
+    aui_node_emit_simple(node, AUI_SIGNAL_UNFOCUSED);
 }
 
-bool cui_node_has_focus(CUI_Node *node)
+bool aui_node_has_focus(AUI_Node *node)
 {
     return node && s_focused_node == node;
 }
 
-CUI_Node *cui_get_focused_node(CUI_Context *ctx)
+AUI_Node *aui_get_focused_node(AUI_Context *ctx)
 {
     (void)ctx;
     return s_focused_node;
 }
 
-void cui_node_set_opacity(CUI_Node *node, float opacity)
+void aui_node_set_opacity(AUI_Node *node, float opacity)
 {
     if (node) {
         node->opacity = fmaxf(0.0f, fminf(1.0f, opacity));
     }
 }
 
-float cui_node_get_opacity(CUI_Node *node)
+float aui_node_get_opacity(AUI_Node *node)
 {
     return node ? node->opacity : 1.0f;
 }
@@ -855,13 +855,13 @@ float cui_node_get_opacity(CUI_Node *node)
 
 static uint32_t s_next_connection_id = 1;
 
-uint32_t cui_node_connect(CUI_Node *node, CUI_SignalType signal,
-                           CUI_SignalCallback callback, void *userdata)
+uint32_t aui_node_connect(AUI_Node *node, AUI_SignalType signal,
+                           AUI_SignalCallback callback, void *userdata)
 {
     if (!node || !callback) return 0;
-    if (node->connection_count >= CUI_MAX_CONNECTIONS) return 0;
+    if (node->connection_count >= AUI_MAX_CONNECTIONS) return 0;
 
-    CUI_Connection *conn = &node->connections[node->connection_count++];
+    AUI_Connection *conn = &node->connections[node->connection_count++];
     conn->id = s_next_connection_id++;
     conn->signal_type = signal;
     conn->callback = callback;
@@ -872,17 +872,17 @@ uint32_t cui_node_connect(CUI_Node *node, CUI_SignalType signal,
     return conn->id;
 }
 
-uint32_t cui_node_connect_oneshot(CUI_Node *node, CUI_SignalType signal,
-                                   CUI_SignalCallback callback, void *userdata)
+uint32_t aui_node_connect_oneshot(AUI_Node *node, AUI_SignalType signal,
+                                   AUI_SignalCallback callback, void *userdata)
 {
-    uint32_t id = cui_node_connect(node, signal, callback, userdata);
+    uint32_t id = aui_node_connect(node, signal, callback, userdata);
     if (id && node->connection_count > 0) {
         node->connections[node->connection_count - 1].oneshot = true;
     }
     return id;
 }
 
-void cui_node_disconnect(CUI_Node *node, uint32_t connection_id)
+void aui_node_disconnect(AUI_Node *node, uint32_t connection_id)
 {
     if (!node || connection_id == 0) return;
 
@@ -894,7 +894,7 @@ void cui_node_disconnect(CUI_Node *node, uint32_t connection_id)
     }
 }
 
-void cui_node_disconnect_all(CUI_Node *node, CUI_SignalType signal)
+void aui_node_disconnect_all(AUI_Node *node, AUI_SignalType signal)
 {
     if (!node) return;
 
@@ -905,12 +905,12 @@ void cui_node_disconnect_all(CUI_Node *node, CUI_SignalType signal)
     }
 }
 
-void cui_node_emit(CUI_Node *node, CUI_SignalType signal, const CUI_Signal *data)
+void aui_node_emit(AUI_Node *node, AUI_SignalType signal, const AUI_Signal *data)
 {
     if (!node) return;
 
     for (int i = 0; i < node->connection_count; i++) {
-        CUI_Connection *conn = &node->connections[i];
+        AUI_Connection *conn = &node->connections[i];
         if (conn->active && conn->signal_type == signal) {
             conn->callback(node, data, conn->userdata);
             if (conn->oneshot) {
@@ -920,20 +920,20 @@ void cui_node_emit(CUI_Node *node, CUI_SignalType signal, const CUI_Signal *data
     }
 }
 
-void cui_node_emit_simple(CUI_Node *node, CUI_SignalType signal)
+void aui_node_emit_simple(AUI_Node *node, AUI_SignalType signal)
 {
-    CUI_Signal sig;
+    AUI_Signal sig;
     memset(&sig, 0, sizeof(sig));
     sig.type = signal;
     sig.source = node;
-    cui_node_emit(node, signal, &sig);
+    aui_node_emit(node, signal, &sig);
 }
 
 /* ============================================================================
  * Layout Calculation
  * ============================================================================ */
 
-static void cui_node_calculate_rect(CUI_Node *node, CUI_Rect parent_rect)
+static void aui_node_calculate_rect(AUI_Node *node, AUI_Rect parent_rect)
 {
     if (!node) return;
 
@@ -960,7 +960,7 @@ static void cui_node_calculate_rect(CUI_Node *node, CUI_Rect parent_rect)
 
     /* Apply minimum size */
     float min_w, min_h;
-    cui_node_get_min_size(node, &min_w, &min_h);
+    aui_node_get_min_size(node, &min_w, &min_h);
     if (node->rect.w < min_w) node->rect.w = min_w;
     if (node->rect.h < min_h) node->rect.h = min_h;
 
@@ -972,7 +972,7 @@ static void cui_node_calculate_rect(CUI_Node *node, CUI_Rect parent_rect)
 }
 
 /* Get minimum size for a node, using text metrics for labels/buttons */
-static void cui_node_get_content_min_size(CUI_Context *ctx, CUI_Node *node,
+static void aui_node_get_content_min_size(AUI_Context *ctx, AUI_Node *node,
                                            float *out_w, float *out_h)
 {
     float min_w = node->custom_min_size_x;
@@ -981,18 +981,18 @@ static void cui_node_get_content_min_size(CUI_Context *ctx, CUI_Node *node,
     /* Calculate content-based minimum size for certain node types */
     if (ctx) {
         switch (node->type) {
-            case CUI_NODE_LABEL:
+            case AUI_NODE_LABEL:
                 if (node->label.text[0]) {
-                    float tw = cui_text_width(ctx, node->label.text);
-                    float th = cui_text_height(ctx);
+                    float tw = aui_text_width(ctx, node->label.text);
+                    float th = aui_text_height(ctx);
                     if (tw > min_w) min_w = tw;
                     if (th > min_h) min_h = th;
                 }
                 break;
-            case CUI_NODE_BUTTON:
+            case AUI_NODE_BUTTON:
                 if (node->button.text[0]) {
-                    float tw = cui_text_width(ctx, node->button.text);
-                    float th = cui_text_height(ctx);
+                    float tw = aui_text_width(ctx, node->button.text);
+                    float th = aui_text_height(ctx);
                     /* Add some button padding */
                     if (tw + 20 > min_w) min_w = tw + 20;
                     if (th + 10 > min_h) min_h = th + 10;
@@ -1012,7 +1012,7 @@ static void cui_node_get_content_min_size(CUI_Context *ctx, CUI_Node *node,
     if (out_h) *out_h = fmaxf(min_h, node->min_size_y);
 }
 
-static void cui_node_layout_vbox_ctx(CUI_Context *ctx, CUI_Node *node)
+static void aui_node_layout_vbox_ctx(AUI_Context *ctx, AUI_Node *node)
 {
     if (!node || node->child_count == 0) return;
 
@@ -1029,21 +1029,21 @@ static void cui_node_layout_vbox_ctx(CUI_Context *ctx, CUI_Node *node)
     float total_min_h = 0;
     float total_stretch = 0;
 
-    for (CUI_Node *child = node->first_child; child; child = child->next_sibling) {
+    for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
         if (!child->visible) continue;
 
         float child_min_w, child_min_h;
-        cui_node_get_content_min_size(ctx, child, &child_min_w, &child_min_h);
+        aui_node_get_content_min_size(ctx, child, &child_min_w, &child_min_h);
         total_min_h += child_min_h;
 
-        if (child->v_size_flags & CUI_SIZE_EXPAND) {
+        if (child->v_size_flags & AUI_SIZE_EXPAND) {
             total_stretch += child->size_flags_stretch_ratio;
         }
     }
 
     /* Add separations */
     int visible_count = 0;
-    for (CUI_Node *child = node->first_child; child; child = child->next_sibling) {
+    for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
         if (child->visible) visible_count++;
     }
     if (visible_count > 1) {
@@ -1056,30 +1056,30 @@ static void cui_node_layout_vbox_ctx(CUI_Context *ctx, CUI_Node *node)
 
     /* Second pass: position children */
     float y = padding_top;
-    for (CUI_Node *child = node->first_child; child; child = child->next_sibling) {
+    for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
         if (!child->visible) continue;
 
         float child_min_w, child_min_h;
-        cui_node_get_content_min_size(ctx, child, &child_min_w, &child_min_h);
+        aui_node_get_content_min_size(ctx, child, &child_min_w, &child_min_h);
 
         /* Calculate child width - FILL takes full available width */
         float child_w = child_min_w;
-        if (child->h_size_flags & CUI_SIZE_FILL) {
+        if (child->h_size_flags & AUI_SIZE_FILL) {
             child_w = available_w;
         }
 
         /* Calculate child height */
         float child_h = child_min_h;
-        if ((child->v_size_flags & CUI_SIZE_EXPAND) && total_stretch > 0) {
+        if ((child->v_size_flags & AUI_SIZE_EXPAND) && total_stretch > 0) {
             float ratio = child->size_flags_stretch_ratio / total_stretch;
             child_h += extra_space * ratio;
         }
 
         /* Calculate x position based on alignment */
         float child_x = padding_left;
-        if (child->h_size_flags & CUI_SIZE_SHRINK_CENTER) {
+        if (child->h_size_flags & AUI_SIZE_SHRINK_CENTER) {
             child_x = padding_left + (available_w - child_w) / 2;
-        } else if (child->h_size_flags & CUI_SIZE_SHRINK_END) {
+        } else if (child->h_size_flags & AUI_SIZE_SHRINK_END) {
             child_x = padding_left + available_w - child_w;
         }
 
@@ -1099,7 +1099,7 @@ static void cui_node_layout_vbox_ctx(CUI_Context *ctx, CUI_Node *node)
 }
 
 
-static void cui_node_layout_hbox(CUI_Node *node)
+static void aui_node_layout_hbox(AUI_Node *node)
 {
     if (!node || node->child_count == 0) return;
 
@@ -1116,21 +1116,21 @@ static void cui_node_layout_hbox(CUI_Node *node)
     float total_min_w = 0;
     float total_stretch = 0;
 
-    for (CUI_Node *child = node->first_child; child; child = child->next_sibling) {
+    for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
         if (!child->visible) continue;
 
         float child_min_w, child_min_h;
-        cui_node_get_min_size(child, &child_min_w, &child_min_h);
+        aui_node_get_min_size(child, &child_min_w, &child_min_h);
         total_min_w += child_min_w;
 
-        if (child->h_size_flags & CUI_SIZE_EXPAND) {
+        if (child->h_size_flags & AUI_SIZE_EXPAND) {
             total_stretch += child->size_flags_stretch_ratio;
         }
     }
 
     /* Add separations */
     int visible_count = 0;
-    for (CUI_Node *child = node->first_child; child; child = child->next_sibling) {
+    for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
         if (child->visible) visible_count++;
     }
     if (visible_count > 1) {
@@ -1143,30 +1143,30 @@ static void cui_node_layout_hbox(CUI_Node *node)
 
     /* Second pass: position children */
     float x = padding_left;
-    for (CUI_Node *child = node->first_child; child; child = child->next_sibling) {
+    for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
         if (!child->visible) continue;
 
         float child_min_w, child_min_h;
-        cui_node_get_min_size(child, &child_min_w, &child_min_h);
+        aui_node_get_min_size(child, &child_min_w, &child_min_h);
 
         /* Calculate child width */
         float child_w = child_min_w;
-        if ((child->h_size_flags & CUI_SIZE_EXPAND) && total_stretch > 0) {
+        if ((child->h_size_flags & AUI_SIZE_EXPAND) && total_stretch > 0) {
             float ratio = child->size_flags_stretch_ratio / total_stretch;
             child_w += extra_space * ratio;
         }
 
         /* Calculate child height */
         float child_h = child_min_h;
-        if (child->v_size_flags & CUI_SIZE_FILL) {
+        if (child->v_size_flags & AUI_SIZE_FILL) {
             child_h = available_h;
         }
 
         /* Calculate y position based on alignment */
         float child_y = padding_top;
-        if (child->v_size_flags & CUI_SIZE_SHRINK_CENTER) {
+        if (child->v_size_flags & AUI_SIZE_SHRINK_CENTER) {
             child_y = padding_top + (available_h - child_h) / 2;
-        } else if (child->v_size_flags & CUI_SIZE_SHRINK_END) {
+        } else if (child->v_size_flags & AUI_SIZE_SHRINK_END) {
             child_y = padding_top + available_h - child_h;
         }
 
@@ -1186,34 +1186,34 @@ static void cui_node_layout_hbox(CUI_Node *node)
 }
 
 /* Returns true if this container type manages child layout directly */
-static bool cui_node_is_layout_container(CUI_Node *node)
+static bool aui_node_is_layout_container(AUI_Node *node)
 {
     if (!node) return false;
     switch (node->type) {
-        case CUI_NODE_VBOX:
-        case CUI_NODE_HBOX:
-        case CUI_NODE_GRID:
+        case AUI_NODE_VBOX:
+        case AUI_NODE_HBOX:
+        case AUI_NODE_GRID:
             return true;
         default:
             return false;
     }
 }
 
-static void cui_node_layout_children(CUI_Context *ctx, CUI_Node *node)
+static void aui_node_layout_children(AUI_Context *ctx, AUI_Node *node)
 {
     if (!node) return;
 
     /* Container-specific layout - these directly set child positions */
     switch (node->type) {
-        case CUI_NODE_VBOX:
-            cui_node_layout_vbox_ctx(ctx, node);
+        case AUI_NODE_VBOX:
+            aui_node_layout_vbox_ctx(ctx, node);
             return;
 
-        case CUI_NODE_HBOX:
-            cui_node_layout_hbox(node);  /* TODO: add ctx version */
+        case AUI_NODE_HBOX:
+            aui_node_layout_hbox(node);  /* TODO: add ctx version */
             return;
 
-        case CUI_NODE_GRID:
+        case AUI_NODE_GRID:
             /* TODO: Implement grid layout */
             break;
 
@@ -1222,14 +1222,14 @@ static void cui_node_layout_children(CUI_Context *ctx, CUI_Node *node)
     }
 
     /* Default: calculate each child's rect from anchors */
-    for (CUI_Node *child = node->first_child; child; child = child->next_sibling) {
+    for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
         if (!child->visible) continue;
-        cui_node_calculate_rect(child, node->global_rect);
+        aui_node_calculate_rect(child, node->global_rect);
     }
 }
 
-static void cui_node_layout_recursive_internal(CUI_Context *ctx, CUI_Node *node,
-                                                 CUI_Rect parent_rect,
+static void aui_node_layout_recursive_internal(AUI_Context *ctx, AUI_Node *node,
+                                                 AUI_Rect parent_rect,
                                                  bool parent_is_layout_container)
 {
     if (!node || !node->visible) return;
@@ -1238,11 +1238,11 @@ static void cui_node_layout_recursive_internal(CUI_Context *ctx, CUI_Node *node,
      * Layout containers (VBox, HBox, Grid) set child positions directly,
      * so we skip the anchor-based calculation for their children. */
     if (!parent_is_layout_container) {
-        cui_node_calculate_rect(node, parent_rect);
+        aui_node_calculate_rect(node, parent_rect);
     }
 
     /* Layout children (this may directly set child positions for VBox/HBox/Grid) */
-    cui_node_layout_children(ctx, node);
+    aui_node_layout_children(ctx, node);
 
     /* Call custom layout */
     if (node->on_layout) {
@@ -1250,46 +1250,46 @@ static void cui_node_layout_recursive_internal(CUI_Context *ctx, CUI_Node *node,
     }
 
     /* Check if this node is a layout container for children */
-    bool this_is_layout_container = cui_node_is_layout_container(node);
+    bool this_is_layout_container = aui_node_is_layout_container(node);
 
     /* Recurse to children */
-    for (CUI_Node *child = node->first_child; child; child = child->next_sibling) {
+    for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
         if (child->visible) {
-            cui_node_layout_recursive_internal(ctx, child, node->global_rect, this_is_layout_container);
+            aui_node_layout_recursive_internal(ctx, child, node->global_rect, this_is_layout_container);
         }
     }
 
     node->layout_dirty = false;
 }
 
-static void cui_node_layout_recursive(CUI_Context *ctx, CUI_Node *node, CUI_Rect parent_rect)
+static void aui_node_layout_recursive(AUI_Context *ctx, AUI_Node *node, AUI_Rect parent_rect)
 {
     /* Root node is never inside a layout container */
-    cui_node_layout_recursive_internal(ctx, node, parent_rect, false);
+    aui_node_layout_recursive_internal(ctx, node, parent_rect, false);
 }
 
 /* ============================================================================
  * Scene Tree Processing
  * ============================================================================ */
 
-void cui_scene_update(CUI_Context *ctx, CUI_Node *root, float delta_time)
+void aui_scene_update(AUI_Context *ctx, AUI_Node *root, float delta_time)
 {
     if (!ctx || !root) return;
 
     /* Update style transitions */
-    cui_node_update_transitions(root, delta_time);
+    aui_node_update_transitions(root, delta_time);
 
     /* Process nodes recursively */
     if (root->on_process) {
         root->on_process(root, delta_time);
     }
 
-    for (CUI_Node *child = root->first_child; child; child = child->next_sibling) {
-        cui_scene_update(ctx, child, delta_time);
+    for (AUI_Node *child = root->first_child; child; child = child->next_sibling) {
+        aui_scene_update(ctx, child, delta_time);
     }
 }
 
-bool cui_scene_process_event(CUI_Context *ctx, CUI_Node *root, const SDL_Event *event)
+bool aui_scene_process_event(AUI_Context *ctx, AUI_Node *root, const SDL_Event *event)
 {
     if (!ctx || !root || !event) return false;
 
@@ -1301,42 +1301,42 @@ bool cui_scene_process_event(CUI_Context *ctx, CUI_Node *root, const SDL_Event *
         float mx = event->motion.x;
         float my = event->motion.y;
 
-        CUI_Node *hit = cui_node_hit_test(root, mx, my);
+        AUI_Node *hit = aui_node_hit_test(root, mx, my);
 
         /* Handle hover state changes */
-        static CUI_Node *s_last_hovered = NULL;
+        static AUI_Node *s_last_hovered = NULL;
         if (hit != s_last_hovered) {
             if (s_last_hovered) {
                 s_last_hovered->hovered = false;
-                cui_node_emit_simple(s_last_hovered, CUI_SIGNAL_MOUSE_EXITED);
+                aui_node_emit_simple(s_last_hovered, AUI_SIGNAL_MOUSE_EXITED);
             }
             if (hit) {
                 hit->hovered = true;
-                cui_node_emit_simple(hit, CUI_SIGNAL_MOUSE_ENTERED);
+                aui_node_emit_simple(hit, AUI_SIGNAL_MOUSE_ENTERED);
             }
             s_last_hovered = hit;
         }
 
         /* Track which node is currently pressed (must be outside block scope) */
-        static CUI_Node *s_pressed_node = NULL;
+        static AUI_Node *s_pressed_node = NULL;
 
         /* Handle click */
         if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN && hit) {
             if (hit->focus_mode_click) {
-                cui_node_grab_focus(hit);
+                aui_node_grab_focus(hit);
             }
 
             hit->pressed = true;
             s_pressed_node = hit;  /* Store the pressed node */
 
-            CUI_Signal sig;
+            AUI_Signal sig;
             memset(&sig, 0, sizeof(sig));
-            sig.type = CUI_SIGNAL_PRESSED;
+            sig.type = AUI_SIGNAL_PRESSED;
             sig.source = hit;
             sig.mouse.x = mx;
             sig.mouse.y = my;
             sig.mouse.button = event->button.button;
-            cui_node_emit(hit, CUI_SIGNAL_PRESSED, &sig);
+            aui_node_emit(hit, AUI_SIGNAL_PRESSED, &sig);
 
             if (hit->on_gui_input) {
                 return hit->on_gui_input(hit, ctx, event);
@@ -1348,22 +1348,22 @@ bool cui_scene_process_event(CUI_Context *ctx, CUI_Node *root, const SDL_Event *
             /* Release pressed node and emit released/clicked */
             if (s_pressed_node) {
                 s_pressed_node->pressed = false;
-                cui_node_emit_simple(s_pressed_node, CUI_SIGNAL_RELEASED);
+                aui_node_emit_simple(s_pressed_node, AUI_SIGNAL_RELEASED);
 
                 if (hit == s_pressed_node) {
-                    cui_node_emit_simple(hit, CUI_SIGNAL_CLICKED);
+                    aui_node_emit_simple(hit, AUI_SIGNAL_CLICKED);
 
                     /* Handle checkbox toggle */
-                    if (hit->type == CUI_NODE_CHECKBOX) {
+                    if (hit->type == AUI_NODE_CHECKBOX) {
                         bool old_val = hit->checkbox.checked;
                         hit->checkbox.checked = !hit->checkbox.checked;
-                        CUI_Signal sig;
+                        AUI_Signal sig;
                         memset(&sig, 0, sizeof(sig));
-                        sig.type = CUI_SIGNAL_TOGGLED;
+                        sig.type = AUI_SIGNAL_TOGGLED;
                         sig.source = hit;
                         sig.bool_change.old_value = old_val;
                         sig.bool_change.new_value = hit->checkbox.checked;
-                        cui_node_emit(hit, CUI_SIGNAL_TOGGLED, &sig);
+                        aui_node_emit(hit, AUI_SIGNAL_TOGGLED, &sig);
                     }
                 }
                 s_pressed_node = NULL;
@@ -1372,8 +1372,8 @@ bool cui_scene_process_event(CUI_Context *ctx, CUI_Node *root, const SDL_Event *
 
         /* Handle slider dragging */
         if (event->type == SDL_EVENT_MOUSE_MOTION && s_pressed_node &&
-            s_pressed_node->type == CUI_NODE_SLIDER) {
-            CUI_Node *slider = s_pressed_node;
+            s_pressed_node->type == AUI_NODE_SLIDER) {
+            AUI_Node *slider = s_pressed_node;
             float rel_x = mx - slider->global_rect.x;
             float ratio = rel_x / slider->global_rect.w;
             ratio = fmaxf(0.0f, fminf(1.0f, ratio));
@@ -1391,19 +1391,19 @@ bool cui_scene_process_event(CUI_Context *ctx, CUI_Node *root, const SDL_Event *
 
             if (new_val != old_val) {
                 slider->slider.value = new_val;
-                CUI_Signal sig;
+                AUI_Signal sig;
                 memset(&sig, 0, sizeof(sig));
-                sig.type = CUI_SIGNAL_VALUE_CHANGED;
+                sig.type = AUI_SIGNAL_VALUE_CHANGED;
                 sig.source = slider;
                 sig.float_change.old_value = old_val;
                 sig.float_change.new_value = new_val;
-                cui_node_emit(slider, CUI_SIGNAL_VALUE_CHANGED, &sig);
+                aui_node_emit(slider, AUI_SIGNAL_VALUE_CHANGED, &sig);
             }
         }
 
         /* Handle slider click to set value directly */
         if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN && hit &&
-            hit->type == CUI_NODE_SLIDER) {
+            hit->type == AUI_NODE_SLIDER) {
             float rel_x = mx - hit->global_rect.x;
             float ratio = rel_x / hit->global_rect.w;
             ratio = fmaxf(0.0f, fminf(1.0f, ratio));
@@ -1420,13 +1420,13 @@ bool cui_scene_process_event(CUI_Context *ctx, CUI_Node *root, const SDL_Event *
 
             if (new_val != old_val) {
                 hit->slider.value = new_val;
-                CUI_Signal sig;
+                AUI_Signal sig;
                 memset(&sig, 0, sizeof(sig));
-                sig.type = CUI_SIGNAL_VALUE_CHANGED;
+                sig.type = AUI_SIGNAL_VALUE_CHANGED;
                 sig.source = hit;
                 sig.float_change.old_value = old_val;
                 sig.float_change.new_value = new_val;
-                cui_node_emit(hit, CUI_SIGNAL_VALUE_CHANGED, &sig);
+                aui_node_emit(hit, AUI_SIGNAL_VALUE_CHANGED, &sig);
             }
         }
 
@@ -1443,48 +1443,48 @@ bool cui_scene_process_event(CUI_Context *ctx, CUI_Node *root, const SDL_Event *
     return false;
 }
 
-static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node, float inherited_opacity);
+static void aui_node_render_recursive(AUI_Context *ctx, AUI_Node *node, float inherited_opacity);
 
-void cui_scene_render(CUI_Context *ctx, CUI_Node *root)
+void aui_scene_render(AUI_Context *ctx, AUI_Node *root)
 {
     if (!ctx || !root) return;
 
     /* Layout pass */
-    cui_scene_layout(ctx, root);
+    aui_scene_layout(ctx, root);
 
     /* Render the scene tree */
-    cui_node_render_recursive(ctx, root, 1.0f);
+    aui_node_render_recursive(ctx, root, 1.0f);
 }
 
-void cui_scene_layout(CUI_Context *ctx, CUI_Node *root)
+void aui_scene_layout(AUI_Context *ctx, AUI_Node *root)
 {
     if (!ctx || !root) return;
 
     /* Create root rect from screen size */
-    CUI_Rect screen_rect = {0, 0, (float)ctx->width, (float)ctx->height};
-    cui_node_layout_recursive(ctx, root, screen_rect);
+    AUI_Rect screen_rect = {0, 0, (float)ctx->width, (float)ctx->height};
+    aui_node_layout_recursive(ctx, root, screen_rect);
 }
 
-static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node, float inherited_opacity)
+static void aui_node_render_recursive(AUI_Context *ctx, AUI_Node *node, float inherited_opacity)
 {
     if (!node || !node->visible) return;
 
     /* Get effective style */
-    CUI_Style style = cui_node_get_effective_style(node);
+    AUI_Style style = aui_node_get_effective_style(node);
 
     /* Calculate effective opacity (node opacity * inherited from ancestors) */
     float effective_opacity = node->opacity * inherited_opacity;
     style.opacity *= effective_opacity;
 
     /* Draw styled background */
-    if (style.background.type != CUI_BG_NONE) {
-        cui_draw_styled_rect(ctx, node->global_rect.x, node->global_rect.y,
+    if (style.background.type != AUI_BG_NONE) {
+        aui_draw_styled_rect(ctx, node->global_rect.x, node->global_rect.y,
                               node->global_rect.w, node->global_rect.h, &style);
     }
 
     /* Type-specific rendering (apply effective_opacity to all colors) */
     switch (node->type) {
-        case CUI_NODE_LABEL:
+        case AUI_NODE_LABEL:
             {
                 float avail_w = node->global_rect.w - style.padding.left - style.padding.right;
                 float avail_h = node->global_rect.h - style.padding.top - style.padding.bottom;
@@ -1495,32 +1495,32 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node, float in
                 uint32_t text_color = node->label.color ? node->label.color : style.text_color;
 
                 /* Use styled text drawing with alignment, overflow, shadow etc. */
-                CUI_TextStyle text_style = style.text;
+                AUI_TextStyle text_style = style.text;
 
                 /* Apply size flags as alignment overrides if not explicitly set */
-                if (node->h_size_flags & CUI_SIZE_SHRINK_CENTER) {
-                    text_style.align = CUI_TEXT_ALIGN_CENTER;
-                } else if (node->h_size_flags & CUI_SIZE_SHRINK_END) {
-                    text_style.align = CUI_TEXT_ALIGN_RIGHT;
+                if (node->h_size_flags & AUI_SIZE_SHRINK_CENTER) {
+                    text_style.align = AUI_TEXT_ALIGN_CENTER;
+                } else if (node->h_size_flags & AUI_SIZE_SHRINK_END) {
+                    text_style.align = AUI_TEXT_ALIGN_RIGHT;
                 }
 
                 /* Apply label-specific settings */
                 if (node->label.autowrap) {
                     text_style.wrap = true;
-                    text_style.overflow = CUI_TEXT_OVERFLOW_WRAP;
+                    text_style.overflow = AUI_TEXT_OVERFLOW_WRAP;
                 }
                 if (node->label.max_lines > 0) {
                     text_style.max_lines = node->label.max_lines;
                 }
 
-                cui_draw_styled_text(ctx, node->label.text,
+                aui_draw_styled_text(ctx, node->label.text,
                                      text_x, text_y, avail_w, avail_h,
-                                     cui_apply_opacity(text_color, effective_opacity),
+                                     aui_apply_opacity(text_color, effective_opacity),
                                      &text_style);
             }
             break;
 
-        case CUI_NODE_BUTTON:
+        case AUI_NODE_BUTTON:
             /* Draw button with transition-aware background */
             {
                 uint32_t bg_color;
@@ -1532,7 +1532,7 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node, float in
                     text_color = node->transition_state.current_text_color;
                 } else {
                     /* Fallback to instant switching */
-                    CUI_Background *bg = &style.background;
+                    AUI_Background *bg = &style.background;
                     if (!node->enabled) {
                         bg = &style.background_disabled;
                     } else if (node->pressed) {
@@ -1540,36 +1540,36 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node, float in
                     } else if (node->hovered) {
                         bg = &style.background_hover;
                     }
-                    bg_color = (bg->type == CUI_BG_SOLID) ? bg->solid_color : 0;
+                    bg_color = (bg->type == AUI_BG_SOLID) ? bg->solid_color : 0;
                     text_color = node->enabled ? style.text_color : style.text_color_disabled;
                 }
 
                 if (bg_color != 0) {
-                    cui_draw_rect_rounded(ctx, node->global_rect.x, node->global_rect.y,
+                    aui_draw_rect_rounded(ctx, node->global_rect.x, node->global_rect.y,
                                           node->global_rect.w, node->global_rect.h,
-                                          cui_apply_opacity(bg_color, effective_opacity),
+                                          aui_apply_opacity(bg_color, effective_opacity),
                                           style.corner_radius.top_left);
                 }
 
                 /* Draw text centered using styled text */
-                CUI_TextStyle text_style = style.text;
-                text_style.align = CUI_TEXT_ALIGN_CENTER;
-                text_style.valign = CUI_TEXT_VALIGN_MIDDLE;
+                AUI_TextStyle text_style = style.text;
+                text_style.align = AUI_TEXT_ALIGN_CENTER;
+                text_style.valign = AUI_TEXT_VALIGN_MIDDLE;
 
-                cui_draw_styled_text(ctx, node->button.text,
+                aui_draw_styled_text(ctx, node->button.text,
                                      node->global_rect.x, node->global_rect.y,
                                      node->global_rect.w, node->global_rect.h,
-                                     cui_apply_opacity(text_color, effective_opacity),
+                                     aui_apply_opacity(text_color, effective_opacity),
                                      &text_style);
             }
             break;
 
-        case CUI_NODE_PROGRESS_BAR:
+        case AUI_NODE_PROGRESS_BAR:
             {
                 /* Background */
-                cui_draw_rect(ctx, node->global_rect.x, node->global_rect.y,
+                aui_draw_rect(ctx, node->global_rect.x, node->global_rect.y,
                               node->global_rect.w, node->global_rect.h,
-                              cui_apply_opacity(style.background.solid_color, effective_opacity));
+                              aui_apply_opacity(style.background.solid_color, effective_opacity));
 
                 /* Fill */
                 float range = node->progress.max_value - node->progress.min_value;
@@ -1578,13 +1578,13 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node, float in
                 fill_ratio = fmaxf(0, fminf(1, fill_ratio));
 
                 uint32_t fill_color = node->progress.fill_color ? node->progress.fill_color : ctx->theme.accent;
-                cui_draw_rect(ctx, node->global_rect.x, node->global_rect.y,
+                aui_draw_rect(ctx, node->global_rect.x, node->global_rect.y,
                               node->global_rect.w * fill_ratio, node->global_rect.h,
-                              cui_apply_opacity(fill_color, effective_opacity));
+                              aui_apply_opacity(fill_color, effective_opacity));
             }
             break;
 
-        case CUI_NODE_SLIDER:
+        case AUI_NODE_SLIDER:
             {
                 float x = node->global_rect.x;
                 float y = node->global_rect.y;
@@ -1594,8 +1594,8 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node, float in
                 /* Track background */
                 float track_h = 6.0f;
                 float track_y = y + (h - track_h) / 2;
-                cui_draw_rect_rounded(ctx, x, track_y, w, track_h,
-                                      cui_apply_opacity(ctx->theme.slider_track, effective_opacity), 3.0f);
+                aui_draw_rect_rounded(ctx, x, track_y, w, track_h,
+                                      aui_apply_opacity(ctx->theme.slider_track, effective_opacity), 3.0f);
 
                 /* Calculate fill amount */
                 float range = node->slider.max_value - node->slider.min_value;
@@ -1606,8 +1606,8 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node, float in
                 /* Filled portion */
                 float fill_w = w * fill_ratio;
                 if (fill_w > 0) {
-                    cui_draw_rect_rounded(ctx, x, track_y, fill_w, track_h,
-                                          cui_apply_opacity(ctx->theme.accent, effective_opacity), 3.0f);
+                    aui_draw_rect_rounded(ctx, x, track_y, fill_w, track_h,
+                                          aui_apply_opacity(ctx->theme.accent, effective_opacity), 3.0f);
                 }
 
                 /* Grab handle */
@@ -1616,24 +1616,24 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node, float in
                 float grab_y = y + h / 2;
                 uint32_t grab_color = node->hovered || node->pressed ?
                     ctx->theme.accent_hover : ctx->theme.slider_grab;
-                cui_draw_rect_rounded(ctx, grab_x - grab_r, grab_y - grab_r,
+                aui_draw_rect_rounded(ctx, grab_x - grab_r, grab_y - grab_r,
                                       grab_r * 2, grab_r * 2,
-                                      cui_apply_opacity(grab_color, effective_opacity), grab_r);
+                                      aui_apply_opacity(grab_color, effective_opacity), grab_r);
 
                 /* Value text if enabled - draw inside the track, right-aligned */
                 if (node->slider.show_value) {
                     char val_text[16];
                     snprintf(val_text, sizeof(val_text), "%.0f%%",
                              fill_ratio * 100);
-                    float text_w = cui_text_width(ctx, val_text);
+                    float text_w = aui_text_width(ctx, val_text);
                     float text_x = x + w - text_w - 4;  /* Right-aligned with 4px padding */
-                    cui_draw_text(ctx, val_text, text_x, y + (h - cui_text_height(ctx)) / 2,
-                                  cui_apply_opacity(style.text_color, effective_opacity));
+                    aui_draw_text(ctx, val_text, text_x, y + (h - aui_text_height(ctx)) / 2,
+                                  aui_apply_opacity(style.text_color, effective_opacity));
                 }
             }
             break;
 
-        case CUI_NODE_CHECKBOX:
+        case AUI_NODE_CHECKBOX:
             {
                 float x = node->global_rect.x;
                 float y = node->global_rect.y;
@@ -1644,10 +1644,10 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node, float in
                 float box_y = y + (h - box_size) / 2;
                 uint32_t box_bg = node->hovered ? ctx->theme.bg_widget_hover :
                                   ctx->theme.bg_widget;
-                cui_draw_rect_rounded(ctx, x, box_y, box_size, box_size,
-                                      cui_apply_opacity(box_bg, effective_opacity), 3.0f);
-                cui_draw_rect_outline(ctx, x, box_y, box_size, box_size,
-                                      cui_apply_opacity(ctx->theme.border, effective_opacity), 1.0f);
+                aui_draw_rect_rounded(ctx, x, box_y, box_size, box_size,
+                                      aui_apply_opacity(box_bg, effective_opacity), 3.0f);
+                aui_draw_rect_outline(ctx, x, box_y, box_size, box_size,
+                                      aui_apply_opacity(ctx->theme.border, effective_opacity), 1.0f);
 
                 /* Checkmark if checked */
                 if (node->checkbox.checked) {
@@ -1656,16 +1656,16 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node, float in
                     float cy = box_y + box_size / 2;
                     /* Simple filled square for now */
                     float inner = box_size - 8;
-                    cui_draw_rect(ctx, cx - inner/2, cy - inner/2, inner, inner,
-                                  cui_apply_opacity(ctx->theme.checkbox_check, effective_opacity));
+                    aui_draw_rect(ctx, cx - inner/2, cy - inner/2, inner, inner,
+                                  aui_apply_opacity(ctx->theme.checkbox_check, effective_opacity));
                 }
 
                 /* Label text */
                 float text_x = x + box_size + 8;
-                float text_y = y + (h - cui_text_height(ctx)) / 2;
+                float text_y = y + (h - aui_text_height(ctx)) / 2;
                 uint32_t cb_text_color = node->enabled ? style.text_color : style.text_color_disabled;
-                cui_draw_text(ctx, node->checkbox.text, text_x, text_y,
-                              cui_apply_opacity(cb_text_color, effective_opacity));
+                aui_draw_text(ctx, node->checkbox.text, text_x, text_y,
+                              aui_apply_opacity(cb_text_color, effective_opacity));
             }
             break;
 
@@ -1680,16 +1680,16 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node, float in
 
     /* Render children */
     if (node->clip_contents) {
-        cui_push_scissor(ctx, node->global_rect.x, node->global_rect.y,
+        aui_push_scissor(ctx, node->global_rect.x, node->global_rect.y,
                           node->global_rect.w, node->global_rect.h);
     }
 
-    for (CUI_Node *child = node->first_child; child; child = child->next_sibling) {
-        cui_node_render_recursive(ctx, child, effective_opacity);
+    for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
+        aui_node_render_recursive(ctx, child, effective_opacity);
     }
 
     if (node->clip_contents) {
-        cui_pop_scissor(ctx);
+        aui_pop_scissor(ctx);
     }
 }
 
@@ -1697,25 +1697,25 @@ static void cui_node_render_recursive(CUI_Context *ctx, CUI_Node *node, float in
  * Hit Testing
  * ============================================================================ */
 
-CUI_Node *cui_node_hit_test(CUI_Node *root, float x, float y)
+AUI_Node *aui_node_hit_test(AUI_Node *root, float x, float y)
 {
     if (!root || !root->visible) return NULL;
 
     /* Check children in reverse order (front to back) */
-    for (CUI_Node *child = root->last_child; child; child = child->prev_sibling) {
-        CUI_Node *hit = cui_node_hit_test(child, x, y);
+    for (AUI_Node *child = root->last_child; child; child = child->prev_sibling) {
+        AUI_Node *hit = aui_node_hit_test(child, x, y);
         if (hit) return hit;
     }
 
     /* Check this node */
-    if (!root->mouse_filter_ignore && cui_node_contains_point(root, x, y)) {
+    if (!root->mouse_filter_ignore && aui_node_contains_point(root, x, y)) {
         return root;
     }
 
     return NULL;
 }
 
-bool cui_node_contains_point(CUI_Node *node, float x, float y)
+bool aui_node_contains_point(AUI_Node *node, float x, float y)
 {
     if (!node) return false;
     return x >= node->global_rect.x &&
@@ -1728,18 +1728,18 @@ bool cui_node_contains_point(CUI_Node *node, float x, float y)
  * Convenience Creators
  * ============================================================================ */
 
-CUI_Node *cui_label_create(CUI_Context *ctx, const char *name, const char *text)
+AUI_Node *aui_label_create(AUI_Context *ctx, const char *name, const char *text)
 {
-    CUI_Node *node = cui_node_create(ctx, CUI_NODE_LABEL, name);
+    AUI_Node *node = aui_node_create(ctx, AUI_NODE_LABEL, name);
     if (node && text) {
         strncpy(node->label.text, text, sizeof(node->label.text) - 1);
     }
     return node;
 }
 
-CUI_Node *cui_button_create(CUI_Context *ctx, const char *name, const char *text)
+AUI_Node *aui_button_create(AUI_Context *ctx, const char *name, const char *text)
 {
-    CUI_Node *node = cui_node_create(ctx, CUI_NODE_BUTTON, name);
+    AUI_Node *node = aui_node_create(ctx, AUI_NODE_BUTTON, name);
     if (node) {
         if (text) {
             strncpy(node->button.text, text, sizeof(node->button.text) - 1);
@@ -1751,38 +1751,38 @@ CUI_Node *cui_button_create(CUI_Context *ctx, const char *name, const char *text
     return node;
 }
 
-CUI_Node *cui_vbox_create(CUI_Context *ctx, const char *name)
+AUI_Node *aui_vbox_create(AUI_Context *ctx, const char *name)
 {
-    return cui_node_create(ctx, CUI_NODE_VBOX, name);
+    return aui_node_create(ctx, AUI_NODE_VBOX, name);
 }
 
-CUI_Node *cui_hbox_create(CUI_Context *ctx, const char *name)
+AUI_Node *aui_hbox_create(AUI_Context *ctx, const char *name)
 {
-    return cui_node_create(ctx, CUI_NODE_HBOX, name);
+    return aui_node_create(ctx, AUI_NODE_HBOX, name);
 }
 
-CUI_Node *cui_grid_create(CUI_Context *ctx, const char *name, int columns)
+AUI_Node *aui_grid_create(AUI_Context *ctx, const char *name, int columns)
 {
-    CUI_Node *node = cui_node_create(ctx, CUI_NODE_GRID, name);
+    AUI_Node *node = aui_node_create(ctx, AUI_NODE_GRID, name);
     if (node) {
         node->grid.columns = columns > 0 ? columns : 2;
     }
     return node;
 }
 
-CUI_Node *cui_margin_create(CUI_Context *ctx, const char *name)
+AUI_Node *aui_margin_create(AUI_Context *ctx, const char *name)
 {
-    return cui_node_create(ctx, CUI_NODE_MARGIN, name);
+    return aui_node_create(ctx, AUI_NODE_MARGIN, name);
 }
 
-CUI_Node *cui_scroll_create(CUI_Context *ctx, const char *name)
+AUI_Node *aui_scroll_create(AUI_Context *ctx, const char *name)
 {
-    return cui_node_create(ctx, CUI_NODE_SCROLL, name);
+    return aui_node_create(ctx, AUI_NODE_SCROLL, name);
 }
 
-CUI_Node *cui_panel_create(CUI_Context *ctx, const char *name, const char *title)
+AUI_Node *aui_panel_create(AUI_Context *ctx, const char *name, const char *title)
 {
-    CUI_Node *node = cui_node_create(ctx, CUI_NODE_PANEL, name);
+    AUI_Node *node = aui_node_create(ctx, AUI_NODE_PANEL, name);
     if (node) {
         node->clip_contents = true;  /* Panels clip their contents by default */
         if (title) {
@@ -1796,75 +1796,75 @@ CUI_Node *cui_panel_create(CUI_Context *ctx, const char *name, const char *title
  * Container-Specific Functions
  * ============================================================================ */
 
-void cui_box_set_separation(CUI_Node *node, float separation)
+void aui_box_set_separation(AUI_Node *node, float separation)
 {
     if (!node) return;
-    if (node->type == CUI_NODE_VBOX || node->type == CUI_NODE_HBOX) {
+    if (node->type == AUI_NODE_VBOX || node->type == AUI_NODE_HBOX) {
         node->box.separation = separation;
         node->layout_dirty = true;
     }
 }
 
-void cui_box_set_alignment(CUI_Node *node, CUI_SizeFlags alignment)
+void aui_box_set_alignment(AUI_Node *node, AUI_SizeFlags alignment)
 {
     if (!node) return;
-    if (node->type == CUI_NODE_VBOX || node->type == CUI_NODE_HBOX) {
+    if (node->type == AUI_NODE_VBOX || node->type == AUI_NODE_HBOX) {
         node->box.alignment = alignment;
         node->layout_dirty = true;
     }
 }
 
-void cui_grid_set_columns(CUI_Node *node, int columns)
+void aui_grid_set_columns(AUI_Node *node, int columns)
 {
-    if (!node || node->type != CUI_NODE_GRID) return;
+    if (!node || node->type != AUI_NODE_GRID) return;
     node->grid.columns = columns > 0 ? columns : 1;
     node->layout_dirty = true;
 }
 
-void cui_grid_set_h_separation(CUI_Node *node, float separation)
+void aui_grid_set_h_separation(AUI_Node *node, float separation)
 {
-    if (!node || node->type != CUI_NODE_GRID) return;
+    if (!node || node->type != AUI_NODE_GRID) return;
     node->grid.h_separation = separation;
     node->layout_dirty = true;
 }
 
-void cui_grid_set_v_separation(CUI_Node *node, float separation)
+void aui_grid_set_v_separation(AUI_Node *node, float separation)
 {
-    if (!node || node->type != CUI_NODE_GRID) return;
+    if (!node || node->type != AUI_NODE_GRID) return;
     node->grid.v_separation = separation;
     node->layout_dirty = true;
 }
 
-void cui_margin_set_margins(CUI_Node *node, float left, float top,
+void aui_margin_set_margins(AUI_Node *node, float left, float top,
                              float right, float bottom)
 {
     if (!node) return;
-    node->style.padding = cui_edges(top, right, bottom, left);
+    node->style.padding = aui_edges(top, right, bottom, left);
     node->layout_dirty = true;
 }
 
-void cui_scroll_set_h_scroll_enabled(CUI_Node *node, bool enabled)
+void aui_scroll_set_h_scroll_enabled(AUI_Node *node, bool enabled)
 {
-    if (!node || node->type != CUI_NODE_SCROLL) return;
+    if (!node || node->type != AUI_NODE_SCROLL) return;
     node->scroll.h_scroll_enabled = enabled;
 }
 
-void cui_scroll_set_v_scroll_enabled(CUI_Node *node, bool enabled)
+void aui_scroll_set_v_scroll_enabled(AUI_Node *node, bool enabled)
 {
-    if (!node || node->type != CUI_NODE_SCROLL) return;
+    if (!node || node->type != AUI_NODE_SCROLL) return;
     node->scroll.v_scroll_enabled = enabled;
 }
 
-void cui_scroll_set_scroll(CUI_Node *node, float x, float y)
+void aui_scroll_set_scroll(AUI_Node *node, float x, float y)
 {
-    if (!node || node->type != CUI_NODE_SCROLL) return;
+    if (!node || node->type != AUI_NODE_SCROLL) return;
     node->scroll.scroll_x = x;
     node->scroll.scroll_y = y;
 }
 
-void cui_scroll_ensure_visible(CUI_Node *node, CUI_Rect rect)
+void aui_scroll_ensure_visible(AUI_Node *node, AUI_Rect rect)
 {
-    if (!node || node->type != CUI_NODE_SCROLL) return;
+    if (!node || node->type != AUI_NODE_SCROLL) return;
 
     /* Adjust scroll to make rect visible */
     if (rect.y < node->scroll.scroll_y) {
@@ -1885,9 +1885,9 @@ void cui_scroll_ensure_visible(CUI_Node *node, CUI_Rect rect)
  * Widget-Specific Functions
  * ============================================================================ */
 
-void cui_label_set_text(CUI_Node *node, const char *text)
+void aui_label_set_text(AUI_Node *node, const char *text)
 {
-    if (!node || node->type != CUI_NODE_LABEL) return;
+    if (!node || node->type != AUI_NODE_LABEL) return;
     if (text) {
         strncpy(node->label.text, text, sizeof(node->label.text) - 1);
     } else {
@@ -1895,15 +1895,15 @@ void cui_label_set_text(CUI_Node *node, const char *text)
     }
 }
 
-const char *cui_label_get_text(CUI_Node *node)
+const char *aui_label_get_text(AUI_Node *node)
 {
-    if (!node || node->type != CUI_NODE_LABEL) return "";
+    if (!node || node->type != AUI_NODE_LABEL) return "";
     return node->label.text;
 }
 
-void cui_button_set_text(CUI_Node *node, const char *text)
+void aui_button_set_text(AUI_Node *node, const char *text)
 {
-    if (!node || node->type != CUI_NODE_BUTTON) return;
+    if (!node || node->type != AUI_NODE_BUTTON) return;
     if (text) {
         strncpy(node->button.text, text, sizeof(node->button.text) - 1);
     } else {
@@ -1911,67 +1911,67 @@ void cui_button_set_text(CUI_Node *node, const char *text)
     }
 }
 
-void cui_button_set_disabled(CUI_Node *node, bool disabled)
+void aui_button_set_disabled(AUI_Node *node, bool disabled)
 {
-    if (!node || node->type != CUI_NODE_BUTTON) return;
+    if (!node || node->type != AUI_NODE_BUTTON) return;
     node->button.disabled = disabled;
     node->enabled = !disabled;
 }
 
-void cui_button_set_toggle_mode(CUI_Node *node, bool toggle)
+void aui_button_set_toggle_mode(AUI_Node *node, bool toggle)
 {
-    if (!node || node->type != CUI_NODE_BUTTON) return;
+    if (!node || node->type != AUI_NODE_BUTTON) return;
     node->button.toggle_mode = toggle;
 }
 
-bool cui_button_is_toggled(CUI_Node *node)
+bool aui_button_is_toggled(AUI_Node *node)
 {
-    if (!node || node->type != CUI_NODE_BUTTON) return false;
+    if (!node || node->type != AUI_NODE_BUTTON) return false;
     return node->button.toggled;
 }
 
-void cui_checkbox_set_checked(CUI_Node *node, bool checked)
+void aui_checkbox_set_checked(AUI_Node *node, bool checked)
 {
-    if (!node || node->type != CUI_NODE_CHECKBOX) return;
+    if (!node || node->type != AUI_NODE_CHECKBOX) return;
     node->checkbox.checked = checked;
 }
 
-bool cui_checkbox_is_checked(CUI_Node *node)
+bool aui_checkbox_is_checked(AUI_Node *node)
 {
-    if (!node || node->type != CUI_NODE_CHECKBOX) return false;
+    if (!node || node->type != AUI_NODE_CHECKBOX) return false;
     return node->checkbox.checked;
 }
 
-void cui_slider_set_value(CUI_Node *node, float value)
+void aui_slider_set_value(AUI_Node *node, float value)
 {
-    if (!node || node->type != CUI_NODE_SLIDER) return;
+    if (!node || node->type != AUI_NODE_SLIDER) return;
     node->slider.value = fmaxf(node->slider.min_value,
                                 fminf(node->slider.max_value, value));
 }
 
-float cui_slider_get_value(CUI_Node *node)
+float aui_slider_get_value(AUI_Node *node)
 {
-    if (!node || node->type != CUI_NODE_SLIDER) return 0;
+    if (!node || node->type != AUI_NODE_SLIDER) return 0;
     return node->slider.value;
 }
 
-void cui_slider_set_range(CUI_Node *node, float min, float max)
+void aui_slider_set_range(AUI_Node *node, float min, float max)
 {
-    if (!node || node->type != CUI_NODE_SLIDER) return;
+    if (!node || node->type != AUI_NODE_SLIDER) return;
     node->slider.min_value = min;
     node->slider.max_value = max;
     node->slider.value = fmaxf(min, fminf(max, node->slider.value));
 }
 
-void cui_slider_set_step(CUI_Node *node, float step)
+void aui_slider_set_step(AUI_Node *node, float step)
 {
-    if (!node || node->type != CUI_NODE_SLIDER) return;
+    if (!node || node->type != AUI_NODE_SLIDER) return;
     node->slider.step = step;
 }
 
-void cui_textbox_set_text(CUI_Node *node, const char *text)
+void aui_textbox_set_text(AUI_Node *node, const char *text)
 {
-    if (!node || node->type != CUI_NODE_TEXTBOX || !node->textbox.buffer) return;
+    if (!node || node->type != AUI_NODE_TEXTBOX || !node->textbox.buffer) return;
     if (text) {
         strncpy(node->textbox.buffer, text, node->textbox.buffer_size - 1);
         node->textbox.buffer[node->textbox.buffer_size - 1] = '\0';
@@ -1981,15 +1981,15 @@ void cui_textbox_set_text(CUI_Node *node, const char *text)
     node->textbox.cursor_pos = (int)strlen(node->textbox.buffer);
 }
 
-const char *cui_textbox_get_text(CUI_Node *node)
+const char *aui_textbox_get_text(AUI_Node *node)
 {
-    if (!node || node->type != CUI_NODE_TEXTBOX || !node->textbox.buffer) return "";
+    if (!node || node->type != AUI_NODE_TEXTBOX || !node->textbox.buffer) return "";
     return node->textbox.buffer;
 }
 
-void cui_textbox_set_placeholder(CUI_Node *node, const char *placeholder)
+void aui_textbox_set_placeholder(AUI_Node *node, const char *placeholder)
 {
-    if (!node || node->type != CUI_NODE_TEXTBOX) return;
+    if (!node || node->type != AUI_NODE_TEXTBOX) return;
     if (placeholder) {
         strncpy(node->textbox.placeholder, placeholder,
                 sizeof(node->textbox.placeholder) - 1);
@@ -1998,9 +1998,9 @@ void cui_textbox_set_placeholder(CUI_Node *node, const char *placeholder)
     }
 }
 
-void cui_dropdown_set_items(CUI_Node *node, const char **items, int count)
+void aui_dropdown_set_items(AUI_Node *node, const char **items, int count)
 {
-    if (!node || node->type != CUI_NODE_DROPDOWN) return;
+    if (!node || node->type != AUI_NODE_DROPDOWN) return;
     node->dropdown.items = items;
     node->dropdown.item_count = count;
     if (node->dropdown.selected >= count) {
@@ -2008,30 +2008,30 @@ void cui_dropdown_set_items(CUI_Node *node, const char **items, int count)
     }
 }
 
-void cui_dropdown_set_selected(CUI_Node *node, int index)
+void aui_dropdown_set_selected(AUI_Node *node, int index)
 {
-    if (!node || node->type != CUI_NODE_DROPDOWN) return;
+    if (!node || node->type != AUI_NODE_DROPDOWN) return;
     if (index >= 0 && index < node->dropdown.item_count) {
         node->dropdown.selected = index;
     }
 }
 
-int cui_dropdown_get_selected(CUI_Node *node)
+int aui_dropdown_get_selected(AUI_Node *node)
 {
-    if (!node || node->type != CUI_NODE_DROPDOWN) return -1;
+    if (!node || node->type != AUI_NODE_DROPDOWN) return -1;
     return node->dropdown.selected;
 }
 
-void cui_progress_set_value(CUI_Node *node, float value)
+void aui_progress_set_value(AUI_Node *node, float value)
 {
-    if (!node || node->type != CUI_NODE_PROGRESS_BAR) return;
+    if (!node || node->type != AUI_NODE_PROGRESS_BAR) return;
     node->progress.value = fmaxf(node->progress.min_value,
                                   fminf(node->progress.max_value, value));
 }
 
-void cui_progress_set_range(CUI_Node *node, float min, float max)
+void aui_progress_set_range(AUI_Node *node, float min, float max)
 {
-    if (!node || node->type != CUI_NODE_PROGRESS_BAR) return;
+    if (!node || node->type != AUI_NODE_PROGRESS_BAR) return;
     node->progress.min_value = min;
     node->progress.max_value = max;
     node->progress.value = fmaxf(min, fminf(max, node->progress.value));

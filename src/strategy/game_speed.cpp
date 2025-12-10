@@ -3,10 +3,10 @@
  * @brief Variable Game Speed System implementation
  */
 
-#include "carbon/carbon.h"
-#include "carbon/game_speed.h"
-#include "carbon/validate.h"
-#include "carbon/error.h"
+#include "agentite/agentite.h"
+#include "agentite/game_speed.h"
+#include "agentite/validate.h"
+#include "agentite/error.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -17,7 +17,7 @@
  * Internal Structure
  * ========================================================================= */
 
-struct Carbon_GameSpeed {
+struct Agentite_GameSpeed {
     /* Current state */
     float base_speed;           /**< Base speed multiplier (unaffected by pause) */
     float current_speed;        /**< Current effective speed (0 if paused) */
@@ -29,7 +29,7 @@ struct Carbon_GameSpeed {
     float max_speed;            /**< Maximum speed */
 
     /* Presets */
-    float presets[CARBON_GAME_SPEED_MAX_PRESETS];
+    float presets[AGENTITE_GAME_SPEED_MAX_PRESETS];
     int preset_count;
     int current_preset;         /**< Current preset index, -1 if not on preset */
 
@@ -38,9 +38,9 @@ struct Carbon_GameSpeed {
     float transition_rate;      /**< How fast to interpolate */
 
     /* Callbacks */
-    Carbon_GameSpeedCallback speed_callback;
+    Agentite_GameSpeedCallback speed_callback;
     void *speed_callback_data;
-    Carbon_GameSpeedPauseCallback pause_callback;
+    Agentite_GameSpeedPauseCallback pause_callback;
     void *pause_callback_data;
 
     /* Statistics */
@@ -67,19 +67,19 @@ static bool float_equal(float a, float b, float epsilon) {
     return fabsf(a - b) < epsilon;
 }
 
-static void notify_speed_change(Carbon_GameSpeed *speed, float old_speed, float new_speed) {
+static void notify_speed_change(Agentite_GameSpeed *speed, float old_speed, float new_speed) {
     if (speed->speed_callback && !float_equal(old_speed, new_speed, 0.001f)) {
         speed->speed_callback(speed, old_speed, new_speed, speed->speed_callback_data);
     }
 }
 
-static void notify_pause_change(Carbon_GameSpeed *speed, bool paused) {
+static void notify_pause_change(Agentite_GameSpeed *speed, bool paused) {
     if (speed->pause_callback) {
         speed->pause_callback(speed, paused, speed->pause_callback_data);
     }
 }
 
-static int find_preset_index(Carbon_GameSpeed *speed, float value) {
+static int find_preset_index(Agentite_GameSpeed *speed, float value) {
     for (int i = 0; i < speed->preset_count; i++) {
         if (float_equal(speed->presets[i], value, 0.001f)) {
             return i;
@@ -92,20 +92,20 @@ static int find_preset_index(Carbon_GameSpeed *speed, float value) {
  * Creation and Destruction
  * ========================================================================= */
 
-Carbon_GameSpeed *carbon_game_speed_create(void) {
-    return carbon_game_speed_create_ex(CARBON_GAME_SPEED_DEFAULT);
+Agentite_GameSpeed *agentite_game_speed_create(void) {
+    return agentite_game_speed_create_ex(AGENTITE_GAME_SPEED_DEFAULT);
 }
 
-Carbon_GameSpeed *carbon_game_speed_create_ex(float initial_speed) {
-    Carbon_GameSpeed *speed = CARBON_ALLOC(Carbon_GameSpeed);
+Agentite_GameSpeed *agentite_game_speed_create_ex(float initial_speed) {
+    Agentite_GameSpeed *speed = AGENTITE_ALLOC(Agentite_GameSpeed);
     if (!speed) {
-        carbon_set_error("Failed to allocate game speed system");
+        agentite_set_error("Failed to allocate game speed system");
         return NULL;
     }
 
     /* Initialize limits first */
-    speed->min_speed = CARBON_GAME_SPEED_MIN;
-    speed->max_speed = CARBON_GAME_SPEED_MAX;
+    speed->min_speed = AGENTITE_GAME_SPEED_MIN;
+    speed->max_speed = AGENTITE_GAME_SPEED_MAX;
 
     /* Clamp initial speed */
     initial_speed = clamp_speed(initial_speed, speed->min_speed, speed->max_speed);
@@ -135,7 +135,7 @@ Carbon_GameSpeed *carbon_game_speed_create_ex(float initial_speed) {
     return speed;
 }
 
-void carbon_game_speed_destroy(Carbon_GameSpeed *speed) {
+void agentite_game_speed_destroy(Agentite_GameSpeed *speed) {
     if (speed) {
         free(speed);
     }
@@ -145,8 +145,8 @@ void carbon_game_speed_destroy(Carbon_GameSpeed *speed) {
  * Speed Control
  * ========================================================================= */
 
-void carbon_game_speed_set(Carbon_GameSpeed *speed, float multiplier) {
-    CARBON_VALIDATE_PTR(speed);
+void agentite_game_speed_set(Agentite_GameSpeed *speed, float multiplier) {
+    AGENTITE_VALIDATE_PTR(speed);
 
     float old_speed = speed->base_speed;
     multiplier = clamp_speed(multiplier, speed->min_speed, speed->max_speed);
@@ -164,45 +164,45 @@ void carbon_game_speed_set(Carbon_GameSpeed *speed, float multiplier) {
     }
 }
 
-float carbon_game_speed_get(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR_RET(speed, 0.0f);
+float agentite_game_speed_get(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR_RET(speed, 0.0f);
 
     if (speed->paused) {
-        return CARBON_GAME_SPEED_PAUSED;
+        return AGENTITE_GAME_SPEED_PAUSED;
     }
     return speed->current_speed;
 }
 
-float carbon_game_speed_get_base(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR_RET(speed, CARBON_GAME_SPEED_DEFAULT);
+float agentite_game_speed_get_base(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR_RET(speed, AGENTITE_GAME_SPEED_DEFAULT);
     return speed->base_speed;
 }
 
-void carbon_game_speed_multiply(Carbon_GameSpeed *speed, float factor) {
-    CARBON_VALIDATE_PTR(speed);
+void agentite_game_speed_multiply(Agentite_GameSpeed *speed, float factor) {
+    AGENTITE_VALIDATE_PTR(speed);
     if (factor <= 0.0f) return;
 
-    carbon_game_speed_set(speed, speed->base_speed * factor);
+    agentite_game_speed_set(speed, speed->base_speed * factor);
 }
 
-void carbon_game_speed_divide(Carbon_GameSpeed *speed, float divisor) {
-    CARBON_VALIDATE_PTR(speed);
+void agentite_game_speed_divide(Agentite_GameSpeed *speed, float divisor) {
+    AGENTITE_VALIDATE_PTR(speed);
     if (divisor <= 0.0f) return;
 
-    carbon_game_speed_set(speed, speed->base_speed / divisor);
+    agentite_game_speed_set(speed, speed->base_speed / divisor);
 }
 
-void carbon_game_speed_reset(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR(speed);
-    carbon_game_speed_set(speed, CARBON_GAME_SPEED_DEFAULT);
+void agentite_game_speed_reset(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR(speed);
+    agentite_game_speed_set(speed, AGENTITE_GAME_SPEED_DEFAULT);
 }
 
 /* ============================================================================
  * Pause Control
  * ========================================================================= */
 
-void carbon_game_speed_pause(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR(speed);
+void agentite_game_speed_pause(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR(speed);
 
     if (!speed->paused) {
         speed->paused = true;
@@ -210,8 +210,8 @@ void carbon_game_speed_pause(Carbon_GameSpeed *speed) {
     }
 }
 
-void carbon_game_speed_resume(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR(speed);
+void agentite_game_speed_resume(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR(speed);
 
     if (speed->paused) {
         speed->paused = false;
@@ -219,18 +219,18 @@ void carbon_game_speed_resume(Carbon_GameSpeed *speed) {
     }
 }
 
-void carbon_game_speed_toggle_pause(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR(speed);
+void agentite_game_speed_toggle_pause(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR(speed);
 
     if (speed->paused) {
-        carbon_game_speed_resume(speed);
+        agentite_game_speed_resume(speed);
     } else {
-        carbon_game_speed_pause(speed);
+        agentite_game_speed_pause(speed);
     }
 }
 
-bool carbon_game_speed_is_paused(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR_RET(speed, true);
+bool agentite_game_speed_is_paused(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR_RET(speed, true);
     return speed->paused;
 }
 
@@ -238,8 +238,8 @@ bool carbon_game_speed_is_paused(Carbon_GameSpeed *speed) {
  * Delta Time Scaling
  * ========================================================================= */
 
-float carbon_game_speed_scale_delta(Carbon_GameSpeed *speed, float raw_delta) {
-    CARBON_VALIDATE_PTR_RET(speed, 0.0f);
+float agentite_game_speed_scale_delta(Agentite_GameSpeed *speed, float raw_delta) {
+    AGENTITE_VALIDATE_PTR_RET(speed, 0.0f);
 
     /* Update statistics */
     speed->total_real_time += raw_delta;
@@ -254,8 +254,8 @@ float carbon_game_speed_scale_delta(Carbon_GameSpeed *speed, float raw_delta) {
     return scaled;
 }
 
-void carbon_game_speed_update(Carbon_GameSpeed *speed, float delta_time) {
-    CARBON_VALIDATE_PTR(speed);
+void agentite_game_speed_update(Agentite_GameSpeed *speed, float delta_time) {
+    AGENTITE_VALIDATE_PTR(speed);
 
     /* Update smooth transitions */
     if (speed->smooth_transitions && !float_equal(speed->current_speed, speed->target_speed, 0.001f)) {
@@ -278,12 +278,12 @@ void carbon_game_speed_update(Carbon_GameSpeed *speed, float delta_time) {
  * Speed Presets
  * ========================================================================= */
 
-void carbon_game_speed_set_presets(Carbon_GameSpeed *speed, const float *presets, int count) {
-    CARBON_VALIDATE_PTR(speed);
-    CARBON_VALIDATE_PTR(presets);
+void agentite_game_speed_set_presets(Agentite_GameSpeed *speed, const float *presets, int count) {
+    AGENTITE_VALIDATE_PTR(speed);
+    AGENTITE_VALIDATE_PTR(presets);
 
     if (count < 1) count = 1;
-    if (count > CARBON_GAME_SPEED_MAX_PRESETS) count = CARBON_GAME_SPEED_MAX_PRESETS;
+    if (count > AGENTITE_GAME_SPEED_MAX_PRESETS) count = AGENTITE_GAME_SPEED_MAX_PRESETS;
 
     for (int i = 0; i < count; i++) {
         speed->presets[i] = clamp_speed(presets[i], speed->min_speed, speed->max_speed);
@@ -292,15 +292,15 @@ void carbon_game_speed_set_presets(Carbon_GameSpeed *speed, const float *presets
     speed->current_preset = find_preset_index(speed, speed->base_speed);
 }
 
-void carbon_game_speed_set_default_presets(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR(speed);
+void agentite_game_speed_set_default_presets(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR(speed);
 
     float defaults[] = { 1.0f, 2.0f, 4.0f };
-    carbon_game_speed_set_presets(speed, defaults, 3);
+    agentite_game_speed_set_presets(speed, defaults, 3);
 }
 
-void carbon_game_speed_cycle(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR(speed);
+void agentite_game_speed_cycle(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR(speed);
     if (speed->preset_count == 0) return;
 
     int next = (speed->current_preset + 1) % speed->preset_count;
@@ -315,12 +315,12 @@ void carbon_game_speed_cycle(Carbon_GameSpeed *speed) {
         }
     }
 
-    carbon_game_speed_set(speed, speed->presets[next]);
+    agentite_game_speed_set(speed, speed->presets[next]);
     speed->current_preset = next;
 }
 
-void carbon_game_speed_cycle_reverse(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR(speed);
+void agentite_game_speed_cycle_reverse(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR(speed);
     if (speed->preset_count == 0) return;
 
     int prev = speed->current_preset - 1;
@@ -338,34 +338,34 @@ void carbon_game_speed_cycle_reverse(Carbon_GameSpeed *speed) {
         }
     }
 
-    carbon_game_speed_set(speed, speed->presets[prev]);
+    agentite_game_speed_set(speed, speed->presets[prev]);
     speed->current_preset = prev;
 }
 
-bool carbon_game_speed_set_preset(Carbon_GameSpeed *speed, int index) {
-    CARBON_VALIDATE_PTR_RET(speed, false);
+bool agentite_game_speed_set_preset(Agentite_GameSpeed *speed, int index) {
+    AGENTITE_VALIDATE_PTR_RET(speed, false);
 
     if (index < 0 || index >= speed->preset_count) {
         return false;
     }
 
-    carbon_game_speed_set(speed, speed->presets[index]);
+    agentite_game_speed_set(speed, speed->presets[index]);
     speed->current_preset = index;
     return true;
 }
 
-int carbon_game_speed_get_preset_index(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR_RET(speed, -1);
+int agentite_game_speed_get_preset_index(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR_RET(speed, -1);
     return speed->current_preset;
 }
 
-int carbon_game_speed_get_preset_count(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR_RET(speed, 0);
+int agentite_game_speed_get_preset_count(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR_RET(speed, 0);
     return speed->preset_count;
 }
 
-float carbon_game_speed_get_preset(Carbon_GameSpeed *speed, int index) {
-    CARBON_VALIDATE_PTR_RET(speed, 0.0f);
+float agentite_game_speed_get_preset(Agentite_GameSpeed *speed, int index) {
+    AGENTITE_VALIDATE_PTR_RET(speed, 0.0f);
 
     if (index < 0 || index >= speed->preset_count) {
         return 0.0f;
@@ -378,8 +378,8 @@ float carbon_game_speed_get_preset(Carbon_GameSpeed *speed, int index) {
  * Smooth Transitions
  * ========================================================================= */
 
-void carbon_game_speed_set_smooth_transitions(Carbon_GameSpeed *speed, bool enabled) {
-    CARBON_VALIDATE_PTR(speed);
+void agentite_game_speed_set_smooth_transitions(Agentite_GameSpeed *speed, bool enabled) {
+    AGENTITE_VALIDATE_PTR(speed);
     speed->smooth_transitions = enabled;
 
     if (!enabled) {
@@ -388,23 +388,23 @@ void carbon_game_speed_set_smooth_transitions(Carbon_GameSpeed *speed, bool enab
     }
 }
 
-bool carbon_game_speed_get_smooth_transitions(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR_RET(speed, false);
+bool agentite_game_speed_get_smooth_transitions(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR_RET(speed, false);
     return speed->smooth_transitions;
 }
 
-void carbon_game_speed_set_transition_rate(Carbon_GameSpeed *speed, float rate) {
-    CARBON_VALIDATE_PTR(speed);
+void agentite_game_speed_set_transition_rate(Agentite_GameSpeed *speed, float rate) {
+    AGENTITE_VALIDATE_PTR(speed);
     speed->transition_rate = rate > 0.0f ? rate : 5.0f;
 }
 
-bool carbon_game_speed_is_transitioning(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR_RET(speed, false);
+bool agentite_game_speed_is_transitioning(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR_RET(speed, false);
     return speed->smooth_transitions && !float_equal(speed->current_speed, speed->target_speed, 0.001f);
 }
 
-void carbon_game_speed_complete_transition(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR(speed);
+void agentite_game_speed_complete_transition(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR(speed);
 
     if (!float_equal(speed->current_speed, speed->target_speed, 0.001f)) {
         float old_speed = speed->current_speed;
@@ -420,9 +420,9 @@ void carbon_game_speed_complete_transition(Carbon_GameSpeed *speed) {
  * Speed Limits
  * ========================================================================= */
 
-void carbon_game_speed_set_min(Carbon_GameSpeed *speed, float min_speed) {
-    CARBON_VALIDATE_PTR(speed);
-    speed->min_speed = min_speed > 0.0f ? min_speed : CARBON_GAME_SPEED_MIN;
+void agentite_game_speed_set_min(Agentite_GameSpeed *speed, float min_speed) {
+    AGENTITE_VALIDATE_PTR(speed);
+    speed->min_speed = min_speed > 0.0f ? min_speed : AGENTITE_GAME_SPEED_MIN;
 
     if (speed->min_speed > speed->max_speed) {
         speed->min_speed = speed->max_speed;
@@ -434,9 +434,9 @@ void carbon_game_speed_set_min(Carbon_GameSpeed *speed, float min_speed) {
     speed->target_speed = clamp_speed(speed->target_speed, speed->min_speed, speed->max_speed);
 }
 
-void carbon_game_speed_set_max(Carbon_GameSpeed *speed, float max_speed) {
-    CARBON_VALIDATE_PTR(speed);
-    speed->max_speed = max_speed > 0.0f ? max_speed : CARBON_GAME_SPEED_MAX;
+void agentite_game_speed_set_max(Agentite_GameSpeed *speed, float max_speed) {
+    AGENTITE_VALIDATE_PTR(speed);
+    speed->max_speed = max_speed > 0.0f ? max_speed : AGENTITE_GAME_SPEED_MAX;
 
     if (speed->max_speed < speed->min_speed) {
         speed->max_speed = speed->min_speed;
@@ -448,13 +448,13 @@ void carbon_game_speed_set_max(Carbon_GameSpeed *speed, float max_speed) {
     speed->target_speed = clamp_speed(speed->target_speed, speed->min_speed, speed->max_speed);
 }
 
-float carbon_game_speed_get_min(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR_RET(speed, CARBON_GAME_SPEED_MIN);
+float agentite_game_speed_get_min(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR_RET(speed, AGENTITE_GAME_SPEED_MIN);
     return speed->min_speed;
 }
 
-float carbon_game_speed_get_max(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR_RET(speed, CARBON_GAME_SPEED_MAX);
+float agentite_game_speed_get_max(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR_RET(speed, AGENTITE_GAME_SPEED_MAX);
     return speed->max_speed;
 }
 
@@ -462,18 +462,18 @@ float carbon_game_speed_get_max(Carbon_GameSpeed *speed) {
  * Callbacks
  * ========================================================================= */
 
-void carbon_game_speed_set_callback(Carbon_GameSpeed *speed,
-                                     Carbon_GameSpeedCallback callback,
+void agentite_game_speed_set_callback(Agentite_GameSpeed *speed,
+                                     Agentite_GameSpeedCallback callback,
                                      void *userdata) {
-    CARBON_VALIDATE_PTR(speed);
+    AGENTITE_VALIDATE_PTR(speed);
     speed->speed_callback = callback;
     speed->speed_callback_data = userdata;
 }
 
-void carbon_game_speed_set_pause_callback(Carbon_GameSpeed *speed,
-                                           Carbon_GameSpeedPauseCallback callback,
+void agentite_game_speed_set_pause_callback(Agentite_GameSpeed *speed,
+                                           Agentite_GameSpeedPauseCallback callback,
                                            void *userdata) {
-    CARBON_VALIDATE_PTR(speed);
+    AGENTITE_VALIDATE_PTR(speed);
     speed->pause_callback = callback;
     speed->pause_callback_data = userdata;
 }
@@ -482,23 +482,23 @@ void carbon_game_speed_set_pause_callback(Carbon_GameSpeed *speed,
  * Statistics
  * ========================================================================= */
 
-float carbon_game_speed_get_total_scaled_time(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR_RET(speed, 0.0f);
+float agentite_game_speed_get_total_scaled_time(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR_RET(speed, 0.0f);
     return speed->total_scaled_time;
 }
 
-float carbon_game_speed_get_total_real_time(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR_RET(speed, 0.0f);
+float agentite_game_speed_get_total_real_time(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR_RET(speed, 0.0f);
     return speed->total_real_time;
 }
 
-float carbon_game_speed_get_total_paused_time(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR_RET(speed, 0.0f);
+float agentite_game_speed_get_total_paused_time(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR_RET(speed, 0.0f);
     return speed->total_paused_time;
 }
 
-void carbon_game_speed_reset_stats(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR(speed);
+void agentite_game_speed_reset_stats(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR(speed);
     speed->total_scaled_time = 0.0f;
     speed->total_real_time = 0.0f;
     speed->total_paused_time = 0.0f;
@@ -508,9 +508,9 @@ void carbon_game_speed_reset_stats(Carbon_GameSpeed *speed) {
  * Utility Functions
  * ========================================================================= */
 
-int carbon_game_speed_to_string(Carbon_GameSpeed *speed, char *buffer, int buffer_size) {
-    CARBON_VALIDATE_PTR_RET(speed, 0);
-    CARBON_VALIDATE_PTR_RET(buffer, 0);
+int agentite_game_speed_to_string(Agentite_GameSpeed *speed, char *buffer, int buffer_size) {
+    AGENTITE_VALIDATE_PTR_RET(speed, 0);
+    AGENTITE_VALIDATE_PTR_RET(buffer, 0);
 
     if (buffer_size < 1) return 0;
 
@@ -545,8 +545,8 @@ int carbon_game_speed_to_string(Carbon_GameSpeed *speed, char *buffer, int buffe
     }
 }
 
-int carbon_game_speed_get_percent(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR_RET(speed, 0);
+int agentite_game_speed_get_percent(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR_RET(speed, 0);
 
     if (speed->paused) {
         return 0;
@@ -555,17 +555,17 @@ int carbon_game_speed_get_percent(Carbon_GameSpeed *speed) {
     return (int)(speed->current_speed * 100.0f + 0.5f);
 }
 
-bool carbon_game_speed_is_at_min(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR_RET(speed, false);
+bool agentite_game_speed_is_at_min(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR_RET(speed, false);
     return float_equal(speed->base_speed, speed->min_speed, 0.001f);
 }
 
-bool carbon_game_speed_is_at_max(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR_RET(speed, false);
+bool agentite_game_speed_is_at_max(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR_RET(speed, false);
     return float_equal(speed->base_speed, speed->max_speed, 0.001f);
 }
 
-bool carbon_game_speed_is_normal(Carbon_GameSpeed *speed) {
-    CARBON_VALIDATE_PTR_RET(speed, false);
-    return float_equal(speed->base_speed, CARBON_GAME_SPEED_DEFAULT, 0.001f);
+bool agentite_game_speed_is_normal(Agentite_GameSpeed *speed) {
+    AGENTITE_VALIDATE_PTR_RET(speed, false);
+    return float_equal(speed->base_speed, AGENTITE_GAME_SPEED_DEFAULT, 0.001f);
 }

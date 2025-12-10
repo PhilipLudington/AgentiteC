@@ -1,7 +1,7 @@
 #ifndef GAME_COMPONENTS_H
 #define GAME_COMPONENTS_H
 
-#include "carbon/ecs.h"
+#include "agentite/ecs.h"
 
 /**
  * Game-Specific ECS Components

@@ -1,5 +1,5 @@
-#include "carbon/carbon.h"
-#include "carbon/game_event.h"
+#include "agentite/agentite.h"
+#include "agentite/game_event.h"
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -8,13 +8,13 @@
 #define MAX_EVENTS 128
 #define MAX_TRIGGERED_IDS 256
 
-struct Carbon_EventManager {
+struct Agentite_EventManager {
     // Registered events
-    Carbon_EventDef events[MAX_EVENTS];
+    Agentite_EventDef events[MAX_EVENTS];
     int event_count;
 
     // Active event state
-    Carbon_ActiveEvent pending;
+    Agentite_ActiveEvent pending;
     bool has_pending;
 
     // Tracking one-shot events
@@ -29,32 +29,32 @@ struct Carbon_EventManager {
     int cooldown_remaining;
 };
 
-Carbon_EventManager *carbon_event_create(void) {
-    Carbon_EventManager *em = CARBON_ALLOC(Carbon_EventManager);
+Agentite_EventManager *agentite_event_create(void) {
+    Agentite_EventManager *em = AGENTITE_ALLOC(Agentite_EventManager);
     if (!em) return NULL;
 
     em->pending.choice_made = -1;
     return em;
 }
 
-void carbon_event_destroy(Carbon_EventManager *em) {
+void agentite_event_destroy(Agentite_EventManager *em) {
     free(em);
 }
 
-void carbon_event_register(Carbon_EventManager *em, const Carbon_EventDef *def) {
+void agentite_event_register(Agentite_EventManager *em, const Agentite_EventDef *def) {
     if (!em || !def || em->event_count >= MAX_EVENTS) return;
 
     em->events[em->event_count] = *def;
     em->event_count++;
 }
 
-void carbon_event_set_cooldown_between(Carbon_EventManager *em, int turns) {
+void agentite_event_set_cooldown_between(Agentite_EventManager *em, int turns) {
     if (!em) return;
     em->cooldown_between = turns;
 }
 
 // Check if event was already triggered (for one-shots)
-static bool was_triggered(const Carbon_EventManager *em, const char *id) {
+static bool was_triggered(const Agentite_EventManager *em, const char *id) {
     for (int i = 0; i < em->triggered_count; i++) {
         if (strcmp(em->triggered_ids[i], id) == 0) {
             return true;
@@ -63,7 +63,7 @@ static bool was_triggered(const Carbon_EventManager *em, const char *id) {
     return false;
 }
 
-static void mark_triggered(Carbon_EventManager *em, const char *id) {
+static void mark_triggered(Agentite_EventManager *em, const char *id) {
     if (em->triggered_count >= MAX_TRIGGERED_IDS) return;
 
     strncpy(em->triggered_ids[em->triggered_count], id,
@@ -94,7 +94,7 @@ typedef struct {
     const char *expr;
     int pos;
     Token current;
-    const Carbon_TriggerContext *ctx;
+    const Agentite_TriggerContext *ctx;
 } ExprParser;
 
 static void skip_whitespace(ExprParser *p) {
@@ -103,7 +103,7 @@ static void skip_whitespace(ExprParser *p) {
     }
 }
 
-static float lookup_variable(const Carbon_TriggerContext *ctx, const char *name) {
+static float lookup_variable(const Agentite_TriggerContext *ctx, const char *name) {
     if (!ctx || !name) return 0.0f;
 
     for (int i = 0; i < ctx->var_count; i++) {
@@ -291,7 +291,7 @@ static bool parse_or_expr(ExprParser *p) {
     return result;
 }
 
-bool carbon_event_evaluate(const char *expr, const Carbon_TriggerContext *ctx) {
+bool agentite_event_evaluate(const char *expr, const Agentite_TriggerContext *ctx) {
     if (!expr || !expr[0]) return false;
 
     ExprParser parser = {0};
@@ -304,14 +304,14 @@ bool carbon_event_evaluate(const char *expr, const Carbon_TriggerContext *ctx) {
 
 // Compare events by priority for sorting (used for qsort if needed)
 static int compare_events_by_priority(const void *a, const void *b) {
-    const Carbon_EventDef *ea = (const Carbon_EventDef*)a;
-    const Carbon_EventDef *eb = (const Carbon_EventDef*)b;
+    const Agentite_EventDef *ea = (const Agentite_EventDef*)a;
+    const Agentite_EventDef *eb = (const Agentite_EventDef*)b;
     return eb->priority - ea->priority;  // Higher priority first
 }
 // Suppress unused warning - function is available for future use
 __attribute__((unused)) static void *_unused_compare = (void*)compare_events_by_priority;
 
-bool carbon_event_check_triggers(Carbon_EventManager *em, const Carbon_TriggerContext *ctx) {
+bool agentite_event_check_triggers(Agentite_EventManager *em, const Agentite_TriggerContext *ctx) {
     if (!em || !ctx) return false;
 
     // Already have pending event
@@ -325,11 +325,11 @@ bool carbon_event_check_triggers(Carbon_EventManager *em, const Carbon_TriggerCo
 
     // Sort events by priority (in-place, could be optimized)
     // For now, just iterate and track best match
-    const Carbon_EventDef *best = NULL;
+    const Agentite_EventDef *best = NULL;
     int best_index = -1;
 
     for (int i = 0; i < em->event_count; i++) {
-        Carbon_EventDef *def = &em->events[i];
+        Agentite_EventDef *def = &em->events[i];
 
         // Skip if on cooldown
         if (em->event_cooldowns[i] > 0) {
@@ -343,7 +343,7 @@ bool carbon_event_check_triggers(Carbon_EventManager *em, const Carbon_TriggerCo
         }
 
         // Check trigger expression
-        if (!carbon_event_evaluate(def->trigger, ctx)) {
+        if (!agentite_event_evaluate(def->trigger, ctx)) {
             continue;
         }
 
@@ -379,17 +379,17 @@ bool carbon_event_check_triggers(Carbon_EventManager *em, const Carbon_TriggerCo
     return false;
 }
 
-bool carbon_event_has_pending(const Carbon_EventManager *em) {
+bool agentite_event_has_pending(const Agentite_EventManager *em) {
     if (!em) return false;
     return em->has_pending && !em->pending.resolved;
 }
 
-const Carbon_ActiveEvent *carbon_event_get_pending(const Carbon_EventManager *em) {
+const Agentite_ActiveEvent *agentite_event_get_pending(const Agentite_EventManager *em) {
     if (!em || !em->has_pending) return NULL;
     return &em->pending;
 }
 
-bool carbon_event_choose(Carbon_EventManager *em, int choice_index) {
+bool agentite_event_choose(Agentite_EventManager *em, int choice_index) {
     if (!em || !em->has_pending || em->pending.resolved) return false;
     if (!em->pending.def) return false;
     if (choice_index < 0 || choice_index >= em->pending.def->choice_count) return false;
@@ -399,14 +399,14 @@ bool carbon_event_choose(Carbon_EventManager *em, int choice_index) {
     return true;
 }
 
-const Carbon_EventChoice *carbon_event_get_chosen(const Carbon_EventManager *em) {
+const Agentite_EventChoice *agentite_event_get_chosen(const Agentite_EventManager *em) {
     if (!em || !em->has_pending || !em->pending.resolved) return NULL;
     if (em->pending.choice_made < 0) return NULL;
 
     return &em->pending.def->choices[em->pending.choice_made];
 }
 
-void carbon_event_clear_pending(Carbon_EventManager *em) {
+void agentite_event_clear_pending(Agentite_EventManager *em) {
     if (!em) return;
 
     em->has_pending = false;
@@ -415,24 +415,24 @@ void carbon_event_clear_pending(Carbon_EventManager *em) {
     em->pending.choice_made = -1;
 }
 
-void carbon_event_reset(Carbon_EventManager *em) {
+void agentite_event_reset(Agentite_EventManager *em) {
     if (!em) return;
 
     em->triggered_count = 0;
     em->cooldown_remaining = 0;
     memset(em->event_cooldowns, 0, sizeof(em->event_cooldowns));
-    carbon_event_clear_pending(em);
+    agentite_event_clear_pending(em);
 }
 
-void carbon_trigger_context_add(Carbon_TriggerContext *ctx, const char *name, float value) {
-    if (!ctx || !name || ctx->var_count >= CARBON_EVENT_MAX_VARS) return;
+void agentite_trigger_context_add(Agentite_TriggerContext *ctx, const char *name, float value) {
+    if (!ctx || !name || ctx->var_count >= AGENTITE_EVENT_MAX_VARS) return;
 
     ctx->var_names[ctx->var_count] = name;
     ctx->var_values[ctx->var_count] = value;
     ctx->var_count++;
 }
 
-void carbon_trigger_context_clear(Carbon_TriggerContext *ctx) {
+void agentite_trigger_context_clear(Agentite_TriggerContext *ctx) {
     if (!ctx) return;
     ctx->var_count = 0;
 }

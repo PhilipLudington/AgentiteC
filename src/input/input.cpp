@@ -2,8 +2,8 @@
  * Carbon Input System Implementation
  */
 
-#include "carbon/carbon.h"
-#include "carbon/input.h"
+#include "agentite/agentite.h"
+#include "agentite/input.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -11,9 +11,9 @@
 #define MAX_KEYS 512
 
 /* Internal input state */
-struct Carbon_Input {
+struct Agentite_Input {
     /* Actions */
-    Carbon_Action actions[CARBON_INPUT_MAX_ACTIONS];
+    Agentite_Action actions[AGENTITE_INPUT_MAX_ACTIONS];
     int action_count;
 
     /* Keyboard state */
@@ -21,11 +21,11 @@ struct Carbon_Input {
     bool keys_prev[MAX_KEYS];
 
     /* Mouse state */
-    Carbon_MouseState mouse;
+    Agentite_MouseState mouse;
     float mouse_prev_x, mouse_prev_y;
 
     /* Gamepad state */
-    Carbon_GamepadState gamepads[MAX_GAMEPADS];
+    Agentite_GamepadState gamepads[MAX_GAMEPADS];
     int gamepad_count;
 };
 
@@ -36,8 +36,8 @@ static float clampf(float val, float min, float max) {
     return val;
 }
 
-Carbon_Input *carbon_input_init(void) {
-    Carbon_Input *input = CARBON_ALLOC(Carbon_Input);
+Agentite_Input *agentite_input_init(void) {
+    Agentite_Input *input = AGENTITE_ALLOC(Agentite_Input);
     if (!input) return NULL;
 
     /* Initialize SDL gamepad subsystem if not already */
@@ -74,7 +74,7 @@ Carbon_Input *carbon_input_init(void) {
     return input;
 }
 
-void carbon_input_shutdown(Carbon_Input *input) {
+void agentite_input_shutdown(Agentite_Input *input) {
     if (!input) return;
 
     /* Close all gamepads */
@@ -87,7 +87,7 @@ void carbon_input_shutdown(Carbon_Input *input) {
     free(input);
 }
 
-void carbon_input_begin_frame(Carbon_Input *input) {
+void agentite_input_begin_frame(Agentite_Input *input) {
     if (!input) return;
 
     /* Store previous mouse position for delta calculation */
@@ -120,7 +120,7 @@ void carbon_input_begin_frame(Carbon_Input *input) {
     }
 }
 
-bool carbon_input_process_event(Carbon_Input *input, const SDL_Event *event) {
+bool agentite_input_process_event(Agentite_Input *input, const SDL_Event *event) {
     if (!input || !event) return false;
 
     switch (event->type) {
@@ -253,16 +253,16 @@ bool carbon_input_process_event(Carbon_Input *input, const SDL_Event *event) {
 }
 
 /* Helper: check if a binding is currently active */
-static bool binding_active(Carbon_Input *input, const Carbon_Binding *binding, float *value) {
+static bool binding_active(Agentite_Input *input, const Agentite_Binding *binding, float *value) {
     switch (binding->type) {
-    case CARBON_BINDING_KEY:
+    case AGENTITE_BINDING_KEY:
         if (binding->key < MAX_KEYS && input->keys[binding->key]) {
             *value = 1.0f;
             return true;
         }
         break;
 
-    case CARBON_BINDING_MOUSE_BUTTON:
+    case AGENTITE_BINDING_MOUSE_BUTTON:
         if (binding->mouse_button >= 1 && binding->mouse_button <= 5) {
             if (input->mouse.buttons[binding->mouse_button - 1]) {
                 *value = 1.0f;
@@ -271,7 +271,7 @@ static bool binding_active(Carbon_Input *input, const Carbon_Binding *binding, f
         }
         break;
 
-    case CARBON_BINDING_GAMEPAD_BUTTON:
+    case AGENTITE_BINDING_GAMEPAD_BUTTON:
         for (int i = 0; i < MAX_GAMEPADS; i++) {
             if (input->gamepads[i].connected &&
                 input->gamepads[i].buttons[binding->gamepad_button]) {
@@ -281,7 +281,7 @@ static bool binding_active(Carbon_Input *input, const Carbon_Binding *binding, f
         }
         break;
 
-    case CARBON_BINDING_GAMEPAD_AXIS:
+    case AGENTITE_BINDING_GAMEPAD_AXIS:
         for (int i = 0; i < MAX_GAMEPADS; i++) {
             if (input->gamepads[i].connected) {
                 float axis_val = input->gamepads[i].axes[binding->gamepad_axis.axis];
@@ -308,12 +308,12 @@ static bool binding_active(Carbon_Input *input, const Carbon_Binding *binding, f
     return false;
 }
 
-void carbon_input_update(Carbon_Input *input) {
+void agentite_input_update(Agentite_Input *input) {
     if (!input) return;
 
     /* Update action states based on bindings */
     for (int i = 0; i < input->action_count; i++) {
-        Carbon_Action *action = &input->actions[i];
+        Agentite_Action *action = &input->actions[i];
         bool was_pressed = action->pressed;
         bool is_pressed = false;
         float max_value = 0.0f;
@@ -336,9 +336,9 @@ void carbon_input_update(Carbon_Input *input) {
 
 /* ============ Action Management ============ */
 
-int carbon_input_register_action(Carbon_Input *input, const char *name) {
+int agentite_input_register_action(Agentite_Input *input, const char *name) {
     if (!input || !name) return -1;
-    if (input->action_count >= CARBON_INPUT_MAX_ACTIONS) return -1;
+    if (input->action_count >= AGENTITE_INPUT_MAX_ACTIONS) return -1;
 
     /* Check for duplicate */
     for (int i = 0; i < input->action_count; i++) {
@@ -349,9 +349,9 @@ int carbon_input_register_action(Carbon_Input *input, const char *name) {
 
     /* Create new action */
     int id = input->action_count++;
-    Carbon_Action *action = &input->actions[id];
-    strncpy(action->name, name, CARBON_INPUT_ACTION_NAME_LEN - 1);
-    action->name[CARBON_INPUT_ACTION_NAME_LEN - 1] = '\0';
+    Agentite_Action *action = &input->actions[id];
+    strncpy(action->name, name, AGENTITE_INPUT_ACTION_NAME_LEN - 1);
+    action->name[AGENTITE_INPUT_ACTION_NAME_LEN - 1] = '\0';
     action->binding_count = 0;
     action->pressed = false;
     action->just_pressed = false;
@@ -361,7 +361,7 @@ int carbon_input_register_action(Carbon_Input *input, const char *name) {
     return id;
 }
 
-int carbon_input_find_action(Carbon_Input *input, const char *name) {
+int agentite_input_find_action(Agentite_Input *input, const char *name) {
     if (!input || !name) return -1;
 
     for (int i = 0; i < input->action_count; i++) {
@@ -372,165 +372,165 @@ int carbon_input_find_action(Carbon_Input *input, const char *name) {
     return -1;
 }
 
-bool carbon_input_bind_key(Carbon_Input *input, int action_id, SDL_Scancode key) {
+bool agentite_input_bind_key(Agentite_Input *input, int action_id, SDL_Scancode key) {
     if (!input || action_id < 0 || action_id >= input->action_count) return false;
 
-    Carbon_Action *action = &input->actions[action_id];
-    if (action->binding_count >= CARBON_INPUT_MAX_BINDINGS) return false;
+    Agentite_Action *action = &input->actions[action_id];
+    if (action->binding_count >= AGENTITE_INPUT_MAX_BINDINGS) return false;
 
-    Carbon_Binding *binding = &action->bindings[action->binding_count++];
-    binding->type = CARBON_BINDING_KEY;
+    Agentite_Binding *binding = &action->bindings[action->binding_count++];
+    binding->type = AGENTITE_BINDING_KEY;
     binding->key = key;
     return true;
 }
 
-bool carbon_input_bind_mouse(Carbon_Input *input, int action_id, uint8_t button) {
+bool agentite_input_bind_mouse(Agentite_Input *input, int action_id, uint8_t button) {
     if (!input || action_id < 0 || action_id >= input->action_count) return false;
     if (button < 1 || button > 5) return false;
 
-    Carbon_Action *action = &input->actions[action_id];
-    if (action->binding_count >= CARBON_INPUT_MAX_BINDINGS) return false;
+    Agentite_Action *action = &input->actions[action_id];
+    if (action->binding_count >= AGENTITE_INPUT_MAX_BINDINGS) return false;
 
-    Carbon_Binding *binding = &action->bindings[action->binding_count++];
-    binding->type = CARBON_BINDING_MOUSE_BUTTON;
+    Agentite_Binding *binding = &action->bindings[action->binding_count++];
+    binding->type = AGENTITE_BINDING_MOUSE_BUTTON;
     binding->mouse_button = button;
     return true;
 }
 
-bool carbon_input_bind_gamepad_button(Carbon_Input *input, int action_id,
+bool agentite_input_bind_gamepad_button(Agentite_Input *input, int action_id,
                                        SDL_GamepadButton button) {
     if (!input || action_id < 0 || action_id >= input->action_count) return false;
 
-    Carbon_Action *action = &input->actions[action_id];
-    if (action->binding_count >= CARBON_INPUT_MAX_BINDINGS) return false;
+    Agentite_Action *action = &input->actions[action_id];
+    if (action->binding_count >= AGENTITE_INPUT_MAX_BINDINGS) return false;
 
-    Carbon_Binding *binding = &action->bindings[action->binding_count++];
-    binding->type = CARBON_BINDING_GAMEPAD_BUTTON;
+    Agentite_Binding *binding = &action->bindings[action->binding_count++];
+    binding->type = AGENTITE_BINDING_GAMEPAD_BUTTON;
     binding->gamepad_button = button;
     return true;
 }
 
-bool carbon_input_bind_gamepad_axis(Carbon_Input *input, int action_id,
+bool agentite_input_bind_gamepad_axis(Agentite_Input *input, int action_id,
                                      SDL_GamepadAxis axis, float threshold, bool positive) {
     if (!input || action_id < 0 || action_id >= input->action_count) return false;
 
-    Carbon_Action *action = &input->actions[action_id];
-    if (action->binding_count >= CARBON_INPUT_MAX_BINDINGS) return false;
+    Agentite_Action *action = &input->actions[action_id];
+    if (action->binding_count >= AGENTITE_INPUT_MAX_BINDINGS) return false;
 
-    Carbon_Binding *binding = &action->bindings[action->binding_count++];
-    binding->type = CARBON_BINDING_GAMEPAD_AXIS;
+    Agentite_Binding *binding = &action->bindings[action->binding_count++];
+    binding->type = AGENTITE_BINDING_GAMEPAD_AXIS;
     binding->gamepad_axis.axis = axis;
     binding->gamepad_axis.threshold = clampf(threshold, 0.0f, 1.0f);
     binding->gamepad_axis.positive = positive;
     return true;
 }
 
-void carbon_input_clear_bindings(Carbon_Input *input, int action_id) {
+void agentite_input_clear_bindings(Agentite_Input *input, int action_id) {
     if (!input || action_id < 0 || action_id >= input->action_count) return;
     input->actions[action_id].binding_count = 0;
 }
 
 /* ============ Action Queries ============ */
 
-bool carbon_input_action_pressed(Carbon_Input *input, int action_id) {
+bool agentite_input_action_pressed(Agentite_Input *input, int action_id) {
     if (!input || action_id < 0 || action_id >= input->action_count) return false;
     return input->actions[action_id].pressed;
 }
 
-bool carbon_input_action_just_pressed(Carbon_Input *input, int action_id) {
+bool agentite_input_action_just_pressed(Agentite_Input *input, int action_id) {
     if (!input || action_id < 0 || action_id >= input->action_count) return false;
     return input->actions[action_id].just_pressed;
 }
 
-bool carbon_input_action_just_released(Carbon_Input *input, int action_id) {
+bool agentite_input_action_just_released(Agentite_Input *input, int action_id) {
     if (!input || action_id < 0 || action_id >= input->action_count) return false;
     return input->actions[action_id].just_released;
 }
 
-float carbon_input_action_value(Carbon_Input *input, int action_id) {
+float agentite_input_action_value(Agentite_Input *input, int action_id) {
     if (!input || action_id < 0 || action_id >= input->action_count) return 0.0f;
     return input->actions[action_id].value;
 }
 
 /* Convenience name-based functions */
-bool carbon_input_pressed(Carbon_Input *input, const char *action) {
-    return carbon_input_action_pressed(input, carbon_input_find_action(input, action));
+bool agentite_input_pressed(Agentite_Input *input, const char *action) {
+    return agentite_input_action_pressed(input, agentite_input_find_action(input, action));
 }
 
-bool carbon_input_just_pressed(Carbon_Input *input, const char *action) {
-    return carbon_input_action_just_pressed(input, carbon_input_find_action(input, action));
+bool agentite_input_just_pressed(Agentite_Input *input, const char *action) {
+    return agentite_input_action_just_pressed(input, agentite_input_find_action(input, action));
 }
 
-bool carbon_input_just_released(Carbon_Input *input, const char *action) {
-    return carbon_input_action_just_released(input, carbon_input_find_action(input, action));
+bool agentite_input_just_released(Agentite_Input *input, const char *action) {
+    return agentite_input_action_just_released(input, agentite_input_find_action(input, action));
 }
 
-float carbon_input_value(Carbon_Input *input, const char *action) {
-    return carbon_input_action_value(input, carbon_input_find_action(input, action));
+float agentite_input_value(Agentite_Input *input, const char *action) {
+    return agentite_input_action_value(input, agentite_input_find_action(input, action));
 }
 
 /* ============ Direct Input Queries ============ */
 
-const Carbon_MouseState *carbon_input_get_mouse(Carbon_Input *input) {
+const Agentite_MouseState *agentite_input_get_mouse(Agentite_Input *input) {
     if (!input) return NULL;
     return &input->mouse;
 }
 
-void carbon_input_get_mouse_position(Carbon_Input *input, float *x, float *y) {
+void agentite_input_get_mouse_position(Agentite_Input *input, float *x, float *y) {
     if (!input) return;
     if (x) *x = input->mouse.x;
     if (y) *y = input->mouse.y;
 }
 
-void carbon_input_get_mouse_delta(Carbon_Input *input, float *dx, float *dy) {
+void agentite_input_get_mouse_delta(Agentite_Input *input, float *dx, float *dy) {
     if (!input) return;
     if (dx) *dx = input->mouse.dx;
     if (dy) *dy = input->mouse.dy;
 }
 
-bool carbon_input_mouse_button(Carbon_Input *input, int button) {
+bool agentite_input_mouse_button(Agentite_Input *input, int button) {
     if (!input || button < 0 || button >= 5) return false;
     return input->mouse.buttons[button];
 }
 
-bool carbon_input_mouse_button_pressed(Carbon_Input *input, int button) {
+bool agentite_input_mouse_button_pressed(Agentite_Input *input, int button) {
     if (!input || button < 0 || button >= 5) return false;
     return input->mouse.buttons_pressed[button];
 }
 
-bool carbon_input_mouse_button_released(Carbon_Input *input, int button) {
+bool agentite_input_mouse_button_released(Agentite_Input *input, int button) {
     if (!input || button < 0 || button >= 5) return false;
     return input->mouse.buttons_released[button];
 }
 
-void carbon_input_get_scroll(Carbon_Input *input, float *x, float *y) {
+void agentite_input_get_scroll(Agentite_Input *input, float *x, float *y) {
     if (!input) return;
     if (x) *x = input->mouse.scroll_x;
     if (y) *y = input->mouse.scroll_y;
 }
 
-bool carbon_input_key_pressed(Carbon_Input *input, SDL_Scancode key) {
+bool agentite_input_key_pressed(Agentite_Input *input, SDL_Scancode key) {
     if (!input || key >= MAX_KEYS) return false;
     return input->keys[key];
 }
 
-bool carbon_input_key_just_pressed(Carbon_Input *input, SDL_Scancode key) {
+bool agentite_input_key_just_pressed(Agentite_Input *input, SDL_Scancode key) {
     if (!input || key >= MAX_KEYS) return false;
     return input->keys[key] && !input->keys_prev[key];
 }
 
-bool carbon_input_key_just_released(Carbon_Input *input, SDL_Scancode key) {
+bool agentite_input_key_just_released(Agentite_Input *input, SDL_Scancode key) {
     if (!input || key >= MAX_KEYS) return false;
     return !input->keys[key] && input->keys_prev[key];
 }
 
-const Carbon_GamepadState *carbon_input_get_gamepad(Carbon_Input *input, int index) {
+const Agentite_GamepadState *agentite_input_get_gamepad(Agentite_Input *input, int index) {
     if (!input || index < 0 || index >= MAX_GAMEPADS) return NULL;
     if (!input->gamepads[index].connected) return NULL;
     return &input->gamepads[index];
 }
 
-int carbon_input_get_gamepad_count(Carbon_Input *input) {
+int agentite_input_get_gamepad_count(Agentite_Input *input) {
     if (!input) return 0;
     return input->gamepad_count;
 }

@@ -1,8 +1,8 @@
-# Carbon Game Engine - Cross-platform Makefile
+# Agentite Engine - Cross-platform Makefile
 # Supports macOS, Linux, and Windows (via MinGW)
 
 # Project settings
-PROJECT_NAME := carbon
+PROJECT_NAME := agentite
 BUILD_DIR := build
 SRC_DIR := src
 INCLUDE_DIR := include
@@ -283,7 +283,7 @@ info:
 
 # List available targets
 help:
-	@echo "Carbon Engine Build Targets:"
+	@echo "Agentite Engine Build Targets:"
 	@echo ""
 	@echo "  make              - Build main game (uses game template)"
 	@echo "  make run          - Build and run main game"

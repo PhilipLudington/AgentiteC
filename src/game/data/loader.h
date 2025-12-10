@@ -1,7 +1,7 @@
 #ifndef GAME_DATA_LOADER_H
 #define GAME_DATA_LOADER_H
 
-#include "carbon/game_context.h"
+#include "agentite/game_context.h"
 #include <stdbool.h>
 #include <stddef.h>
 

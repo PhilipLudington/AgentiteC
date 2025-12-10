@@ -4,8 +4,8 @@
  * Orbital camera with spherical coordinate control and smooth animations.
  */
 
-#include "carbon/carbon.h"
-#include "carbon/camera3d.h"
+#include "agentite/agentite.h"
+#include "agentite/camera3d.h"
 #include <cglm/cglm.h>
 #include <stdlib.h>
 #include <math.h>
@@ -21,7 +21,7 @@
  * Internal Structure
  * ============================================================================ */
 
-struct Carbon_Camera3D {
+struct Agentite_Camera3D {
     /* Position and target */
     vec3 position;
     vec3 target;
@@ -36,7 +36,7 @@ struct Carbon_Camera3D {
     float min_pitch, max_pitch;   /* In radians */
 
     /* Projection settings */
-    Carbon_ProjectionType projection_type;
+    Agentite_ProjectionType projection_type;
     float fov;          /* Perspective FOV in radians */
     float aspect;       /* Width / height */
     float near_plane, far_plane;
@@ -98,7 +98,7 @@ static float clampf(float val, float min, float max)
 }
 
 /* Update position from spherical coordinates */
-static void update_position_from_spherical(Carbon_Camera3D *cam)
+static void update_position_from_spherical(Agentite_Camera3D *cam)
 {
     /* Convert spherical to Cartesian
      * x = target.x + distance * cos(pitch) * cos(yaw)
@@ -118,7 +118,7 @@ static void update_position_from_spherical(Carbon_Camera3D *cam)
 }
 
 /* Update spherical from position (for direct position setting) */
-static void update_spherical_from_position(Carbon_Camera3D *cam)
+static void update_spherical_from_position(Agentite_Camera3D *cam)
 {
     vec3 dir;
     glm_vec3_sub(cam->position, cam->target, dir);
@@ -138,7 +138,7 @@ static void update_spherical_from_position(Carbon_Camera3D *cam)
 }
 
 /* Compute matrices */
-static void compute_matrices(Carbon_Camera3D *cam)
+static void compute_matrices(Agentite_Camera3D *cam)
 {
     if (!cam || !cam->dirty) return;
 
@@ -147,7 +147,7 @@ static void compute_matrices(Carbon_Camera3D *cam)
     glm_lookat(cam->position, cam->target, up, cam->view);
 
     /* Projection matrix */
-    if (cam->projection_type == CARBON_PROJECTION_PERSPECTIVE) {
+    if (cam->projection_type == AGENTITE_PROJECTION_PERSPECTIVE) {
         glm_perspective(cam->fov, cam->aspect, cam->near_plane, cam->far_plane,
                         cam->projection);
     } else {
@@ -164,7 +164,7 @@ static void compute_matrices(Carbon_Camera3D *cam)
 }
 
 /* Apply constraints */
-static void apply_constraints(Carbon_Camera3D *cam)
+static void apply_constraints(Agentite_Camera3D *cam)
 {
     /* Pitch limits */
     cam->pitch = clampf(cam->pitch, cam->min_pitch, cam->max_pitch);
@@ -182,9 +182,9 @@ static void apply_constraints(Carbon_Camera3D *cam)
  * Lifecycle
  * ============================================================================ */
 
-Carbon_Camera3D *carbon_camera3d_create(void)
+Agentite_Camera3D *agentite_camera3d_create(void)
 {
-    Carbon_Camera3D *cam = CARBON_ALLOC(Carbon_Camera3D);
+    Agentite_Camera3D *cam = AGENTITE_ALLOC(Agentite_Camera3D);
     if (!cam) return NULL;
 
     /* Default position: looking at origin from (0, 5, 10) */
@@ -201,7 +201,7 @@ Carbon_Camera3D *carbon_camera3d_create(void)
     cam->max_pitch = DEG_TO_RAD(89.0f);
 
     /* Default perspective projection */
-    cam->projection_type = CARBON_PROJECTION_PERSPECTIVE;
+    cam->projection_type = AGENTITE_PROJECTION_PERSPECTIVE;
     cam->fov = DEG_TO_RAD(60.0f);
     cam->aspect = 16.0f / 9.0f;
     cam->near_plane = 0.1f;
@@ -222,7 +222,7 @@ Carbon_Camera3D *carbon_camera3d_create(void)
     return cam;
 }
 
-void carbon_camera3d_destroy(Carbon_Camera3D *cam)
+void agentite_camera3d_destroy(Agentite_Camera3D *cam)
 {
     free(cam);
 }
@@ -231,7 +231,7 @@ void carbon_camera3d_destroy(Carbon_Camera3D *cam)
  * Position (Cartesian)
  * ============================================================================ */
 
-void carbon_camera3d_set_position(Carbon_Camera3D *cam, float x, float y, float z)
+void agentite_camera3d_set_position(Agentite_Camera3D *cam, float x, float y, float z)
 {
     if (!cam) return;
     cam->position[0] = x;
@@ -241,7 +241,7 @@ void carbon_camera3d_set_position(Carbon_Camera3D *cam, float x, float y, float 
     cam->dirty = true;
 }
 
-void carbon_camera3d_get_position(Carbon_Camera3D *cam, float *x, float *y, float *z)
+void agentite_camera3d_get_position(Agentite_Camera3D *cam, float *x, float *y, float *z)
 {
     if (!cam) return;
     if (x) *x = cam->position[0];
@@ -249,7 +249,7 @@ void carbon_camera3d_get_position(Carbon_Camera3D *cam, float *x, float *y, floa
     if (z) *z = cam->position[2];
 }
 
-void carbon_camera3d_set_target(Carbon_Camera3D *cam, float x, float y, float z)
+void agentite_camera3d_set_target(Agentite_Camera3D *cam, float x, float y, float z)
 {
     if (!cam) return;
     cam->target[0] = x;
@@ -258,7 +258,7 @@ void carbon_camera3d_set_target(Carbon_Camera3D *cam, float x, float y, float z)
     update_position_from_spherical(cam);
 }
 
-void carbon_camera3d_get_target(Carbon_Camera3D *cam, float *x, float *y, float *z)
+void agentite_camera3d_get_target(Agentite_Camera3D *cam, float *x, float *y, float *z)
 {
     if (!cam) return;
     if (x) *x = cam->target[0];
@@ -270,7 +270,7 @@ void carbon_camera3d_get_target(Carbon_Camera3D *cam, float *x, float *y, float 
  * Spherical Coordinates
  * ============================================================================ */
 
-void carbon_camera3d_set_spherical(Carbon_Camera3D *cam,
+void agentite_camera3d_set_spherical(Agentite_Camera3D *cam,
                                     float yaw, float pitch, float distance)
 {
     if (!cam) return;
@@ -281,7 +281,7 @@ void carbon_camera3d_set_spherical(Carbon_Camera3D *cam,
     update_position_from_spherical(cam);
 }
 
-void carbon_camera3d_get_spherical(Carbon_Camera3D *cam,
+void agentite_camera3d_get_spherical(Agentite_Camera3D *cam,
                                     float *yaw, float *pitch, float *distance)
 {
     if (!cam) return;
@@ -294,7 +294,7 @@ void carbon_camera3d_get_spherical(Carbon_Camera3D *cam,
  * Orbital Controls
  * ============================================================================ */
 
-void carbon_camera3d_orbit(Carbon_Camera3D *cam, float delta_yaw, float delta_pitch)
+void agentite_camera3d_orbit(Agentite_Camera3D *cam, float delta_yaw, float delta_pitch)
 {
     if (!cam) return;
     cam->yaw += DEG_TO_RAD(delta_yaw);
@@ -303,7 +303,7 @@ void carbon_camera3d_orbit(Carbon_Camera3D *cam, float delta_yaw, float delta_pi
     update_position_from_spherical(cam);
 }
 
-void carbon_camera3d_zoom(Carbon_Camera3D *cam, float delta)
+void agentite_camera3d_zoom(Agentite_Camera3D *cam, float delta)
 {
     if (!cam) return;
     cam->distance += delta;
@@ -311,7 +311,7 @@ void carbon_camera3d_zoom(Carbon_Camera3D *cam, float delta)
     update_position_from_spherical(cam);
 }
 
-void carbon_camera3d_pan(Carbon_Camera3D *cam, float right, float up)
+void agentite_camera3d_pan(Agentite_Camera3D *cam, float right, float up)
 {
     if (!cam) return;
 
@@ -338,7 +338,7 @@ void carbon_camera3d_pan(Carbon_Camera3D *cam, float right, float up)
     update_position_from_spherical(cam);
 }
 
-void carbon_camera3d_pan_xz(Carbon_Camera3D *cam, float dx, float dz)
+void agentite_camera3d_pan_xz(Agentite_Camera3D *cam, float dx, float dz)
 {
     if (!cam) return;
     cam->target[0] += dx;
@@ -350,7 +350,7 @@ void carbon_camera3d_pan_xz(Carbon_Camera3D *cam, float dx, float dz)
  * Constraints
  * ============================================================================ */
 
-void carbon_camera3d_set_distance_limits(Carbon_Camera3D *cam, float min, float max)
+void agentite_camera3d_set_distance_limits(Agentite_Camera3D *cam, float min, float max)
 {
     if (!cam) return;
     cam->min_distance = min;
@@ -359,7 +359,7 @@ void carbon_camera3d_set_distance_limits(Carbon_Camera3D *cam, float min, float 
     update_position_from_spherical(cam);
 }
 
-void carbon_camera3d_set_pitch_limits(Carbon_Camera3D *cam, float min, float max)
+void agentite_camera3d_set_pitch_limits(Agentite_Camera3D *cam, float min, float max)
 {
     if (!cam) return;
     cam->min_pitch = DEG_TO_RAD(min);
@@ -368,14 +368,14 @@ void carbon_camera3d_set_pitch_limits(Carbon_Camera3D *cam, float min, float max
     update_position_from_spherical(cam);
 }
 
-void carbon_camera3d_get_distance_limits(Carbon_Camera3D *cam, float *min, float *max)
+void agentite_camera3d_get_distance_limits(Agentite_Camera3D *cam, float *min, float *max)
 {
     if (!cam) return;
     if (min) *min = cam->min_distance;
     if (max) *max = cam->max_distance;
 }
 
-void carbon_camera3d_get_pitch_limits(Carbon_Camera3D *cam, float *min, float *max)
+void agentite_camera3d_get_pitch_limits(Agentite_Camera3D *cam, float *min, float *max)
 {
     if (!cam) return;
     if (min) *min = RAD_TO_DEG(cam->min_pitch);
@@ -386,12 +386,12 @@ void carbon_camera3d_get_pitch_limits(Carbon_Camera3D *cam, float *min, float *m
  * Projection
  * ============================================================================ */
 
-void carbon_camera3d_set_perspective(Carbon_Camera3D *cam,
+void agentite_camera3d_set_perspective(Agentite_Camera3D *cam,
                                       float fov, float aspect,
                                       float near, float far)
 {
     if (!cam) return;
-    cam->projection_type = CARBON_PROJECTION_PERSPECTIVE;
+    cam->projection_type = AGENTITE_PROJECTION_PERSPECTIVE;
     cam->fov = DEG_TO_RAD(fov);
     cam->aspect = aspect;
     cam->near_plane = near;
@@ -399,12 +399,12 @@ void carbon_camera3d_set_perspective(Carbon_Camera3D *cam,
     cam->dirty = true;
 }
 
-void carbon_camera3d_set_orthographic(Carbon_Camera3D *cam,
+void agentite_camera3d_set_orthographic(Agentite_Camera3D *cam,
                                        float width, float height,
                                        float near, float far)
 {
     if (!cam) return;
-    cam->projection_type = CARBON_PROJECTION_ORTHOGRAPHIC;
+    cam->projection_type = AGENTITE_PROJECTION_ORTHOGRAPHIC;
     cam->ortho_width = width;
     cam->ortho_height = height;
     cam->near_plane = near;
@@ -412,12 +412,12 @@ void carbon_camera3d_set_orthographic(Carbon_Camera3D *cam,
     cam->dirty = true;
 }
 
-Carbon_ProjectionType carbon_camera3d_get_projection_type(Carbon_Camera3D *cam)
+Agentite_ProjectionType agentite_camera3d_get_projection_type(Agentite_Camera3D *cam)
 {
-    return cam ? cam->projection_type : CARBON_PROJECTION_PERSPECTIVE;
+    return cam ? cam->projection_type : AGENTITE_PROJECTION_PERSPECTIVE;
 }
 
-void carbon_camera3d_set_aspect(Carbon_Camera3D *cam, float aspect)
+void agentite_camera3d_set_aspect(Agentite_Camera3D *cam, float aspect)
 {
     if (!cam) return;
     cam->aspect = aspect;
@@ -430,7 +430,7 @@ void carbon_camera3d_set_aspect(Carbon_Camera3D *cam, float aspect)
  * Matrix Access
  * ============================================================================ */
 
-void carbon_camera3d_update(Carbon_Camera3D *cam, float delta_time)
+void agentite_camera3d_update(Agentite_Camera3D *cam, float delta_time)
 {
     if (!cam) return;
 
@@ -471,21 +471,21 @@ void carbon_camera3d_update(Carbon_Camera3D *cam, float delta_time)
     compute_matrices(cam);
 }
 
-const float *carbon_camera3d_get_view_matrix(Carbon_Camera3D *cam)
+const float *agentite_camera3d_get_view_matrix(Agentite_Camera3D *cam)
 {
     if (!cam) return NULL;
     compute_matrices(cam);
     return (const float *)cam->view;
 }
 
-const float *carbon_camera3d_get_projection_matrix(Carbon_Camera3D *cam)
+const float *agentite_camera3d_get_projection_matrix(Agentite_Camera3D *cam)
 {
     if (!cam) return NULL;
     compute_matrices(cam);
     return (const float *)cam->projection;
 }
 
-const float *carbon_camera3d_get_vp_matrix(Carbon_Camera3D *cam)
+const float *agentite_camera3d_get_vp_matrix(Agentite_Camera3D *cam)
 {
     if (!cam) return NULL;
     compute_matrices(cam);
@@ -496,7 +496,7 @@ const float *carbon_camera3d_get_vp_matrix(Carbon_Camera3D *cam)
  * Direction Vectors
  * ============================================================================ */
 
-void carbon_camera3d_get_forward(Carbon_Camera3D *cam, float *x, float *y, float *z)
+void agentite_camera3d_get_forward(Agentite_Camera3D *cam, float *x, float *y, float *z)
 {
     if (!cam) return;
     compute_matrices(cam);
@@ -507,7 +507,7 @@ void carbon_camera3d_get_forward(Carbon_Camera3D *cam, float *x, float *y, float
     if (z) *z = -cam->view[2][2];
 }
 
-void carbon_camera3d_get_right(Carbon_Camera3D *cam, float *x, float *y, float *z)
+void agentite_camera3d_get_right(Agentite_Camera3D *cam, float *x, float *y, float *z)
 {
     if (!cam) return;
     compute_matrices(cam);
@@ -518,7 +518,7 @@ void carbon_camera3d_get_right(Carbon_Camera3D *cam, float *x, float *y, float *
     if (z) *z = cam->view[2][0];
 }
 
-void carbon_camera3d_get_up(Carbon_Camera3D *cam, float *x, float *y, float *z)
+void agentite_camera3d_get_up(Agentite_Camera3D *cam, float *x, float *y, float *z)
 {
     if (!cam) return;
     compute_matrices(cam);
@@ -533,12 +533,12 @@ void carbon_camera3d_get_up(Carbon_Camera3D *cam, float *x, float *y, float *z)
  * Smooth Transitions
  * ============================================================================ */
 
-void carbon_camera3d_animate_to(Carbon_Camera3D *cam,
+void agentite_camera3d_animate_to(Agentite_Camera3D *cam,
                                  float x, float y, float z,
                                  float duration)
 {
     if (!cam || duration <= 0) {
-        if (cam) carbon_camera3d_set_position(cam, x, y, z);
+        if (cam) agentite_camera3d_set_position(cam, x, y, z);
         return;
     }
 
@@ -553,12 +553,12 @@ void carbon_camera3d_animate_to(Carbon_Camera3D *cam,
     cam->animating = true;
 }
 
-void carbon_camera3d_animate_spherical_to(Carbon_Camera3D *cam,
+void agentite_camera3d_animate_spherical_to(Agentite_Camera3D *cam,
                                            float yaw, float pitch, float distance,
                                            float duration)
 {
     if (!cam || duration <= 0) {
-        if (cam) carbon_camera3d_set_spherical(cam, yaw, pitch, distance);
+        if (cam) agentite_camera3d_set_spherical(cam, yaw, pitch, distance);
         return;
     }
 
@@ -576,12 +576,12 @@ void carbon_camera3d_animate_spherical_to(Carbon_Camera3D *cam,
     cam->animating = true;
 }
 
-void carbon_camera3d_animate_target_to(Carbon_Camera3D *cam,
+void agentite_camera3d_animate_target_to(Agentite_Camera3D *cam,
                                         float x, float y, float z,
                                         float duration)
 {
     if (!cam || duration <= 0) {
-        if (cam) carbon_camera3d_set_target(cam, x, y, z);
+        if (cam) agentite_camera3d_set_target(cam, x, y, z);
         return;
     }
 
@@ -596,17 +596,17 @@ void carbon_camera3d_animate_target_to(Carbon_Camera3D *cam,
     cam->animating = true;
 }
 
-bool carbon_camera3d_is_animating(Carbon_Camera3D *cam)
+bool agentite_camera3d_is_animating(Agentite_Camera3D *cam)
 {
     return cam ? cam->animating : false;
 }
 
-void carbon_camera3d_stop_animation(Carbon_Camera3D *cam)
+void agentite_camera3d_stop_animation(Agentite_Camera3D *cam)
 {
     if (cam) cam->animating = false;
 }
 
-void carbon_camera3d_set_easing(Carbon_Camera3D *cam, int easing_type)
+void agentite_camera3d_set_easing(Agentite_Camera3D *cam, int easing_type)
 {
     if (cam) cam->easing_type = easing_type;
 }
@@ -615,7 +615,7 @@ void carbon_camera3d_set_easing(Carbon_Camera3D *cam, int easing_type)
  * Coordinate Conversion
  * ============================================================================ */
 
-void carbon_camera3d_screen_to_ray(Carbon_Camera3D *cam,
+void agentite_camera3d_screen_to_ray(Agentite_Camera3D *cam,
                                     float screen_x, float screen_y,
                                     float screen_w, float screen_h,
                                     float *ray_origin_x, float *ray_origin_y, float *ray_origin_z,
@@ -662,7 +662,7 @@ void carbon_camera3d_screen_to_ray(Carbon_Camera3D *cam,
     if (ray_dir_z) *ray_dir_z = dir[2];
 }
 
-bool carbon_camera3d_world_to_screen(Carbon_Camera3D *cam,
+bool agentite_camera3d_world_to_screen(Agentite_Camera3D *cam,
                                       float world_x, float world_y, float world_z,
                                       float screen_w, float screen_h,
                                       float *screen_x, float *screen_y)

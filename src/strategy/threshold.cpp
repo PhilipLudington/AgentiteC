@@ -1,23 +1,23 @@
-#include "carbon/threshold.h"
+#include "agentite/threshold.h"
 #include <string.h>
 
-void carbon_threshold_init(Carbon_ThresholdTracker *tracker, float initial_value) {
+void agentite_threshold_init(Agentite_ThresholdTracker *tracker, float initial_value) {
     if (!tracker) return;
 
-    memset(tracker, 0, sizeof(Carbon_ThresholdTracker));
+    memset(tracker, 0, sizeof(Agentite_ThresholdTracker));
     tracker->current_value = initial_value;
 }
 
-int carbon_threshold_add(Carbon_ThresholdTracker *tracker,
+int agentite_threshold_add(Agentite_ThresholdTracker *tracker,
                           float boundary,
-                          Carbon_ThresholdCallback callback,
+                          Agentite_ThresholdCallback callback,
                           void *userdata) {
     if (!tracker || !callback) return -1;
 
     // Find first inactive slot
-    for (int i = 0; i < CARBON_THRESHOLD_MAX; i++) {
+    for (int i = 0; i < AGENTITE_THRESHOLD_MAX; i++) {
         if (!tracker->thresholds[i].active) {
-            Carbon_Threshold *t = &tracker->thresholds[i];
+            Agentite_Threshold *t = &tracker->thresholds[i];
             t->boundary = boundary;
             t->callback = callback;
             t->userdata = userdata;
@@ -31,8 +31,8 @@ int carbon_threshold_add(Carbon_ThresholdTracker *tracker,
     return -1;  // No free slots
 }
 
-void carbon_threshold_remove(Carbon_ThresholdTracker *tracker, int threshold_id) {
-    if (!tracker || threshold_id < 0 || threshold_id >= CARBON_THRESHOLD_MAX) return;
+void agentite_threshold_remove(Agentite_ThresholdTracker *tracker, int threshold_id) {
+    if (!tracker || threshold_id < 0 || threshold_id >= AGENTITE_THRESHOLD_MAX) return;
 
     if (tracker->thresholds[threshold_id].active) {
         tracker->thresholds[threshold_id].active = false;
@@ -40,14 +40,14 @@ void carbon_threshold_remove(Carbon_ThresholdTracker *tracker, int threshold_id)
     }
 }
 
-void carbon_threshold_update(Carbon_ThresholdTracker *tracker, float new_value) {
+void agentite_threshold_update(Agentite_ThresholdTracker *tracker, float new_value) {
     if (!tracker) return;
 
     float old_value = tracker->current_value;
     tracker->current_value = new_value;
 
-    for (int i = 0; i < CARBON_THRESHOLD_MAX; i++) {
-        Carbon_Threshold *t = &tracker->thresholds[i];
+    for (int i = 0; i < AGENTITE_THRESHOLD_MAX; i++) {
+        Agentite_Threshold *t = &tracker->thresholds[i];
         if (!t->active) continue;
 
         bool is_above = new_value > t->boundary;
@@ -61,12 +61,12 @@ void carbon_threshold_update(Carbon_ThresholdTracker *tracker, float new_value) 
     }
 }
 
-float carbon_threshold_get_value(const Carbon_ThresholdTracker *tracker) {
+float agentite_threshold_get_value(const Agentite_ThresholdTracker *tracker) {
     if (!tracker) return 0.0f;
     return tracker->current_value;
 }
 
-int carbon_threshold_count(const Carbon_ThresholdTracker *tracker) {
+int agentite_threshold_count(const Agentite_ThresholdTracker *tracker) {
     if (!tracker) return 0;
     return tracker->count;
 }

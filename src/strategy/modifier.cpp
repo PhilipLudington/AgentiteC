@@ -1,13 +1,13 @@
-#include "carbon/modifier.h"
+#include "agentite/modifier.h"
 #include <string.h>
 
-void carbon_modifier_init(Carbon_ModifierStack *stack) {
+void agentite_modifier_init(Agentite_ModifierStack *stack) {
     if (!stack) return;
-    memset(stack, 0, sizeof(Carbon_ModifierStack));
+    memset(stack, 0, sizeof(Agentite_ModifierStack));
 }
 
-bool carbon_modifier_add(Carbon_ModifierStack *stack, const char *source, float value) {
-    if (!stack || !source || stack->count >= CARBON_MODIFIER_MAX) return false;
+bool agentite_modifier_add(Agentite_ModifierStack *stack, const char *source, float value) {
+    if (!stack || !source || stack->count >= AGENTITE_MODIFIER_MAX) return false;
 
     // Check for duplicate
     for (int i = 0; i < stack->count; i++) {
@@ -16,7 +16,7 @@ bool carbon_modifier_add(Carbon_ModifierStack *stack, const char *source, float 
         }
     }
 
-    Carbon_Modifier *mod = &stack->modifiers[stack->count];
+    Agentite_Modifier *mod = &stack->modifiers[stack->count];
     strncpy(mod->source, source, sizeof(mod->source) - 1);
     mod->source[sizeof(mod->source) - 1] = '\0';
     mod->value = value;
@@ -25,7 +25,7 @@ bool carbon_modifier_add(Carbon_ModifierStack *stack, const char *source, float 
     return true;
 }
 
-bool carbon_modifier_remove(Carbon_ModifierStack *stack, const char *source) {
+bool agentite_modifier_remove(Agentite_ModifierStack *stack, const char *source) {
     if (!stack || !source) return false;
 
     for (int i = 0; i < stack->count; i++) {
@@ -42,7 +42,7 @@ bool carbon_modifier_remove(Carbon_ModifierStack *stack, const char *source) {
     return false;
 }
 
-bool carbon_modifier_has(const Carbon_ModifierStack *stack, const char *source) {
+bool agentite_modifier_has(const Agentite_ModifierStack *stack, const char *source) {
     if (!stack || !source) return false;
 
     for (int i = 0; i < stack->count; i++) {
@@ -54,7 +54,7 @@ bool carbon_modifier_has(const Carbon_ModifierStack *stack, const char *source) 
     return false;
 }
 
-bool carbon_modifier_set(Carbon_ModifierStack *stack, const char *source, float value) {
+bool agentite_modifier_set(Agentite_ModifierStack *stack, const char *source, float value) {
     if (!stack || !source) return false;
 
     for (int i = 0; i < stack->count; i++) {
@@ -67,7 +67,7 @@ bool carbon_modifier_set(Carbon_ModifierStack *stack, const char *source, float 
     return false;
 }
 
-float carbon_modifier_apply(const Carbon_ModifierStack *stack, float base_value) {
+float agentite_modifier_apply(const Agentite_ModifierStack *stack, float base_value) {
     if (!stack || stack->count == 0) return base_value;
 
     float result = base_value;
@@ -78,7 +78,7 @@ float carbon_modifier_apply(const Carbon_ModifierStack *stack, float base_value)
     return result;
 }
 
-float carbon_modifier_apply_additive(const Carbon_ModifierStack *stack, float base_value) {
+float agentite_modifier_apply_additive(const Agentite_ModifierStack *stack, float base_value) {
     if (!stack || stack->count == 0) return base_value;
 
     float sum = 0.0f;
@@ -89,7 +89,7 @@ float carbon_modifier_apply_additive(const Carbon_ModifierStack *stack, float ba
     return base_value * (1.0f + sum);
 }
 
-float carbon_modifier_total(const Carbon_ModifierStack *stack) {
+float agentite_modifier_total(const Agentite_ModifierStack *stack) {
     if (!stack || stack->count == 0) return 0.0f;
 
     float sum = 0.0f;
@@ -100,17 +100,17 @@ float carbon_modifier_total(const Carbon_ModifierStack *stack) {
     return sum;
 }
 
-void carbon_modifier_clear(Carbon_ModifierStack *stack) {
+void agentite_modifier_clear(Agentite_ModifierStack *stack) {
     if (!stack) return;
     stack->count = 0;
 }
 
-int carbon_modifier_count(const Carbon_ModifierStack *stack) {
+int agentite_modifier_count(const Agentite_ModifierStack *stack) {
     if (!stack) return 0;
     return stack->count;
 }
 
-const Carbon_Modifier *carbon_modifier_get(const Carbon_ModifierStack *stack, int index) {
+const Agentite_Modifier *agentite_modifier_get(const Agentite_ModifierStack *stack, int index) {
     if (!stack || index < 0 || index >= stack->count) return NULL;
     return &stack->modifiers[index];
 }

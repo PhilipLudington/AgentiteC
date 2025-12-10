@@ -1,4 +1,4 @@
-#include "carbon/log.h"
+#include "agentite/log.h"
 #include <SDL3/SDL.h>
 #include <stdio.h>
 #include <string.h>
@@ -7,7 +7,7 @@
 /* Log file handle */
 static FILE *log_file = NULL;
 static char log_path[512] = {0};
-static Carbon_LogLevel current_level = CARBON_LOG_LEVEL_INFO;
+static Agentite_LogLevel current_level = AGENTITE_LOG_LEVEL_INFO;
 static bool console_output = true;
 static bool initialized = false;
 
@@ -42,7 +42,7 @@ static void write_session_start(void) {
 
     fprintf(log_file, "\n");
     fprintf(log_file, "================================================================================\n");
-    fprintf(log_file, "=== Carbon Engine - Session Start: %s\n", timestamp);
+    fprintf(log_file, "=== Agentite Engine - Session Start: %s\n", timestamp);
     fprintf(log_file, "================================================================================\n");
     fflush(log_file);
 }
@@ -60,11 +60,11 @@ static void write_session_end(void) {
     fflush(log_file);
 }
 
-bool carbon_log_init(void) {
-    return carbon_log_init_with_path(NULL);
+bool agentite_log_init(void) {
+    return agentite_log_init_with_path(NULL);
 }
 
-bool carbon_log_init_with_path(const char *path) {
+bool agentite_log_init_with_path(const char *path) {
     if (initialized) {
         return true;  /* Already initialized */
     }
@@ -88,7 +88,7 @@ bool carbon_log_init_with_path(const char *path) {
     return true;
 }
 
-void carbon_log_shutdown(void) {
+void agentite_log_shutdown(void) {
     if (!initialized) return;
 
     write_session_end();
@@ -102,25 +102,25 @@ void carbon_log_shutdown(void) {
     initialized = false;
 }
 
-bool carbon_log_is_initialized(void) {
+bool agentite_log_is_initialized(void) {
     return initialized;
 }
 
-void carbon_log_set_level(Carbon_LogLevel level) {
+void agentite_log_set_level(Agentite_LogLevel level) {
     current_level = level;
 }
 
-Carbon_LogLevel carbon_log_get_level(void) {
+Agentite_LogLevel agentite_log_get_level(void) {
     return current_level;
 }
 
-void carbon_log_set_console_output(bool enabled) {
+void agentite_log_set_console_output(bool enabled) {
     console_output = enabled;
 }
 
-void carbon_log_v(Carbon_LogLevel level, const char *subsystem, const char *fmt, va_list args) {
+void agentite_log_v(Agentite_LogLevel level, const char *subsystem, const char *fmt, va_list args) {
     /* Check level filter (errors always pass) */
-    if (level != CARBON_LOG_LEVEL_ERROR && level > current_level) {
+    if (level != AGENTITE_LOG_LEVEL_ERROR && level > current_level) {
         return;
     }
 
@@ -149,7 +149,7 @@ void carbon_log_v(Carbon_LogLevel level, const char *subsystem, const char *fmt,
         fprintf(log_file, "%s\n", log_line);
 
         /* Auto-flush on errors for crash debugging */
-        if (level == CARBON_LOG_LEVEL_ERROR) {
+        if (level == AGENTITE_LOG_LEVEL_ERROR) {
             fflush(log_file);
         }
     }
@@ -157,56 +157,56 @@ void carbon_log_v(Carbon_LogLevel level, const char *subsystem, const char *fmt,
     /* Echo to console if enabled */
     if (console_output) {
         switch (level) {
-            case CARBON_LOG_LEVEL_ERROR:
+            case AGENTITE_LOG_LEVEL_ERROR:
                 SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "%s", message);
                 break;
-            case CARBON_LOG_LEVEL_WARNING:
+            case AGENTITE_LOG_LEVEL_WARNING:
                 SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[%s] %s", subsystem_padded, message);
                 break;
-            case CARBON_LOG_LEVEL_INFO:
+            case AGENTITE_LOG_LEVEL_INFO:
                 SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "[%s] %s", subsystem_padded, message);
                 break;
-            case CARBON_LOG_LEVEL_DEBUG:
+            case AGENTITE_LOG_LEVEL_DEBUG:
                 SDL_LogDebug(SDL_LOG_CATEGORY_APPLICATION, "[%s] %s", subsystem_padded, message);
                 break;
         }
     }
 }
 
-void carbon_log_error(const char *subsystem, const char *fmt, ...) {
+void agentite_log_error(const char *subsystem, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
-    carbon_log_v(CARBON_LOG_LEVEL_ERROR, subsystem, fmt, args);
+    agentite_log_v(AGENTITE_LOG_LEVEL_ERROR, subsystem, fmt, args);
     va_end(args);
 }
 
-void carbon_log_warning(const char *subsystem, const char *fmt, ...) {
+void agentite_log_warning(const char *subsystem, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
-    carbon_log_v(CARBON_LOG_LEVEL_WARNING, subsystem, fmt, args);
+    agentite_log_v(AGENTITE_LOG_LEVEL_WARNING, subsystem, fmt, args);
     va_end(args);
 }
 
-void carbon_log_info(const char *subsystem, const char *fmt, ...) {
+void agentite_log_info(const char *subsystem, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
-    carbon_log_v(CARBON_LOG_LEVEL_INFO, subsystem, fmt, args);
+    agentite_log_v(AGENTITE_LOG_LEVEL_INFO, subsystem, fmt, args);
     va_end(args);
 }
 
-void carbon_log_debug(const char *subsystem, const char *fmt, ...) {
+void agentite_log_debug(const char *subsystem, const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
-    carbon_log_v(CARBON_LOG_LEVEL_DEBUG, subsystem, fmt, args);
+    agentite_log_v(AGENTITE_LOG_LEVEL_DEBUG, subsystem, fmt, args);
     va_end(args);
 }
 
-void carbon_log_flush(void) {
+void agentite_log_flush(void) {
     if (log_file) {
         fflush(log_file);
     }
 }
 
-const char *carbon_log_get_path(void) {
+const char *agentite_log_get_path(void) {
     return initialized ? log_path : NULL;
 }

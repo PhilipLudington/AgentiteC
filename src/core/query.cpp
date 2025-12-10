@@ -4,10 +4,10 @@
  * Read-only state queries with structured results for clean UI integration.
  */
 
-#include "carbon/carbon.h"
-#include "carbon/query.h"
-#include "carbon/error.h"
-#include "carbon/validate.h"
+#include "agentite/agentite.h"
+#include "agentite/query.h"
+#include "agentite/error.h"
+#include "agentite/validate.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -32,7 +32,7 @@ typedef struct QueryCacheEntry {
     uint64_t cache_key;             /* Parameter hash */
     uint32_t timestamp;             /* When cached */
     bool valid;                     /* Entry is valid */
-    uint8_t data[CARBON_QUERY_MAX_RESULT_SIZE];  /* Cached result */
+    uint8_t data[AGENTITE_QUERY_MAX_RESULT_SIZE];  /* Cached result */
 } QueryCacheEntry;
 
 /**
@@ -51,8 +51,8 @@ typedef struct QueryCache {
  * Registered query.
  */
 typedef struct RegisteredQuery {
-    char name[CARBON_QUERY_MAX_NAME_LEN];
-    Carbon_QueryFunc query_fn;
+    char name[AGENTITE_QUERY_MAX_NAME_LEN];
+    Agentite_QueryFunc query_fn;
     size_t result_size;
     void *userdata;
     bool registered;
@@ -60,7 +60,7 @@ typedef struct RegisteredQuery {
     /* Cache */
     QueryCache cache;
     bool cache_enabled;
-    Carbon_QueryCacheKeyFunc key_fn;
+    Agentite_QueryCacheKeyFunc key_fn;
     void *key_userdata;
 
     /* Tags */
@@ -71,19 +71,19 @@ typedef struct RegisteredQuery {
 /**
  * Query system.
  */
-struct Carbon_QuerySystem {
-    RegisteredQuery queries[CARBON_QUERY_MAX_QUERIES];
+struct Agentite_QuerySystem {
+    RegisteredQuery queries[AGENTITE_QUERY_MAX_QUERIES];
     int query_count;
 
     /* Timestamp for cache */
     uint32_t timestamp;
 
     /* Invalidation callback */
-    Carbon_QueryInvalidateCallback invalidate_callback;
+    Agentite_QueryInvalidateCallback invalidate_callback;
     void *invalidate_userdata;
 
     /* Statistics */
-    Carbon_QueryStats stats;
+    Agentite_QueryStats stats;
 };
 
 /*============================================================================
@@ -106,7 +106,7 @@ static uint64_t fnv1a_hash(const void *data, size_t len) {
  * Internal Helpers
  *============================================================================*/
 
-static RegisteredQuery *find_query(Carbon_QuerySystem *sys, const char *name) {
+static RegisteredQuery *find_query(Agentite_QuerySystem *sys, const char *name) {
     for (int i = 0; i < sys->query_count; i++) {
         if (sys->queries[i].registered &&
             strcmp(sys->queries[i].name, name) == 0) {
@@ -116,8 +116,8 @@ static RegisteredQuery *find_query(Carbon_QuerySystem *sys, const char *name) {
     return NULL;
 }
 
-static RegisteredQuery *find_query_const(const Carbon_QuerySystem *sys, const char *name) {
-    return find_query((Carbon_QuerySystem *)sys, name);
+static RegisteredQuery *find_query_const(const Agentite_QuerySystem *sys, const char *name) {
+    return find_query((Agentite_QuerySystem *)sys, name);
 }
 
 static void free_cache(QueryCache *cache) {
@@ -135,14 +135,14 @@ static bool init_cache(QueryCache *cache, int max_entries) {
         return true;
     }
 
-    if (max_entries > CARBON_QUERY_MAX_CACHE_SIZE) {
-        max_entries = CARBON_QUERY_MAX_CACHE_SIZE;
+    if (max_entries > AGENTITE_QUERY_MAX_CACHE_SIZE) {
+        max_entries = AGENTITE_QUERY_MAX_CACHE_SIZE;
     }
 
     /* Realloc if different size */
     if (cache->max_entries != max_entries) {
         free_cache(cache);
-        cache->entries = CARBON_ALLOC_ARRAY(QueryCacheEntry, max_entries);
+        cache->entries = AGENTITE_ALLOC_ARRAY(QueryCacheEntry, max_entries);
         if (!cache->entries) {
             return false;
         }
@@ -201,21 +201,21 @@ static void cache_invalidate_all(QueryCache *cache) {
     cache->count = 0;
 }
 
-static uint64_t default_hash_params(const Carbon_QueryParams *params) {
+static uint64_t default_hash_params(const Agentite_QueryParams *params) {
     if (!params || params->count == 0) {
         return 0;
     }
-    return fnv1a_hash(params->params, params->count * sizeof(Carbon_QueryParam));
+    return fnv1a_hash(params->params, params->count * sizeof(Agentite_QueryParam));
 }
 
 /*============================================================================
  * Lifecycle
  *============================================================================*/
 
-Carbon_QuerySystem *carbon_query_create(void) {
-    Carbon_QuerySystem *sys = CARBON_ALLOC(Carbon_QuerySystem);
+Agentite_QuerySystem *agentite_query_create(void) {
+    Agentite_QuerySystem *sys = AGENTITE_ALLOC(Agentite_QuerySystem);
     if (!sys) {
-        carbon_set_error("carbon_query_create: allocation failed");
+        agentite_set_error("agentite_query_create: allocation failed");
         return NULL;
     }
 
@@ -228,7 +228,7 @@ Carbon_QuerySystem *carbon_query_create(void) {
     return sys;
 }
 
-void carbon_query_destroy(Carbon_QuerySystem *sys) {
+void agentite_query_destroy(Agentite_QuerySystem *sys) {
     if (!sys) return;
 
     /* Free caches */
@@ -245,44 +245,44 @@ void carbon_query_destroy(Carbon_QuerySystem *sys) {
  * Query Registration
  *============================================================================*/
 
-bool carbon_query_register(Carbon_QuerySystem *sys,
+bool agentite_query_register(Agentite_QuerySystem *sys,
                             const char *name,
-                            Carbon_QueryFunc query_fn,
+                            Agentite_QueryFunc query_fn,
                             size_t result_size) {
-    return carbon_query_register_ex(sys, name, query_fn, result_size, NULL);
+    return agentite_query_register_ex(sys, name, query_fn, result_size, NULL);
 }
 
-bool carbon_query_register_ex(Carbon_QuerySystem *sys,
+bool agentite_query_register_ex(Agentite_QuerySystem *sys,
                                const char *name,
-                               Carbon_QueryFunc query_fn,
+                               Agentite_QueryFunc query_fn,
                                size_t result_size,
                                void *userdata) {
-    CARBON_VALIDATE_PTR_RET(sys, false);
-    CARBON_VALIDATE_PTR_RET(name, false);
-    CARBON_VALIDATE_PTR_RET(query_fn, false);
+    AGENTITE_VALIDATE_PTR_RET(sys, false);
+    AGENTITE_VALIDATE_PTR_RET(name, false);
+    AGENTITE_VALIDATE_PTR_RET(query_fn, false);
 
-    if (result_size > CARBON_QUERY_MAX_RESULT_SIZE) {
-        carbon_set_error("carbon_query_register: result_size %zu exceeds max %d",
-                         result_size, CARBON_QUERY_MAX_RESULT_SIZE);
+    if (result_size > AGENTITE_QUERY_MAX_RESULT_SIZE) {
+        agentite_set_error("agentite_query_register: result_size %zu exceeds max %d",
+                         result_size, AGENTITE_QUERY_MAX_RESULT_SIZE);
         return false;
     }
 
     /* Check if already registered */
     if (find_query(sys, name)) {
-        carbon_set_error("carbon_query_register: query '%s' already registered", name);
+        agentite_set_error("agentite_query_register: query '%s' already registered", name);
         return false;
     }
 
     /* Check capacity */
-    if (sys->query_count >= CARBON_QUERY_MAX_QUERIES) {
-        carbon_set_error("carbon_query_register: max queries reached");
+    if (sys->query_count >= AGENTITE_QUERY_MAX_QUERIES) {
+        agentite_set_error("agentite_query_register: max queries reached");
         return false;
     }
 
     RegisteredQuery *q = &sys->queries[sys->query_count];
     memset(q, 0, sizeof(*q));
 
-    strncpy(q->name, name, CARBON_QUERY_MAX_NAME_LEN - 1);
+    strncpy(q->name, name, AGENTITE_QUERY_MAX_NAME_LEN - 1);
     q->query_fn = query_fn;
     q->result_size = result_size;
     q->userdata = userdata;
@@ -297,9 +297,9 @@ bool carbon_query_register_ex(Carbon_QuerySystem *sys,
     return true;
 }
 
-bool carbon_query_unregister(Carbon_QuerySystem *sys, const char *name) {
-    CARBON_VALIDATE_PTR_RET(sys, false);
-    CARBON_VALIDATE_PTR_RET(name, false);
+bool agentite_query_unregister(Agentite_QuerySystem *sys, const char *name) {
+    AGENTITE_VALIDATE_PTR_RET(sys, false);
+    AGENTITE_VALIDATE_PTR_RET(name, false);
 
     RegisteredQuery *q = find_query(sys, name);
     if (!q) {
@@ -313,20 +313,20 @@ bool carbon_query_unregister(Carbon_QuerySystem *sys, const char *name) {
     return true;
 }
 
-bool carbon_query_is_registered(const Carbon_QuerySystem *sys, const char *name) {
-    CARBON_VALIDATE_PTR_RET(sys, false);
-    CARBON_VALIDATE_PTR_RET(name, false);
+bool agentite_query_is_registered(const Agentite_QuerySystem *sys, const char *name) {
+    AGENTITE_VALIDATE_PTR_RET(sys, false);
+    AGENTITE_VALIDATE_PTR_RET(name, false);
     return find_query_const(sys, name) != NULL;
 }
 
-int carbon_query_count(const Carbon_QuerySystem *sys) {
-    CARBON_VALIDATE_PTR_RET(sys, 0);
+int agentite_query_count(const Agentite_QuerySystem *sys) {
+    AGENTITE_VALIDATE_PTR_RET(sys, 0);
     return sys->stats.registered_count;
 }
 
-int carbon_query_get_names(const Carbon_QuerySystem *sys, const char **names, int max) {
-    CARBON_VALIDATE_PTR_RET(sys, 0);
-    CARBON_VALIDATE_PTR_RET(names, 0);
+int agentite_query_get_names(const Agentite_QuerySystem *sys, const char **names, int max) {
+    AGENTITE_VALIDATE_PTR_RET(sys, 0);
+    AGENTITE_VALIDATE_PTR_RET(names, 0);
 
     int count = 0;
     for (int i = 0; i < sys->query_count && count < max; i++) {
@@ -341,18 +341,18 @@ int carbon_query_get_names(const Carbon_QuerySystem *sys, const char **names, in
  * Query Execution
  *============================================================================*/
 
-Carbon_QueryStatus carbon_query_exec(Carbon_QuerySystem *sys,
+Agentite_QueryStatus agentite_query_exec(Agentite_QuerySystem *sys,
                                        const char *name,
                                        void *game_state,
-                                       const Carbon_QueryParams *params,
+                                       const Agentite_QueryParams *params,
                                        void *result) {
-    CARBON_VALIDATE_PTR_RET(sys, CARBON_QUERY_INVALID_PARAMS);
-    CARBON_VALIDATE_PTR_RET(name, CARBON_QUERY_INVALID_PARAMS);
-    CARBON_VALIDATE_PTR_RET(result, CARBON_QUERY_INVALID_PARAMS);
+    AGENTITE_VALIDATE_PTR_RET(sys, AGENTITE_QUERY_INVALID_PARAMS);
+    AGENTITE_VALIDATE_PTR_RET(name, AGENTITE_QUERY_INVALID_PARAMS);
+    AGENTITE_VALIDATE_PTR_RET(result, AGENTITE_QUERY_INVALID_PARAMS);
 
     RegisteredQuery *q = find_query(sys, name);
     if (!q) {
-        return CARBON_QUERY_NOT_FOUND;
+        return AGENTITE_QUERY_NOT_FOUND;
     }
 
     sys->stats.total_executions++;
@@ -369,7 +369,7 @@ Carbon_QueryStatus carbon_query_exec(Carbon_QuerySystem *sys,
             q->cache.hits++;
             sys->stats.total_cache_hits++;
             memcpy(result, entry->data, q->result_size);
-            return CARBON_QUERY_CACHE_HIT;
+            return AGENTITE_QUERY_CACHE_HIT;
         }
 
         q->cache.misses++;
@@ -377,10 +377,10 @@ Carbon_QueryStatus carbon_query_exec(Carbon_QuerySystem *sys,
     }
 
     /* Execute query */
-    Carbon_QueryStatus status = q->query_fn(game_state, params, result,
+    Agentite_QueryStatus status = q->query_fn(game_state, params, result,
                                              q->result_size, q->userdata);
 
-    if (status != CARBON_QUERY_OK) {
+    if (status != AGENTITE_QUERY_OK) {
         sys->stats.total_failures++;
         return status;
     }
@@ -400,61 +400,61 @@ Carbon_QueryStatus carbon_query_exec(Carbon_QuerySystem *sys,
         }
     }
 
-    return CARBON_QUERY_OK;
+    return AGENTITE_QUERY_OK;
 }
 
-Carbon_QueryStatus carbon_query_exec_int(Carbon_QuerySystem *sys,
+Agentite_QueryStatus agentite_query_exec_int(Agentite_QuerySystem *sys,
                                            const char *name,
                                            void *game_state,
                                            int32_t param,
                                            void *result) {
-    Carbon_QueryParams params;
-    carbon_query_params_init(&params);
-    carbon_query_params_add_int(&params, param);
-    return carbon_query_exec(sys, name, game_state, &params, result);
+    Agentite_QueryParams params;
+    agentite_query_params_init(&params);
+    agentite_query_params_add_int(&params, param);
+    return agentite_query_exec(sys, name, game_state, &params, result);
 }
 
-Carbon_QueryStatus carbon_query_exec_entity(Carbon_QuerySystem *sys,
+Agentite_QueryStatus agentite_query_exec_entity(Agentite_QuerySystem *sys,
                                               const char *name,
                                               void *game_state,
                                               uint32_t entity,
                                               void *result) {
-    Carbon_QueryParams params;
-    carbon_query_params_init(&params);
-    carbon_query_params_add_entity(&params, entity);
-    return carbon_query_exec(sys, name, game_state, &params, result);
+    Agentite_QueryParams params;
+    agentite_query_params_init(&params);
+    agentite_query_params_add_entity(&params, entity);
+    return agentite_query_exec(sys, name, game_state, &params, result);
 }
 
-Carbon_QueryStatus carbon_query_exec_point(Carbon_QuerySystem *sys,
+Agentite_QueryStatus agentite_query_exec_point(Agentite_QuerySystem *sys,
                                              const char *name,
                                              void *game_state,
                                              int32_t x, int32_t y,
                                              void *result) {
-    Carbon_QueryParams params;
-    carbon_query_params_init(&params);
-    carbon_query_params_add_point(&params, x, y);
-    return carbon_query_exec(sys, name, game_state, &params, result);
+    Agentite_QueryParams params;
+    agentite_query_params_init(&params);
+    agentite_query_params_add_point(&params, x, y);
+    return agentite_query_exec(sys, name, game_state, &params, result);
 }
 
-Carbon_QueryStatus carbon_query_exec_rect(Carbon_QuerySystem *sys,
+Agentite_QueryStatus agentite_query_exec_rect(Agentite_QuerySystem *sys,
                                             const char *name,
                                             void *game_state,
                                             int32_t x, int32_t y,
                                             int32_t w, int32_t h,
                                             void *result) {
-    Carbon_QueryParams params;
-    carbon_query_params_init(&params);
-    carbon_query_params_add_rect(&params, x, y, w, h);
-    return carbon_query_exec(sys, name, game_state, &params, result);
+    Agentite_QueryParams params;
+    agentite_query_params_init(&params);
+    agentite_query_params_add_rect(&params, x, y, w, h);
+    return agentite_query_exec(sys, name, game_state, &params, result);
 }
 
 /*============================================================================
  * Caching
  *============================================================================*/
 
-bool carbon_query_enable_cache(Carbon_QuerySystem *sys, const char *name, int max_cached) {
-    CARBON_VALIDATE_PTR_RET(sys, false);
-    CARBON_VALIDATE_PTR_RET(name, false);
+bool agentite_query_enable_cache(Agentite_QuerySystem *sys, const char *name, int max_cached) {
+    AGENTITE_VALIDATE_PTR_RET(sys, false);
+    AGENTITE_VALIDATE_PTR_RET(name, false);
 
     RegisteredQuery *q = find_query(sys, name);
     if (!q) {
@@ -462,7 +462,7 @@ bool carbon_query_enable_cache(Carbon_QuerySystem *sys, const char *name, int ma
     }
 
     if (max_cached <= 0) {
-        carbon_query_disable_cache(sys, name);
+        agentite_query_disable_cache(sys, name);
         return true;
     }
 
@@ -476,9 +476,9 @@ bool carbon_query_enable_cache(Carbon_QuerySystem *sys, const char *name, int ma
     return true;
 }
 
-void carbon_query_disable_cache(Carbon_QuerySystem *sys, const char *name) {
-    CARBON_VALIDATE_PTR(sys);
-    CARBON_VALIDATE_PTR(name);
+void agentite_query_disable_cache(Agentite_QuerySystem *sys, const char *name) {
+    AGENTITE_VALIDATE_PTR(sys);
+    AGENTITE_VALIDATE_PTR(name);
 
     RegisteredQuery *q = find_query(sys, name);
     if (!q || !q->cache_enabled) {
@@ -490,20 +490,20 @@ void carbon_query_disable_cache(Carbon_QuerySystem *sys, const char *name) {
     sys->stats.cached_count--;
 }
 
-bool carbon_query_is_cached(const Carbon_QuerySystem *sys, const char *name) {
-    CARBON_VALIDATE_PTR_RET(sys, false);
-    CARBON_VALIDATE_PTR_RET(name, false);
+bool agentite_query_is_cached(const Agentite_QuerySystem *sys, const char *name) {
+    AGENTITE_VALIDATE_PTR_RET(sys, false);
+    AGENTITE_VALIDATE_PTR_RET(name, false);
 
     RegisteredQuery *q = find_query_const(sys, name);
     return q && q->cache_enabled;
 }
 
-void carbon_query_set_cache_key_func(Carbon_QuerySystem *sys,
+void agentite_query_set_cache_key_func(Agentite_QuerySystem *sys,
                                        const char *name,
-                                       Carbon_QueryCacheKeyFunc key_fn,
+                                       Agentite_QueryCacheKeyFunc key_fn,
                                        void *userdata) {
-    CARBON_VALIDATE_PTR(sys);
-    CARBON_VALIDATE_PTR(name);
+    AGENTITE_VALIDATE_PTR(sys);
+    AGENTITE_VALIDATE_PTR(name);
 
     RegisteredQuery *q = find_query(sys, name);
     if (!q) return;
@@ -512,9 +512,9 @@ void carbon_query_set_cache_key_func(Carbon_QuerySystem *sys,
     q->key_userdata = userdata;
 }
 
-void carbon_query_invalidate(Carbon_QuerySystem *sys, const char *name) {
-    CARBON_VALIDATE_PTR(sys);
-    CARBON_VALIDATE_PTR(name);
+void agentite_query_invalidate(Agentite_QuerySystem *sys, const char *name) {
+    AGENTITE_VALIDATE_PTR(sys);
+    AGENTITE_VALIDATE_PTR(name);
 
     RegisteredQuery *q = find_query(sys, name);
     if (!q || !q->cache_enabled) {
@@ -528,9 +528,9 @@ void carbon_query_invalidate(Carbon_QuerySystem *sys, const char *name) {
     }
 }
 
-void carbon_query_invalidate_tag(Carbon_QuerySystem *sys, const char *tag) {
-    CARBON_VALIDATE_PTR(sys);
-    CARBON_VALIDATE_PTR(tag);
+void agentite_query_invalidate_tag(Agentite_QuerySystem *sys, const char *tag) {
+    AGENTITE_VALIDATE_PTR(sys);
+    AGENTITE_VALIDATE_PTR(tag);
 
     for (int i = 0; i < sys->query_count; i++) {
         RegisteredQuery *q = &sys->queries[i];
@@ -550,8 +550,8 @@ void carbon_query_invalidate_tag(Carbon_QuerySystem *sys, const char *tag) {
     }
 }
 
-void carbon_query_invalidate_all(Carbon_QuerySystem *sys) {
-    CARBON_VALIDATE_PTR(sys);
+void agentite_query_invalidate_all(Agentite_QuerySystem *sys) {
+    AGENTITE_VALIDATE_PTR(sys);
 
     for (int i = 0; i < sys->query_count; i++) {
         RegisteredQuery *q = &sys->queries[i];
@@ -564,13 +564,13 @@ void carbon_query_invalidate_all(Carbon_QuerySystem *sys) {
     }
 }
 
-void carbon_query_get_cache_stats(const Carbon_QuerySystem *sys,
+void agentite_query_get_cache_stats(const Agentite_QuerySystem *sys,
                                     const char *name,
                                     uint32_t *hits,
                                     uint32_t *misses,
                                     uint32_t *evictions) {
-    CARBON_VALIDATE_PTR(sys);
-    CARBON_VALIDATE_PTR(name);
+    AGENTITE_VALIDATE_PTR(sys);
+    AGENTITE_VALIDATE_PTR(name);
 
     RegisteredQuery *q = find_query_const(sys, name);
     if (!q) {
@@ -585,8 +585,8 @@ void carbon_query_get_cache_stats(const Carbon_QuerySystem *sys,
     if (evictions) *evictions = q->cache.evictions;
 }
 
-void carbon_query_clear_cache_stats(Carbon_QuerySystem *sys, const char *name) {
-    CARBON_VALIDATE_PTR(sys);
+void agentite_query_clear_cache_stats(Agentite_QuerySystem *sys, const char *name) {
+    AGENTITE_VALIDATE_PTR(sys);
 
     if (name) {
         RegisteredQuery *q = find_query(sys, name);
@@ -611,10 +611,10 @@ void carbon_query_clear_cache_stats(Carbon_QuerySystem *sys, const char *name) {
  * Query Tags
  *============================================================================*/
 
-bool carbon_query_add_tag(Carbon_QuerySystem *sys, const char *name, const char *tag) {
-    CARBON_VALIDATE_PTR_RET(sys, false);
-    CARBON_VALIDATE_PTR_RET(name, false);
-    CARBON_VALIDATE_PTR_RET(tag, false);
+bool agentite_query_add_tag(Agentite_QuerySystem *sys, const char *name, const char *tag) {
+    AGENTITE_VALIDATE_PTR_RET(sys, false);
+    AGENTITE_VALIDATE_PTR_RET(name, false);
+    AGENTITE_VALIDATE_PTR_RET(tag, false);
 
     RegisteredQuery *q = find_query(sys, name);
     if (!q) return false;
@@ -636,10 +636,10 @@ bool carbon_query_add_tag(Carbon_QuerySystem *sys, const char *name, const char 
     return true;
 }
 
-bool carbon_query_remove_tag(Carbon_QuerySystem *sys, const char *name, const char *tag) {
-    CARBON_VALIDATE_PTR_RET(sys, false);
-    CARBON_VALIDATE_PTR_RET(name, false);
-    CARBON_VALIDATE_PTR_RET(tag, false);
+bool agentite_query_remove_tag(Agentite_QuerySystem *sys, const char *name, const char *tag) {
+    AGENTITE_VALIDATE_PTR_RET(sys, false);
+    AGENTITE_VALIDATE_PTR_RET(name, false);
+    AGENTITE_VALIDATE_PTR_RET(tag, false);
 
     RegisteredQuery *q = find_query(sys, name);
     if (!q) return false;
@@ -659,10 +659,10 @@ bool carbon_query_remove_tag(Carbon_QuerySystem *sys, const char *name, const ch
     return false;
 }
 
-bool carbon_query_has_tag(const Carbon_QuerySystem *sys, const char *name, const char *tag) {
-    CARBON_VALIDATE_PTR_RET(sys, false);
-    CARBON_VALIDATE_PTR_RET(name, false);
-    CARBON_VALIDATE_PTR_RET(tag, false);
+bool agentite_query_has_tag(const Agentite_QuerySystem *sys, const char *name, const char *tag) {
+    AGENTITE_VALIDATE_PTR_RET(sys, false);
+    AGENTITE_VALIDATE_PTR_RET(name, false);
+    AGENTITE_VALIDATE_PTR_RET(tag, false);
 
     RegisteredQuery *q = find_query_const(sys, name);
     if (!q) return false;
@@ -676,13 +676,13 @@ bool carbon_query_has_tag(const Carbon_QuerySystem *sys, const char *name, const
     return false;
 }
 
-int carbon_query_get_by_tag(const Carbon_QuerySystem *sys,
+int agentite_query_get_by_tag(const Agentite_QuerySystem *sys,
                              const char *tag,
                              const char **names,
                              int max) {
-    CARBON_VALIDATE_PTR_RET(sys, 0);
-    CARBON_VALIDATE_PTR_RET(tag, 0);
-    CARBON_VALIDATE_PTR_RET(names, 0);
+    AGENTITE_VALIDATE_PTR_RET(sys, 0);
+    AGENTITE_VALIDATE_PTR_RET(tag, 0);
+    AGENTITE_VALIDATE_PTR_RET(names, 0);
 
     int count = 0;
     for (int i = 0; i < sys->query_count && count < max; i++) {
@@ -704,10 +704,10 @@ int carbon_query_get_by_tag(const Carbon_QuerySystem *sys,
  * Callbacks
  *============================================================================*/
 
-void carbon_query_set_invalidate_callback(Carbon_QuerySystem *sys,
-                                            Carbon_QueryInvalidateCallback callback,
+void agentite_query_set_invalidate_callback(Agentite_QuerySystem *sys,
+                                            Agentite_QueryInvalidateCallback callback,
                                             void *userdata) {
-    CARBON_VALIDATE_PTR(sys);
+    AGENTITE_VALIDATE_PTR(sys);
     sys->invalidate_callback = callback;
     sys->invalidate_userdata = userdata;
 }
@@ -716,72 +716,72 @@ void carbon_query_set_invalidate_callback(Carbon_QuerySystem *sys,
  * Parameter Builders
  *============================================================================*/
 
-void carbon_query_params_init(Carbon_QueryParams *params) {
+void agentite_query_params_init(Agentite_QueryParams *params) {
     if (!params) return;
     memset(params, 0, sizeof(*params));
 }
 
-void carbon_query_params_clear(Carbon_QueryParams *params) {
-    carbon_query_params_init(params);
+void agentite_query_params_clear(Agentite_QueryParams *params) {
+    agentite_query_params_init(params);
 }
 
-bool carbon_query_params_add_int(Carbon_QueryParams *params, int32_t value) {
-    CARBON_VALIDATE_PTR_RET(params, false);
-    if (params->count >= CARBON_QUERY_MAX_PARAMS) return false;
+bool agentite_query_params_add_int(Agentite_QueryParams *params, int32_t value) {
+    AGENTITE_VALIDATE_PTR_RET(params, false);
+    if (params->count >= AGENTITE_QUERY_MAX_PARAMS) return false;
 
-    params->params[params->count].type = CARBON_QUERY_PARAM_INT;
+    params->params[params->count].type = AGENTITE_QUERY_PARAM_INT;
     params->params[params->count].i32 = value;
     params->count++;
     return true;
 }
 
-bool carbon_query_params_add_int64(Carbon_QueryParams *params, int64_t value) {
-    CARBON_VALIDATE_PTR_RET(params, false);
-    if (params->count >= CARBON_QUERY_MAX_PARAMS) return false;
+bool agentite_query_params_add_int64(Agentite_QueryParams *params, int64_t value) {
+    AGENTITE_VALIDATE_PTR_RET(params, false);
+    if (params->count >= AGENTITE_QUERY_MAX_PARAMS) return false;
 
-    params->params[params->count].type = CARBON_QUERY_PARAM_INT64;
+    params->params[params->count].type = AGENTITE_QUERY_PARAM_INT64;
     params->params[params->count].i64 = value;
     params->count++;
     return true;
 }
 
-bool carbon_query_params_add_float(Carbon_QueryParams *params, float value) {
-    CARBON_VALIDATE_PTR_RET(params, false);
-    if (params->count >= CARBON_QUERY_MAX_PARAMS) return false;
+bool agentite_query_params_add_float(Agentite_QueryParams *params, float value) {
+    AGENTITE_VALIDATE_PTR_RET(params, false);
+    if (params->count >= AGENTITE_QUERY_MAX_PARAMS) return false;
 
-    params->params[params->count].type = CARBON_QUERY_PARAM_FLOAT;
+    params->params[params->count].type = AGENTITE_QUERY_PARAM_FLOAT;
     params->params[params->count].f32 = value;
     params->count++;
     return true;
 }
 
-bool carbon_query_params_add_double(Carbon_QueryParams *params, double value) {
-    CARBON_VALIDATE_PTR_RET(params, false);
-    if (params->count >= CARBON_QUERY_MAX_PARAMS) return false;
+bool agentite_query_params_add_double(Agentite_QueryParams *params, double value) {
+    AGENTITE_VALIDATE_PTR_RET(params, false);
+    if (params->count >= AGENTITE_QUERY_MAX_PARAMS) return false;
 
-    params->params[params->count].type = CARBON_QUERY_PARAM_DOUBLE;
+    params->params[params->count].type = AGENTITE_QUERY_PARAM_DOUBLE;
     params->params[params->count].f64 = value;
     params->count++;
     return true;
 }
 
-bool carbon_query_params_add_bool(Carbon_QueryParams *params, bool value) {
-    CARBON_VALIDATE_PTR_RET(params, false);
-    if (params->count >= CARBON_QUERY_MAX_PARAMS) return false;
+bool agentite_query_params_add_bool(Agentite_QueryParams *params, bool value) {
+    AGENTITE_VALIDATE_PTR_RET(params, false);
+    if (params->count >= AGENTITE_QUERY_MAX_PARAMS) return false;
 
-    params->params[params->count].type = CARBON_QUERY_PARAM_BOOL;
+    params->params[params->count].type = AGENTITE_QUERY_PARAM_BOOL;
     params->params[params->count].b = value;
     params->count++;
     return true;
 }
 
-bool carbon_query_params_add_string(Carbon_QueryParams *params, const char *value) {
-    CARBON_VALIDATE_PTR_RET(params, false);
-    if (params->count >= CARBON_QUERY_MAX_PARAMS) return false;
+bool agentite_query_params_add_string(Agentite_QueryParams *params, const char *value) {
+    AGENTITE_VALIDATE_PTR_RET(params, false);
+    if (params->count >= AGENTITE_QUERY_MAX_PARAMS) return false;
 
-    params->params[params->count].type = CARBON_QUERY_PARAM_STRING;
+    params->params[params->count].type = AGENTITE_QUERY_PARAM_STRING;
     if (value) {
-        strncpy(params->params[params->count].str, value, CARBON_QUERY_MAX_NAME_LEN - 1);
+        strncpy(params->params[params->count].str, value, AGENTITE_QUERY_MAX_NAME_LEN - 1);
     } else {
         params->params[params->count].str[0] = '\0';
     }
@@ -789,43 +789,43 @@ bool carbon_query_params_add_string(Carbon_QueryParams *params, const char *valu
     return true;
 }
 
-bool carbon_query_params_add_ptr(Carbon_QueryParams *params, void *value) {
-    CARBON_VALIDATE_PTR_RET(params, false);
-    if (params->count >= CARBON_QUERY_MAX_PARAMS) return false;
+bool agentite_query_params_add_ptr(Agentite_QueryParams *params, void *value) {
+    AGENTITE_VALIDATE_PTR_RET(params, false);
+    if (params->count >= AGENTITE_QUERY_MAX_PARAMS) return false;
 
-    params->params[params->count].type = CARBON_QUERY_PARAM_PTR;
+    params->params[params->count].type = AGENTITE_QUERY_PARAM_PTR;
     params->params[params->count].ptr = value;
     params->count++;
     return true;
 }
 
-bool carbon_query_params_add_entity(Carbon_QueryParams *params, uint32_t entity) {
-    CARBON_VALIDATE_PTR_RET(params, false);
-    if (params->count >= CARBON_QUERY_MAX_PARAMS) return false;
+bool agentite_query_params_add_entity(Agentite_QueryParams *params, uint32_t entity) {
+    AGENTITE_VALIDATE_PTR_RET(params, false);
+    if (params->count >= AGENTITE_QUERY_MAX_PARAMS) return false;
 
-    params->params[params->count].type = CARBON_QUERY_PARAM_ENTITY;
+    params->params[params->count].type = AGENTITE_QUERY_PARAM_ENTITY;
     params->params[params->count].entity = entity;
     params->count++;
     return true;
 }
 
-bool carbon_query_params_add_point(Carbon_QueryParams *params, int32_t x, int32_t y) {
-    CARBON_VALIDATE_PTR_RET(params, false);
-    if (params->count >= CARBON_QUERY_MAX_PARAMS) return false;
+bool agentite_query_params_add_point(Agentite_QueryParams *params, int32_t x, int32_t y) {
+    AGENTITE_VALIDATE_PTR_RET(params, false);
+    if (params->count >= AGENTITE_QUERY_MAX_PARAMS) return false;
 
-    params->params[params->count].type = CARBON_QUERY_PARAM_POINT;
+    params->params[params->count].type = AGENTITE_QUERY_PARAM_POINT;
     params->params[params->count].point.x = x;
     params->params[params->count].point.y = y;
     params->count++;
     return true;
 }
 
-bool carbon_query_params_add_rect(Carbon_QueryParams *params,
+bool agentite_query_params_add_rect(Agentite_QueryParams *params,
                                    int32_t x, int32_t y, int32_t w, int32_t h) {
-    CARBON_VALIDATE_PTR_RET(params, false);
-    if (params->count >= CARBON_QUERY_MAX_PARAMS) return false;
+    AGENTITE_VALIDATE_PTR_RET(params, false);
+    if (params->count >= AGENTITE_QUERY_MAX_PARAMS) return false;
 
-    params->params[params->count].type = CARBON_QUERY_PARAM_RECT;
+    params->params[params->count].type = AGENTITE_QUERY_PARAM_RECT;
     params->params[params->count].rect.x = x;
     params->params[params->count].rect.y = y;
     params->params[params->count].rect.w = w;
@@ -838,78 +838,78 @@ bool carbon_query_params_add_rect(Carbon_QueryParams *params,
  * Parameter Getters
  *============================================================================*/
 
-int32_t carbon_query_params_get_int(const Carbon_QueryParams *params, int index) {
-    CARBON_VALIDATE_PTR_RET(params, 0);
+int32_t agentite_query_params_get_int(const Agentite_QueryParams *params, int index) {
+    AGENTITE_VALIDATE_PTR_RET(params, 0);
     if (index < 0 || index >= params->count) return 0;
-    if (params->params[index].type != CARBON_QUERY_PARAM_INT) return 0;
+    if (params->params[index].type != AGENTITE_QUERY_PARAM_INT) return 0;
     return params->params[index].i32;
 }
 
-int64_t carbon_query_params_get_int64(const Carbon_QueryParams *params, int index) {
-    CARBON_VALIDATE_PTR_RET(params, 0);
+int64_t agentite_query_params_get_int64(const Agentite_QueryParams *params, int index) {
+    AGENTITE_VALIDATE_PTR_RET(params, 0);
     if (index < 0 || index >= params->count) return 0;
-    if (params->params[index].type != CARBON_QUERY_PARAM_INT64) return 0;
+    if (params->params[index].type != AGENTITE_QUERY_PARAM_INT64) return 0;
     return params->params[index].i64;
 }
 
-float carbon_query_params_get_float(const Carbon_QueryParams *params, int index) {
-    CARBON_VALIDATE_PTR_RET(params, 0.0f);
+float agentite_query_params_get_float(const Agentite_QueryParams *params, int index) {
+    AGENTITE_VALIDATE_PTR_RET(params, 0.0f);
     if (index < 0 || index >= params->count) return 0.0f;
-    if (params->params[index].type != CARBON_QUERY_PARAM_FLOAT) return 0.0f;
+    if (params->params[index].type != AGENTITE_QUERY_PARAM_FLOAT) return 0.0f;
     return params->params[index].f32;
 }
 
-double carbon_query_params_get_double(const Carbon_QueryParams *params, int index) {
-    CARBON_VALIDATE_PTR_RET(params, 0.0);
+double agentite_query_params_get_double(const Agentite_QueryParams *params, int index) {
+    AGENTITE_VALIDATE_PTR_RET(params, 0.0);
     if (index < 0 || index >= params->count) return 0.0;
-    if (params->params[index].type != CARBON_QUERY_PARAM_DOUBLE) return 0.0;
+    if (params->params[index].type != AGENTITE_QUERY_PARAM_DOUBLE) return 0.0;
     return params->params[index].f64;
 }
 
-bool carbon_query_params_get_bool(const Carbon_QueryParams *params, int index) {
-    CARBON_VALIDATE_PTR_RET(params, false);
+bool agentite_query_params_get_bool(const Agentite_QueryParams *params, int index) {
+    AGENTITE_VALIDATE_PTR_RET(params, false);
     if (index < 0 || index >= params->count) return false;
-    if (params->params[index].type != CARBON_QUERY_PARAM_BOOL) return false;
+    if (params->params[index].type != AGENTITE_QUERY_PARAM_BOOL) return false;
     return params->params[index].b;
 }
 
-const char *carbon_query_params_get_string(const Carbon_QueryParams *params, int index) {
-    CARBON_VALIDATE_PTR_RET(params, NULL);
+const char *agentite_query_params_get_string(const Agentite_QueryParams *params, int index) {
+    AGENTITE_VALIDATE_PTR_RET(params, NULL);
     if (index < 0 || index >= params->count) return NULL;
-    if (params->params[index].type != CARBON_QUERY_PARAM_STRING) return NULL;
+    if (params->params[index].type != AGENTITE_QUERY_PARAM_STRING) return NULL;
     return params->params[index].str;
 }
 
-void *carbon_query_params_get_ptr(const Carbon_QueryParams *params, int index) {
-    CARBON_VALIDATE_PTR_RET(params, NULL);
+void *agentite_query_params_get_ptr(const Agentite_QueryParams *params, int index) {
+    AGENTITE_VALIDATE_PTR_RET(params, NULL);
     if (index < 0 || index >= params->count) return NULL;
-    if (params->params[index].type != CARBON_QUERY_PARAM_PTR) return NULL;
+    if (params->params[index].type != AGENTITE_QUERY_PARAM_PTR) return NULL;
     return params->params[index].ptr;
 }
 
-uint32_t carbon_query_params_get_entity(const Carbon_QueryParams *params, int index) {
-    CARBON_VALIDATE_PTR_RET(params, 0);
+uint32_t agentite_query_params_get_entity(const Agentite_QueryParams *params, int index) {
+    AGENTITE_VALIDATE_PTR_RET(params, 0);
     if (index < 0 || index >= params->count) return 0;
-    if (params->params[index].type != CARBON_QUERY_PARAM_ENTITY) return 0;
+    if (params->params[index].type != AGENTITE_QUERY_PARAM_ENTITY) return 0;
     return params->params[index].entity;
 }
 
-bool carbon_query_params_get_point(const Carbon_QueryParams *params, int index,
+bool agentite_query_params_get_point(const Agentite_QueryParams *params, int index,
                                     int32_t *x, int32_t *y) {
-    CARBON_VALIDATE_PTR_RET(params, false);
+    AGENTITE_VALIDATE_PTR_RET(params, false);
     if (index < 0 || index >= params->count) return false;
-    if (params->params[index].type != CARBON_QUERY_PARAM_POINT) return false;
+    if (params->params[index].type != AGENTITE_QUERY_PARAM_POINT) return false;
 
     if (x) *x = params->params[index].point.x;
     if (y) *y = params->params[index].point.y;
     return true;
 }
 
-bool carbon_query_params_get_rect(const Carbon_QueryParams *params, int index,
+bool agentite_query_params_get_rect(const Agentite_QueryParams *params, int index,
                                    int32_t *x, int32_t *y, int32_t *w, int32_t *h) {
-    CARBON_VALIDATE_PTR_RET(params, false);
+    AGENTITE_VALIDATE_PTR_RET(params, false);
     if (index < 0 || index >= params->count) return false;
-    if (params->params[index].type != CARBON_QUERY_PARAM_RECT) return false;
+    if (params->params[index].type != AGENTITE_QUERY_PARAM_RECT) return false;
 
     if (x) *x = params->params[index].rect.x;
     if (y) *y = params->params[index].rect.y;
@@ -922,14 +922,14 @@ bool carbon_query_params_get_rect(const Carbon_QueryParams *params, int index,
  * Statistics
  *============================================================================*/
 
-void carbon_query_get_stats(const Carbon_QuerySystem *sys, Carbon_QueryStats *stats) {
-    CARBON_VALIDATE_PTR(sys);
-    CARBON_VALIDATE_PTR(stats);
+void agentite_query_get_stats(const Agentite_QuerySystem *sys, Agentite_QueryStats *stats) {
+    AGENTITE_VALIDATE_PTR(sys);
+    AGENTITE_VALIDATE_PTR(stats);
     *stats = sys->stats;
 }
 
-void carbon_query_reset_stats(Carbon_QuerySystem *sys) {
-    CARBON_VALIDATE_PTR(sys);
+void agentite_query_reset_stats(Agentite_QuerySystem *sys) {
+    AGENTITE_VALIDATE_PTR(sys);
 
     /* Preserve registered/cached counts */
     int registered = sys->stats.registered_count;
@@ -941,26 +941,26 @@ void carbon_query_reset_stats(Carbon_QuerySystem *sys) {
     sys->stats.cached_count = cached;
 
     /* Also clear per-query stats */
-    carbon_query_clear_cache_stats(sys, NULL);
+    agentite_query_clear_cache_stats(sys, NULL);
 }
 
 /*============================================================================
  * Utility Functions
  *============================================================================*/
 
-const char *carbon_query_status_name(Carbon_QueryStatus status) {
+const char *agentite_query_status_name(Agentite_QueryStatus status) {
     switch (status) {
-        case CARBON_QUERY_OK:             return "OK";
-        case CARBON_QUERY_NOT_FOUND:      return "Not Found";
-        case CARBON_QUERY_INVALID_PARAMS: return "Invalid Params";
-        case CARBON_QUERY_FAILED:         return "Failed";
-        case CARBON_QUERY_NO_RESULT:      return "No Result";
-        case CARBON_QUERY_CACHE_HIT:      return "Cache Hit";
+        case AGENTITE_QUERY_OK:             return "OK";
+        case AGENTITE_QUERY_NOT_FOUND:      return "Not Found";
+        case AGENTITE_QUERY_INVALID_PARAMS: return "Invalid Params";
+        case AGENTITE_QUERY_FAILED:         return "Failed";
+        case AGENTITE_QUERY_NO_RESULT:      return "No Result";
+        case AGENTITE_QUERY_CACHE_HIT:      return "Cache Hit";
         default:                          return "Unknown";
     }
 }
 
-uint64_t carbon_query_hash_params(const Carbon_QueryParams *params) {
+uint64_t agentite_query_hash_params(const Agentite_QueryParams *params) {
     if (!params) return 0;
     return default_hash_params(params);
 }

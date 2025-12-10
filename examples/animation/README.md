@@ -29,53 +29,53 @@ make example-animation
 ### Creating Animations
 ```c
 // Load sprite sheet texture
-Carbon_Texture *sheet = carbon_texture_load(sr, "spritesheet.png");
+Agentite_Texture *sheet = agentite_texture_load(sr, "spritesheet.png");
 
 // Create from horizontal strip (x, y, frame_width, frame_height, frame_count)
-Carbon_Animation *walk = carbon_animation_from_strip(sheet, 0, 0, 64, 64, 8);
+Agentite_Animation *walk = agentite_animation_from_strip(sheet, 0, 0, 64, 64, 8);
 
 // Create from grid (x, y, frame_width, frame_height, cols, rows)
-Carbon_Animation *idle = carbon_animation_from_grid(sheet, 0, 64, 64, 64, 4, 2);
+Agentite_Animation *idle = agentite_animation_from_grid(sheet, 0, 64, 64, 64, 4, 2);
 
 // Set timing
-carbon_animation_set_fps(walk, 12.0f);
-carbon_animation_set_frame_duration(walk, 7, 0.2f);  // Custom duration for frame 7
+agentite_animation_set_fps(walk, 12.0f);
+agentite_animation_set_frame_duration(walk, 7, 0.2f);  // Custom duration for frame 7
 ```
 
 ### Animation Players
 ```c
-Carbon_AnimationPlayer player;
-carbon_animation_player_init(&player, animation);
+Agentite_AnimationPlayer player;
+agentite_animation_player_init(&player, animation);
 
 // Playback modes
-carbon_animation_player_set_mode(&player, CARBON_ANIM_LOOP);       // Default
-carbon_animation_player_set_mode(&player, CARBON_ANIM_ONCE);       // Stop on last frame
-carbon_animation_player_set_mode(&player, CARBON_ANIM_PING_PONG);  // Reverse at ends
-carbon_animation_player_set_mode(&player, CARBON_ANIM_ONCE_RESET); // Reset after playing
+agentite_animation_player_set_mode(&player, AGENTITE_ANIM_LOOP);       // Default
+agentite_animation_player_set_mode(&player, AGENTITE_ANIM_ONCE);       // Stop on last frame
+agentite_animation_player_set_mode(&player, AGENTITE_ANIM_PING_PONG);  // Reverse at ends
+agentite_animation_player_set_mode(&player, AGENTITE_ANIM_ONCE_RESET); // Reset after playing
 
 // Control
-carbon_animation_player_play(&player);
-carbon_animation_player_pause(&player);
-carbon_animation_player_stop(&player);    // Stop and reset to frame 0
-carbon_animation_player_restart(&player); // Restart from beginning
+agentite_animation_player_play(&player);
+agentite_animation_player_pause(&player);
+agentite_animation_player_stop(&player);    // Stop and reset to frame 0
+agentite_animation_player_restart(&player); // Restart from beginning
 
 // Speed
-carbon_animation_player_set_speed(&player, 2.0f);  // Double speed
+agentite_animation_player_set_speed(&player, 2.0f);  // Double speed
 ```
 
 ### Rendering
 ```c
 // In game loop
-carbon_animation_player_update(&player, delta_time);
+agentite_animation_player_update(&player, delta_time);
 
 // During sprite batch
-carbon_sprite_begin(sprites, NULL);
-carbon_animation_draw(sprites, &player, x, y);
-carbon_animation_draw_scaled(sprites, &player, x, y, sx, sy);
-carbon_animation_draw_ex(sprites, &player, x, y, sx, sy, rotation, ox, oy);
-carbon_sprite_upload(sprites, cmd);
+agentite_sprite_begin(sprites, NULL);
+agentite_animation_draw(sprites, &player, x, y);
+agentite_animation_draw_scaled(sprites, &player, x, y, sx, sy);
+agentite_animation_draw_ex(sprites, &player, x, y, sx, sy, rotation, ox, oy);
+agentite_sprite_upload(sprites, cmd);
 // ... render pass ...
-carbon_sprite_render(sprites, cmd, pass);
+agentite_sprite_render(sprites, cmd, pass);
 ```
 
 ### Completion Callbacks
@@ -83,5 +83,5 @@ carbon_sprite_render(sprites, cmd, pass);
 void on_complete(void *userdata) {
     // Animation finished (useful for state machines)
 }
-carbon_animation_player_set_callback(&player, on_complete, userdata);
+agentite_animation_player_set_callback(&player, on_complete, userdata);
 ```

@@ -1,5 +1,5 @@
-#include "carbon/carbon.h"
-#include "carbon/save.h"
+#include "agentite/agentite.h"
+#include "agentite/save.h"
 #include "toml.h"
 #include <stdlib.h>
 #include <string.h>
@@ -12,14 +12,14 @@
 #define mkdir(path, mode) _mkdir(path)
 #endif
 
-struct Carbon_SaveWriter {
+struct Agentite_SaveWriter {
     FILE *fp;
     char current_section[64];
     bool in_section;
 };
 
-struct Carbon_SaveManager {
-    char saves_dir[CARBON_SAVE_MAX_PATH];
+struct Agentite_SaveManager {
+    char saves_dir[AGENTITE_SAVE_MAX_PATH];
     int version;
     int min_compatible;
 };
@@ -51,13 +51,13 @@ static void get_timestamp(char *buf, size_t size) {
 }
 
 // Build save file path
-static void build_save_path(const Carbon_SaveManager *sm, const char *save_name,
+static void build_save_path(const Agentite_SaveManager *sm, const char *save_name,
                             char *out_path, size_t path_size) {
     snprintf(out_path, path_size, "%s/%s.toml", sm->saves_dir, save_name);
 }
 
-Carbon_SaveManager *carbon_save_create(const char *saves_dir) {
-    Carbon_SaveManager *sm = CARBON_ALLOC(Carbon_SaveManager);
+Agentite_SaveManager *agentite_save_create(const char *saves_dir) {
+    Agentite_SaveManager *sm = AGENTITE_ALLOC(Agentite_SaveManager);
     if (!sm) return NULL;
 
     if (saves_dir && saves_dir[0]) {
@@ -75,21 +75,21 @@ Carbon_SaveManager *carbon_save_create(const char *saves_dir) {
     return sm;
 }
 
-void carbon_save_destroy(Carbon_SaveManager *sm) {
+void agentite_save_destroy(Agentite_SaveManager *sm) {
     free(sm);
 }
 
-void carbon_save_set_version(Carbon_SaveManager *sm, int version, int min_compatible) {
+void agentite_save_set_version(Agentite_SaveManager *sm, int version, int min_compatible) {
     if (!sm) return;
     sm->version = version;
     sm->min_compatible = min_compatible;
 }
 
-Carbon_SaveResult carbon_save_game(Carbon_SaveManager *sm,
+Agentite_SaveResult agentite_save_game(Agentite_SaveManager *sm,
                                     const char *save_name,
-                                    Carbon_SerializeFunc serialize,
+                                    Agentite_SerializeFunc serialize,
                                     void *game_state) {
-    Carbon_SaveResult result = {0};
+    Agentite_SaveResult result = {0};
 
     if (!sm || !save_name || !serialize) {
         snprintf(result.error_message, sizeof(result.error_message),
@@ -123,7 +123,7 @@ Carbon_SaveResult carbon_save_game(Carbon_SaveManager *sm,
     fprintf(fp, "\n");
 
     // Create writer for game state
-    Carbon_SaveWriter writer = {0};
+    Agentite_SaveWriter writer = {0};
     writer.fp = fp;
     writer.in_section = false;
 
@@ -149,11 +149,11 @@ Carbon_SaveResult carbon_save_game(Carbon_SaveManager *sm,
     return result;
 }
 
-Carbon_SaveResult carbon_load_game(Carbon_SaveManager *sm,
+Agentite_SaveResult agentite_load_game(Agentite_SaveManager *sm,
                                     const char *save_name,
-                                    Carbon_DeserializeFunc deserialize,
+                                    Agentite_DeserializeFunc deserialize,
                                     void *game_state) {
-    Carbon_SaveResult result = {0};
+    Agentite_SaveResult result = {0};
 
     if (!sm || !save_name || !deserialize) {
         snprintf(result.error_message, sizeof(result.error_message),
@@ -208,7 +208,7 @@ Carbon_SaveResult carbon_load_game(Carbon_SaveManager *sm,
     }
 
     // Create reader
-    Carbon_SaveReader reader = {0};
+    Agentite_SaveReader reader = {0};
     reader.root = root;
     reader.game_state = toml_table_in(root, "game_state");
 
@@ -227,25 +227,25 @@ Carbon_SaveResult carbon_load_game(Carbon_SaveManager *sm,
     return result;
 }
 
-Carbon_SaveResult carbon_save_quick(Carbon_SaveManager *sm,
-                                     Carbon_SerializeFunc serialize,
+Agentite_SaveResult agentite_save_quick(Agentite_SaveManager *sm,
+                                     Agentite_SerializeFunc serialize,
                                      void *game_state) {
-    return carbon_save_game(sm, "quicksave", serialize, game_state);
+    return agentite_save_game(sm, "quicksave", serialize, game_state);
 }
 
-Carbon_SaveResult carbon_load_quick(Carbon_SaveManager *sm,
-                                     Carbon_DeserializeFunc deserialize,
+Agentite_SaveResult agentite_load_quick(Agentite_SaveManager *sm,
+                                     Agentite_DeserializeFunc deserialize,
                                      void *game_state) {
-    return carbon_load_game(sm, "quicksave", deserialize, game_state);
+    return agentite_load_game(sm, "quicksave", deserialize, game_state);
 }
 
-Carbon_SaveResult carbon_save_auto(Carbon_SaveManager *sm,
-                                    Carbon_SerializeFunc serialize,
+Agentite_SaveResult agentite_save_auto(Agentite_SaveManager *sm,
+                                    Agentite_SerializeFunc serialize,
                                     void *game_state) {
-    return carbon_save_game(sm, "autosave", serialize, game_state);
+    return agentite_save_game(sm, "autosave", serialize, game_state);
 }
 
-Carbon_SaveInfo *carbon_save_list(const Carbon_SaveManager *sm, int *out_count) {
+Agentite_SaveInfo *agentite_save_list(const Agentite_SaveManager *sm, int *out_count) {
     if (!sm || !out_count) return NULL;
 
     *out_count = 0;
@@ -268,7 +268,7 @@ Carbon_SaveInfo *carbon_save_list(const Carbon_SaveManager *sm, int *out_count) 
         return NULL;
     }
 
-    Carbon_SaveInfo *list = CARBON_ALLOC_ARRAY(Carbon_SaveInfo, capacity);
+    Agentite_SaveInfo *list = AGENTITE_ALLOC_ARRAY(Agentite_SaveInfo, capacity);
     if (!list) {
         closedir(dir);
         return NULL;
@@ -284,7 +284,7 @@ Carbon_SaveInfo *carbon_save_list(const Carbon_SaveManager *sm, int *out_count) 
             continue;
         }
 
-        Carbon_SaveInfo *info = &list[count];
+        Agentite_SaveInfo *info = &list[count];
         strncpy(info->filename, entry->d_name, sizeof(info->filename) - 1);
 
         // Remove .toml extension for display name
@@ -295,7 +295,7 @@ Carbon_SaveInfo *carbon_save_list(const Carbon_SaveManager *sm, int *out_count) 
         }
 
         // Try to read metadata from file
-        char filepath[CARBON_SAVE_MAX_PATH];
+        char filepath[AGENTITE_SAVE_MAX_PATH];
         snprintf(filepath, sizeof(filepath), "%s/%s", sm->saves_dir, entry->d_name);
 
         FILE *fp = fopen(filepath, "r");
@@ -339,25 +339,25 @@ Carbon_SaveInfo *carbon_save_list(const Carbon_SaveManager *sm, int *out_count) 
     return list;
 }
 
-void carbon_save_list_free(Carbon_SaveInfo *list) {
+void agentite_save_list_free(Agentite_SaveInfo *list) {
     free(list);
 }
 
-bool carbon_save_delete(Carbon_SaveManager *sm, const char *save_name) {
+bool agentite_save_delete(Agentite_SaveManager *sm, const char *save_name) {
     if (!sm || !save_name) return false;
     if (!is_valid_save_name(save_name)) return false;
 
-    char filepath[CARBON_SAVE_MAX_PATH];
+    char filepath[AGENTITE_SAVE_MAX_PATH];
     build_save_path(sm, save_name, filepath, sizeof(filepath));
 
     return remove(filepath) == 0;
 }
 
-bool carbon_save_exists(const Carbon_SaveManager *sm, const char *save_name) {
+bool agentite_save_exists(const Agentite_SaveManager *sm, const char *save_name) {
     if (!sm || !save_name) return false;
     if (!is_valid_save_name(save_name)) return false;
 
-    char filepath[CARBON_SAVE_MAX_PATH];
+    char filepath[AGENTITE_SAVE_MAX_PATH];
     build_save_path(sm, save_name, filepath, sizeof(filepath));
 
     struct stat st;
@@ -366,7 +366,7 @@ bool carbon_save_exists(const Carbon_SaveManager *sm, const char *save_name) {
 
 // Writer API implementation
 
-void carbon_save_write_section(Carbon_SaveWriter *w, const char *section_name) {
+void agentite_save_write_section(Agentite_SaveWriter *w, const char *section_name) {
     if (!w || !w->fp || !section_name) return;
 
     fprintf(w->fp, "\n[%s]\n", section_name);
@@ -374,32 +374,32 @@ void carbon_save_write_section(Carbon_SaveWriter *w, const char *section_name) {
     w->in_section = true;
 }
 
-void carbon_save_write_int(Carbon_SaveWriter *w, const char *key, int value) {
+void agentite_save_write_int(Agentite_SaveWriter *w, const char *key, int value) {
     if (!w || !w->fp || !key) return;
     fprintf(w->fp, "%s = %d\n", key, value);
 }
 
-void carbon_save_write_int64(Carbon_SaveWriter *w, const char *key, long long value) {
+void agentite_save_write_int64(Agentite_SaveWriter *w, const char *key, long long value) {
     if (!w || !w->fp || !key) return;
     fprintf(w->fp, "%s = %lld\n", key, value);
 }
 
-void carbon_save_write_float(Carbon_SaveWriter *w, const char *key, float value) {
+void agentite_save_write_float(Agentite_SaveWriter *w, const char *key, float value) {
     if (!w || !w->fp || !key) return;
     fprintf(w->fp, "%s = %f\n", key, value);
 }
 
-void carbon_save_write_double(Carbon_SaveWriter *w, const char *key, double value) {
+void agentite_save_write_double(Agentite_SaveWriter *w, const char *key, double value) {
     if (!w || !w->fp || !key) return;
     fprintf(w->fp, "%s = %f\n", key, value);
 }
 
-void carbon_save_write_bool(Carbon_SaveWriter *w, const char *key, bool value) {
+void agentite_save_write_bool(Agentite_SaveWriter *w, const char *key, bool value) {
     if (!w || !w->fp || !key) return;
     fprintf(w->fp, "%s = %s\n", key, value ? "true" : "false");
 }
 
-void carbon_save_write_string(Carbon_SaveWriter *w, const char *key, const char *value) {
+void agentite_save_write_string(Agentite_SaveWriter *w, const char *key, const char *value) {
     if (!w || !w->fp || !key) return;
 
     // Escape special characters in string
@@ -419,7 +419,7 @@ void carbon_save_write_string(Carbon_SaveWriter *w, const char *key, const char 
     fprintf(w->fp, "\"\n");
 }
 
-void carbon_save_write_int_array(Carbon_SaveWriter *w, const char *key,
+void agentite_save_write_int_array(Agentite_SaveWriter *w, const char *key,
                                   const int *values, int count) {
     if (!w || !w->fp || !key || !values || count <= 0) return;
 
@@ -431,7 +431,7 @@ void carbon_save_write_int_array(Carbon_SaveWriter *w, const char *key,
     fprintf(w->fp, "]\n");
 }
 
-void carbon_save_write_float_array(Carbon_SaveWriter *w, const char *key,
+void agentite_save_write_float_array(Agentite_SaveWriter *w, const char *key,
                                     const float *values, int count) {
     if (!w || !w->fp || !key || !values || count <= 0) return;
 
@@ -445,7 +445,7 @@ void carbon_save_write_float_array(Carbon_SaveWriter *w, const char *key,
 
 // Reader API implementation
 
-bool carbon_save_read_int(Carbon_SaveReader *r, const char *key, int *out_value) {
+bool agentite_save_read_int(Agentite_SaveReader *r, const char *key, int *out_value) {
     if (!r || !r->game_state || !key || !out_value) return false;
 
     toml_datum_t d = toml_int_in(r->game_state, key);
@@ -455,7 +455,7 @@ bool carbon_save_read_int(Carbon_SaveReader *r, const char *key, int *out_value)
     return true;
 }
 
-bool carbon_save_read_int64(Carbon_SaveReader *r, const char *key, long long *out_value) {
+bool agentite_save_read_int64(Agentite_SaveReader *r, const char *key, long long *out_value) {
     if (!r || !r->game_state || !key || !out_value) return false;
 
     toml_datum_t d = toml_int_in(r->game_state, key);
@@ -465,7 +465,7 @@ bool carbon_save_read_int64(Carbon_SaveReader *r, const char *key, long long *ou
     return true;
 }
 
-bool carbon_save_read_float(Carbon_SaveReader *r, const char *key, float *out_value) {
+bool agentite_save_read_float(Agentite_SaveReader *r, const char *key, float *out_value) {
     if (!r || !r->game_state || !key || !out_value) return false;
 
     toml_datum_t d = toml_double_in(r->game_state, key);
@@ -475,7 +475,7 @@ bool carbon_save_read_float(Carbon_SaveReader *r, const char *key, float *out_va
     return true;
 }
 
-bool carbon_save_read_double(Carbon_SaveReader *r, const char *key, double *out_value) {
+bool agentite_save_read_double(Agentite_SaveReader *r, const char *key, double *out_value) {
     if (!r || !r->game_state || !key || !out_value) return false;
 
     toml_datum_t d = toml_double_in(r->game_state, key);
@@ -485,7 +485,7 @@ bool carbon_save_read_double(Carbon_SaveReader *r, const char *key, double *out_
     return true;
 }
 
-bool carbon_save_read_bool(Carbon_SaveReader *r, const char *key, bool *out_value) {
+bool agentite_save_read_bool(Agentite_SaveReader *r, const char *key, bool *out_value) {
     if (!r || !r->game_state || !key || !out_value) return false;
 
     toml_datum_t d = toml_bool_in(r->game_state, key);
@@ -495,7 +495,7 @@ bool carbon_save_read_bool(Carbon_SaveReader *r, const char *key, bool *out_valu
     return true;
 }
 
-bool carbon_save_read_string(Carbon_SaveReader *r, const char *key,
+bool agentite_save_read_string(Agentite_SaveReader *r, const char *key,
                               char *out_buf, size_t buf_size) {
     if (!r || !r->game_state || !key || !out_buf || buf_size == 0) return false;
 
@@ -508,7 +508,7 @@ bool carbon_save_read_string(Carbon_SaveReader *r, const char *key,
     return true;
 }
 
-bool carbon_save_read_int_array(Carbon_SaveReader *r, const char *key,
+bool agentite_save_read_int_array(Agentite_SaveReader *r, const char *key,
                                  int **out_array, int *out_count) {
     if (!r || !r->game_state || !key || !out_array || !out_count) return false;
 
@@ -535,7 +535,7 @@ bool carbon_save_read_int_array(Carbon_SaveReader *r, const char *key,
     return true;
 }
 
-bool carbon_save_read_float_array(Carbon_SaveReader *r, const char *key,
+bool agentite_save_read_float_array(Agentite_SaveReader *r, const char *key,
                                    float **out_array, int *out_count) {
     if (!r || !r->game_state || !key || !out_array || !out_count) return false;
 
@@ -562,7 +562,7 @@ bool carbon_save_read_float_array(Carbon_SaveReader *r, const char *key,
     return true;
 }
 
-toml_table_t *carbon_save_read_section(Carbon_SaveReader *r, const char *section_name) {
+toml_table_t *agentite_save_read_section(Agentite_SaveReader *r, const char *section_name) {
     if (!r || !r->root || !section_name) return NULL;
     return toml_table_in(r->root, section_name);
 }

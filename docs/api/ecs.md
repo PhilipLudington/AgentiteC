@@ -5,26 +5,26 @@ Wrapper around Flecs v4.0.0 for game entity management.
 ## Quick Start
 
 ```c
-#include "carbon/ecs.h"
+#include "agentite/ecs.h"
 
 // Initialize
-Carbon_World *ecs_world = carbon_ecs_init();
-ecs_world_t *w = carbon_ecs_get_world(ecs_world);
+Agentite_World *ecs_world = agentite_ecs_init();
+ecs_world_t *w = agentite_ecs_get_world(ecs_world);
 
 // Create entities with components
-ecs_entity_t player = carbon_ecs_entity_new_named(ecs_world, "Player");
+ecs_entity_t player = agentite_ecs_entity_new_named(ecs_world, "Player");
 ecs_set(w, player, C_Position, { .x = 100.0f, .y = 100.0f });
 ecs_set(w, player, C_Velocity, { .vx = 0.0f, .vy = 0.0f });
 ecs_set(w, player, C_Health, { .health = 100, .max_health = 100 });
 
 // In game loop
-carbon_ecs_progress(ecs_world, delta_time);
+agentite_ecs_progress(ecs_world, delta_time);
 
 // Query components
 const C_Position *pos = ecs_get(w, player, C_Position);
 
 // Cleanup
-carbon_ecs_shutdown(ecs_world);
+agentite_ecs_shutdown(ecs_world);
 ```
 
 ## Built-in Components
@@ -117,4 +117,4 @@ ecs_set(world, e, C_Health, { .health = 50 });
 ## Notes
 
 - See [Flecs documentation](https://www.flecs.dev/flecs/) for advanced features
-- Systems are processed each frame via `carbon_ecs_progress()`
+- Systems are processed each frame via `agentite_ecs_progress()`

@@ -7,8 +7,8 @@
  * - Error correction
  */
 
-#include "carbon/msdf.h"
-#include "carbon/error.h"
+#include "agentite/msdf.h"
+#include "agentite/error.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -317,7 +317,7 @@ void msdf_generate_sdf(const MSDF_Shape *shape,
 {
     if (!shape || !bitmap || !projection) return;
     if (bitmap->format != MSDF_BITMAP_GRAY) {
-        carbon_set_error("SDF requires MSDF_BITMAP_GRAY format");
+        agentite_set_error("SDF requires MSDF_BITMAP_GRAY format");
         return;
     }
 
@@ -350,7 +350,7 @@ void msdf_generate_msdf(const MSDF_Shape *shape,
 {
     if (!shape || !bitmap || !projection) return;
     if (bitmap->format != MSDF_BITMAP_RGB) {
-        carbon_set_error("MSDF requires MSDF_BITMAP_RGB format");
+        agentite_set_error("MSDF requires MSDF_BITMAP_RGB format");
         return;
     }
 
@@ -394,7 +394,7 @@ void msdf_generate_mtsdf(const MSDF_Shape *shape,
 {
     if (!shape || !bitmap || !projection) return;
     if (bitmap->format != MSDF_BITMAP_RGBA) {
-        carbon_set_error("MTSDF requires MSDF_BITMAP_RGBA format");
+        agentite_set_error("MTSDF requires MSDF_BITMAP_RGBA format");
         return;
     }
 

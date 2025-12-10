@@ -4,10 +4,10 @@
  * Chunk-based tile storage for efficient large map rendering.
  */
 
-#include "carbon/carbon.h"
-#include "carbon/tilemap.h"
-#include "carbon/sprite.h"
-#include "carbon/camera.h"
+#include "agentite/agentite.h"
+#include "agentite/tilemap.h"
+#include "agentite/sprite.h"
+#include "agentite/camera.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -17,15 +17,15 @@
  * ============================================================================ */
 
 /* Chunk: 32x32 tiles */
-typedef struct Carbon_TileChunk {
-    Carbon_TileID tiles[CARBON_TILEMAP_CHUNK_SIZE * CARBON_TILEMAP_CHUNK_SIZE];
+typedef struct Agentite_TileChunk {
+    Agentite_TileID tiles[AGENTITE_TILEMAP_CHUNK_SIZE * AGENTITE_TILEMAP_CHUNK_SIZE];
     uint32_t tile_count;  /* Non-empty tile count (skip chunk if 0) */
-} Carbon_TileChunk;
+} Agentite_TileChunk;
 
 /* Layer: sparse 2D array of chunks */
-struct Carbon_TileLayer {
+struct Agentite_TileLayer {
     char *name;
-    Carbon_TileChunk **chunks;  /* Flat array: chunks[cy * chunks_x + cx] */
+    Agentite_TileChunk **chunks;  /* Flat array: chunks[cy * chunks_x + cx] */
     int chunks_x;               /* Number of chunks in X */
     int chunks_y;               /* Number of chunks in Y */
     bool visible;
@@ -33,9 +33,9 @@ struct Carbon_TileLayer {
 };
 
 /* Tileset: texture divided into tiles */
-struct Carbon_Tileset {
-    Carbon_Texture *texture;
-    Carbon_Sprite *sprites;     /* Pre-computed sprite per tile */
+struct Agentite_Tileset {
+    Agentite_Texture *texture;
+    Agentite_Sprite *sprites;     /* Pre-computed sprite per tile */
     int tile_width;
     int tile_height;
     int columns;                /* Tiles per row in texture */
@@ -46,9 +46,9 @@ struct Carbon_Tileset {
 };
 
 /* Tilemap: layers + tileset */
-struct Carbon_Tilemap {
-    Carbon_Tileset *tileset;
-    Carbon_TileLayer *layers[CARBON_TILEMAP_MAX_LAYERS];
+struct Agentite_Tilemap {
+    Agentite_Tileset *tileset;
+    Agentite_TileLayer *layers[AGENTITE_TILEMAP_MAX_LAYERS];
     int layer_count;
     int width;                  /* Map width in tiles */
     int height;                 /* Map height in tiles */
@@ -62,19 +62,19 @@ struct Carbon_Tilemap {
  * Tileset Functions
  * ============================================================================ */
 
-Carbon_Tileset *carbon_tileset_create(Carbon_Texture *texture,
+Agentite_Tileset *agentite_tileset_create(Agentite_Texture *texture,
                                       int tile_width, int tile_height)
 {
-    return carbon_tileset_create_ex(texture, tile_width, tile_height, 0, 0);
+    return agentite_tileset_create_ex(texture, tile_width, tile_height, 0, 0);
 }
 
-Carbon_Tileset *carbon_tileset_create_ex(Carbon_Texture *texture,
+Agentite_Tileset *agentite_tileset_create_ex(Agentite_Texture *texture,
                                          int tile_width, int tile_height,
                                          int spacing, int margin)
 {
     if (!texture || tile_width <= 0 || tile_height <= 0) return NULL;
 
-    Carbon_Tileset *ts = CARBON_ALLOC(Carbon_Tileset);
+    Agentite_Tileset *ts = AGENTITE_ALLOC(Agentite_Tileset);
     if (!ts) return NULL;
 
     ts->texture = texture;
@@ -85,7 +85,7 @@ Carbon_Tileset *carbon_tileset_create_ex(Carbon_Texture *texture,
 
     /* Calculate tileset dimensions */
     int tex_w, tex_h;
-    carbon_texture_get_size(texture, &tex_w, &tex_h);
+    agentite_texture_get_size(texture, &tex_w, &tex_h);
 
     int usable_w = tex_w - 2 * margin;
     int usable_h = tex_h - 2 * margin;
@@ -100,7 +100,7 @@ Carbon_Tileset *carbon_tileset_create_ex(Carbon_Texture *texture,
     }
 
     /* Pre-compute sprites for each tile */
-    ts->sprites = (Carbon_Sprite*)malloc(ts->tile_count * sizeof(Carbon_Sprite));
+    ts->sprites = (Agentite_Sprite*)malloc(ts->tile_count * sizeof(Agentite_Sprite));
     if (!ts->sprites) {
         free(ts);
         return NULL;
@@ -113,30 +113,30 @@ Carbon_Tileset *carbon_tileset_create_ex(Carbon_Texture *texture,
         float src_x = (float)(margin + tx * (tile_width + spacing));
         float src_y = (float)(margin + ty * (tile_height + spacing));
 
-        ts->sprites[i] = carbon_sprite_create(texture, src_x, src_y,
+        ts->sprites[i] = agentite_sprite_create(texture, src_x, src_y,
                                               (float)tile_width, (float)tile_height);
         /* Set origin to top-left for tilemap rendering */
-        carbon_sprite_set_origin(&ts->sprites[i], 0.0f, 0.0f);
+        agentite_sprite_set_origin(&ts->sprites[i], 0.0f, 0.0f);
     }
 
     return ts;
 }
 
-void carbon_tileset_destroy(Carbon_Tileset *tileset)
+void agentite_tileset_destroy(Agentite_Tileset *tileset)
 {
     if (!tileset) return;
     free(tileset->sprites);
     free(tileset);
 }
 
-void carbon_tileset_get_tile_size(Carbon_Tileset *tileset, int *width, int *height)
+void agentite_tileset_get_tile_size(Agentite_Tileset *tileset, int *width, int *height)
 {
     if (!tileset) return;
     if (width) *width = tileset->tile_width;
     if (height) *height = tileset->tile_height;
 }
 
-int carbon_tileset_get_tile_count(Carbon_Tileset *tileset)
+int agentite_tileset_get_tile_count(Agentite_Tileset *tileset)
 {
     return tileset ? tileset->tile_count : 0;
 }
@@ -145,9 +145,9 @@ int carbon_tileset_get_tile_count(Carbon_Tileset *tileset)
  * Internal Layer Functions
  * ============================================================================ */
 
-static Carbon_TileLayer *layer_create(const char *name, int chunks_x, int chunks_y)
+static Agentite_TileLayer *layer_create(const char *name, int chunks_x, int chunks_y)
 {
-    Carbon_TileLayer *layer = CARBON_ALLOC(Carbon_TileLayer);
+    Agentite_TileLayer *layer = AGENTITE_ALLOC(Agentite_TileLayer);
     if (!layer) return NULL;
 
     layer->name = name ? strdup(name) : NULL;
@@ -158,7 +158,7 @@ static Carbon_TileLayer *layer_create(const char *name, int chunks_x, int chunks
 
     /* Allocate chunk pointer array (initially all NULL) */
     int total_chunks = chunks_x * chunks_y;
-    layer->chunks = (Carbon_TileChunk**)calloc(total_chunks, sizeof(Carbon_TileChunk *));
+    layer->chunks = (Agentite_TileChunk**)calloc(total_chunks, sizeof(Agentite_TileChunk *));
     if (!layer->chunks) {
         free(layer->name);
         free(layer);
@@ -168,7 +168,7 @@ static Carbon_TileLayer *layer_create(const char *name, int chunks_x, int chunks
     return layer;
 }
 
-static void layer_destroy(Carbon_TileLayer *layer)
+static void layer_destroy(Agentite_TileLayer *layer)
 {
     if (!layer) return;
 
@@ -182,7 +182,7 @@ static void layer_destroy(Carbon_TileLayer *layer)
     free(layer);
 }
 
-static Carbon_TileChunk *layer_get_chunk(Carbon_TileLayer *layer, int cx, int cy)
+static Agentite_TileChunk *layer_get_chunk(Agentite_TileLayer *layer, int cx, int cy)
 {
     if (!layer || cx < 0 || cy < 0 || cx >= layer->chunks_x || cy >= layer->chunks_y) {
         return NULL;
@@ -190,7 +190,7 @@ static Carbon_TileChunk *layer_get_chunk(Carbon_TileLayer *layer, int cx, int cy
     return layer->chunks[cy * layer->chunks_x + cx];
 }
 
-static Carbon_TileChunk *layer_ensure_chunk(Carbon_TileLayer *layer, int cx, int cy)
+static Agentite_TileChunk *layer_ensure_chunk(Agentite_TileLayer *layer, int cx, int cy)
 {
     if (!layer || cx < 0 || cy < 0 || cx >= layer->chunks_x || cy >= layer->chunks_y) {
         return NULL;
@@ -198,7 +198,7 @@ static Carbon_TileChunk *layer_ensure_chunk(Carbon_TileLayer *layer, int cx, int
 
     int idx = cy * layer->chunks_x + cx;
     if (!layer->chunks[idx]) {
-        layer->chunks[idx] = CARBON_ALLOC(Carbon_TileChunk);
+        layer->chunks[idx] = AGENTITE_ALLOC(Agentite_TileChunk);
     }
     return layer->chunks[idx];
 }
@@ -207,12 +207,12 @@ static Carbon_TileChunk *layer_ensure_chunk(Carbon_TileLayer *layer, int cx, int
  * Tilemap Lifecycle Functions
  * ============================================================================ */
 
-Carbon_Tilemap *carbon_tilemap_create(Carbon_Tileset *tileset,
+Agentite_Tilemap *agentite_tilemap_create(Agentite_Tileset *tileset,
                                       int width, int height)
 {
     if (!tileset || width <= 0 || height <= 0) return NULL;
 
-    Carbon_Tilemap *tm = CARBON_ALLOC(Carbon_Tilemap);
+    Agentite_Tilemap *tm = AGENTITE_ALLOC(Agentite_Tilemap);
     if (!tm) return NULL;
 
     tm->tileset = tileset;
@@ -222,13 +222,13 @@ Carbon_Tilemap *carbon_tilemap_create(Carbon_Tileset *tileset,
     tm->tile_height = tileset->tile_height;
 
     /* Calculate chunk grid dimensions */
-    tm->chunks_x = (width + CARBON_TILEMAP_CHUNK_SIZE - 1) / CARBON_TILEMAP_CHUNK_SIZE;
-    tm->chunks_y = (height + CARBON_TILEMAP_CHUNK_SIZE - 1) / CARBON_TILEMAP_CHUNK_SIZE;
+    tm->chunks_x = (width + AGENTITE_TILEMAP_CHUNK_SIZE - 1) / AGENTITE_TILEMAP_CHUNK_SIZE;
+    tm->chunks_y = (height + AGENTITE_TILEMAP_CHUNK_SIZE - 1) / AGENTITE_TILEMAP_CHUNK_SIZE;
 
     return tm;
 }
 
-void carbon_tilemap_destroy(Carbon_Tilemap *tilemap)
+void agentite_tilemap_destroy(Agentite_Tilemap *tilemap)
 {
     if (!tilemap) return;
 
@@ -240,14 +240,14 @@ void carbon_tilemap_destroy(Carbon_Tilemap *tilemap)
     free(tilemap);
 }
 
-void carbon_tilemap_get_size(Carbon_Tilemap *tilemap, int *width, int *height)
+void agentite_tilemap_get_size(Agentite_Tilemap *tilemap, int *width, int *height)
 {
     if (!tilemap) return;
     if (width) *width = tilemap->width;
     if (height) *height = tilemap->height;
 }
 
-void carbon_tilemap_get_tile_size(Carbon_Tilemap *tilemap, int *width, int *height)
+void agentite_tilemap_get_tile_size(Agentite_Tilemap *tilemap, int *width, int *height)
 {
     if (!tilemap) return;
     if (width) *width = tilemap->tile_width;
@@ -258,13 +258,13 @@ void carbon_tilemap_get_tile_size(Carbon_Tilemap *tilemap, int *width, int *heig
  * Layer Functions
  * ============================================================================ */
 
-int carbon_tilemap_add_layer(Carbon_Tilemap *tilemap, const char *name)
+int agentite_tilemap_add_layer(Agentite_Tilemap *tilemap, const char *name)
 {
-    if (!tilemap || tilemap->layer_count >= CARBON_TILEMAP_MAX_LAYERS) {
+    if (!tilemap || tilemap->layer_count >= AGENTITE_TILEMAP_MAX_LAYERS) {
         return -1;
     }
 
-    Carbon_TileLayer *layer = layer_create(name, tilemap->chunks_x, tilemap->chunks_y);
+    Agentite_TileLayer *layer = layer_create(name, tilemap->chunks_x, tilemap->chunks_y);
     if (!layer) return -1;
 
     int index = tilemap->layer_count;
@@ -274,7 +274,7 @@ int carbon_tilemap_add_layer(Carbon_Tilemap *tilemap, const char *name)
     return index;
 }
 
-Carbon_TileLayer *carbon_tilemap_get_layer(Carbon_Tilemap *tilemap, int index)
+Agentite_TileLayer *agentite_tilemap_get_layer(Agentite_Tilemap *tilemap, int index)
 {
     if (!tilemap || index < 0 || index >= tilemap->layer_count) {
         return NULL;
@@ -282,7 +282,7 @@ Carbon_TileLayer *carbon_tilemap_get_layer(Carbon_Tilemap *tilemap, int index)
     return tilemap->layers[index];
 }
 
-Carbon_TileLayer *carbon_tilemap_get_layer_by_name(Carbon_Tilemap *tilemap,
+Agentite_TileLayer *agentite_tilemap_get_layer_by_name(Agentite_Tilemap *tilemap,
                                                    const char *name)
 {
     if (!tilemap || !name) return NULL;
@@ -295,26 +295,26 @@ Carbon_TileLayer *carbon_tilemap_get_layer_by_name(Carbon_Tilemap *tilemap,
     return NULL;
 }
 
-int carbon_tilemap_get_layer_count(Carbon_Tilemap *tilemap)
+int agentite_tilemap_get_layer_count(Agentite_Tilemap *tilemap)
 {
     return tilemap ? tilemap->layer_count : 0;
 }
 
-void carbon_tilemap_set_layer_visible(Carbon_Tilemap *tilemap, int layer, bool visible)
+void agentite_tilemap_set_layer_visible(Agentite_Tilemap *tilemap, int layer, bool visible)
 {
-    Carbon_TileLayer *l = carbon_tilemap_get_layer(tilemap, layer);
+    Agentite_TileLayer *l = agentite_tilemap_get_layer(tilemap, layer);
     if (l) l->visible = visible;
 }
 
-bool carbon_tilemap_get_layer_visible(Carbon_Tilemap *tilemap, int layer)
+bool agentite_tilemap_get_layer_visible(Agentite_Tilemap *tilemap, int layer)
 {
-    Carbon_TileLayer *l = carbon_tilemap_get_layer(tilemap, layer);
+    Agentite_TileLayer *l = agentite_tilemap_get_layer(tilemap, layer);
     return l ? l->visible : false;
 }
 
-void carbon_tilemap_set_layer_opacity(Carbon_Tilemap *tilemap, int layer, float opacity)
+void agentite_tilemap_set_layer_opacity(Agentite_Tilemap *tilemap, int layer, float opacity)
 {
-    Carbon_TileLayer *l = carbon_tilemap_get_layer(tilemap, layer);
+    Agentite_TileLayer *l = agentite_tilemap_get_layer(tilemap, layer);
     if (l) {
         if (opacity < 0.0f) opacity = 0.0f;
         if (opacity > 1.0f) opacity = 1.0f;
@@ -322,9 +322,9 @@ void carbon_tilemap_set_layer_opacity(Carbon_Tilemap *tilemap, int layer, float 
     }
 }
 
-float carbon_tilemap_get_layer_opacity(Carbon_Tilemap *tilemap, int layer)
+float agentite_tilemap_get_layer_opacity(Agentite_Tilemap *tilemap, int layer)
 {
-    Carbon_TileLayer *l = carbon_tilemap_get_layer(tilemap, layer);
+    Agentite_TileLayer *l = agentite_tilemap_get_layer(tilemap, layer);
     return l ? l->opacity : 0.0f;
 }
 
@@ -332,62 +332,62 @@ float carbon_tilemap_get_layer_opacity(Carbon_Tilemap *tilemap, int layer)
  * Tile Access Functions
  * ============================================================================ */
 
-void carbon_tilemap_set_tile(Carbon_Tilemap *tilemap, int layer,
-                             int x, int y, Carbon_TileID tile)
+void agentite_tilemap_set_tile(Agentite_Tilemap *tilemap, int layer,
+                             int x, int y, Agentite_TileID tile)
 {
     if (!tilemap || x < 0 || y < 0 || x >= tilemap->width || y >= tilemap->height) {
         return;
     }
 
-    Carbon_TileLayer *l = carbon_tilemap_get_layer(tilemap, layer);
+    Agentite_TileLayer *l = agentite_tilemap_get_layer(tilemap, layer);
     if (!l) return;
 
     /* Calculate chunk and local coordinates */
-    int cx = x / CARBON_TILEMAP_CHUNK_SIZE;
-    int cy = y / CARBON_TILEMAP_CHUNK_SIZE;
-    int lx = x % CARBON_TILEMAP_CHUNK_SIZE;
-    int ly = y % CARBON_TILEMAP_CHUNK_SIZE;
+    int cx = x / AGENTITE_TILEMAP_CHUNK_SIZE;
+    int cy = y / AGENTITE_TILEMAP_CHUNK_SIZE;
+    int lx = x % AGENTITE_TILEMAP_CHUNK_SIZE;
+    int ly = y % AGENTITE_TILEMAP_CHUNK_SIZE;
 
-    Carbon_TileChunk *chunk = layer_ensure_chunk(l, cx, cy);
+    Agentite_TileChunk *chunk = layer_ensure_chunk(l, cx, cy);
     if (!chunk) return;
 
-    int idx = ly * CARBON_TILEMAP_CHUNK_SIZE + lx;
-    Carbon_TileID old_tile = chunk->tiles[idx];
+    int idx = ly * AGENTITE_TILEMAP_CHUNK_SIZE + lx;
+    Agentite_TileID old_tile = chunk->tiles[idx];
 
     /* Update tile count */
-    if (old_tile == CARBON_TILE_EMPTY && tile != CARBON_TILE_EMPTY) {
+    if (old_tile == AGENTITE_TILE_EMPTY && tile != AGENTITE_TILE_EMPTY) {
         chunk->tile_count++;
-    } else if (old_tile != CARBON_TILE_EMPTY && tile == CARBON_TILE_EMPTY) {
+    } else if (old_tile != AGENTITE_TILE_EMPTY && tile == AGENTITE_TILE_EMPTY) {
         chunk->tile_count--;
     }
 
     chunk->tiles[idx] = tile;
 }
 
-Carbon_TileID carbon_tilemap_get_tile(Carbon_Tilemap *tilemap, int layer,
+Agentite_TileID agentite_tilemap_get_tile(Agentite_Tilemap *tilemap, int layer,
                                       int x, int y)
 {
     if (!tilemap || x < 0 || y < 0 || x >= tilemap->width || y >= tilemap->height) {
-        return CARBON_TILE_EMPTY;
+        return AGENTITE_TILE_EMPTY;
     }
 
-    Carbon_TileLayer *l = carbon_tilemap_get_layer(tilemap, layer);
-    if (!l) return CARBON_TILE_EMPTY;
+    Agentite_TileLayer *l = agentite_tilemap_get_layer(tilemap, layer);
+    if (!l) return AGENTITE_TILE_EMPTY;
 
-    int cx = x / CARBON_TILEMAP_CHUNK_SIZE;
-    int cy = y / CARBON_TILEMAP_CHUNK_SIZE;
-    int lx = x % CARBON_TILEMAP_CHUNK_SIZE;
-    int ly = y % CARBON_TILEMAP_CHUNK_SIZE;
+    int cx = x / AGENTITE_TILEMAP_CHUNK_SIZE;
+    int cy = y / AGENTITE_TILEMAP_CHUNK_SIZE;
+    int lx = x % AGENTITE_TILEMAP_CHUNK_SIZE;
+    int ly = y % AGENTITE_TILEMAP_CHUNK_SIZE;
 
-    Carbon_TileChunk *chunk = layer_get_chunk(l, cx, cy);
-    if (!chunk) return CARBON_TILE_EMPTY;
+    Agentite_TileChunk *chunk = layer_get_chunk(l, cx, cy);
+    if (!chunk) return AGENTITE_TILE_EMPTY;
 
-    return chunk->tiles[ly * CARBON_TILEMAP_CHUNK_SIZE + lx];
+    return chunk->tiles[ly * AGENTITE_TILEMAP_CHUNK_SIZE + lx];
 }
 
-void carbon_tilemap_fill(Carbon_Tilemap *tilemap, int layer,
+void agentite_tilemap_fill(Agentite_Tilemap *tilemap, int layer,
                          int x, int y, int width, int height,
-                         Carbon_TileID tile)
+                         Agentite_TileID tile)
 {
     if (!tilemap) return;
 
@@ -400,14 +400,14 @@ void carbon_tilemap_fill(Carbon_Tilemap *tilemap, int layer,
 
     for (int ty = y; ty < y + height; ty++) {
         for (int tx = x; tx < x + width; tx++) {
-            carbon_tilemap_set_tile(tilemap, layer, tx, ty, tile);
+            agentite_tilemap_set_tile(tilemap, layer, tx, ty, tile);
         }
     }
 }
 
-void carbon_tilemap_clear_layer(Carbon_Tilemap *tilemap, int layer)
+void agentite_tilemap_clear_layer(Agentite_Tilemap *tilemap, int layer)
 {
-    Carbon_TileLayer *l = carbon_tilemap_get_layer(tilemap, layer);
+    Agentite_TileLayer *l = agentite_tilemap_get_layer(tilemap, layer);
     if (!l) return;
 
     int total_chunks = l->chunks_x * l->chunks_y;
@@ -423,20 +423,20 @@ void carbon_tilemap_clear_layer(Carbon_Tilemap *tilemap, int layer)
  * Rendering Functions
  * ============================================================================ */
 
-void carbon_tilemap_render_layer(Carbon_Tilemap *tilemap,
-                                 Carbon_SpriteRenderer *sr,
-                                 Carbon_Camera *camera,
+void agentite_tilemap_render_layer(Agentite_Tilemap *tilemap,
+                                 Agentite_SpriteRenderer *sr,
+                                 Agentite_Camera *camera,
                                  int layer_idx)
 {
     if (!tilemap || !sr) return;
 
-    Carbon_TileLayer *layer = carbon_tilemap_get_layer(tilemap, layer_idx);
+    Agentite_TileLayer *layer = agentite_tilemap_get_layer(tilemap, layer_idx);
     if (!layer || !layer->visible) return;
 
     /* Get visible world bounds */
     float left, right, top, bottom;
     if (camera) {
-        carbon_camera_get_bounds(camera, &left, &right, &top, &bottom);
+        agentite_camera_get_bounds(camera, &left, &right, &top, &bottom);
     } else {
         /* No camera - assume screen bounds at origin */
         left = 0;
@@ -446,8 +446,8 @@ void carbon_tilemap_render_layer(Carbon_Tilemap *tilemap,
     }
 
     /* Convert world bounds to chunk range (with 1-chunk padding for safety) */
-    float chunk_world_w = CARBON_TILEMAP_CHUNK_SIZE * tilemap->tile_width;
-    float chunk_world_h = CARBON_TILEMAP_CHUNK_SIZE * tilemap->tile_height;
+    float chunk_world_w = AGENTITE_TILEMAP_CHUNK_SIZE * tilemap->tile_width;
+    float chunk_world_h = AGENTITE_TILEMAP_CHUNK_SIZE * tilemap->tile_height;
 
     int chunk_min_x = (int)floorf(left / chunk_world_w) - 1;
     int chunk_max_x = (int)ceilf(right / chunk_world_w) + 1;
@@ -461,39 +461,39 @@ void carbon_tilemap_render_layer(Carbon_Tilemap *tilemap,
     if (chunk_max_y > tilemap->chunks_y) chunk_max_y = tilemap->chunks_y;
 
     float opacity = layer->opacity;
-    Carbon_Tileset *ts = tilemap->tileset;
+    Agentite_Tileset *ts = tilemap->tileset;
 
     /* Render visible chunks */
     for (int cy = chunk_min_y; cy < chunk_max_y; cy++) {
         for (int cx = chunk_min_x; cx < chunk_max_x; cx++) {
-            Carbon_TileChunk *chunk = layer_get_chunk(layer, cx, cy);
+            Agentite_TileChunk *chunk = layer_get_chunk(layer, cx, cy);
             if (!chunk || chunk->tile_count == 0) continue;
 
             /* Base world position of this chunk */
-            int base_tile_x = cx * CARBON_TILEMAP_CHUNK_SIZE;
-            int base_tile_y = cy * CARBON_TILEMAP_CHUNK_SIZE;
+            int base_tile_x = cx * AGENTITE_TILEMAP_CHUNK_SIZE;
+            int base_tile_y = cy * AGENTITE_TILEMAP_CHUNK_SIZE;
 
             /* Render tiles in this chunk */
-            for (int ly = 0; ly < CARBON_TILEMAP_CHUNK_SIZE; ly++) {
+            for (int ly = 0; ly < AGENTITE_TILEMAP_CHUNK_SIZE; ly++) {
                 int tile_y = base_tile_y + ly;
                 if (tile_y >= tilemap->height) break;
 
-                for (int lx = 0; lx < CARBON_TILEMAP_CHUNK_SIZE; lx++) {
+                for (int lx = 0; lx < AGENTITE_TILEMAP_CHUNK_SIZE; lx++) {
                     int tile_x = base_tile_x + lx;
                     if (tile_x >= tilemap->width) break;
 
-                    Carbon_TileID tile_id = chunk->tiles[ly * CARBON_TILEMAP_CHUNK_SIZE + lx];
-                    if (tile_id == CARBON_TILE_EMPTY) continue;
+                    Agentite_TileID tile_id = chunk->tiles[ly * AGENTITE_TILEMAP_CHUNK_SIZE + lx];
+                    if (tile_id == AGENTITE_TILE_EMPTY) continue;
 
                     /* Tile ID is 1-based, sprite array is 0-based */
                     int sprite_idx = tile_id - 1;
                     if (sprite_idx < 0 || sprite_idx >= ts->tile_count) continue;
 
-                    Carbon_Sprite *sprite = &ts->sprites[sprite_idx];
+                    Agentite_Sprite *sprite = &ts->sprites[sprite_idx];
                     float world_x = (float)(tile_x * tilemap->tile_width);
                     float world_y = (float)(tile_y * tilemap->tile_height);
 
-                    carbon_sprite_draw_tinted(sr, sprite, world_x, world_y,
+                    agentite_sprite_draw_tinted(sr, sprite, world_x, world_y,
                                               1.0f, 1.0f, 1.0f, opacity);
                 }
             }
@@ -501,15 +501,15 @@ void carbon_tilemap_render_layer(Carbon_Tilemap *tilemap,
     }
 }
 
-void carbon_tilemap_render(Carbon_Tilemap *tilemap,
-                           Carbon_SpriteRenderer *sr,
-                           Carbon_Camera *camera)
+void agentite_tilemap_render(Agentite_Tilemap *tilemap,
+                           Agentite_SpriteRenderer *sr,
+                           Agentite_Camera *camera)
 {
     if (!tilemap || !sr) return;
 
     /* Render layers in order (0 = back, N = front) */
     for (int i = 0; i < tilemap->layer_count; i++) {
-        carbon_tilemap_render_layer(tilemap, sr, camera, i);
+        agentite_tilemap_render_layer(tilemap, sr, camera, i);
     }
 }
 
@@ -517,7 +517,7 @@ void carbon_tilemap_render(Carbon_Tilemap *tilemap,
  * Coordinate Conversion
  * ============================================================================ */
 
-void carbon_tilemap_world_to_tile(Carbon_Tilemap *tilemap,
+void agentite_tilemap_world_to_tile(Agentite_Tilemap *tilemap,
                                   float world_x, float world_y,
                                   int *tile_x, int *tile_y)
 {
@@ -527,7 +527,7 @@ void carbon_tilemap_world_to_tile(Carbon_Tilemap *tilemap,
     if (tile_y) *tile_y = (int)floorf(world_y / tilemap->tile_height);
 }
 
-void carbon_tilemap_tile_to_world(Carbon_Tilemap *tilemap,
+void agentite_tilemap_tile_to_world(Agentite_Tilemap *tilemap,
                                   int tile_x, int tile_y,
                                   float *world_x, float *world_y)
 {
@@ -537,18 +537,18 @@ void carbon_tilemap_tile_to_world(Carbon_Tilemap *tilemap,
     if (world_y) *world_y = (float)(tile_y * tilemap->tile_height);
 }
 
-Carbon_TileID carbon_tilemap_get_tile_at_world(Carbon_Tilemap *tilemap,
+Agentite_TileID agentite_tilemap_get_tile_at_world(Agentite_Tilemap *tilemap,
                                                int layer,
                                                float world_x, float world_y)
 {
-    if (!tilemap) return CARBON_TILE_EMPTY;
+    if (!tilemap) return AGENTITE_TILE_EMPTY;
 
     int tx, ty;
-    carbon_tilemap_world_to_tile(tilemap, world_x, world_y, &tx, &ty);
-    return carbon_tilemap_get_tile(tilemap, layer, tx, ty);
+    agentite_tilemap_world_to_tile(tilemap, world_x, world_y, &tx, &ty);
+    return agentite_tilemap_get_tile(tilemap, layer, tx, ty);
 }
 
-void carbon_tilemap_get_world_bounds(Carbon_Tilemap *tilemap,
+void agentite_tilemap_get_world_bounds(Agentite_Tilemap *tilemap,
                                      float *left, float *right,
                                      float *top, float *bottom)
 {

@@ -1,10 +1,10 @@
 /*
- * Carbon UI - Rich Text System Implementation
+ * Agentite UI - Rich Text System Implementation
  */
 
-#include "carbon/ui_richtext.h"
-#include "carbon/ui.h"
-#include "carbon/ui_node.h"
+#include "agentite/ui_richtext.h"
+#include "agentite/ui.h"
+#include "agentite/ui_node.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -29,7 +29,7 @@
  * Rich Text Structure
  * ============================================================================ */
 
-struct CUI_RichText {
+struct AUI_RichText {
     /* Source text */
     char *bbcode;
     int bbcode_len;
@@ -39,18 +39,18 @@ struct CUI_RichText {
     int plain_len;
 
     /* Spans */
-    CUI_RichSpan spans[MAX_SPANS];
+    AUI_RichSpan spans[MAX_SPANS];
     int span_count;
 
     /* Layout */
-    CUI_RichLine lines[MAX_LINES];
+    AUI_RichLine lines[MAX_LINES];
     int line_count;
     float total_width;
     float total_height;
     bool layout_valid;
 
     /* Hotspots (clickable regions) */
-    CUI_RichHotspot hotspots[MAX_HOTSPOTS];
+    AUI_RichHotspot hotspots[MAX_HOTSPOTS];
     int hotspot_count;
 
     /* Selection */
@@ -61,7 +61,7 @@ struct CUI_RichText {
     float anim_time;
 
     /* Config */
-    CUI_RichTextConfig config;
+    AUI_RichTextConfig config;
 };
 
 /* ============================================================================
@@ -71,9 +71,9 @@ struct CUI_RichText {
 typedef struct {
     const char *name;
     uint32_t color;
-} CUI_NamedColor;
+} AUI_NamedColor;
 
-static CUI_NamedColor s_named_colors[] = {
+static AUI_NamedColor s_named_colors[] = {
     {"black",   0xFF000000},
     {"white",   0xFFFFFFFF},
     {"red",     0xFF0000FF},
@@ -93,7 +93,7 @@ static CUI_NamedColor s_named_colors[] = {
 };
 
 /* Custom registered colors */
-static CUI_NamedColor s_custom_colors[32];
+static AUI_NamedColor s_custom_colors[32];
 static int s_custom_color_count = 0;
 
 /* ============================================================================
@@ -104,16 +104,16 @@ typedef struct {
     char name[64];
     char texture_path[256];
     float src_x, src_y, src_w, src_h;
-} CUI_IconEntry;
+} AUI_IconEntry;
 
-static CUI_IconEntry s_icons[64];
+static AUI_IconEntry s_icons[64];
 static int s_icon_count = 0;
 
 /* ============================================================================
  * Color Parsing
  * ============================================================================ */
 
-uint32_t cui_richtext_parse_color(const char *color_str)
+uint32_t aui_richtext_parse_color(const char *color_str)
 {
     if (!color_str) return 0xFFFFFFFF;
 
@@ -171,11 +171,11 @@ uint32_t cui_richtext_parse_color(const char *color_str)
     return 0xFFFFFFFF;
 }
 
-void cui_richtext_register_color(const char *name, uint32_t color)
+void aui_richtext_register_color(const char *name, uint32_t color)
 {
     if (!name || s_custom_color_count >= 32) return;
 
-    CUI_NamedColor *nc = &s_custom_colors[s_custom_color_count++];
+    AUI_NamedColor *nc = &s_custom_colors[s_custom_color_count++];
     nc->name = strdup(name);
     nc->color = color;
 }
@@ -184,12 +184,12 @@ void cui_richtext_register_color(const char *name, uint32_t color)
  * Icon Registry
  * ============================================================================ */
 
-void cui_richtext_register_icon(const char *name, const char *texture_path,
+void aui_richtext_register_icon(const char *name, const char *texture_path,
                                  float src_x, float src_y, float src_w, float src_h)
 {
     if (!name || !texture_path || s_icon_count >= 64) return;
 
-    CUI_IconEntry *ie = &s_icons[s_icon_count++];
+    AUI_IconEntry *ie = &s_icons[s_icon_count++];
     strncpy(ie->name, name, sizeof(ie->name) - 1);
     strncpy(ie->texture_path, texture_path, sizeof(ie->texture_path) - 1);
     ie->src_x = src_x;
@@ -198,7 +198,7 @@ void cui_richtext_register_icon(const char *name, const char *texture_path,
     ie->src_h = src_h;
 }
 
-bool cui_richtext_get_icon(const char *name, const char **texture_path,
+bool aui_richtext_get_icon(const char *name, const char **texture_path,
                             float *src_x, float *src_y, float *src_w, float *src_h)
 {
     if (!name) return false;
@@ -221,7 +221,7 @@ bool cui_richtext_get_icon(const char *name, const char **texture_path,
  * ============================================================================ */
 
 typedef struct {
-    CUI_RichTagType type;
+    AUI_RichTagType type;
     int plain_start;           /* Start position in plain text */
     union {
         uint32_t color;
@@ -230,7 +230,7 @@ typedef struct {
     };
 } TagStackEntry;
 
-static bool cui_parse_tag(const char *tag, int tag_len, CUI_RichTagType *type,
+static bool aui_parse_tag(const char *tag, int tag_len, AUI_RichTagType *type,
                           char *value, int value_size, bool *is_close)
 {
     *is_close = (tag_len > 0 && tag[0] == '/');
@@ -253,24 +253,24 @@ static bool cui_parse_tag(const char *tag, int tag_len, CUI_RichTagType *type,
     }
 
     /* Match tag name */
-    if (name_len == 1 && tag[0] == 'b') { *type = CUI_RTAG_BOLD; return true; }
-    if (name_len == 1 && tag[0] == 'i') { *type = CUI_RTAG_ITALIC; return true; }
-    if (name_len == 1 && tag[0] == 'u') { *type = CUI_RTAG_UNDERLINE; return true; }
-    if (name_len == 1 && tag[0] == 's') { *type = CUI_RTAG_STRIKETHROUGH; return true; }
-    if (name_len == 5 && strncasecmp(tag, "color", 5) == 0) { *type = CUI_RTAG_COLOR; return true; }
-    if (name_len == 4 && strncasecmp(tag, "size", 4) == 0) { *type = CUI_RTAG_SIZE; return true; }
-    if (name_len == 3 && strncasecmp(tag, "url", 3) == 0) { *type = CUI_RTAG_URL; return true; }
-    if (name_len == 3 && strncasecmp(tag, "img", 3) == 0) { *type = CUI_RTAG_IMAGE; return true; }
-    if (name_len == 4 && strncasecmp(tag, "icon", 4) == 0) { *type = CUI_RTAG_ICON; return true; }
-    if (name_len == 4 && strncasecmp(tag, "wave", 4) == 0) { *type = CUI_RTAG_WAVE; return true; }
-    if (name_len == 5 && strncasecmp(tag, "shake", 5) == 0) { *type = CUI_RTAG_SHAKE; return true; }
-    if (name_len == 7 && strncasecmp(tag, "rainbow", 7) == 0) { *type = CUI_RTAG_RAINBOW; return true; }
-    if (name_len == 4 && strncasecmp(tag, "fade", 4) == 0) { *type = CUI_RTAG_FADE; return true; }
+    if (name_len == 1 && tag[0] == 'b') { *type = AUI_RTAG_BOLD; return true; }
+    if (name_len == 1 && tag[0] == 'i') { *type = AUI_RTAG_ITALIC; return true; }
+    if (name_len == 1 && tag[0] == 'u') { *type = AUI_RTAG_UNDERLINE; return true; }
+    if (name_len == 1 && tag[0] == 's') { *type = AUI_RTAG_STRIKETHROUGH; return true; }
+    if (name_len == 5 && strncasecmp(tag, "color", 5) == 0) { *type = AUI_RTAG_COLOR; return true; }
+    if (name_len == 4 && strncasecmp(tag, "size", 4) == 0) { *type = AUI_RTAG_SIZE; return true; }
+    if (name_len == 3 && strncasecmp(tag, "url", 3) == 0) { *type = AUI_RTAG_URL; return true; }
+    if (name_len == 3 && strncasecmp(tag, "img", 3) == 0) { *type = AUI_RTAG_IMAGE; return true; }
+    if (name_len == 4 && strncasecmp(tag, "icon", 4) == 0) { *type = AUI_RTAG_ICON; return true; }
+    if (name_len == 4 && strncasecmp(tag, "wave", 4) == 0) { *type = AUI_RTAG_WAVE; return true; }
+    if (name_len == 5 && strncasecmp(tag, "shake", 5) == 0) { *type = AUI_RTAG_SHAKE; return true; }
+    if (name_len == 7 && strncasecmp(tag, "rainbow", 7) == 0) { *type = AUI_RTAG_RAINBOW; return true; }
+    if (name_len == 4 && strncasecmp(tag, "fade", 4) == 0) { *type = AUI_RTAG_FADE; return true; }
 
     return false;
 }
 
-static void cui_richtext_parse_internal(CUI_RichText *rt, const char *bbcode)
+static void aui_richtext_parse_internal(AUI_RichText *rt, const char *bbcode)
 {
     if (!rt || !bbcode) return;
 
@@ -311,32 +311,32 @@ static void cui_richtext_parse_internal(CUI_RichText *rt, const char *bbcode)
             }
 
             /* Parse tag */
-            CUI_RichTagType type;
+            AUI_RichTagType type;
             char value[256];
             bool is_close;
             int tag_len = (int)(end - p - 1);
 
-            if (cui_parse_tag(p + 1, tag_len, &type, value, sizeof(value), &is_close)) {
+            if (aui_parse_tag(p + 1, tag_len, &type, value, sizeof(value), &is_close)) {
                 if (is_close) {
                     /* Find matching open tag */
                     for (int i = stack_depth - 1; i >= 0; i--) {
                         if (stack[i].type == type) {
                             /* Create span */
                             if (rt->span_count < MAX_SPANS) {
-                                CUI_RichSpan *span = &rt->spans[rt->span_count++];
+                                AUI_RichSpan *span = &rt->spans[rt->span_count++];
                                 span->type = type;
                                 span->start = stack[i].plain_start;
                                 span->end = rt->plain_len;
 
                                 /* Copy type-specific data */
                                 switch (type) {
-                                    case CUI_RTAG_COLOR:
+                                    case AUI_RTAG_COLOR:
                                         span->color = stack[i].color;
                                         break;
-                                    case CUI_RTAG_SIZE:
+                                    case AUI_RTAG_SIZE:
                                         span->size = stack[i].size;
                                         break;
-                                    case CUI_RTAG_URL:
+                                    case AUI_RTAG_URL:
                                         strncpy(span->link.url, stack[i].url,
                                                 sizeof(span->link.url) - 1);
                                         break;
@@ -358,20 +358,20 @@ static void cui_richtext_parse_internal(CUI_RichText *rt, const char *bbcode)
                         entry->plain_start = rt->plain_len;
 
                         switch (type) {
-                            case CUI_RTAG_COLOR:
-                                entry->color = cui_richtext_parse_color(value);
+                            case AUI_RTAG_COLOR:
+                                entry->color = aui_richtext_parse_color(value);
                                 break;
-                            case CUI_RTAG_SIZE:
+                            case AUI_RTAG_SIZE:
                                 entry->size = (float)atof(value);
                                 break;
-                            case CUI_RTAG_URL:
+                            case AUI_RTAG_URL:
                                 strncpy(entry->url, value, sizeof(entry->url) - 1);
                                 break;
-                            case CUI_RTAG_ICON:
+                            case AUI_RTAG_ICON:
                                 /* Icon is self-closing, add placeholder char */
                                 if (rt->span_count < MAX_SPANS) {
-                                    CUI_RichSpan *span = &rt->spans[rt->span_count++];
-                                    span->type = CUI_RTAG_ICON;
+                                    AUI_RichSpan *span = &rt->spans[rt->span_count++];
+                                    span->type = AUI_RTAG_ICON;
                                     span->start = rt->plain_len;
                                     span->end = rt->plain_len + 1;
                                     strncpy(span->icon.name, value,
@@ -403,18 +403,18 @@ static void cui_richtext_parse_internal(CUI_RichText *rt, const char *bbcode)
  * Rich Text Creation
  * ============================================================================ */
 
-CUI_RichText *cui_richtext_parse(const char *bbcode)
+AUI_RichText *aui_richtext_parse(const char *bbcode)
 {
-    return cui_richtext_parse_ex(bbcode, NULL);
+    return aui_richtext_parse_ex(bbcode, NULL);
 }
 
-CUI_RichText *cui_richtext_parse_ex(const char *bbcode, const CUI_RichTextConfig *config)
+AUI_RichText *aui_richtext_parse_ex(const char *bbcode, const AUI_RichTextConfig *config)
 {
-    CUI_RichText *rt = (CUI_RichText *)calloc(1, sizeof(CUI_RichText));
+    AUI_RichText *rt = (AUI_RichText *)calloc(1, sizeof(AUI_RichText));
     if (!rt) return NULL;
 
     /* Set default config */
-    rt->config.alignment = CUI_RICH_ALIGN_LEFT;
+    rt->config.alignment = AUI_RICH_ALIGN_LEFT;
     rt->config.line_height_factor = 1.2f;
     rt->config.default_color = 0xFFFFFFFF;
     rt->config.default_size = 16;
@@ -425,18 +425,18 @@ CUI_RichText *cui_richtext_parse_ex(const char *bbcode, const CUI_RichTextConfig
     }
 
     if (bbcode) {
-        cui_richtext_parse_internal(rt, bbcode);
+        aui_richtext_parse_internal(rt, bbcode);
     }
 
     return rt;
 }
 
-CUI_RichText *cui_richtext_create(const char *plain_text)
+AUI_RichText *aui_richtext_create(const char *plain_text)
 {
-    CUI_RichText *rt = (CUI_RichText *)calloc(1, sizeof(CUI_RichText));
+    AUI_RichText *rt = (AUI_RichText *)calloc(1, sizeof(AUI_RichText));
     if (!rt) return NULL;
 
-    rt->config.alignment = CUI_RICH_ALIGN_LEFT;
+    rt->config.alignment = AUI_RICH_ALIGN_LEFT;
     rt->config.line_height_factor = 1.2f;
     rt->config.default_color = 0xFFFFFFFF;
     rt->config.default_size = 16;
@@ -454,7 +454,7 @@ CUI_RichText *cui_richtext_create(const char *plain_text)
     return rt;
 }
 
-void cui_richtext_destroy(CUI_RichText *rt)
+void aui_richtext_destroy(AUI_RichText *rt)
 {
     if (!rt) return;
     free(rt->bbcode);
@@ -466,29 +466,29 @@ void cui_richtext_destroy(CUI_RichText *rt)
  * Rich Text Modification
  * ============================================================================ */
 
-void cui_richtext_set_bbcode(CUI_RichText *rt, const char *bbcode)
+void aui_richtext_set_bbcode(AUI_RichText *rt, const char *bbcode)
 {
     if (rt) {
-        cui_richtext_parse_internal(rt, bbcode);
+        aui_richtext_parse_internal(rt, bbcode);
     }
 }
 
-const char *cui_richtext_get_bbcode(const CUI_RichText *rt)
+const char *aui_richtext_get_bbcode(const AUI_RichText *rt)
 {
     return rt ? rt->bbcode : "";
 }
 
-const char *cui_richtext_get_plain(const CUI_RichText *rt)
+const char *aui_richtext_get_plain(const AUI_RichText *rt)
 {
     return rt ? rt->plain : "";
 }
 
-int cui_richtext_get_length(const CUI_RichText *rt)
+int aui_richtext_get_length(const AUI_RichText *rt)
 {
     return rt ? rt->plain_len : 0;
 }
 
-void cui_richtext_append(CUI_RichText *rt, const char *bbcode)
+void aui_richtext_append(AUI_RichText *rt, const char *bbcode)
 {
     if (!rt || !bbcode) return;
 
@@ -503,11 +503,11 @@ void cui_richtext_append(CUI_RichText *rt, const char *bbcode)
     if (add_len > 0) {
         memcpy(rt->bbcode + old_len, bbcode, add_len);
         rt->bbcode[old_len + add_len] = '\0';
-        cui_richtext_parse_internal(rt, rt->bbcode);
+        aui_richtext_parse_internal(rt, rt->bbcode);
     }
 }
 
-void cui_richtext_clear(CUI_RichText *rt)
+void aui_richtext_clear(AUI_RichText *rt)
 {
     if (!rt) return;
     if (rt->bbcode) rt->bbcode[0] = '\0';
@@ -523,7 +523,7 @@ void cui_richtext_clear(CUI_RichText *rt)
  * Rich Text Layout
  * ============================================================================ */
 
-void cui_richtext_layout(CUI_RichText *rt, float max_width)
+void aui_richtext_layout(AUI_RichText *rt, float max_width)
 {
     if (!rt) return;
 
@@ -539,7 +539,7 @@ void cui_richtext_layout(CUI_RichText *rt, float max_width)
     }
 
     /* Simple line-breaking layout */
-    /* TODO: Use actual font metrics from CUI_Context */
+    /* TODO: Use actual font metrics from AUI_Context */
     float char_width = 8;   /* Placeholder */
     float line_height = rt->config.default_size * rt->config.line_height_factor;
 
@@ -571,7 +571,7 @@ void cui_richtext_layout(CUI_RichText *rt, float max_width)
         }
 
         if (end_line) {
-            CUI_RichLine *line = &rt->lines[rt->line_count++];
+            AUI_RichLine *line = &rt->lines[rt->line_count++];
             line->start_char = line_start;
             line->end_char = i;
             line->width = line_width;
@@ -595,12 +595,12 @@ void cui_richtext_layout(CUI_RichText *rt, float max_width)
 
     /* Build hotspots for URLs */
     for (int i = 0; i < rt->span_count && rt->hotspot_count < MAX_HOTSPOTS; i++) {
-        CUI_RichSpan *span = &rt->spans[i];
-        if (span->type != CUI_RTAG_URL) continue;
+        AUI_RichSpan *span = &rt->spans[i];
+        if (span->type != AUI_RTAG_URL) continue;
 
         /* Find lines that contain this span */
         for (int j = 0; j < rt->line_count; j++) {
-            CUI_RichLine *line = &rt->lines[j];
+            AUI_RichLine *line = &rt->lines[j];
             if (line->end_char <= span->start) continue;
             if (line->start_char >= span->end) break;
 
@@ -608,7 +608,7 @@ void cui_richtext_layout(CUI_RichText *rt, float max_width)
             int start = (span->start > line->start_char) ? span->start : line->start_char;
             int end = (span->end < line->end_char) ? span->end : line->end_char;
 
-            CUI_RichHotspot *hs = &rt->hotspots[rt->hotspot_count++];
+            AUI_RichHotspot *hs = &rt->hotspots[rt->hotspot_count++];
             hs->x = (start - line->start_char) * char_width;
             hs->y = line->y_offset;
             hs->w = (end - start) * char_width;
@@ -621,18 +621,18 @@ void cui_richtext_layout(CUI_RichText *rt, float max_width)
     rt->layout_valid = true;
 }
 
-void cui_richtext_get_size(const CUI_RichText *rt, float *width, float *height)
+void aui_richtext_get_size(const AUI_RichText *rt, float *width, float *height)
 {
     if (width) *width = rt ? rt->total_width : 0;
     if (height) *height = rt ? rt->total_height : 0;
 }
 
-int cui_richtext_get_line_count(const CUI_RichText *rt)
+int aui_richtext_get_line_count(const AUI_RichText *rt)
 {
     return rt ? rt->line_count : 0;
 }
 
-const CUI_RichLine *cui_richtext_get_line(const CUI_RichText *rt, int index)
+const AUI_RichLine *aui_richtext_get_line(const AUI_RichText *rt, int index)
 {
     if (!rt || index < 0 || index >= rt->line_count) return NULL;
     return &rt->lines[index];
@@ -642,33 +642,33 @@ const CUI_RichLine *cui_richtext_get_line(const CUI_RichText *rt, int index)
  * Rich Text Rendering
  * ============================================================================ */
 
-void cui_richtext_draw(CUI_Context *ctx, CUI_RichText *rt, float x, float y)
+void aui_richtext_draw(AUI_Context *ctx, AUI_RichText *rt, float x, float y)
 {
-    cui_richtext_draw_ex(ctx, rt, x, y, NULL);
+    aui_richtext_draw_ex(ctx, rt, x, y, NULL);
 }
 
-void cui_richtext_draw_ex(CUI_Context *ctx, CUI_RichText *rt, float x, float y,
-                           const CUI_RichTextConfig *config)
+void aui_richtext_draw_ex(AUI_Context *ctx, AUI_RichText *rt, float x, float y,
+                           const AUI_RichTextConfig *config)
 {
     if (!ctx || !rt || rt->plain_len == 0) return;
 
     /* Ensure layout is valid */
     if (!rt->layout_valid) {
-        cui_richtext_layout(rt, rt->config.max_width);
+        aui_richtext_layout(rt, rt->config.max_width);
     }
 
-    CUI_RichTextConfig cfg = config ? *config : rt->config;
+    AUI_RichTextConfig cfg = config ? *config : rt->config;
 
     /* For each line */
     for (int li = 0; li < rt->line_count; li++) {
-        CUI_RichLine *line = &rt->lines[li];
+        AUI_RichLine *line = &rt->lines[li];
         float lx = x;
         float ly = y + line->y_offset;
 
         /* Apply alignment */
-        if (cfg.alignment == CUI_RICH_ALIGN_CENTER) {
+        if (cfg.alignment == AUI_RICH_ALIGN_CENTER) {
             lx += (rt->total_width - line->width) / 2;
-        } else if (cfg.alignment == CUI_RICH_ALIGN_RIGHT) {
+        } else if (cfg.alignment == AUI_RICH_ALIGN_RIGHT) {
             lx += rt->total_width - line->width;
         }
 
@@ -678,21 +678,21 @@ void cui_richtext_draw_ex(CUI_Context *ctx, CUI_RichText *rt, float x, float y,
         bool wave = false, shake = false, rainbow = false;
 
         for (int si = 0; si < rt->span_count; si++) {
-            CUI_RichSpan *span = &rt->spans[si];
+            AUI_RichSpan *span = &rt->spans[si];
             if (span->end <= line->start_char) continue;
             if (span->start >= line->end_char) break;
 
             /* Apply span effects */
             switch (span->type) {
-                case CUI_RTAG_BOLD: bold = true; break;
-                case CUI_RTAG_ITALIC: italic = true; break;
-                case CUI_RTAG_UNDERLINE: underline = true; break;
-                case CUI_RTAG_STRIKETHROUGH: strikethrough = true; break;
-                case CUI_RTAG_COLOR: color = span->color; break;
-                case CUI_RTAG_WAVE: wave = true; break;
-                case CUI_RTAG_SHAKE: shake = true; break;
-                case CUI_RTAG_RAINBOW: rainbow = true; break;
-                case CUI_RTAG_URL:
+                case AUI_RTAG_BOLD: bold = true; break;
+                case AUI_RTAG_ITALIC: italic = true; break;
+                case AUI_RTAG_UNDERLINE: underline = true; break;
+                case AUI_RTAG_STRIKETHROUGH: strikethrough = true; break;
+                case AUI_RTAG_COLOR: color = span->color; break;
+                case AUI_RTAG_WAVE: wave = true; break;
+                case AUI_RTAG_SHAKE: shake = true; break;
+                case AUI_RTAG_RAINBOW: rainbow = true; break;
+                case AUI_RTAG_URL:
                     if (cfg.meta_underlines) underline = true;
                     color = ctx->theme.accent;
                     break;
@@ -739,16 +739,16 @@ void cui_richtext_draw_ex(CUI_Context *ctx, CUI_RichText *rt, float x, float y,
 
             /* Draw character */
             char str[2] = {ch, '\0'};
-            cui_draw_text(ctx, str, cx, cy, color);
+            aui_draw_text(ctx, str, cx, cy, color);
 
             /* Draw underline */
             if (underline) {
-                cui_draw_rect(ctx, cx, cy + cfg.default_size + 2, char_w, 1, color);
+                aui_draw_rect(ctx, cx, cy + cfg.default_size + 2, char_w, 1, color);
             }
 
             /* Draw strikethrough */
             if (strikethrough) {
-                cui_draw_rect(ctx, cx, cy + cfg.default_size / 2, char_w, 1, color);
+                aui_draw_rect(ctx, cx, cy + cfg.default_size / 2, char_w, 1, color);
             }
 
             cx += char_w;
@@ -765,7 +765,7 @@ void cui_richtext_draw_ex(CUI_Context *ctx, CUI_RichText *rt, float x, float y,
         float char_w = 8;  /* Placeholder */
 
         for (int li = 0; li < rt->line_count; li++) {
-            CUI_RichLine *line = &rt->lines[li];
+            AUI_RichLine *line = &rt->lines[li];
             if (line->end_char <= sel_start) continue;
             if (line->start_char >= sel_end) break;
 
@@ -776,12 +776,12 @@ void cui_richtext_draw_ex(CUI_Context *ctx, CUI_RichText *rt, float x, float y,
             float sy = y + line->y_offset;
             float sw = (end - start) * char_w;
 
-            cui_draw_rect(ctx, sx, sy, sw, line->height, ctx->theme.selection);
+            aui_draw_rect(ctx, sx, sy, sw, line->height, ctx->theme.selection);
         }
     }
 }
 
-void cui_richtext_update(CUI_RichText *rt, float delta_time)
+void aui_richtext_update(AUI_RichText *rt, float delta_time)
 {
     if (rt) {
         rt->anim_time += delta_time;
@@ -792,12 +792,12 @@ void cui_richtext_update(CUI_RichText *rt, float delta_time)
  * Rich Text Interaction
  * ============================================================================ */
 
-const char *cui_richtext_get_link_at(const CUI_RichText *rt, float x, float y)
+const char *aui_richtext_get_link_at(const AUI_RichText *rt, float x, float y)
 {
     if (!rt) return NULL;
 
     for (int i = 0; i < rt->hotspot_count; i++) {
-        const CUI_RichHotspot *hs = &rt->hotspots[i];
+        const AUI_RichHotspot *hs = &rt->hotspots[i];
         if (x >= hs->x && x < hs->x + hs->w &&
             y >= hs->y && y < hs->y + hs->h) {
             return hs->url;
@@ -806,14 +806,14 @@ const char *cui_richtext_get_link_at(const CUI_RichText *rt, float x, float y)
     return NULL;
 }
 
-int cui_richtext_get_char_at(const CUI_RichText *rt, float x, float y)
+int aui_richtext_get_char_at(const AUI_RichText *rt, float x, float y)
 {
     if (!rt) return -1;
 
     float char_w = 8;  /* Placeholder */
 
     for (int li = 0; li < rt->line_count; li++) {
-        const CUI_RichLine *line = &rt->lines[li];
+        const AUI_RichLine *line = &rt->lines[li];
         if (y < line->y_offset) continue;
         if (y >= line->y_offset + line->height) continue;
 
@@ -826,7 +826,7 @@ int cui_richtext_get_char_at(const CUI_RichText *rt, float x, float y)
     return -1;
 }
 
-void cui_richtext_get_char_pos(const CUI_RichText *rt, int char_index,
+void aui_richtext_get_char_pos(const AUI_RichText *rt, int char_index,
                                 float *x, float *y)
 {
     if (!rt || x == NULL || y == NULL) return;
@@ -834,7 +834,7 @@ void cui_richtext_get_char_pos(const CUI_RichText *rt, int char_index,
     float char_w = 8;  /* Placeholder */
 
     for (int li = 0; li < rt->line_count; li++) {
-        const CUI_RichLine *line = &rt->lines[li];
+        const AUI_RichLine *line = &rt->lines[li];
         if (char_index >= line->start_char && char_index <= line->end_char) {
             *x = (char_index - line->start_char) * char_w;
             *y = line->y_offset;
@@ -846,7 +846,7 @@ void cui_richtext_get_char_pos(const CUI_RichText *rt, int char_index,
     *y = 0;
 }
 
-bool cui_richtext_hit_test(const CUI_RichText *rt, float x, float y)
+bool aui_richtext_hit_test(const AUI_RichText *rt, float x, float y)
 {
     if (!rt) return false;
     return x >= 0 && x < rt->total_width && y >= 0 && y < rt->total_height;
@@ -856,7 +856,7 @@ bool cui_richtext_hit_test(const CUI_RichText *rt, float x, float y)
  * Selection
  * ============================================================================ */
 
-void cui_richtext_set_selection(CUI_RichText *rt, int start, int end)
+void aui_richtext_set_selection(AUI_RichText *rt, int start, int end)
 {
     if (rt) {
         rt->selection_start = start;
@@ -864,13 +864,13 @@ void cui_richtext_set_selection(CUI_RichText *rt, int start, int end)
     }
 }
 
-void cui_richtext_get_selection(const CUI_RichText *rt, int *start, int *end)
+void aui_richtext_get_selection(const AUI_RichText *rt, int *start, int *end)
 {
     if (start) *start = rt ? rt->selection_start : 0;
     if (end) *end = rt ? rt->selection_end : 0;
 }
 
-void cui_richtext_clear_selection(CUI_RichText *rt)
+void aui_richtext_clear_selection(AUI_RichText *rt)
 {
     if (rt) {
         rt->selection_start = 0;
@@ -878,7 +878,7 @@ void cui_richtext_clear_selection(CUI_RichText *rt)
     }
 }
 
-const char *cui_richtext_get_selected_text(const CUI_RichText *rt)
+const char *aui_richtext_get_selected_text(const AUI_RichText *rt)
 {
     static char buffer[1024];
     if (!rt || rt->selection_start == rt->selection_end) {
@@ -903,53 +903,53 @@ const char *cui_richtext_get_selected_text(const CUI_RichText *rt)
  * Rich Text Node Widget
  * ============================================================================ */
 
-CUI_Node *cui_richtext_node_create(CUI_Context *ctx, const char *name,
+AUI_Node *aui_richtext_node_create(AUI_Context *ctx, const char *name,
                                     const char *bbcode)
 {
-    CUI_Node *node = cui_node_create(ctx, CUI_NODE_RICHTEXT, name);
+    AUI_Node *node = aui_node_create(ctx, AUI_NODE_RICHTEXT, name);
     if (node && bbcode) {
         /* Store rich text in custom_data */
-        node->custom_data = cui_richtext_parse(bbcode);
+        node->custom_data = aui_richtext_parse(bbcode);
     }
     return node;
 }
 
-void cui_richtext_node_set_text(CUI_Node *node, const char *bbcode)
+void aui_richtext_node_set_text(AUI_Node *node, const char *bbcode)
 {
-    if (!node || node->type != CUI_NODE_RICHTEXT) return;
+    if (!node || node->type != AUI_NODE_RICHTEXT) return;
 
-    CUI_RichText *rt = (CUI_RichText *)node->custom_data;
+    AUI_RichText *rt = (AUI_RichText *)node->custom_data;
     if (!rt) {
-        rt = cui_richtext_parse(bbcode);
+        rt = aui_richtext_parse(bbcode);
         node->custom_data = rt;
     } else {
-        cui_richtext_set_bbcode(rt, bbcode);
+        aui_richtext_set_bbcode(rt, bbcode);
     }
 }
 
-const char *cui_richtext_node_get_text(CUI_Node *node)
+const char *aui_richtext_node_get_text(AUI_Node *node)
 {
-    if (!node || node->type != CUI_NODE_RICHTEXT) return "";
-    CUI_RichText *rt = (CUI_RichText *)node->custom_data;
-    return rt ? cui_richtext_get_bbcode(rt) : "";
+    if (!node || node->type != AUI_NODE_RICHTEXT) return "";
+    AUI_RichText *rt = (AUI_RichText *)node->custom_data;
+    return rt ? aui_richtext_get_bbcode(rt) : "";
 }
 
-void cui_richtext_node_set_link_callback(CUI_Node *node,
-                                          CUI_RichLinkCallback callback,
+void aui_richtext_node_set_link_callback(AUI_Node *node,
+                                          AUI_RichLinkCallback callback,
                                           void *userdata)
 {
-    if (!node || node->type != CUI_NODE_RICHTEXT) return;
-    CUI_RichText *rt = (CUI_RichText *)node->custom_data;
+    if (!node || node->type != AUI_NODE_RICHTEXT) return;
+    AUI_RichText *rt = (AUI_RichText *)node->custom_data;
     if (rt) {
         rt->config.on_link_click = callback;
         rt->config.link_userdata = userdata;
     }
 }
 
-void cui_richtext_node_set_alignment(CUI_Node *node, CUI_RichTextAlign alignment)
+void aui_richtext_node_set_alignment(AUI_Node *node, AUI_RichTextAlign alignment)
 {
-    if (!node || node->type != CUI_NODE_RICHTEXT) return;
-    CUI_RichText *rt = (CUI_RichText *)node->custom_data;
+    if (!node || node->type != AUI_NODE_RICHTEXT) return;
+    AUI_RichText *rt = (AUI_RichText *)node->custom_data;
     if (rt) {
         rt->config.alignment = alignment;
         rt->layout_valid = false;
@@ -960,18 +960,18 @@ void cui_richtext_node_set_alignment(CUI_Node *node, CUI_RichTextAlign alignment
  * Immediate Mode
  * ============================================================================ */
 
-void cui_rich_label(CUI_Context *ctx, const char *bbcode)
+void aui_rich_label(AUI_Context *ctx, const char *bbcode)
 {
-    cui_rich_label_ex(ctx, bbcode, NULL, NULL);
+    aui_rich_label_ex(ctx, bbcode, NULL, NULL);
 }
 
-bool cui_rich_label_ex(CUI_Context *ctx, const char *bbcode,
-                        CUI_RichLinkCallback on_link, void *userdata)
+bool aui_rich_label_ex(AUI_Context *ctx, const char *bbcode,
+                        AUI_RichLinkCallback on_link, void *userdata)
 {
     if (!ctx || !bbcode) return false;
 
     /* Parse and render (not efficient for per-frame, but convenient) */
-    CUI_RichText *rt = cui_richtext_parse(bbcode);
+    AUI_RichText *rt = aui_richtext_parse(bbcode);
     if (!rt) return false;
 
     rt->config.on_link_click = on_link;
@@ -981,13 +981,13 @@ bool cui_rich_label_ex(CUI_Context *ctx, const char *bbcode,
     /* TODO: Integrate with immediate mode layout system */
     float x = 10, y = 10;  /* Placeholder */
 
-    cui_richtext_layout(rt, 0);  /* No wrapping */
-    cui_richtext_draw(ctx, rt, x, y);
+    aui_richtext_layout(rt, 0);  /* No wrapping */
+    aui_richtext_draw(ctx, rt, x, y);
 
     /* Check for link clicks */
     bool clicked = false;
     if (ctx->input.mouse_pressed[0]) {
-        const char *link = cui_richtext_get_link_at(rt,
+        const char *link = aui_richtext_get_link_at(rt,
             ctx->input.mouse_x - x, ctx->input.mouse_y - y);
         if (link && on_link) {
             on_link(link, userdata);
@@ -995,6 +995,6 @@ bool cui_rich_label_ex(CUI_Context *ctx, const char *bbcode,
         }
     }
 
-    cui_richtext_destroy(rt);
+    aui_richtext_destroy(rt);
     return clicked;
 }

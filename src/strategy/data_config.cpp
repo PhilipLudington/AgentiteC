@@ -1,5 +1,5 @@
-#include "carbon/carbon.h"
-#include "carbon/data_config.h"
+#include "agentite/agentite.h"
+#include "agentite/data_config.h"
 #include "toml.h"
 #include <stdlib.h>
 #include <string.h>
@@ -24,7 +24,7 @@ typedef struct HashEntry {
 
 #define HASH_TABLE_SIZE 256
 
-struct Carbon_DataLoader {
+struct Agentite_DataLoader {
     // Data storage
     void *data;             // Contiguous array of entries
     size_t entry_size;      // Size of each entry
@@ -35,15 +35,15 @@ struct Carbon_DataLoader {
     HashEntry *hash_table[HASH_TABLE_SIZE];
 
     // Error message
-    char error[CARBON_DATA_MAX_ERROR];
+    char error[AGENTITE_DATA_MAX_ERROR];
 };
 
-Carbon_DataLoader *carbon_data_create(void) {
-    Carbon_DataLoader *loader = CARBON_ALLOC(Carbon_DataLoader);
+Agentite_DataLoader *agentite_data_create(void) {
+    Agentite_DataLoader *loader = AGENTITE_ALLOC(Agentite_DataLoader);
     return loader;
 }
 
-static void free_hash_table(Carbon_DataLoader *loader) {
+static void free_hash_table(Agentite_DataLoader *loader) {
     for (int i = 0; i < HASH_TABLE_SIZE; i++) {
         HashEntry *entry = loader->hash_table[i];
         while (entry) {
@@ -55,7 +55,7 @@ static void free_hash_table(Carbon_DataLoader *loader) {
     }
 }
 
-void carbon_data_destroy(Carbon_DataLoader *loader) {
+void agentite_data_destroy(Agentite_DataLoader *loader) {
     if (!loader) return;
 
     free_hash_table(loader);
@@ -63,7 +63,7 @@ void carbon_data_destroy(Carbon_DataLoader *loader) {
     free(loader);
 }
 
-void carbon_data_clear(Carbon_DataLoader *loader) {
+void agentite_data_clear(Agentite_DataLoader *loader) {
     if (!loader) return;
 
     free_hash_table(loader);
@@ -75,7 +75,7 @@ void carbon_data_clear(Carbon_DataLoader *loader) {
     loader->error[0] = '\0';
 }
 
-static bool add_to_hash_table(Carbon_DataLoader *loader, const char *id, size_t data_index) {
+static bool add_to_hash_table(Agentite_DataLoader *loader, const char *id, size_t data_index) {
     if (!id || !id[0]) return false;
 
     unsigned long hash = hash_string(id) % HASH_TABLE_SIZE;
@@ -92,7 +92,7 @@ static bool add_to_hash_table(Carbon_DataLoader *loader, const char *id, size_t 
     return true;
 }
 
-static bool ensure_capacity(Carbon_DataLoader *loader, size_t needed) {
+static bool ensure_capacity(Agentite_DataLoader *loader, size_t needed) {
     if (loader->capacity >= needed) return true;
 
     size_t new_capacity = loader->capacity == 0 ? 16 : loader->capacity * 2;
@@ -106,9 +106,9 @@ static bool ensure_capacity(Carbon_DataLoader *loader, size_t needed) {
     return true;
 }
 
-static bool load_from_table(Carbon_DataLoader *loader, toml_table_t *root,
+static bool load_from_table(Agentite_DataLoader *loader, toml_table_t *root,
                             const char *array_key, size_t entry_size,
-                            Carbon_DataParseFunc parse_func, void *userdata) {
+                            Agentite_DataParseFunc parse_func, void *userdata) {
     loader->entry_size = entry_size;
 
     toml_array_t *array = NULL;
@@ -175,9 +175,9 @@ static bool load_from_table(Carbon_DataLoader *loader, toml_table_t *root,
     return true;
 }
 
-bool carbon_data_load(Carbon_DataLoader *loader, const char *path,
+bool agentite_data_load(Agentite_DataLoader *loader, const char *path,
                       const char *array_key, size_t entry_size,
-                      Carbon_DataParseFunc parse_func, void *userdata) {
+                      Agentite_DataParseFunc parse_func, void *userdata) {
     if (!loader || !path || !parse_func || entry_size == 0) {
         if (loader) {
             snprintf(loader->error, sizeof(loader->error), "Invalid parameters");
@@ -208,9 +208,9 @@ bool carbon_data_load(Carbon_DataLoader *loader, const char *path,
     return success;
 }
 
-bool carbon_data_load_string(Carbon_DataLoader *loader, const char *toml_string,
+bool agentite_data_load_string(Agentite_DataLoader *loader, const char *toml_string,
                              const char *array_key, size_t entry_size,
-                             Carbon_DataParseFunc parse_func, void *userdata) {
+                             Agentite_DataParseFunc parse_func, void *userdata) {
     if (!loader || !toml_string || !parse_func || entry_size == 0) {
         if (loader) {
             snprintf(loader->error, sizeof(loader->error), "Invalid parameters");
@@ -241,17 +241,17 @@ bool carbon_data_load_string(Carbon_DataLoader *loader, const char *toml_string,
     return success;
 }
 
-size_t carbon_data_count(const Carbon_DataLoader *loader) {
+size_t agentite_data_count(const Agentite_DataLoader *loader) {
     if (!loader) return 0;
     return loader->count;
 }
 
-void *carbon_data_get_by_index(const Carbon_DataLoader *loader, size_t index) {
+void *agentite_data_get_by_index(const Agentite_DataLoader *loader, size_t index) {
     if (!loader || index >= loader->count) return NULL;
     return (char *)loader->data + (index * loader->entry_size);
 }
 
-void *carbon_data_find(const Carbon_DataLoader *loader, const char *id) {
+void *agentite_data_find(const Agentite_DataLoader *loader, const char *id) {
     if (!loader || !id) return NULL;
 
     unsigned long hash = hash_string(id) % HASH_TABLE_SIZE;
@@ -259,7 +259,7 @@ void *carbon_data_find(const Carbon_DataLoader *loader, const char *id) {
 
     while (entry) {
         if (strcmp(entry->id, id) == 0) {
-            return carbon_data_get_by_index(loader, entry->data_index);
+            return agentite_data_get_by_index(loader, entry->data_index);
         }
         entry = entry->next;
     }
@@ -267,14 +267,14 @@ void *carbon_data_find(const Carbon_DataLoader *loader, const char *id) {
     return NULL;
 }
 
-const char *carbon_data_get_last_error(const Carbon_DataLoader *loader) {
+const char *agentite_data_get_last_error(const Agentite_DataLoader *loader) {
     if (!loader) return "Invalid loader";
     return loader->error;
 }
 
 // Helper functions for TOML parsing
 
-bool carbon_toml_get_string(toml_table_t *table, const char *key,
+bool agentite_toml_get_string(toml_table_t *table, const char *key,
                             char *out_buf, size_t buf_size) {
     if (!table || !key || !out_buf || buf_size == 0) return false;
 
@@ -287,7 +287,7 @@ bool carbon_toml_get_string(toml_table_t *table, const char *key,
     return true;
 }
 
-bool carbon_toml_get_int(toml_table_t *table, const char *key, int *out_value) {
+bool agentite_toml_get_int(toml_table_t *table, const char *key, int *out_value) {
     if (!table || !key || !out_value) return false;
 
     toml_datum_t d = toml_int_in(table, key);
@@ -297,7 +297,7 @@ bool carbon_toml_get_int(toml_table_t *table, const char *key, int *out_value) {
     return true;
 }
 
-bool carbon_toml_get_int64(toml_table_t *table, const char *key, long long *out_value) {
+bool agentite_toml_get_int64(toml_table_t *table, const char *key, long long *out_value) {
     if (!table || !key || !out_value) return false;
 
     toml_datum_t d = toml_int_in(table, key);
@@ -307,7 +307,7 @@ bool carbon_toml_get_int64(toml_table_t *table, const char *key, long long *out_
     return true;
 }
 
-bool carbon_toml_get_float(toml_table_t *table, const char *key, float *out_value) {
+bool agentite_toml_get_float(toml_table_t *table, const char *key, float *out_value) {
     if (!table || !key || !out_value) return false;
 
     toml_datum_t d = toml_double_in(table, key);
@@ -317,7 +317,7 @@ bool carbon_toml_get_float(toml_table_t *table, const char *key, float *out_valu
     return true;
 }
 
-bool carbon_toml_get_double(toml_table_t *table, const char *key, double *out_value) {
+bool agentite_toml_get_double(toml_table_t *table, const char *key, double *out_value) {
     if (!table || !key || !out_value) return false;
 
     toml_datum_t d = toml_double_in(table, key);
@@ -327,7 +327,7 @@ bool carbon_toml_get_double(toml_table_t *table, const char *key, double *out_va
     return true;
 }
 
-bool carbon_toml_get_bool(toml_table_t *table, const char *key, bool *out_value) {
+bool agentite_toml_get_bool(toml_table_t *table, const char *key, bool *out_value) {
     if (!table || !key || !out_value) return false;
 
     toml_datum_t d = toml_bool_in(table, key);
@@ -337,7 +337,7 @@ bool carbon_toml_get_bool(toml_table_t *table, const char *key, bool *out_value)
     return true;
 }
 
-bool carbon_toml_get_string_array(toml_table_t *table, const char *key,
+bool agentite_toml_get_string_array(toml_table_t *table, const char *key,
                                    char ***out_array, int *out_count) {
     if (!table || !key || !out_array || !out_count) return false;
 
@@ -368,7 +368,7 @@ bool carbon_toml_get_string_array(toml_table_t *table, const char *key,
     return true;
 }
 
-void carbon_toml_free_strings(char **array, int count) {
+void agentite_toml_free_strings(char **array, int count) {
     if (!array) return;
     for (int i = 0; i < count; i++) {
         free(array[i]);
@@ -376,7 +376,7 @@ void carbon_toml_free_strings(char **array, int count) {
     free(array);
 }
 
-bool carbon_toml_get_int_array(toml_table_t *table, const char *key,
+bool agentite_toml_get_int_array(toml_table_t *table, const char *key,
                                 int **out_array, int *out_count) {
     if (!table || !key || !out_array || !out_count) return false;
 
@@ -403,7 +403,7 @@ bool carbon_toml_get_int_array(toml_table_t *table, const char *key,
     return true;
 }
 
-bool carbon_toml_get_float_array(toml_table_t *table, const char *key,
+bool agentite_toml_get_float_array(toml_table_t *table, const char *key,
                                   float **out_array, int *out_count) {
     if (!table || !key || !out_array || !out_count) return false;
 
@@ -430,17 +430,17 @@ bool carbon_toml_get_float_array(toml_table_t *table, const char *key,
     return true;
 }
 
-bool carbon_toml_has_key(toml_table_t *table, const char *key) {
+bool agentite_toml_has_key(toml_table_t *table, const char *key) {
     if (!table || !key) return false;
     return toml_key_exists(table, key) != 0;
 }
 
-toml_table_t *carbon_toml_get_table(toml_table_t *table, const char *key) {
+toml_table_t *agentite_toml_get_table(toml_table_t *table, const char *key) {
     if (!table || !key) return NULL;
     return toml_table_in(table, key);
 }
 
-toml_array_t *carbon_toml_get_array(toml_table_t *table, const char *key) {
+toml_array_t *agentite_toml_get_array(toml_table_t *table, const char *key) {
     if (!table || !key) return NULL;
     return toml_array_in(table, key);
 }

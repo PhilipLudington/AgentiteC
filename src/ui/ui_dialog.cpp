@@ -1,10 +1,10 @@
 /*
- * Carbon UI - Dialog and Popup System Implementation
+ * Agentite UI - Dialog and Popup System Implementation
  */
 
-#include "carbon/ui_dialog.h"
-#include "carbon/ui.h"
-#include "carbon/ui_tween.h"
+#include "agentite/ui_dialog.h"
+#include "agentite/ui.h"
+#include "agentite/ui_tween.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -22,85 +22,85 @@
  * Internal Structures
  * ============================================================================ */
 
-typedef struct CUI_DialogEntry {
-    CUI_Node *node;
-    CUI_DialogConfig config;
+typedef struct AUI_DialogEntry {
+    AUI_Node *node;
+    AUI_DialogConfig config;
     bool active;
     bool closing;
     float close_timer;
-} CUI_DialogEntry;
+} AUI_DialogEntry;
 
-typedef struct CUI_ContextMenuState {
-    CUI_MenuItem items[MAX_CONTEXT_MENU_ITEMS];
+typedef struct AUI_ContextMenuState {
+    AUI_MenuItem items[MAX_CONTEXT_MENU_ITEMS];
     int item_count;
     float x, y;
     bool active;
     int hovered_index;
     int submenu_index;
-    CUI_Rect bounds;
-} CUI_ContextMenuState;
+    AUI_Rect bounds;
+} AUI_ContextMenuState;
 
-typedef struct CUI_TooltipState {
+typedef struct AUI_TooltipState {
     char text[MAX_TOOLTIP_TEXT];
-    CUI_TooltipConfig config;
+    AUI_TooltipConfig config;
     float x, y;
     bool active;
     float hover_timer;
-    CUI_Node *hover_node;
-} CUI_TooltipState;
+    AUI_Node *hover_node;
+} AUI_TooltipState;
 
-typedef struct CUI_Notification {
+typedef struct AUI_Notification {
     char title[64];
     char message[256];
-    CUI_NotificationType type;
+    AUI_NotificationType type;
     float duration;
     float elapsed;
     bool active;
     float y_offset;  /* For animation */
-} CUI_Notification;
+} AUI_Notification;
 
-struct CUI_DialogManager {
-    CUI_DialogEntry dialogs[MAX_DIALOGS];
+struct AUI_DialogManager {
+    AUI_DialogEntry dialogs[MAX_DIALOGS];
     int dialog_count;
 
-    CUI_ContextMenuState context_menu;
-    CUI_TooltipState tooltip;
+    AUI_ContextMenuState context_menu;
+    AUI_TooltipState tooltip;
 
-    CUI_Notification notifications[MAX_NOTIFICATIONS];
+    AUI_Notification notifications[MAX_NOTIFICATIONS];
     int notification_count;
-    CUI_NotifyPosition notify_position;
+    AUI_NotifyPosition notify_position;
 
-    CUI_TweenManager *tweens;
+    AUI_TweenManager *tweens;
 };
 
 /* ============================================================================
  * Dialog Manager Lifecycle
  * ============================================================================ */
 
-CUI_DialogManager *cui_dialog_manager_create(void)
+AUI_DialogManager *aui_dialog_manager_create(void)
 {
-    CUI_DialogManager *dm = (CUI_DialogManager *)calloc(1, sizeof(CUI_DialogManager));
+    AUI_DialogManager *dm = (AUI_DialogManager *)calloc(1, sizeof(AUI_DialogManager));
     if (!dm) return NULL;
 
-    dm->notify_position = CUI_NOTIFY_TOP_RIGHT;
-    dm->tweens = cui_tween_manager_create();
+    dm->notify_position = AUI_NOTIFY_TOP_RIGHT;
+    dm->tweens = aui_tween_manager_create();
 
     return dm;
 }
 
-void cui_dialog_manager_destroy(CUI_DialogManager *dm)
+void aui_dialog_manager_destroy(AUI_DialogManager *dm)
 {
     if (!dm) return;
 
     /* Destroy all dialog nodes */
     for (int i = 0; i < dm->dialog_count; i++) {
         if (dm->dialogs[i].node) {
-            cui_node_destroy(dm->dialogs[i].node);
+            aui_node_destroy(dm->dialogs[i].node);
         }
     }
 
     if (dm->tweens) {
-        cui_tween_manager_destroy(dm->tweens);
+        aui_tween_manager_destroy(dm->tweens);
     }
 
     free(dm);
@@ -110,27 +110,27 @@ void cui_dialog_manager_destroy(CUI_DialogManager *dm)
  * Internal Helpers
  * ============================================================================ */
 
-static uint32_t cui_notification_color(CUI_NotificationType type)
+static uint32_t aui_notification_color(AUI_NotificationType type)
 {
     switch (type) {
-        case CUI_NOTIFY_INFO:    return 0xFF8B4513;  /* Brown-ish blue */
-        case CUI_NOTIFY_SUCCESS: return 0xFF228B22;  /* Forest green */
-        case CUI_NOTIFY_WARNING: return 0xFF00A5FF;  /* Orange */
-        case CUI_NOTIFY_ERROR:   return 0xFF0000CD;  /* Red */
+        case AUI_NOTIFY_INFO:    return 0xFF8B4513;  /* Brown-ish blue */
+        case AUI_NOTIFY_SUCCESS: return 0xFF228B22;  /* Forest green */
+        case AUI_NOTIFY_WARNING: return 0xFF00A5FF;  /* Orange */
+        case AUI_NOTIFY_ERROR:   return 0xFF0000CD;  /* Red */
         default:                 return 0xFF808080;
     }
 }
 
-static const char *cui_button_label(CUI_DialogResult result)
+static const char *aui_button_label(AUI_DialogResult result)
 {
     switch (result) {
-        case CUI_DIALOG_OK:     return "OK";
-        case CUI_DIALOG_CANCEL: return "Cancel";
-        case CUI_DIALOG_YES:    return "Yes";
-        case CUI_DIALOG_NO:     return "No";
-        case CUI_DIALOG_ABORT:  return "Abort";
-        case CUI_DIALOG_RETRY:  return "Retry";
-        case CUI_DIALOG_IGNORE: return "Ignore";
+        case AUI_DIALOG_OK:     return "OK";
+        case AUI_DIALOG_CANCEL: return "Cancel";
+        case AUI_DIALOG_YES:    return "Yes";
+        case AUI_DIALOG_NO:     return "No";
+        case AUI_DIALOG_ABORT:  return "Abort";
+        case AUI_DIALOG_RETRY:  return "Retry";
+        case AUI_DIALOG_IGNORE: return "Ignore";
         default:                return "OK";
     }
 }
@@ -139,13 +139,13 @@ static const char *cui_button_label(CUI_DialogResult result)
  * Dialog Update and Render
  * ============================================================================ */
 
-void cui_dialog_manager_update(CUI_DialogManager *dm, CUI_Context *ctx, float dt)
+void aui_dialog_manager_update(AUI_DialogManager *dm, AUI_Context *ctx, float dt)
 {
     if (!dm || !ctx) return;
 
     /* Update tweens */
     if (dm->tweens) {
-        cui_tween_manager_update(dm->tweens, dt);
+        aui_tween_manager_update(dm->tweens, dt);
     }
 
     /* Update tooltip hover timer */
@@ -158,7 +158,7 @@ void cui_dialog_manager_update(CUI_DialogManager *dm, CUI_Context *ctx, float dt
 
     /* Update notifications */
     for (int i = 0; i < dm->notification_count; i++) {
-        CUI_Notification *n = &dm->notifications[i];
+        AUI_Notification *n = &dm->notifications[i];
         if (!n->active) continue;
 
         n->elapsed += dt;
@@ -181,13 +181,13 @@ void cui_dialog_manager_update(CUI_DialogManager *dm, CUI_Context *ctx, float dt
 
     /* Update closing dialogs */
     for (int i = 0; i < dm->dialog_count; i++) {
-        CUI_DialogEntry *entry = &dm->dialogs[i];
+        AUI_DialogEntry *entry = &dm->dialogs[i];
         if (entry->closing) {
             entry->close_timer += dt;
             if (entry->close_timer >= 0.2f) {
                 /* Destroy and remove */
                 if (entry->node) {
-                    cui_node_destroy(entry->node);
+                    aui_node_destroy(entry->node);
                 }
                 entry->active = false;
             }
@@ -207,7 +207,7 @@ void cui_dialog_manager_update(CUI_DialogManager *dm, CUI_Context *ctx, float dt
     dm->dialog_count = write;
 }
 
-void cui_dialog_manager_render(CUI_DialogManager *dm, CUI_Context *ctx)
+void aui_dialog_manager_render(AUI_DialogManager *dm, AUI_Context *ctx)
 {
     if (!dm || !ctx) return;
 
@@ -221,26 +221,26 @@ void cui_dialog_manager_render(CUI_DialogManager *dm, CUI_Context *ctx)
     }
 
     if (has_modal) {
-        cui_draw_rect(ctx, 0, 0, (float)ctx->width, (float)ctx->height, 0x80000000);
+        aui_draw_rect(ctx, 0, 0, (float)ctx->width, (float)ctx->height, 0x80000000);
     }
 
     /* Render dialogs */
     for (int i = 0; i < dm->dialog_count; i++) {
-        CUI_DialogEntry *entry = &dm->dialogs[i];
+        AUI_DialogEntry *entry = &dm->dialogs[i];
         if (!entry->active || !entry->node) continue;
 
-        cui_scene_render(ctx, entry->node);
+        aui_scene_render(ctx, entry->node);
     }
 
     /* Render context menu */
     if (dm->context_menu.active) {
-        CUI_ContextMenuState *cm = &dm->context_menu;
+        AUI_ContextMenuState *cm = &dm->context_menu;
 
         /* Background */
-        cui_draw_rect_rounded(ctx, cm->bounds.x, cm->bounds.y,
+        aui_draw_rect_rounded(ctx, cm->bounds.x, cm->bounds.y,
                                cm->bounds.w, cm->bounds.h,
                                ctx->theme.bg_panel, ctx->theme.corner_radius);
-        cui_draw_rect_outline(ctx, cm->bounds.x, cm->bounds.y,
+        aui_draw_rect_outline(ctx, cm->bounds.x, cm->bounds.y,
                                cm->bounds.w, cm->bounds.h,
                                ctx->theme.border, 1);
 
@@ -249,11 +249,11 @@ void cui_dialog_manager_render(CUI_DialogManager *dm, CUI_Context *ctx)
         float item_h = ctx->theme.widget_height;
 
         for (int i = 0; i < cm->item_count; i++) {
-            CUI_MenuItem *item = &cm->items[i];
+            AUI_MenuItem *item = &cm->items[i];
 
             if (!item->label) {
                 /* Separator */
-                cui_draw_rect(ctx, cm->bounds.x + 8, y + item_h / 2 - 0.5f,
+                aui_draw_rect(ctx, cm->bounds.x + 8, y + item_h / 2 - 0.5f,
                                cm->bounds.w - 16, 1, ctx->theme.border);
                 y += item_h / 2;
                 continue;
@@ -261,30 +261,30 @@ void cui_dialog_manager_render(CUI_DialogManager *dm, CUI_Context *ctx)
 
             /* Hover highlight */
             if (i == cm->hovered_index && item->enabled) {
-                cui_draw_rect(ctx, cm->bounds.x + 2, y,
+                aui_draw_rect(ctx, cm->bounds.x + 2, y,
                                cm->bounds.w - 4, item_h, ctx->theme.accent);
             }
 
             /* Checkmark */
             if (item->checked) {
-                cui_draw_text(ctx, "v", cm->bounds.x + 8, y + 4, ctx->theme.text);
+                aui_draw_text(ctx, "v", cm->bounds.x + 8, y + 4, ctx->theme.text);
             }
 
             /* Label */
             uint32_t text_color = item->enabled ? ctx->theme.text : ctx->theme.text_disabled;
-            cui_draw_text(ctx, item->label, cm->bounds.x + 28, y + 4, text_color);
+            aui_draw_text(ctx, item->label, cm->bounds.x + 28, y + 4, text_color);
 
             /* Shortcut */
             if (item->shortcut) {
-                float sw = cui_text_width(ctx, item->shortcut);
-                cui_draw_text(ctx, item->shortcut,
+                float sw = aui_text_width(ctx, item->shortcut);
+                aui_draw_text(ctx, item->shortcut,
                                cm->bounds.x + cm->bounds.w - sw - 12,
                                y + 4, ctx->theme.text_dim);
             }
 
             /* Submenu arrow */
             if (item->submenu) {
-                cui_draw_text(ctx, ">",
+                aui_draw_text(ctx, ">",
                                cm->bounds.x + cm->bounds.w - 16,
                                y + 4, ctx->theme.text);
             }
@@ -295,8 +295,8 @@ void cui_dialog_manager_render(CUI_DialogManager *dm, CUI_Context *ctx)
 
     /* Render tooltip */
     if (dm->tooltip.active) {
-        float tw = cui_text_width(ctx, dm->tooltip.text);
-        float th = cui_text_height(ctx);
+        float tw = aui_text_width(ctx, dm->tooltip.text);
+        float th = aui_text_height(ctx);
         float padding = 6;
         float tx = dm->tooltip.x;
         float ty = dm->tooltip.y + 20;  /* Below cursor */
@@ -309,9 +309,9 @@ void cui_dialog_manager_render(CUI_DialogManager *dm, CUI_Context *ctx)
             ty = dm->tooltip.y - th - padding * 2 - 5;  /* Above cursor */
         }
 
-        cui_draw_rect_rounded(ctx, tx, ty, tw + padding * 2, th + padding * 2,
+        aui_draw_rect_rounded(ctx, tx, ty, tw + padding * 2, th + padding * 2,
                                0xF0202020, 4);
-        cui_draw_text(ctx, dm->tooltip.text, tx + padding, ty + padding,
+        aui_draw_text(ctx, dm->tooltip.text, tx + padding, ty + padding,
                        0xFFFFFFFF);
     }
 
@@ -320,27 +320,27 @@ void cui_dialog_manager_render(CUI_DialogManager *dm, CUI_Context *ctx)
     float notify_spacing = 8;
 
     switch (dm->notify_position) {
-        case CUI_NOTIFY_TOP_LEFT:
+        case AUI_NOTIFY_TOP_LEFT:
             notify_x = 16;
             notify_y = 16;
             break;
-        case CUI_NOTIFY_TOP_CENTER:
+        case AUI_NOTIFY_TOP_CENTER:
             notify_x = ctx->width / 2;
             notify_y = 16;
             break;
-        case CUI_NOTIFY_TOP_RIGHT:
+        case AUI_NOTIFY_TOP_RIGHT:
             notify_x = ctx->width - 16;
             notify_y = 16;
             break;
-        case CUI_NOTIFY_BOTTOM_LEFT:
+        case AUI_NOTIFY_BOTTOM_LEFT:
             notify_x = 16;
             notify_y = ctx->height - 16;
             break;
-        case CUI_NOTIFY_BOTTOM_CENTER:
+        case AUI_NOTIFY_BOTTOM_CENTER:
             notify_x = ctx->width / 2;
             notify_y = ctx->height - 16;
             break;
-        case CUI_NOTIFY_BOTTOM_RIGHT:
+        case AUI_NOTIFY_BOTTOM_RIGHT:
         default:
             notify_x = ctx->width - 16;
             notify_y = ctx->height - 16;
@@ -348,7 +348,7 @@ void cui_dialog_manager_render(CUI_DialogManager *dm, CUI_Context *ctx)
     }
 
     for (int i = 0; i < dm->notification_count; i++) {
-        CUI_Notification *n = &dm->notifications[i];
+        AUI_Notification *n = &dm->notifications[i];
         if (!n->active) continue;
 
         float nw = 280;
@@ -356,11 +356,11 @@ void cui_dialog_manager_render(CUI_DialogManager *dm, CUI_Context *ctx)
         float nx, ny;
 
         /* Calculate position based on notify_position */
-        bool from_top = dm->notify_position <= CUI_NOTIFY_TOP_RIGHT;
-        bool from_right = dm->notify_position == CUI_NOTIFY_TOP_RIGHT ||
-                          dm->notify_position == CUI_NOTIFY_BOTTOM_RIGHT;
-        bool centered = dm->notify_position == CUI_NOTIFY_TOP_CENTER ||
-                        dm->notify_position == CUI_NOTIFY_BOTTOM_CENTER;
+        bool from_top = dm->notify_position <= AUI_NOTIFY_TOP_RIGHT;
+        bool from_right = dm->notify_position == AUI_NOTIFY_TOP_RIGHT ||
+                          dm->notify_position == AUI_NOTIFY_BOTTOM_RIGHT;
+        bool centered = dm->notify_position == AUI_NOTIFY_TOP_CENTER ||
+                        dm->notify_position == AUI_NOTIFY_BOTTOM_CENTER;
 
         if (centered) {
             nx = notify_x - nw / 2;
@@ -384,24 +384,24 @@ void cui_dialog_manager_render(CUI_DialogManager *dm, CUI_Context *ctx)
             fade = n->elapsed / 0.2f;
         }
 
-        uint32_t bg_color = cui_notification_color(n->type);
+        uint32_t bg_color = aui_notification_color(n->type);
         bg_color = (bg_color & 0x00FFFFFF) | ((uint32_t)(fade * 240) << 24);
 
-        cui_draw_rect_rounded(ctx, nx, ny, nw, nh, bg_color, 6);
+        aui_draw_rect_rounded(ctx, nx, ny, nw, nh, bg_color, 6);
 
         uint32_t text_color = 0xFFFFFFFF;
         text_color = (text_color & 0x00FFFFFF) | ((uint32_t)(fade * 255) << 24);
 
         if (n->title[0]) {
-            cui_draw_text(ctx, n->title, nx + 12, ny + 8, text_color);
-            cui_draw_text(ctx, n->message, nx + 12, ny + 28, text_color);
+            aui_draw_text(ctx, n->title, nx + 12, ny + 8, text_color);
+            aui_draw_text(ctx, n->message, nx + 12, ny + 28, text_color);
         } else {
-            cui_draw_text(ctx, n->message, nx + 12, ny + (nh - 16) / 2, text_color);
+            aui_draw_text(ctx, n->message, nx + 12, ny + (nh - 16) / 2, text_color);
         }
     }
 }
 
-bool cui_dialog_manager_process_event(CUI_DialogManager *dm, CUI_Context *ctx,
+bool aui_dialog_manager_process_event(AUI_DialogManager *dm, AUI_Context *ctx,
                                        const SDL_Event *event)
 {
     if (!dm || !ctx || !event) return false;
@@ -413,7 +413,7 @@ bool cui_dialog_manager_process_event(CUI_DialogManager *dm, CUI_Context *ctx,
             float my = event->motion.y;
 
             /* Check if inside menu */
-            CUI_ContextMenuState *cm = &dm->context_menu;
+            AUI_ContextMenuState *cm = &dm->context_menu;
             if (mx >= cm->bounds.x && mx < cm->bounds.x + cm->bounds.w &&
                 my >= cm->bounds.y && my < cm->bounds.y + cm->bounds.h) {
 
@@ -423,7 +423,7 @@ bool cui_dialog_manager_process_event(CUI_DialogManager *dm, CUI_Context *ctx,
                 cm->hovered_index = -1;
 
                 for (int i = 0; i < cm->item_count; i++) {
-                    CUI_MenuItem *item = &cm->items[i];
+                    AUI_MenuItem *item = &cm->items[i];
                     float ih = item->label ? item_h : item_h / 2;
 
                     if (my >= y && my < y + ih && item->label) {
@@ -439,7 +439,7 @@ bool cui_dialog_manager_process_event(CUI_DialogManager *dm, CUI_Context *ctx,
         }
 
         if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-            CUI_ContextMenuState *cm = &dm->context_menu;
+            AUI_ContextMenuState *cm = &dm->context_menu;
             float mx = event->button.x;
             float my = event->button.y;
 
@@ -448,7 +448,7 @@ bool cui_dialog_manager_process_event(CUI_DialogManager *dm, CUI_Context *ctx,
 
                 /* Click on item */
                 if (cm->hovered_index >= 0) {
-                    CUI_MenuItem *item = &cm->items[cm->hovered_index];
+                    AUI_MenuItem *item = &cm->items[cm->hovered_index];
                     if (item->enabled && item->on_select && !item->submenu) {
                         item->on_select(item->userdata);
                     }
@@ -469,12 +469,12 @@ bool cui_dialog_manager_process_event(CUI_DialogManager *dm, CUI_Context *ctx,
 
     /* Modal dialogs block other input */
     for (int i = dm->dialog_count - 1; i >= 0; i--) {
-        CUI_DialogEntry *entry = &dm->dialogs[i];
+        AUI_DialogEntry *entry = &dm->dialogs[i];
         if (!entry->active || !entry->config.modal) continue;
 
         /* Process event through dialog's node tree */
         if (entry->node) {
-            if (cui_scene_process_event(ctx, entry->node, event)) {
+            if (aui_scene_process_event(ctx, entry->node, event)) {
                 return true;
             }
         }
@@ -483,7 +483,7 @@ bool cui_dialog_manager_process_event(CUI_DialogManager *dm, CUI_Context *ctx,
         if (event->type == SDL_EVENT_KEY_DOWN &&
             event->key.scancode == SDL_SCANCODE_ESCAPE) {
             if (entry->config.show_close_button) {
-                cui_dialog_close(entry->node, CUI_DIALOG_CANCEL);
+                aui_dialog_close(entry->node, AUI_DIALOG_CANCEL);
                 return true;
             }
         }
@@ -503,7 +503,7 @@ bool cui_dialog_manager_process_event(CUI_DialogManager *dm, CUI_Context *ctx,
     return false;
 }
 
-bool cui_dialog_manager_has_modal(CUI_DialogManager *dm)
+bool aui_dialog_manager_has_modal(AUI_DialogManager *dm)
 {
     if (!dm) return false;
 
@@ -516,16 +516,16 @@ bool cui_dialog_manager_has_modal(CUI_DialogManager *dm)
 }
 
 /* ============================================================================
- * Dialog Manager Access (temporary - will be in CUI_Context)
+ * Dialog Manager Access (temporary - will be in AUI_Context)
  * ============================================================================ */
 
-static CUI_DialogManager *s_dialog_manager = NULL;
+static AUI_DialogManager *s_dialog_manager = NULL;
 
-static CUI_DialogManager *cui_get_dialog_manager(CUI_Context *ctx)
+static AUI_DialogManager *aui_get_dialog_manager(AUI_Context *ctx)
 {
     (void)ctx;
     if (!s_dialog_manager) {
-        s_dialog_manager = cui_dialog_manager_create();
+        s_dialog_manager = aui_dialog_manager_create();
     }
     return s_dialog_manager;
 }
@@ -534,22 +534,22 @@ static CUI_DialogManager *cui_get_dialog_manager(CUI_Context *ctx)
  * Standard Dialogs
  * ============================================================================ */
 
-static void cui_dialog_button_clicked(CUI_Node *node, const CUI_Signal *sig, void *userdata)
+static void aui_dialog_button_clicked(AUI_Node *node, const AUI_Signal *sig, void *userdata)
 {
     (void)sig;
-    CUI_DialogEntry *entry = (CUI_DialogEntry *)userdata;
+    AUI_DialogEntry *entry = (AUI_DialogEntry *)userdata;
     if (!entry) return;
 
     /* Determine which button was clicked based on node name */
-    CUI_DialogResult result = CUI_DIALOG_NONE;
+    AUI_DialogResult result = AUI_DIALOG_NONE;
 
-    if (strcmp(node->name, "btn_ok") == 0) result = CUI_DIALOG_OK;
-    else if (strcmp(node->name, "btn_cancel") == 0) result = CUI_DIALOG_CANCEL;
-    else if (strcmp(node->name, "btn_yes") == 0) result = CUI_DIALOG_YES;
-    else if (strcmp(node->name, "btn_no") == 0) result = CUI_DIALOG_NO;
-    else if (strcmp(node->name, "btn_abort") == 0) result = CUI_DIALOG_ABORT;
-    else if (strcmp(node->name, "btn_retry") == 0) result = CUI_DIALOG_RETRY;
-    else if (strcmp(node->name, "btn_ignore") == 0) result = CUI_DIALOG_IGNORE;
+    if (strcmp(node->name, "btn_ok") == 0) result = AUI_DIALOG_OK;
+    else if (strcmp(node->name, "btn_cancel") == 0) result = AUI_DIALOG_CANCEL;
+    else if (strcmp(node->name, "btn_yes") == 0) result = AUI_DIALOG_YES;
+    else if (strcmp(node->name, "btn_no") == 0) result = AUI_DIALOG_NO;
+    else if (strcmp(node->name, "btn_abort") == 0) result = AUI_DIALOG_ABORT;
+    else if (strcmp(node->name, "btn_retry") == 0) result = AUI_DIALOG_RETRY;
+    else if (strcmp(node->name, "btn_ignore") == 0) result = AUI_DIALOG_IGNORE;
 
     /* Call callback */
     if (entry->config.on_result) {
@@ -561,23 +561,23 @@ static void cui_dialog_button_clicked(CUI_Node *node, const CUI_Signal *sig, voi
     entry->close_timer = 0;
 }
 
-static void cui_dialog_add_button(CUI_Context *ctx, CUI_Node *button_row,
+static void aui_dialog_add_button(AUI_Context *ctx, AUI_Node *button_row,
                                    const char *name, const char *label,
-                                   CUI_DialogEntry *entry)
+                                   AUI_DialogEntry *entry)
 {
-    CUI_Node *btn = cui_button_create(ctx, name, label);
+    AUI_Node *btn = aui_button_create(ctx, name, label);
     if (btn) {
-        cui_node_set_h_size_flags(btn, CUI_SIZE_EXPAND);
-        cui_node_connect(btn, CUI_SIGNAL_CLICKED, cui_dialog_button_clicked, entry);
-        cui_node_add_child(button_row, btn);
+        aui_node_set_h_size_flags(btn, AUI_SIZE_EXPAND);
+        aui_node_connect(btn, AUI_SIGNAL_CLICKED, aui_dialog_button_clicked, entry);
+        aui_node_add_child(button_row, btn);
     }
 }
 
-void cui_dialog_message(CUI_Context *ctx, const char *title, const char *message,
-                         CUI_DialogButtons buttons,
-                         CUI_DialogCallback on_result, void *userdata)
+void aui_dialog_message(AUI_Context *ctx, const char *title, const char *message,
+                         AUI_DialogButtons buttons,
+                         AUI_DialogCallback on_result, void *userdata)
 {
-    CUI_DialogConfig config = {0};
+    AUI_DialogConfig config = {0};
     config.title = title;
     config.message = message;
     config.buttons = buttons;
@@ -591,20 +591,20 @@ void cui_dialog_message(CUI_Context *ctx, const char *title, const char *message
     config.animate = true;
     config.animation_duration = 0.2f;
 
-    cui_dialog_create(ctx, &config);
+    aui_dialog_create(ctx, &config);
 }
 
-void cui_dialog_alert(CUI_Context *ctx, const char *title, const char *message)
+void aui_dialog_alert(AUI_Context *ctx, const char *title, const char *message)
 {
-    cui_dialog_message(ctx, title, message, CUI_BUTTONS_OK, NULL, NULL);
+    aui_dialog_message(ctx, title, message, AUI_BUTTONS_OK, NULL, NULL);
 }
 
-void cui_dialog_confirm(CUI_Context *ctx, const char *title, const char *message,
-                         CUI_ConfirmCallback on_result, void *userdata)
+void aui_dialog_confirm(AUI_Context *ctx, const char *title, const char *message,
+                         AUI_ConfirmCallback on_result, void *userdata)
 {
     /* Wrap callback */
     typedef struct {
-        CUI_ConfirmCallback callback;
+        AUI_ConfirmCallback callback;
         void *userdata;
     } ConfirmWrapper;
 
@@ -612,23 +612,23 @@ void cui_dialog_confirm(CUI_Context *ctx, const char *title, const char *message
     wrapper->callback = on_result;
     wrapper->userdata = userdata;
 
-    auto confirm_handler = [](CUI_DialogResult result, void *ud) {
+    auto confirm_handler = [](AUI_DialogResult result, void *ud) {
         ConfirmWrapper *w = (ConfirmWrapper *)ud;
         if (w->callback) {
-            w->callback(result == CUI_DIALOG_YES, w->userdata);
+            w->callback(result == AUI_DIALOG_YES, w->userdata);
         }
         free(w);
     };
 
-    cui_dialog_message(ctx, title, message, CUI_BUTTONS_YES_NO,
+    aui_dialog_message(ctx, title, message, AUI_BUTTONS_YES_NO,
                         confirm_handler, wrapper);
 }
 
-void cui_dialog_input(CUI_Context *ctx, const char *title, const char *prompt,
+void aui_dialog_input(AUI_Context *ctx, const char *title, const char *prompt,
                        const char *default_text,
-                       CUI_InputCallback on_result, void *userdata)
+                       AUI_InputCallback on_result, void *userdata)
 {
-    CUI_InputDialogConfig config = {0};
+    AUI_InputDialogConfig config = {0};
     config.title = title;
     config.prompt = prompt;
     config.default_text = default_text;
@@ -636,10 +636,10 @@ void cui_dialog_input(CUI_Context *ctx, const char *title, const char *prompt,
     config.on_result = on_result;
     config.userdata = userdata;
 
-    cui_dialog_input_ex(ctx, &config);
+    aui_dialog_input_ex(ctx, &config);
 }
 
-void cui_dialog_input_ex(CUI_Context *ctx, const CUI_InputDialogConfig *config)
+void aui_dialog_input_ex(AUI_Context *ctx, const AUI_InputDialogConfig *config)
 {
     if (!ctx || !config) return;
 
@@ -650,15 +650,15 @@ void cui_dialog_input_ex(CUI_Context *ctx, const CUI_InputDialogConfig *config)
     }
 }
 
-CUI_Node *cui_dialog_create(CUI_Context *ctx, const CUI_DialogConfig *config)
+AUI_Node *aui_dialog_create(AUI_Context *ctx, const AUI_DialogConfig *config)
 {
     if (!ctx || !config) return NULL;
 
-    CUI_DialogManager *dm = cui_get_dialog_manager(ctx);
+    AUI_DialogManager *dm = aui_get_dialog_manager(ctx);
     if (!dm || dm->dialog_count >= MAX_DIALOGS) return NULL;
 
     /* Create dialog entry */
-    CUI_DialogEntry *entry = &dm->dialogs[dm->dialog_count++];
+    AUI_DialogEntry *entry = &dm->dialogs[dm->dialog_count++];
     memset(entry, 0, sizeof(*entry));
     entry->config = *config;
     entry->active = true;
@@ -675,7 +675,7 @@ CUI_Node *cui_dialog_create(CUI_Context *ctx, const CUI_DialogConfig *config)
     float dialog_h = 120;  /* Base height */
 
     /* Create dialog panel */
-    CUI_Node *panel = cui_panel_create(ctx, "dialog", config->title);
+    AUI_Node *panel = aui_panel_create(ctx, "dialog", config->title);
     if (!panel) {
         dm->dialog_count--;
         return NULL;
@@ -684,109 +684,109 @@ CUI_Node *cui_dialog_create(CUI_Context *ctx, const CUI_DialogConfig *config)
 
     /* Position dialog */
     if (config->center_on_screen) {
-        cui_node_set_anchor_preset(panel, CUI_ANCHOR_CENTER);
-        cui_node_set_offsets(panel, -dialog_w / 2, -dialog_h / 2,
+        aui_node_set_anchor_preset(panel, AUI_ANCHOR_CENTER);
+        aui_node_set_offsets(panel, -dialog_w / 2, -dialog_h / 2,
                               dialog_w / 2, dialog_h / 2);
     } else {
-        cui_node_set_anchor_preset(panel, CUI_ANCHOR_TOP_LEFT);
-        cui_node_set_offsets(panel, 100, 100, 100 + dialog_w, 100 + dialog_h);
+        aui_node_set_anchor_preset(panel, AUI_ANCHOR_TOP_LEFT);
+        aui_node_set_offsets(panel, 100, 100, 100 + dialog_w, 100 + dialog_h);
     }
 
     /* Set style */
-    panel->style.background = cui_bg_solid(ctx->theme.bg_panel);
-    panel->style.corner_radius = cui_corners_uniform(8);
-    panel->style.padding = cui_edges_uniform(16);
+    panel->style.background = aui_bg_solid(ctx->theme.bg_panel);
+    panel->style.corner_radius = aui_corners_uniform(8);
+    panel->style.padding = aui_edges_uniform(16);
 
     /* Add shadow */
-    panel->style.shadows[0] = cui_shadow(0, 4, 16, 0x60000000);
+    panel->style.shadows[0] = aui_shadow(0, 4, 16, 0x60000000);
     panel->style.shadow_count = 1;
 
     /* Content layout */
-    CUI_Node *vbox = cui_vbox_create(ctx, "content");
-    cui_node_set_anchor_preset(vbox, CUI_ANCHOR_FULL_RECT);
-    cui_box_set_separation(vbox, 12);
-    cui_node_add_child(panel, vbox);
+    AUI_Node *vbox = aui_vbox_create(ctx, "content");
+    aui_node_set_anchor_preset(vbox, AUI_ANCHOR_FULL_RECT);
+    aui_box_set_separation(vbox, 12);
+    aui_node_add_child(panel, vbox);
 
     /* Message label */
     if (config->message) {
-        CUI_Node *label = cui_label_create(ctx, "message", config->message);
-        cui_node_set_h_size_flags(label, CUI_SIZE_FILL);
-        cui_node_add_child(vbox, label);
+        AUI_Node *label = aui_label_create(ctx, "message", config->message);
+        aui_node_set_h_size_flags(label, AUI_SIZE_FILL);
+        aui_node_add_child(vbox, label);
     }
 
     /* Button row */
-    CUI_Node *button_row = cui_hbox_create(ctx, "buttons");
-    cui_box_set_separation(button_row, 8);
-    cui_node_set_v_size_flags(button_row, CUI_SIZE_SHRINK_END);
-    cui_node_add_child(vbox, button_row);
+    AUI_Node *button_row = aui_hbox_create(ctx, "buttons");
+    aui_box_set_separation(button_row, 8);
+    aui_node_set_v_size_flags(button_row, AUI_SIZE_SHRINK_END);
+    aui_node_add_child(vbox, button_row);
 
     /* Add buttons based on preset */
     switch (config->buttons) {
-        case CUI_BUTTONS_OK:
-            cui_dialog_add_button(ctx, button_row, "btn_ok", "OK", entry);
+        case AUI_BUTTONS_OK:
+            aui_dialog_add_button(ctx, button_row, "btn_ok", "OK", entry);
             break;
 
-        case CUI_BUTTONS_OK_CANCEL:
-            cui_dialog_add_button(ctx, button_row, "btn_ok", "OK", entry);
-            cui_dialog_add_button(ctx, button_row, "btn_cancel", "Cancel", entry);
+        case AUI_BUTTONS_OK_CANCEL:
+            aui_dialog_add_button(ctx, button_row, "btn_ok", "OK", entry);
+            aui_dialog_add_button(ctx, button_row, "btn_cancel", "Cancel", entry);
             break;
 
-        case CUI_BUTTONS_YES_NO:
-            cui_dialog_add_button(ctx, button_row, "btn_yes", "Yes", entry);
-            cui_dialog_add_button(ctx, button_row, "btn_no", "No", entry);
+        case AUI_BUTTONS_YES_NO:
+            aui_dialog_add_button(ctx, button_row, "btn_yes", "Yes", entry);
+            aui_dialog_add_button(ctx, button_row, "btn_no", "No", entry);
             break;
 
-        case CUI_BUTTONS_YES_NO_CANCEL:
-            cui_dialog_add_button(ctx, button_row, "btn_yes", "Yes", entry);
-            cui_dialog_add_button(ctx, button_row, "btn_no", "No", entry);
-            cui_dialog_add_button(ctx, button_row, "btn_cancel", "Cancel", entry);
+        case AUI_BUTTONS_YES_NO_CANCEL:
+            aui_dialog_add_button(ctx, button_row, "btn_yes", "Yes", entry);
+            aui_dialog_add_button(ctx, button_row, "btn_no", "No", entry);
+            aui_dialog_add_button(ctx, button_row, "btn_cancel", "Cancel", entry);
             break;
 
-        case CUI_BUTTONS_ABORT_RETRY_IGNORE:
-            cui_dialog_add_button(ctx, button_row, "btn_abort", "Abort", entry);
-            cui_dialog_add_button(ctx, button_row, "btn_retry", "Retry", entry);
-            cui_dialog_add_button(ctx, button_row, "btn_ignore", "Ignore", entry);
+        case AUI_BUTTONS_ABORT_RETRY_IGNORE:
+            aui_dialog_add_button(ctx, button_row, "btn_abort", "Abort", entry);
+            aui_dialog_add_button(ctx, button_row, "btn_retry", "Retry", entry);
+            aui_dialog_add_button(ctx, button_row, "btn_ignore", "Ignore", entry);
             break;
 
-        case CUI_BUTTONS_RETRY_CANCEL:
-            cui_dialog_add_button(ctx, button_row, "btn_retry", "Retry", entry);
-            cui_dialog_add_button(ctx, button_row, "btn_cancel", "Cancel", entry);
+        case AUI_BUTTONS_RETRY_CANCEL:
+            aui_dialog_add_button(ctx, button_row, "btn_retry", "Retry", entry);
+            aui_dialog_add_button(ctx, button_row, "btn_cancel", "Cancel", entry);
             break;
 
-        case CUI_BUTTONS_CUSTOM:
+        case AUI_BUTTONS_CUSTOM:
             for (int i = 0; i < config->custom_button_count; i++) {
                 char name[32];
                 snprintf(name, sizeof(name), "btn_custom_%d", i);
-                cui_dialog_add_button(ctx, button_row, name,
+                aui_dialog_add_button(ctx, button_row, name,
                                        config->custom_button_labels[i], entry);
             }
             break;
 
-        case CUI_BUTTONS_NONE:
+        case AUI_BUTTONS_NONE:
         default:
             break;
     }
 
     /* Animate entry */
     if (config->animate && dm->tweens) {
-        cui_node_set_opacity(panel, 0);
-        cui_tween_fade_in(dm->tweens, panel, config->animation_duration);
+        aui_node_set_opacity(panel, 0);
+        aui_tween_fade_in(dm->tweens, panel, config->animation_duration);
     }
 
     return panel;
 }
 
-void cui_dialog_close(CUI_Node *dialog, CUI_DialogResult result)
+void aui_dialog_close(AUI_Node *dialog, AUI_DialogResult result)
 {
     if (!dialog) return;
 
-    CUI_DialogManager *dm = s_dialog_manager;
+    AUI_DialogManager *dm = s_dialog_manager;
     if (!dm) return;
 
     /* Find dialog entry */
     for (int i = 0; i < dm->dialog_count; i++) {
         if (dm->dialogs[i].node == dialog) {
-            CUI_DialogEntry *entry = &dm->dialogs[i];
+            AUI_DialogEntry *entry = &dm->dialogs[i];
 
             /* Call callback */
             if (entry->config.on_result) {
@@ -799,7 +799,7 @@ void cui_dialog_close(CUI_Node *dialog, CUI_DialogResult result)
 
             /* Fade out */
             if (entry->config.animate && dm->tweens) {
-                cui_tween_fade_out(dm->tweens, dialog, 0.15f);
+                aui_tween_fade_out(dm->tweens, dialog, 0.15f);
             }
             return;
         }
@@ -810,19 +810,19 @@ void cui_dialog_close(CUI_Node *dialog, CUI_DialogResult result)
  * Context Menus
  * ============================================================================ */
 
-void cui_context_menu_show(CUI_Context *ctx, float x, float y,
-                            const CUI_MenuItem *items, int count)
+void aui_context_menu_show(AUI_Context *ctx, float x, float y,
+                            const AUI_MenuItem *items, int count)
 {
     if (!ctx || !items || count <= 0) return;
 
-    CUI_DialogManager *dm = cui_get_dialog_manager(ctx);
+    AUI_DialogManager *dm = aui_get_dialog_manager(ctx);
     if (!dm) return;
 
-    CUI_ContextMenuState *cm = &dm->context_menu;
+    AUI_ContextMenuState *cm = &dm->context_menu;
 
     /* Copy items */
     cm->item_count = count < MAX_CONTEXT_MENU_ITEMS ? count : MAX_CONTEXT_MENU_ITEMS;
-    memcpy(cm->items, items, cm->item_count * sizeof(CUI_MenuItem));
+    memcpy(cm->items, items, cm->item_count * sizeof(AUI_MenuItem));
 
     /* Calculate bounds */
     float max_label_w = 0;
@@ -832,11 +832,11 @@ void cui_context_menu_show(CUI_Context *ctx, float x, float y,
 
     for (int i = 0; i < cm->item_count; i++) {
         if (cm->items[i].label) {
-            float lw = cui_text_width(ctx, cm->items[i].label);
+            float lw = aui_text_width(ctx, cm->items[i].label);
             if (lw > max_label_w) max_label_w = lw;
 
             if (cm->items[i].shortcut) {
-                float sw = cui_text_width(ctx, cm->items[i].shortcut);
+                float sw = aui_text_width(ctx, cm->items[i].shortcut);
                 if (sw > max_shortcut_w) max_shortcut_w = sw;
             }
 
@@ -868,23 +868,23 @@ void cui_context_menu_show(CUI_Context *ctx, float x, float y,
     cm->hovered_index = -1;
 }
 
-void cui_context_menu_show_at_mouse(CUI_Context *ctx, const CUI_MenuItem *items, int count)
+void aui_context_menu_show_at_mouse(AUI_Context *ctx, const AUI_MenuItem *items, int count)
 {
     if (!ctx) return;
-    cui_context_menu_show(ctx, ctx->input.mouse_x, ctx->input.mouse_y, items, count);
+    aui_context_menu_show(ctx, ctx->input.mouse_x, ctx->input.mouse_y, items, count);
 }
 
-void cui_context_menu_close(CUI_Context *ctx)
+void aui_context_menu_close(AUI_Context *ctx)
 {
-    CUI_DialogManager *dm = cui_get_dialog_manager(ctx);
+    AUI_DialogManager *dm = aui_get_dialog_manager(ctx);
     if (dm) {
         dm->context_menu.active = false;
     }
 }
 
-bool cui_context_menu_is_open(CUI_Context *ctx)
+bool aui_context_menu_is_open(AUI_Context *ctx)
 {
-    CUI_DialogManager *dm = cui_get_dialog_manager(ctx);
+    AUI_DialogManager *dm = aui_get_dialog_manager(ctx);
     return dm && dm->context_menu.active;
 }
 
@@ -892,27 +892,27 @@ bool cui_context_menu_is_open(CUI_Context *ctx)
  * Popup Panels
  * ============================================================================ */
 
-CUI_Node *cui_popup_create(CUI_Context *ctx, const char *name)
+AUI_Node *aui_popup_create(AUI_Context *ctx, const char *name)
 {
-    CUI_Node *popup = cui_node_create(ctx, CUI_NODE_POPUP, name);
+    AUI_Node *popup = aui_node_create(ctx, AUI_NODE_POPUP, name);
     if (popup) {
         popup->visible = false;
-        popup->style.background = cui_bg_solid(ctx->theme.bg_panel);
-        popup->style.corner_radius = cui_corners_uniform(4);
-        popup->style.shadows[0] = cui_shadow(0, 2, 8, 0x40000000);
+        popup->style.background = aui_bg_solid(ctx->theme.bg_panel);
+        popup->style.corner_radius = aui_corners_uniform(4);
+        popup->style.shadows[0] = aui_shadow(0, 2, 8, 0x40000000);
         popup->style.shadow_count = 1;
     }
     return popup;
 }
 
-void cui_popup_show(CUI_Node *popup, float x, float y)
+void aui_popup_show(AUI_Node *popup, float x, float y)
 {
     if (!popup) return;
-    cui_node_set_position(popup, x, y);
-    cui_node_set_visible(popup, true);
+    aui_node_set_position(popup, x, y);
+    aui_node_set_visible(popup, true);
 }
 
-void cui_popup_show_at_node(CUI_Node *popup, CUI_Node *anchor, CUI_PopupPosition pos)
+void aui_popup_show_at_node(AUI_Node *popup, AUI_Node *anchor, AUI_PopupPosition pos)
 {
     if (!popup || !anchor) return;
 
@@ -921,32 +921,32 @@ void cui_popup_show_at_node(CUI_Node *popup, CUI_Node *anchor, CUI_PopupPosition
     float aw = anchor->global_rect.w;
     float ah = anchor->global_rect.h;
     float pw, ph;
-    cui_node_get_size(popup, &pw, &ph);
+    aui_node_get_size(popup, &pw, &ph);
 
     float px, py;
 
     switch (pos) {
-        case CUI_POPUP_BELOW:
+        case AUI_POPUP_BELOW:
             px = ax;
             py = ay + ah;
             break;
-        case CUI_POPUP_ABOVE:
+        case AUI_POPUP_ABOVE:
             px = ax;
             py = ay - ph;
             break;
-        case CUI_POPUP_LEFT:
+        case AUI_POPUP_LEFT:
             px = ax - pw;
             py = ay;
             break;
-        case CUI_POPUP_RIGHT:
+        case AUI_POPUP_RIGHT:
             px = ax + aw;
             py = ay;
             break;
-        case CUI_POPUP_BELOW_CENTER:
+        case AUI_POPUP_BELOW_CENTER:
             px = ax + (aw - pw) / 2;
             py = ay + ah;
             break;
-        case CUI_POPUP_ABOVE_CENTER:
+        case AUI_POPUP_ABOVE_CENTER:
             px = ax + (aw - pw) / 2;
             py = ay - ph;
             break;
@@ -955,17 +955,17 @@ void cui_popup_show_at_node(CUI_Node *popup, CUI_Node *anchor, CUI_PopupPosition
             py = ay + ah;
     }
 
-    cui_popup_show(popup, px, py);
+    aui_popup_show(popup, px, py);
 }
 
-void cui_popup_hide(CUI_Node *popup)
+void aui_popup_hide(AUI_Node *popup)
 {
     if (popup) {
-        cui_node_set_visible(popup, false);
+        aui_node_set_visible(popup, false);
     }
 }
 
-bool cui_popup_is_visible(CUI_Node *popup)
+bool aui_popup_is_visible(AUI_Node *popup)
 {
     return popup && popup->visible;
 }
@@ -974,38 +974,38 @@ bool cui_popup_is_visible(CUI_Node *popup)
  * Tooltips
  * ============================================================================ */
 
-void cui_node_set_tooltip(CUI_Node *node, const char *text)
+void aui_node_set_tooltip(AUI_Node *node, const char *text)
 {
-    CUI_TooltipConfig config = {0};
+    AUI_TooltipConfig config = {0};
     config.text = text;
     config.delay = 0.5f;
-    cui_node_set_tooltip_ex(node, &config);
+    aui_node_set_tooltip_ex(node, &config);
 }
 
-void cui_node_set_tooltip_ex(CUI_Node *node, const CUI_TooltipConfig *config)
+void aui_node_set_tooltip_ex(AUI_Node *node, const AUI_TooltipConfig *config)
 {
     if (!node || !config) return;
 
-    /* Store tooltip config in node (TODO: add to CUI_Node structure) */
+    /* Store tooltip config in node (TODO: add to AUI_Node structure) */
     /* For now, use a simple approach with the global dialog manager */
     (void)node;
     (void)config;
 }
 
-void cui_tooltip_show(CUI_Context *ctx, float x, float y, const char *text)
+void aui_tooltip_show(AUI_Context *ctx, float x, float y, const char *text)
 {
-    CUI_TooltipConfig config = {0};
+    AUI_TooltipConfig config = {0};
     config.text = text;
     config.delay = 0;
-    cui_tooltip_show_ex(ctx, x, y, &config);
+    aui_tooltip_show_ex(ctx, x, y, &config);
 }
 
-void cui_tooltip_show_ex(CUI_Context *ctx, float x, float y,
-                          const CUI_TooltipConfig *config)
+void aui_tooltip_show_ex(AUI_Context *ctx, float x, float y,
+                          const AUI_TooltipConfig *config)
 {
     if (!ctx || !config || !config->text) return;
 
-    CUI_DialogManager *dm = cui_get_dialog_manager(ctx);
+    AUI_DialogManager *dm = aui_get_dialog_manager(ctx);
     if (!dm) return;
 
     strncpy(dm->tooltip.text, config->text, MAX_TOOLTIP_TEXT - 1);
@@ -1015,9 +1015,9 @@ void cui_tooltip_show_ex(CUI_Context *ctx, float x, float y,
     dm->tooltip.active = true;
 }
 
-void cui_tooltip_hide(CUI_Context *ctx)
+void aui_tooltip_hide(AUI_Context *ctx)
 {
-    CUI_DialogManager *dm = cui_get_dialog_manager(ctx);
+    AUI_DialogManager *dm = aui_get_dialog_manager(ctx);
     if (dm) {
         dm->tooltip.active = false;
     }
@@ -1027,20 +1027,20 @@ void cui_tooltip_hide(CUI_Context *ctx)
  * Notifications
  * ============================================================================ */
 
-void cui_notify(CUI_Context *ctx, const char *message, CUI_NotificationType type)
+void aui_notify(AUI_Context *ctx, const char *message, AUI_NotificationType type)
 {
-    cui_notify_ex(ctx, NULL, message, type, 3.0f);
+    aui_notify_ex(ctx, NULL, message, type, 3.0f);
 }
 
-void cui_notify_ex(CUI_Context *ctx, const char *title, const char *message,
-                    CUI_NotificationType type, float duration)
+void aui_notify_ex(AUI_Context *ctx, const char *title, const char *message,
+                    AUI_NotificationType type, float duration)
 {
     if (!ctx || !message) return;
 
-    CUI_DialogManager *dm = cui_get_dialog_manager(ctx);
+    AUI_DialogManager *dm = aui_get_dialog_manager(ctx);
     if (!dm || dm->notification_count >= MAX_NOTIFICATIONS) return;
 
-    CUI_Notification *n = &dm->notifications[dm->notification_count++];
+    AUI_Notification *n = &dm->notifications[dm->notification_count++];
     memset(n, 0, sizeof(*n));
 
     if (title) {
@@ -1053,17 +1053,17 @@ void cui_notify_ex(CUI_Context *ctx, const char *title, const char *message,
     n->active = true;
 }
 
-void cui_notify_set_position(CUI_Context *ctx, CUI_NotifyPosition position)
+void aui_notify_set_position(AUI_Context *ctx, AUI_NotifyPosition position)
 {
-    CUI_DialogManager *dm = cui_get_dialog_manager(ctx);
+    AUI_DialogManager *dm = aui_get_dialog_manager(ctx);
     if (dm) {
         dm->notify_position = position;
     }
 }
 
-void cui_notify_clear_all(CUI_Context *ctx)
+void aui_notify_clear_all(AUI_Context *ctx)
 {
-    CUI_DialogManager *dm = cui_get_dialog_manager(ctx);
+    AUI_DialogManager *dm = aui_get_dialog_manager(ctx);
     if (dm) {
         dm->notification_count = 0;
     }

@@ -265,7 +265,7 @@ static const char msdf_shader_msl[] =
  * Internal: Pipeline Creation
  * ============================================================================ */
 
-static bool text_create_pipeline(Carbon_TextRenderer *tr)
+static bool text_create_pipeline(Agentite_TextRenderer *tr)
 {
     if (!tr || !tr->gpu) return false;
 
@@ -289,7 +289,7 @@ static bool text_create_pipeline(Carbon_TextRenderer *tr)
         };
         vertex_shader = SDL_CreateGPUShader(tr->gpu, &vs_info);
         if (!vertex_shader) {
-            carbon_set_error_from_sdl("Text: Failed to create vertex shader");
+            agentite_set_error_from_sdl("Text: Failed to create vertex shader");
             return false;
         }
 
@@ -307,12 +307,12 @@ static bool text_create_pipeline(Carbon_TextRenderer *tr)
         };
         fragment_shader = SDL_CreateGPUShader(tr->gpu, &fs_info);
         if (!fragment_shader) {
-            carbon_set_error_from_sdl("Text: Failed to create fragment shader");
+            agentite_set_error_from_sdl("Text: Failed to create fragment shader");
             SDL_ReleaseGPUShader(tr->gpu, vertex_shader);
             return false;
         }
     } else {
-        carbon_set_error("Text: No supported shader format (need MSL for Metal)");
+        agentite_set_error("Text: No supported shader format (need MSL for Metal)");
         return false;
     }
 
@@ -404,7 +404,7 @@ static bool text_create_pipeline(Carbon_TextRenderer *tr)
     SDL_ReleaseGPUShader(tr->gpu, fragment_shader);
 
     if (!tr->pipeline) {
-        carbon_set_error_from_sdl("Text: Failed to create graphics pipeline");
+        agentite_set_error_from_sdl("Text: Failed to create graphics pipeline");
         return false;
     }
 
@@ -416,7 +416,7 @@ static bool text_create_pipeline(Carbon_TextRenderer *tr)
  * Internal: SDF/MSDF Pipeline Creation
  * ============================================================================ */
 
-static bool sdf_create_pipeline(Carbon_TextRenderer *tr, bool is_msdf)
+static bool sdf_create_pipeline(Agentite_TextRenderer *tr, bool is_msdf)
 {
     if (!tr || !tr->gpu) return false;
 
@@ -444,7 +444,7 @@ static bool sdf_create_pipeline(Carbon_TextRenderer *tr, bool is_msdf)
         };
         vertex_shader = SDL_CreateGPUShader(tr->gpu, &vs_info);
         if (!vertex_shader) {
-            carbon_set_error("Text: Failed to create %s vertex shader: %s",
+            agentite_set_error("Text: Failed to create %s vertex shader: %s",
                     is_msdf ? "MSDF" : "SDF", SDL_GetError());
             return false;
         }
@@ -462,13 +462,13 @@ static bool sdf_create_pipeline(Carbon_TextRenderer *tr, bool is_msdf)
         };
         fragment_shader = SDL_CreateGPUShader(tr->gpu, &fs_info);
         if (!fragment_shader) {
-            carbon_set_error("Text: Failed to create %s fragment shader: %s",
+            agentite_set_error("Text: Failed to create %s fragment shader: %s",
                     is_msdf ? "MSDF" : "SDF", SDL_GetError());
             SDL_ReleaseGPUShader(tr->gpu, vertex_shader);
             return false;
         }
     } else {
-        carbon_set_error("Text: No supported shader format for SDF (need MSL)");
+        agentite_set_error("Text: No supported shader format for SDF (need MSL)");
         return false;
     }
 
@@ -549,7 +549,7 @@ static bool sdf_create_pipeline(Carbon_TextRenderer *tr, bool is_msdf)
     SDL_ReleaseGPUShader(tr->gpu, fragment_shader);
 
     if (!pipeline) {
-        carbon_set_error("Text: Failed to create %s pipeline: %s",
+        agentite_set_error("Text: Failed to create %s pipeline: %s",
                 is_msdf ? "MSDF" : "SDF", SDL_GetError());
         return false;
     }
@@ -568,7 +568,7 @@ static bool sdf_create_pipeline(Carbon_TextRenderer *tr, bool is_msdf)
  * Internal: Font Atlas Creation
  * ============================================================================ */
 
-SDL_GPUTexture *text_create_font_atlas(Carbon_TextRenderer *tr,
+SDL_GPUTexture *text_create_font_atlas(Agentite_TextRenderer *tr,
                                         unsigned char *atlas_bitmap)
 {
     /* Create GPU texture for the atlas (single channel, but we upload as RGBA) */
@@ -585,7 +585,7 @@ SDL_GPUTexture *text_create_font_atlas(Carbon_TextRenderer *tr,
     };
     SDL_GPUTexture *texture = SDL_CreateGPUTexture(tr->gpu, &tex_info);
     if (!texture) {
-        carbon_set_error_from_sdl("Text: Failed to create atlas texture");
+        agentite_set_error_from_sdl("Text: Failed to create atlas texture");
         return NULL;
     }
 
@@ -597,7 +597,7 @@ SDL_GPUTexture *text_create_font_atlas(Carbon_TextRenderer *tr,
     };
     SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(tr->gpu, &transfer_info);
     if (!transfer) {
-        carbon_set_error_from_sdl("Text: Failed to create transfer buffer");
+        agentite_set_error_from_sdl("Text: Failed to create transfer buffer");
         SDL_ReleaseGPUTexture(tr->gpu, texture);
         return NULL;
     }
@@ -645,13 +645,13 @@ SDL_GPUTexture *text_create_font_atlas(Carbon_TextRenderer *tr,
  * Lifecycle Functions
  * ============================================================================ */
 
-Carbon_TextRenderer *carbon_text_init(SDL_GPUDevice *gpu, SDL_Window *window)
+Agentite_TextRenderer *agentite_text_init(SDL_GPUDevice *gpu, SDL_Window *window)
 {
     if (!gpu || !window) return NULL;
 
-    Carbon_TextRenderer *tr = CARBON_ALLOC(Carbon_TextRenderer);
+    Agentite_TextRenderer *tr = AGENTITE_ALLOC(Agentite_TextRenderer);
     if (!tr) {
-        carbon_set_error("Text: Failed to allocate renderer");
+        agentite_set_error("Text: Failed to allocate renderer");
         return NULL;
     }
 
@@ -665,8 +665,8 @@ Carbon_TextRenderer *carbon_text_init(SDL_GPUDevice *gpu, SDL_Window *window)
     tr->vertices = (TextVertex*)malloc(TEXT_VERTEX_CAPACITY * sizeof(TextVertex));
     tr->indices = (uint16_t*)malloc(TEXT_INDEX_CAPACITY * sizeof(uint16_t));
     if (!tr->vertices || !tr->indices) {
-        carbon_set_error("Text: Failed to allocate batch buffers");
-        carbon_text_shutdown(tr);
+        agentite_set_error("Text: Failed to allocate batch buffers");
+        agentite_text_shutdown(tr);
         return NULL;
     }
 
@@ -690,8 +690,8 @@ Carbon_TextRenderer *carbon_text_init(SDL_GPUDevice *gpu, SDL_Window *window)
     };
     tr->vertex_buffer = SDL_CreateGPUBuffer(gpu, &vb_info);
     if (!tr->vertex_buffer) {
-        carbon_set_error_from_sdl("Text: Failed to create vertex buffer");
-        carbon_text_shutdown(tr);
+        agentite_set_error_from_sdl("Text: Failed to create vertex buffer");
+        agentite_text_shutdown(tr);
         return NULL;
     }
 
@@ -702,8 +702,8 @@ Carbon_TextRenderer *carbon_text_init(SDL_GPUDevice *gpu, SDL_Window *window)
     };
     tr->index_buffer = SDL_CreateGPUBuffer(gpu, &ib_info);
     if (!tr->index_buffer) {
-        carbon_set_error_from_sdl("Text: Failed to create index buffer");
-        carbon_text_shutdown(tr);
+        agentite_set_error_from_sdl("Text: Failed to create index buffer");
+        agentite_text_shutdown(tr);
         return NULL;
     }
 
@@ -718,14 +718,14 @@ Carbon_TextRenderer *carbon_text_init(SDL_GPUDevice *gpu, SDL_Window *window)
     };
     tr->sampler = SDL_CreateGPUSampler(gpu, &sampler_info);
     if (!tr->sampler) {
-        carbon_set_error_from_sdl("Text: Failed to create sampler");
-        carbon_text_shutdown(tr);
+        agentite_set_error_from_sdl("Text: Failed to create sampler");
+        agentite_text_shutdown(tr);
         return NULL;
     }
 
     /* Create bitmap pipeline */
     if (!text_create_pipeline(tr)) {
-        carbon_text_shutdown(tr);
+        agentite_text_shutdown(tr);
         return NULL;
     }
 
@@ -741,7 +741,7 @@ Carbon_TextRenderer *carbon_text_init(SDL_GPUDevice *gpu, SDL_Window *window)
     return tr;
 }
 
-void carbon_text_shutdown(Carbon_TextRenderer *tr)
+void agentite_text_shutdown(Agentite_TextRenderer *tr)
 {
     if (!tr) return;
 
@@ -771,7 +771,7 @@ void carbon_text_shutdown(Carbon_TextRenderer *tr)
     SDL_Log("Text: Renderer shutdown complete");
 }
 
-void carbon_text_set_screen_size(Carbon_TextRenderer *tr, int width, int height)
+void agentite_text_set_screen_size(Agentite_TextRenderer *tr, int width, int height)
 {
     if (!tr) return;
     tr->screen_width = width;

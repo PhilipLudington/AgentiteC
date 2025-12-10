@@ -3,9 +3,9 @@
  * @brief Strategic Coordinator implementation
  */
 
-#include "carbon/carbon.h"
-#include "carbon/strategy.h"
-#include "carbon/error.h"
+#include "agentite/agentite.h"
+#include "agentite/strategy.h"
+#include "agentite/error.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -14,36 +14,36 @@
 /*                              Internal Types                                 */
 /* -------------------------------------------------------------------------- */
 
-typedef struct Carbon_StrategyCoordinator {
+typedef struct Agentite_StrategyCoordinator {
     /* Options */
-    Carbon_StrategyOption options[CARBON_STRATEGY_MAX_OPTIONS];
+    Agentite_StrategyOption options[AGENTITE_STRATEGY_MAX_OPTIONS];
     int option_count;
 
     /* Min/max allocation constraints */
-    float min_allocations[CARBON_STRATEGY_MAX_OPTIONS];
-    float max_allocations[CARBON_STRATEGY_MAX_OPTIONS];
+    float min_allocations[AGENTITE_STRATEGY_MAX_OPTIONS];
+    float max_allocations[AGENTITE_STRATEGY_MAX_OPTIONS];
 
     /* Phase detection */
-    Carbon_GamePhase current_phase;
+    Agentite_GamePhase current_phase;
     float phase_thresholds[3];  /* early->mid, mid->late, late->end */
-    Carbon_PhaseAnalyzer phase_analyzer;
+    Agentite_PhaseAnalyzer phase_analyzer;
     void *analyzer_userdata;
     bool phase_override;        /* True if phase was manually set */
 
     /* Input provider */
-    Carbon_InputProvider input_provider;
+    Agentite_InputProvider input_provider;
     void *input_userdata;
 
     /* Statistics */
     int evaluations;
     int phase_changes;
-} Carbon_StrategyCoordinator;
+} Agentite_StrategyCoordinator;
 
 /* -------------------------------------------------------------------------- */
 /*                              Phase Names                                    */
 /* -------------------------------------------------------------------------- */
 
-static const char *s_phase_names[CARBON_GAME_PHASE_COUNT] = {
+static const char *s_phase_names[AGENTITE_GAME_PHASE_COUNT] = {
     "Early Expansion",
     "Mid Consolidation",
     "Late Competition",
@@ -54,10 +54,10 @@ static const char *s_phase_names[CARBON_GAME_PHASE_COUNT] = {
 /*                           Lifecycle Functions                               */
 /* -------------------------------------------------------------------------- */
 
-Carbon_StrategyCoordinator *carbon_strategy_create(void) {
-    Carbon_StrategyCoordinator *coord = CARBON_ALLOC(Carbon_StrategyCoordinator);
+Agentite_StrategyCoordinator *agentite_strategy_create(void) {
+    Agentite_StrategyCoordinator *coord = AGENTITE_ALLOC(Agentite_StrategyCoordinator);
     if (!coord) {
-        carbon_set_error("Failed to allocate strategy coordinator");
+        agentite_set_error("Failed to allocate strategy coordinator");
         return NULL;
     }
 
@@ -67,7 +67,7 @@ Carbon_StrategyCoordinator *carbon_strategy_create(void) {
     coord->phase_thresholds[2] = 0.90f;  /* late -> endgame */
 
     /* Initialize allocations to no constraints */
-    for (int i = 0; i < CARBON_STRATEGY_MAX_OPTIONS; i++) {
+    for (int i = 0; i < AGENTITE_STRATEGY_MAX_OPTIONS; i++) {
         coord->min_allocations[i] = 0.0f;
         coord->max_allocations[i] = 1.0f;
     }
@@ -75,22 +75,22 @@ Carbon_StrategyCoordinator *carbon_strategy_create(void) {
     return coord;
 }
 
-void carbon_strategy_destroy(Carbon_StrategyCoordinator *coord) {
+void agentite_strategy_destroy(Agentite_StrategyCoordinator *coord) {
     if (coord) {
         free(coord);
     }
 }
 
-void carbon_strategy_reset(Carbon_StrategyCoordinator *coord) {
+void agentite_strategy_reset(Agentite_StrategyCoordinator *coord) {
     if (!coord) return;
 
     coord->option_count = 0;
-    coord->current_phase = CARBON_GAME_PHASE_EARLY_EXPANSION;
+    coord->current_phase = AGENTITE_GAME_PHASE_EARLY_EXPANSION;
     coord->phase_override = false;
     coord->evaluations = 0;
     coord->phase_changes = 0;
 
-    for (int i = 0; i < CARBON_STRATEGY_MAX_OPTIONS; i++) {
+    for (int i = 0; i < AGENTITE_STRATEGY_MAX_OPTIONS; i++) {
         coord->min_allocations[i] = 0.0f;
         coord->max_allocations[i] = 1.0f;
     }
@@ -100,7 +100,7 @@ void carbon_strategy_reset(Carbon_StrategyCoordinator *coord) {
 /*                           Phase Detection                                   */
 /* -------------------------------------------------------------------------- */
 
-void carbon_strategy_set_phase_thresholds(Carbon_StrategyCoordinator *coord,
+void agentite_strategy_set_phase_thresholds(Agentite_StrategyCoordinator *coord,
                                           float early_to_mid,
                                           float mid_to_late,
                                           float late_to_end) {
@@ -111,8 +111,8 @@ void carbon_strategy_set_phase_thresholds(Carbon_StrategyCoordinator *coord,
     coord->phase_thresholds[2] = late_to_end;
 }
 
-void carbon_strategy_set_phase_analyzer(Carbon_StrategyCoordinator *coord,
-                                        Carbon_PhaseAnalyzer analyzer,
+void agentite_strategy_set_phase_analyzer(Agentite_StrategyCoordinator *coord,
+                                        Agentite_PhaseAnalyzer analyzer,
                                         void *userdata) {
     if (!coord) return;
 
@@ -120,9 +120,9 @@ void carbon_strategy_set_phase_analyzer(Carbon_StrategyCoordinator *coord,
     coord->analyzer_userdata = userdata;
 }
 
-Carbon_GamePhase carbon_strategy_detect_phase(Carbon_StrategyCoordinator *coord,
+Agentite_GamePhase agentite_strategy_detect_phase(Agentite_StrategyCoordinator *coord,
                                               void *game_state) {
-    if (!coord) return CARBON_GAME_PHASE_EARLY_EXPANSION;
+    if (!coord) return AGENTITE_GAME_PHASE_EARLY_EXPANSION;
 
     /* If phase was manually overridden, return that */
     if (coord->phase_override) {
@@ -151,17 +151,17 @@ Carbon_GamePhase carbon_strategy_detect_phase(Carbon_StrategyCoordinator *coord,
     avg /= (float)metric_count;
 
     /* Determine phase based on thresholds */
-    Carbon_GamePhase old_phase = coord->current_phase;
-    Carbon_GamePhase new_phase;
+    Agentite_GamePhase old_phase = coord->current_phase;
+    Agentite_GamePhase new_phase;
 
     if (avg < coord->phase_thresholds[0]) {
-        new_phase = CARBON_GAME_PHASE_EARLY_EXPANSION;
+        new_phase = AGENTITE_GAME_PHASE_EARLY_EXPANSION;
     } else if (avg < coord->phase_thresholds[1]) {
-        new_phase = CARBON_GAME_PHASE_MID_CONSOLIDATION;
+        new_phase = AGENTITE_GAME_PHASE_MID_CONSOLIDATION;
     } else if (avg < coord->phase_thresholds[2]) {
-        new_phase = CARBON_GAME_PHASE_LATE_COMPETITION;
+        new_phase = AGENTITE_GAME_PHASE_LATE_COMPETITION;
     } else {
-        new_phase = CARBON_GAME_PHASE_ENDGAME;
+        new_phase = AGENTITE_GAME_PHASE_ENDGAME;
     }
 
     /* Track phase changes */
@@ -173,15 +173,15 @@ Carbon_GamePhase carbon_strategy_detect_phase(Carbon_StrategyCoordinator *coord,
     return new_phase;
 }
 
-bool carbon_strategy_analyze_phase(Carbon_StrategyCoordinator *coord,
+bool agentite_strategy_analyze_phase(Agentite_StrategyCoordinator *coord,
                                    void *game_state,
-                                   Carbon_PhaseAnalysis *out_analysis) {
+                                   Agentite_PhaseAnalysis *out_analysis) {
     if (!coord || !out_analysis) return false;
 
-    memset(out_analysis, 0, sizeof(Carbon_PhaseAnalysis));
+    memset(out_analysis, 0, sizeof(Agentite_PhaseAnalysis));
 
     /* Detect phase (updates coord->current_phase) */
-    out_analysis->phase = carbon_strategy_detect_phase(coord, game_state);
+    out_analysis->phase = agentite_strategy_detect_phase(coord, game_state);
 
     /* If we have an analyzer, get detailed metrics */
     if (coord->phase_analyzer) {
@@ -202,19 +202,19 @@ bool carbon_strategy_analyze_phase(Carbon_StrategyCoordinator *coord,
         float phase_end = 1.0f;
 
         switch (out_analysis->phase) {
-            case CARBON_GAME_PHASE_EARLY_EXPANSION:
+            case AGENTITE_GAME_PHASE_EARLY_EXPANSION:
                 phase_start = 0.0f;
                 phase_end = coord->phase_thresholds[0];
                 break;
-            case CARBON_GAME_PHASE_MID_CONSOLIDATION:
+            case AGENTITE_GAME_PHASE_MID_CONSOLIDATION:
                 phase_start = coord->phase_thresholds[0];
                 phase_end = coord->phase_thresholds[1];
                 break;
-            case CARBON_GAME_PHASE_LATE_COMPETITION:
+            case AGENTITE_GAME_PHASE_LATE_COMPETITION:
                 phase_start = coord->phase_thresholds[1];
                 phase_end = coord->phase_thresholds[2];
                 break;
-            case CARBON_GAME_PHASE_ENDGAME:
+            case AGENTITE_GAME_PHASE_ENDGAME:
                 phase_start = coord->phase_thresholds[2];
                 phase_end = 1.0f;
                 break;
@@ -242,19 +242,19 @@ bool carbon_strategy_analyze_phase(Carbon_StrategyCoordinator *coord,
     return true;
 }
 
-Carbon_GamePhase carbon_strategy_get_current_phase(const Carbon_StrategyCoordinator *coord) {
-    if (!coord) return CARBON_GAME_PHASE_EARLY_EXPANSION;
+Agentite_GamePhase agentite_strategy_get_current_phase(const Agentite_StrategyCoordinator *coord) {
+    if (!coord) return AGENTITE_GAME_PHASE_EARLY_EXPANSION;
     return coord->current_phase;
 }
 
-const char *carbon_strategy_phase_name(Carbon_GamePhase phase) {
-    if (phase < 0 || phase >= CARBON_GAME_PHASE_COUNT) {
+const char *agentite_strategy_phase_name(Agentite_GamePhase phase) {
+    if (phase < 0 || phase >= AGENTITE_GAME_PHASE_COUNT) {
         return "Unknown";
     }
     return s_phase_names[phase];
 }
 
-void carbon_strategy_set_phase(Carbon_StrategyCoordinator *coord, Carbon_GamePhase phase) {
+void agentite_strategy_set_phase(Agentite_StrategyCoordinator *coord, Agentite_GamePhase phase) {
     if (!coord) return;
 
     if (phase != coord->current_phase) {
@@ -268,28 +268,28 @@ void carbon_strategy_set_phase(Carbon_StrategyCoordinator *coord, Carbon_GamePha
 /*                           Option Management                                 */
 /* -------------------------------------------------------------------------- */
 
-int carbon_strategy_add_option(Carbon_StrategyCoordinator *coord,
+int agentite_strategy_add_option(Agentite_StrategyCoordinator *coord,
                                const char *name,
-                               const Carbon_UtilityCurve *curve,
+                               const Agentite_UtilityCurve *curve,
                                float base_weight) {
     if (!coord || !name || !curve) return -1;
 
-    if (coord->option_count >= CARBON_STRATEGY_MAX_OPTIONS) {
-        carbon_set_error("Maximum strategy options reached");
+    if (coord->option_count >= AGENTITE_STRATEGY_MAX_OPTIONS) {
+        agentite_set_error("Maximum strategy options reached");
         return -1;
     }
 
     /* Check for duplicate name */
-    if (carbon_strategy_find_option(coord, name) >= 0) {
-        carbon_set_error("Option '%s' already exists", name);
+    if (agentite_strategy_find_option(coord, name) >= 0) {
+        agentite_set_error("Option '%s' already exists", name);
         return -1;
     }
 
     int idx = coord->option_count++;
-    Carbon_StrategyOption *opt = &coord->options[idx];
+    Agentite_StrategyOption *opt = &coord->options[idx];
 
-    strncpy(opt->name, name, CARBON_STRATEGY_MAX_NAME_LEN - 1);
-    opt->name[CARBON_STRATEGY_MAX_NAME_LEN - 1] = '\0';
+    strncpy(opt->name, name, AGENTITE_STRATEGY_MAX_NAME_LEN - 1);
+    opt->name[AGENTITE_STRATEGY_MAX_NAME_LEN - 1] = '\0';
     opt->curve = *curve;
     opt->base_weight = base_weight;
     opt->current_input = 0.0f;
@@ -297,17 +297,17 @@ int carbon_strategy_add_option(Carbon_StrategyCoordinator *coord,
     opt->active = true;
 
     /* Initialize phase modifiers to 1.0 (no modification) */
-    for (int i = 0; i < CARBON_PHASE_COUNT; i++) {
+    for (int i = 0; i < AGENTITE_PHASE_COUNT; i++) {
         opt->phase_modifiers[i] = 1.0f;
     }
 
     return idx;
 }
 
-bool carbon_strategy_remove_option(Carbon_StrategyCoordinator *coord, const char *name) {
+bool agentite_strategy_remove_option(Agentite_StrategyCoordinator *coord, const char *name) {
     if (!coord || !name) return false;
 
-    int idx = carbon_strategy_find_option(coord, name);
+    int idx = agentite_strategy_find_option(coord, name);
     if (idx < 0) return false;
 
     /* Shift remaining options */
@@ -321,7 +321,7 @@ bool carbon_strategy_remove_option(Carbon_StrategyCoordinator *coord, const char
     return true;
 }
 
-int carbon_strategy_find_option(const Carbon_StrategyCoordinator *coord, const char *name) {
+int agentite_strategy_find_option(const Agentite_StrategyCoordinator *coord, const char *name) {
     if (!coord || !name) return -1;
 
     for (int i = 0; i < coord->option_count; i++) {
@@ -332,32 +332,32 @@ int carbon_strategy_find_option(const Carbon_StrategyCoordinator *coord, const c
     return -1;
 }
 
-int carbon_strategy_get_option_count(const Carbon_StrategyCoordinator *coord) {
+int agentite_strategy_get_option_count(const Agentite_StrategyCoordinator *coord) {
     if (!coord) return 0;
     return coord->option_count;
 }
 
-const Carbon_StrategyOption *carbon_strategy_get_option(const Carbon_StrategyCoordinator *coord,
+const Agentite_StrategyOption *agentite_strategy_get_option(const Agentite_StrategyCoordinator *coord,
                                                         int index) {
     if (!coord || index < 0 || index >= coord->option_count) return NULL;
     return &coord->options[index];
 }
 
-void carbon_strategy_set_option_weight(Carbon_StrategyCoordinator *coord,
+void agentite_strategy_set_option_weight(Agentite_StrategyCoordinator *coord,
                                        const char *name, float weight) {
     if (!coord || !name) return;
 
-    int idx = carbon_strategy_find_option(coord, name);
+    int idx = agentite_strategy_find_option(coord, name);
     if (idx >= 0) {
         coord->options[idx].base_weight = weight;
     }
 }
 
-void carbon_strategy_set_option_active(Carbon_StrategyCoordinator *coord,
+void agentite_strategy_set_option_active(Agentite_StrategyCoordinator *coord,
                                        const char *name, bool active) {
     if (!coord || !name) return;
 
-    int idx = carbon_strategy_find_option(coord, name);
+    int idx = agentite_strategy_find_option(coord, name);
     if (idx >= 0) {
         coord->options[idx].active = active;
     }
@@ -367,41 +367,41 @@ void carbon_strategy_set_option_active(Carbon_StrategyCoordinator *coord,
 /*                           Phase Modifiers                                   */
 /* -------------------------------------------------------------------------- */
 
-void carbon_strategy_set_phase_modifier(Carbon_StrategyCoordinator *coord,
+void agentite_strategy_set_phase_modifier(Agentite_StrategyCoordinator *coord,
                                         const char *option_name,
-                                        Carbon_GamePhase phase,
+                                        Agentite_GamePhase phase,
                                         float modifier) {
     if (!coord || !option_name) return;
-    if (phase < 0 || phase >= CARBON_GAME_PHASE_COUNT) return;
+    if (phase < 0 || phase >= AGENTITE_GAME_PHASE_COUNT) return;
 
-    int idx = carbon_strategy_find_option(coord, option_name);
+    int idx = agentite_strategy_find_option(coord, option_name);
     if (idx >= 0) {
         coord->options[idx].phase_modifiers[phase] = modifier;
     }
 }
 
-float carbon_strategy_get_phase_modifier(const Carbon_StrategyCoordinator *coord,
+float agentite_strategy_get_phase_modifier(const Agentite_StrategyCoordinator *coord,
                                          const char *option_name,
-                                         Carbon_GamePhase phase) {
+                                         Agentite_GamePhase phase) {
     if (!coord || !option_name) return 1.0f;
-    if (phase < 0 || phase >= CARBON_GAME_PHASE_COUNT) return 1.0f;
+    if (phase < 0 || phase >= AGENTITE_GAME_PHASE_COUNT) return 1.0f;
 
-    int idx = carbon_strategy_find_option(coord, option_name);
+    int idx = agentite_strategy_find_option(coord, option_name);
     if (idx >= 0) {
         return coord->options[idx].phase_modifiers[phase];
     }
     return 1.0f;
 }
 
-void carbon_strategy_set_all_phase_modifiers(Carbon_StrategyCoordinator *coord,
+void agentite_strategy_set_all_phase_modifiers(Agentite_StrategyCoordinator *coord,
                                              const char *option_name,
                                              const float *modifiers) {
     if (!coord || !option_name || !modifiers) return;
 
-    int idx = carbon_strategy_find_option(coord, option_name);
+    int idx = agentite_strategy_find_option(coord, option_name);
     if (idx >= 0) {
         memcpy(coord->options[idx].phase_modifiers, modifiers,
-               sizeof(float) * CARBON_GAME_PHASE_COUNT);
+               sizeof(float) * AGENTITE_GAME_PHASE_COUNT);
     }
 }
 
@@ -409,8 +409,8 @@ void carbon_strategy_set_all_phase_modifiers(Carbon_StrategyCoordinator *coord,
 /*                           Utility Evaluation                                */
 /* -------------------------------------------------------------------------- */
 
-void carbon_strategy_set_input_provider(Carbon_StrategyCoordinator *coord,
-                                        Carbon_InputProvider provider,
+void agentite_strategy_set_input_provider(Agentite_StrategyCoordinator *coord,
+                                        Agentite_InputProvider provider,
                                         void *userdata) {
     if (!coord) return;
 
@@ -418,24 +418,24 @@ void carbon_strategy_set_input_provider(Carbon_StrategyCoordinator *coord,
     coord->input_userdata = userdata;
 }
 
-void carbon_strategy_set_input(Carbon_StrategyCoordinator *coord,
+void agentite_strategy_set_input(Agentite_StrategyCoordinator *coord,
                                const char *option_name, float input) {
     if (!coord || !option_name) return;
 
-    int idx = carbon_strategy_find_option(coord, option_name);
+    int idx = agentite_strategy_find_option(coord, option_name);
     if (idx >= 0) {
         coord->options[idx].current_input = fmaxf(0.0f, fminf(1.0f, input));
     }
 }
 
-void carbon_strategy_evaluate_options(Carbon_StrategyCoordinator *coord,
+void agentite_strategy_evaluate_options(Agentite_StrategyCoordinator *coord,
                                       void *game_state) {
     if (!coord) return;
 
     coord->evaluations++;
 
     for (int i = 0; i < coord->option_count; i++) {
-        Carbon_StrategyOption *opt = &coord->options[i];
+        Agentite_StrategyOption *opt = &coord->options[i];
 
         if (!opt->active) {
             opt->current_utility = 0.0f;
@@ -450,7 +450,7 @@ void carbon_strategy_evaluate_options(Carbon_StrategyCoordinator *coord,
         }
 
         /* Evaluate curve */
-        float raw_utility = carbon_curve_evaluate(&opt->curve, opt->current_input);
+        float raw_utility = agentite_curve_evaluate(&opt->curve, opt->current_input);
 
         /* Apply base weight */
         float weighted = raw_utility * opt->base_weight;
@@ -461,18 +461,18 @@ void carbon_strategy_evaluate_options(Carbon_StrategyCoordinator *coord,
     }
 }
 
-float carbon_strategy_get_utility(const Carbon_StrategyCoordinator *coord,
+float agentite_strategy_get_utility(const Agentite_StrategyCoordinator *coord,
                                   const char *option_name) {
     if (!coord || !option_name) return -1.0f;
 
-    int idx = carbon_strategy_find_option(coord, option_name);
+    int idx = agentite_strategy_find_option(coord, option_name);
     if (idx >= 0) {
         return coord->options[idx].current_utility;
     }
     return -1.0f;
 }
 
-const char *carbon_strategy_get_best_option(const Carbon_StrategyCoordinator *coord) {
+const char *agentite_strategy_get_best_option(const Agentite_StrategyCoordinator *coord) {
     if (!coord || coord->option_count == 0) return NULL;
 
     int best_idx = -1;
@@ -489,14 +489,14 @@ const char *carbon_strategy_get_best_option(const Carbon_StrategyCoordinator *co
     return (best_idx >= 0) ? coord->options[best_idx].name : NULL;
 }
 
-int carbon_strategy_get_options_by_utility(const Carbon_StrategyCoordinator *coord,
+int agentite_strategy_get_options_by_utility(const Agentite_StrategyCoordinator *coord,
                                            const char **out_names,
                                            float *out_utilities,
                                            int max) {
     if (!coord || !out_names || max <= 0) return 0;
 
     /* Build sorted list (simple insertion sort, options count is small) */
-    int indices[CARBON_STRATEGY_MAX_OPTIONS];
+    int indices[AGENTITE_STRATEGY_MAX_OPTIONS];
     int count = 0;
 
     for (int i = 0; i < coord->option_count && count < max; i++) {
@@ -535,9 +535,9 @@ int carbon_strategy_get_options_by_utility(const Carbon_StrategyCoordinator *coo
 /*                           Budget Allocation                                 */
 /* -------------------------------------------------------------------------- */
 
-int carbon_strategy_allocate_budget(Carbon_StrategyCoordinator *coord,
+int agentite_strategy_allocate_budget(Agentite_StrategyCoordinator *coord,
                                     int32_t total_budget,
-                                    Carbon_BudgetAllocation *out_allocations,
+                                    Agentite_BudgetAllocation *out_allocations,
                                     int max_allocations) {
     if (!coord || !out_allocations || max_allocations <= 0) return 0;
     if (total_budget <= 0) return 0;
@@ -558,7 +558,7 @@ int carbon_strategy_allocate_budget(Carbon_StrategyCoordinator *coord,
     }
 
     /* First pass: calculate proportions based on utility */
-    float proportions[CARBON_STRATEGY_MAX_OPTIONS];
+    float proportions[AGENTITE_STRATEGY_MAX_OPTIONS];
     int count = 0;
 
     for (int i = 0; i < coord->option_count && count < max_allocations; i++) {
@@ -593,10 +593,10 @@ int carbon_strategy_allocate_budget(Carbon_StrategyCoordinator *coord,
     for (int i = 0; i < coord->option_count && alloc_idx < count; i++) {
         if (!coord->options[i].active) continue;
 
-        Carbon_BudgetAllocation *alloc = &out_allocations[alloc_count++];
+        Agentite_BudgetAllocation *alloc = &out_allocations[alloc_count++];
         strncpy(alloc->option_name, coord->options[i].name,
-                CARBON_STRATEGY_MAX_NAME_LEN - 1);
-        alloc->option_name[CARBON_STRATEGY_MAX_NAME_LEN - 1] = '\0';
+                AGENTITE_STRATEGY_MAX_NAME_LEN - 1);
+        alloc->option_name[AGENTITE_STRATEGY_MAX_NAME_LEN - 1] = '\0';
         alloc->proportion = proportions[alloc_idx];
         alloc->allocated = (int32_t)(total_budget * proportions[alloc_idx]);
 
@@ -606,35 +606,35 @@ int carbon_strategy_allocate_budget(Carbon_StrategyCoordinator *coord,
     return alloc_count;
 }
 
-void carbon_strategy_set_min_allocation(Carbon_StrategyCoordinator *coord,
+void agentite_strategy_set_min_allocation(Agentite_StrategyCoordinator *coord,
                                         const char *option_name,
                                         float min_proportion) {
     if (!coord || !option_name) return;
 
-    int idx = carbon_strategy_find_option(coord, option_name);
+    int idx = agentite_strategy_find_option(coord, option_name);
     if (idx >= 0) {
         coord->min_allocations[idx] = fmaxf(0.0f, fminf(1.0f, min_proportion));
     }
 }
 
-void carbon_strategy_set_max_allocation(Carbon_StrategyCoordinator *coord,
+void agentite_strategy_set_max_allocation(Agentite_StrategyCoordinator *coord,
                                         const char *option_name,
                                         float max_proportion) {
     if (!coord || !option_name) return;
 
-    int idx = carbon_strategy_find_option(coord, option_name);
+    int idx = agentite_strategy_find_option(coord, option_name);
     if (idx >= 0) {
         coord->max_allocations[idx] = fmaxf(0.0f, fminf(1.0f, max_proportion));
     }
 }
 
-int32_t carbon_strategy_get_allocation(const Carbon_StrategyCoordinator *coord,
+int32_t agentite_strategy_get_allocation(const Agentite_StrategyCoordinator *coord,
                                        const char *option_name,
                                        int32_t total_budget) {
     if (!coord || !option_name || total_budget <= 0) return 0;
 
     /* Find the option */
-    int idx = carbon_strategy_find_option(coord, option_name);
+    int idx = agentite_strategy_find_option(coord, option_name);
     if (idx < 0 || !coord->options[idx].active) return 0;
 
     /* Calculate total utility of active options */
@@ -661,33 +661,33 @@ int32_t carbon_strategy_get_allocation(const Carbon_StrategyCoordinator *coord,
 /*                          Utility Curve Helpers                              */
 /* -------------------------------------------------------------------------- */
 
-Carbon_UtilityCurve carbon_curve_linear(float min_output, float max_output) {
-    Carbon_UtilityCurve curve = {};
-    curve.type = CARBON_CURVE_LINEAR;
+Agentite_UtilityCurve agentite_curve_linear(float min_output, float max_output) {
+    Agentite_UtilityCurve curve = {};
+    curve.type = AGENTITE_CURVE_LINEAR;
     curve.min_output = min_output;
     curve.max_output = max_output;
     return curve;
 }
 
-Carbon_UtilityCurve carbon_curve_quadratic(float min_output, float max_output) {
-    Carbon_UtilityCurve curve = {};
-    curve.type = CARBON_CURVE_QUADRATIC;
+Agentite_UtilityCurve agentite_curve_quadratic(float min_output, float max_output) {
+    Agentite_UtilityCurve curve = {};
+    curve.type = AGENTITE_CURVE_QUADRATIC;
     curve.min_output = min_output;
     curve.max_output = max_output;
     return curve;
 }
 
-Carbon_UtilityCurve carbon_curve_sqrt(float min_output, float max_output) {
-    Carbon_UtilityCurve curve = {};
-    curve.type = CARBON_CURVE_SQRT;
+Agentite_UtilityCurve agentite_curve_sqrt(float min_output, float max_output) {
+    Agentite_UtilityCurve curve = {};
+    curve.type = AGENTITE_CURVE_SQRT;
     curve.min_output = min_output;
     curve.max_output = max_output;
     return curve;
 }
 
-Carbon_UtilityCurve carbon_curve_sigmoid(float steepness, float midpoint) {
-    Carbon_UtilityCurve curve = {};
-    curve.type = CARBON_CURVE_SIGMOID;
+Agentite_UtilityCurve agentite_curve_sigmoid(float steepness, float midpoint) {
+    Agentite_UtilityCurve curve = {};
+    curve.type = AGENTITE_CURVE_SIGMOID;
     curve.param_a = steepness;
     curve.param_b = midpoint;
     curve.min_output = 0.0f;
@@ -695,45 +695,45 @@ Carbon_UtilityCurve carbon_curve_sigmoid(float steepness, float midpoint) {
     return curve;
 }
 
-Carbon_UtilityCurve carbon_curve_inverse(float min_output, float max_output) {
-    Carbon_UtilityCurve curve = {};
-    curve.type = CARBON_CURVE_INVERSE;
+Agentite_UtilityCurve agentite_curve_inverse(float min_output, float max_output) {
+    Agentite_UtilityCurve curve = {};
+    curve.type = AGENTITE_CURVE_INVERSE;
     curve.min_output = min_output;
     curve.max_output = max_output;
     return curve;
 }
 
-Carbon_UtilityCurve carbon_curve_step(float threshold, float low_value, float high_value) {
-    Carbon_UtilityCurve curve = {};
-    curve.type = CARBON_CURVE_STEP;
+Agentite_UtilityCurve agentite_curve_step(float threshold, float low_value, float high_value) {
+    Agentite_UtilityCurve curve = {};
+    curve.type = AGENTITE_CURVE_STEP;
     curve.param_a = threshold;
     curve.min_output = low_value;
     curve.max_output = high_value;
     return curve;
 }
 
-Carbon_UtilityCurve carbon_curve_exponential(float rate, float min_output, float max_output) {
-    Carbon_UtilityCurve curve = {};
-    curve.type = CARBON_CURVE_EXPONENTIAL;
+Agentite_UtilityCurve agentite_curve_exponential(float rate, float min_output, float max_output) {
+    Agentite_UtilityCurve curve = {};
+    curve.type = AGENTITE_CURVE_EXPONENTIAL;
     curve.param_a = rate;
     curve.min_output = min_output;
     curve.max_output = max_output;
     return curve;
 }
 
-Carbon_UtilityCurve carbon_curve_logarithmic(float scale, float min_output, float max_output) {
-    Carbon_UtilityCurve curve = {};
-    curve.type = CARBON_CURVE_LOGARITHMIC;
+Agentite_UtilityCurve agentite_curve_logarithmic(float scale, float min_output, float max_output) {
+    Agentite_UtilityCurve curve = {};
+    curve.type = AGENTITE_CURVE_LOGARITHMIC;
     curve.param_a = scale;
     curve.min_output = min_output;
     curve.max_output = max_output;
     return curve;
 }
 
-Carbon_UtilityCurve carbon_curve_custom(float (*fn)(float input, void *userdata),
+Agentite_UtilityCurve agentite_curve_custom(float (*fn)(float input, void *userdata),
                                         void *userdata) {
-    Carbon_UtilityCurve curve = {};
-    curve.type = CARBON_CURVE_CUSTOM;
+    Agentite_UtilityCurve curve = {};
+    curve.type = AGENTITE_CURVE_CUSTOM;
     curve.custom_fn = fn;
     curve.custom_userdata = userdata;
     curve.min_output = 0.0f;
@@ -741,7 +741,7 @@ Carbon_UtilityCurve carbon_curve_custom(float (*fn)(float input, void *userdata)
     return curve;
 }
 
-float carbon_curve_evaluate(const Carbon_UtilityCurve *curve, float input) {
+float agentite_curve_evaluate(const Agentite_UtilityCurve *curve, float input) {
     if (!curve) return 0.0f;
 
     /* Clamp input to 0-1 */
@@ -750,34 +750,34 @@ float carbon_curve_evaluate(const Carbon_UtilityCurve *curve, float input) {
     float t = 0.0f;  /* Normalized result 0-1 */
 
     switch (curve->type) {
-        case CARBON_CURVE_LINEAR:
+        case AGENTITE_CURVE_LINEAR:
             t = input;
             break;
 
-        case CARBON_CURVE_QUADRATIC:
+        case AGENTITE_CURVE_QUADRATIC:
             t = input * input;
             break;
 
-        case CARBON_CURVE_SQRT:
+        case AGENTITE_CURVE_SQRT:
             t = sqrtf(input);
             break;
 
-        case CARBON_CURVE_SIGMOID: {
+        case AGENTITE_CURVE_SIGMOID: {
             float steepness = curve->param_a > 0.0f ? curve->param_a : 10.0f;
             float midpoint = curve->param_b > 0.0f ? curve->param_b : 0.5f;
             t = 1.0f / (1.0f + expf(-steepness * (input - midpoint)));
             break;
         }
 
-        case CARBON_CURVE_INVERSE:
+        case AGENTITE_CURVE_INVERSE:
             t = 1.0f - input;
             break;
 
-        case CARBON_CURVE_STEP:
+        case AGENTITE_CURVE_STEP:
             t = (input >= curve->param_a) ? 1.0f : 0.0f;
             break;
 
-        case CARBON_CURVE_EXPONENTIAL: {
+        case AGENTITE_CURVE_EXPONENTIAL: {
             float rate = curve->param_a > 0.0f ? curve->param_a : 2.0f;
             /* Normalize so that e^(rate*1) - 1 maps to 1 */
             float max_exp = expf(rate) - 1.0f;
@@ -787,7 +787,7 @@ float carbon_curve_evaluate(const Carbon_UtilityCurve *curve, float input) {
             break;
         }
 
-        case CARBON_CURVE_LOGARITHMIC: {
+        case AGENTITE_CURVE_LOGARITHMIC: {
             float scale = curve->param_a > 0.0f ? curve->param_a : 10.0f;
             /* Normalize so that log(1 + scale*1) maps to 1 */
             float max_log = logf(1.0f + scale);
@@ -797,7 +797,7 @@ float carbon_curve_evaluate(const Carbon_UtilityCurve *curve, float input) {
             break;
         }
 
-        case CARBON_CURVE_CUSTOM:
+        case AGENTITE_CURVE_CUSTOM:
             if (curve->custom_fn) {
                 return curve->custom_fn(input, curve->custom_userdata);
             }
@@ -817,11 +817,11 @@ float carbon_curve_evaluate(const Carbon_UtilityCurve *curve, float input) {
 /*                              Statistics                                     */
 /* -------------------------------------------------------------------------- */
 
-void carbon_strategy_get_stats(const Carbon_StrategyCoordinator *coord,
-                               Carbon_StrategyStats *out_stats) {
+void agentite_strategy_get_stats(const Agentite_StrategyCoordinator *coord,
+                               Agentite_StrategyStats *out_stats) {
     if (!coord || !out_stats) return;
 
-    memset(out_stats, 0, sizeof(Carbon_StrategyStats));
+    memset(out_stats, 0, sizeof(Agentite_StrategyStats));
 
     out_stats->evaluations = coord->evaluations;
     out_stats->phase_changes = coord->phase_changes;
@@ -847,7 +847,7 @@ void carbon_strategy_get_stats(const Carbon_StrategyCoordinator *coord,
     out_stats->highest_option = highest_name;
 }
 
-void carbon_strategy_reset_stats(Carbon_StrategyCoordinator *coord) {
+void agentite_strategy_reset_stats(Agentite_StrategyCoordinator *coord) {
     if (!coord) return;
 
     coord->evaluations = 0;

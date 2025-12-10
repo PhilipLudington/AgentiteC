@@ -1,7 +1,7 @@
-#include "carbon/carbon.h"
-#include "carbon/tech.h"
-#include "carbon/event.h"
-#include "carbon/error.h"
+#include "agentite/agentite.h"
+#include "agentite/tech.h"
+#include "agentite/event.h"
+#include "agentite/error.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -9,15 +9,15 @@
  * Internal Data Structures
  *============================================================================*/
 
-struct Carbon_TechTree {
-    Carbon_TechDef techs[CARBON_TECH_MAX];
+struct Agentite_TechTree {
+    Agentite_TechDef techs[AGENTITE_TECH_MAX];
     int tech_count;
 
     /* Event integration */
-    Carbon_EventDispatcher *events;
+    Agentite_EventDispatcher *events;
 
     /* Completion callback */
-    Carbon_TechCallback on_complete;
+    Agentite_TechCallback on_complete;
     void *callback_userdata;
 };
 
@@ -25,7 +25,7 @@ struct Carbon_TechTree {
  * Helper Functions
  *============================================================================*/
 
-static int find_tech_index(const Carbon_TechTree *tree, const char *id) {
+static int find_tech_index(const Agentite_TechTree *tree, const char *id) {
     if (!tree || !id) return -1;
 
     for (int i = 0; i < tree->tech_count; i++) {
@@ -36,25 +36,25 @@ static int find_tech_index(const Carbon_TechTree *tree, const char *id) {
     return -1;
 }
 
-static void emit_tech_event(Carbon_TechTree *tree, Carbon_EventType type,
+static void emit_tech_event(Agentite_TechTree *tree, Agentite_EventType type,
                             int tech_index, const char *tech_name) {
     if (!tree || !tree->events) return;
 
-    Carbon_Event e = { .type = type };
+    Agentite_Event e = { .type = type };
     e.tech.tech_id = (uint32_t)tech_index;
     e.tech.tech_name = tech_name;
 
-    carbon_event_emit(tree->events, &e);
+    agentite_event_emit(tree->events, &e);
 }
 
-static void complete_tech_internal(Carbon_TechTree *tree,
-                                    Carbon_TechState *state,
+static void complete_tech_internal(Agentite_TechTree *tree,
+                                    Agentite_TechState *state,
                                     int tech_index) {
     if (!tree || !state || tech_index < 0 || tech_index >= tree->tech_count) {
         return;
     }
 
-    const Carbon_TechDef *def = &tree->techs[tech_index];
+    const Agentite_TechDef *def = &tree->techs[tech_index];
 
     /* Mark as completed */
     state->completed[tech_index] = true;
@@ -71,7 +71,7 @@ static void complete_tech_internal(Carbon_TechTree *tree,
     }
 
     /* Emit event */
-    emit_tech_event(tree, CARBON_EVENT_TECH_RESEARCHED, tech_index, def->name);
+    emit_tech_event(tree, AGENTITE_EVENT_TECH_RESEARCHED, tech_index, def->name);
 
     /* Call completion callback */
     if (tree->on_complete) {
@@ -83,14 +83,14 @@ static void complete_tech_internal(Carbon_TechTree *tree,
  * Tech Tree Creation/Destruction
  *============================================================================*/
 
-Carbon_TechTree *carbon_tech_create(void) {
-    return carbon_tech_create_with_events(NULL);
+Agentite_TechTree *agentite_tech_create(void) {
+    return agentite_tech_create_with_events(NULL);
 }
 
-Carbon_TechTree *carbon_tech_create_with_events(Carbon_EventDispatcher *events) {
-    Carbon_TechTree *tree = CARBON_ALLOC(Carbon_TechTree);
+Agentite_TechTree *agentite_tech_create_with_events(Agentite_EventDispatcher *events) {
+    Agentite_TechTree *tree = AGENTITE_ALLOC(Agentite_TechTree);
     if (!tree) {
-        carbon_set_error("Failed to allocate tech tree");
+        agentite_set_error("Failed to allocate tech tree");
         return NULL;
     }
 
@@ -98,7 +98,7 @@ Carbon_TechTree *carbon_tech_create_with_events(Carbon_EventDispatcher *events) 
     return tree;
 }
 
-void carbon_tech_destroy(Carbon_TechTree *tree) {
+void agentite_tech_destroy(Agentite_TechTree *tree) {
     free(tree);
 }
 
@@ -106,27 +106,27 @@ void carbon_tech_destroy(Carbon_TechTree *tree) {
  * Technology Registration
  *============================================================================*/
 
-int carbon_tech_register(Carbon_TechTree *tree, const Carbon_TechDef *def) {
+int agentite_tech_register(Agentite_TechTree *tree, const Agentite_TechDef *def) {
     if (!tree) {
-        carbon_set_error("carbon_tech_register: null tree");
+        agentite_set_error("agentite_tech_register: null tree");
         return -1;
     }
     if (!def) {
-        carbon_set_error("carbon_tech_register: null definition");
+        agentite_set_error("agentite_tech_register: null definition");
         return -1;
     }
-    if (tree->tech_count >= CARBON_TECH_MAX) {
-        carbon_set_error("carbon_tech_register: maximum technologies reached");
+    if (tree->tech_count >= AGENTITE_TECH_MAX) {
+        agentite_set_error("agentite_tech_register: maximum technologies reached");
         return -1;
     }
     if (def->id[0] == '\0') {
-        carbon_set_error("carbon_tech_register: empty technology ID");
+        agentite_set_error("agentite_tech_register: empty technology ID");
         return -1;
     }
 
     /* Check for duplicate ID */
     if (find_tech_index(tree, def->id) >= 0) {
-        carbon_set_error("carbon_tech_register: duplicate technology ID: %s", def->id);
+        agentite_set_error("agentite_tech_register: duplicate technology ID: %s", def->id);
         return -1;
     }
 
@@ -137,24 +137,24 @@ int carbon_tech_register(Carbon_TechTree *tree, const Carbon_TechDef *def) {
     return index;
 }
 
-int carbon_tech_count(const Carbon_TechTree *tree) {
+int agentite_tech_count(const Agentite_TechTree *tree) {
     return tree ? tree->tech_count : 0;
 }
 
-const Carbon_TechDef *carbon_tech_get(const Carbon_TechTree *tree, int index) {
+const Agentite_TechDef *agentite_tech_get(const Agentite_TechTree *tree, int index) {
     if (!tree || index < 0 || index >= tree->tech_count) {
         return NULL;
     }
     return &tree->techs[index];
 }
 
-const Carbon_TechDef *carbon_tech_find(const Carbon_TechTree *tree, const char *id) {
+const Agentite_TechDef *agentite_tech_find(const Agentite_TechTree *tree, const char *id) {
     int index = find_tech_index(tree, id);
     if (index < 0) return NULL;
     return &tree->techs[index];
 }
 
-int carbon_tech_find_index(const Carbon_TechTree *tree, const char *id) {
+int agentite_tech_find_index(const Agentite_TechTree *tree, const char *id) {
     return find_tech_index(tree, id);
 }
 
@@ -162,21 +162,21 @@ int carbon_tech_find_index(const Carbon_TechTree *tree, const char *id) {
  * Technology State Management
  *============================================================================*/
 
-void carbon_tech_state_init(Carbon_TechState *state) {
+void agentite_tech_state_init(Agentite_TechState *state) {
     if (!state) return;
-    memset(state, 0, sizeof(Carbon_TechState));
+    memset(state, 0, sizeof(Agentite_TechState));
 }
 
-void carbon_tech_state_reset(Carbon_TechState *state) {
-    carbon_tech_state_init(state);
+void agentite_tech_state_reset(Agentite_TechState *state) {
+    agentite_tech_state_init(state);
 }
 
 /*============================================================================
  * Research Status Queries
  *============================================================================*/
 
-bool carbon_tech_is_researched(const Carbon_TechTree *tree,
-                                const Carbon_TechState *state,
+bool agentite_tech_is_researched(const Agentite_TechTree *tree,
+                                const Agentite_TechState *state,
                                 const char *id) {
     if (!tree || !state || !id) return false;
 
@@ -191,12 +191,12 @@ bool carbon_tech_is_researched(const Carbon_TechTree *tree,
     return state->completed[index];
 }
 
-bool carbon_tech_has_prerequisites(const Carbon_TechTree *tree,
-                                    const Carbon_TechState *state,
+bool agentite_tech_has_prerequisites(const Agentite_TechTree *tree,
+                                    const Agentite_TechState *state,
                                     const char *id) {
     if (!tree || !state || !id) return false;
 
-    const Carbon_TechDef *def = carbon_tech_find(tree, id);
+    const Agentite_TechDef *def = agentite_tech_find(tree, id);
     if (!def) return false;
 
     /* No prerequisites = satisfied */
@@ -204,7 +204,7 @@ bool carbon_tech_has_prerequisites(const Carbon_TechTree *tree,
 
     /* Check each prerequisite */
     for (int i = 0; i < def->prereq_count; i++) {
-        if (!carbon_tech_is_researched(tree, state, def->prerequisites[i])) {
+        if (!agentite_tech_is_researched(tree, state, def->prerequisites[i])) {
             return false;
         }
     }
@@ -212,63 +212,63 @@ bool carbon_tech_has_prerequisites(const Carbon_TechTree *tree,
     return true;
 }
 
-bool carbon_tech_can_research(const Carbon_TechTree *tree,
-                               const Carbon_TechState *state,
+bool agentite_tech_can_research(const Agentite_TechTree *tree,
+                               const Agentite_TechState *state,
                                const char *id) {
     if (!tree || !state || !id) return false;
 
-    const Carbon_TechDef *def = carbon_tech_find(tree, id);
+    const Agentite_TechDef *def = agentite_tech_find(tree, id);
     if (!def) return false;
 
     /* Already researched (and not repeatable) */
-    if (carbon_tech_is_researched(tree, state, id) && !def->repeatable) {
+    if (agentite_tech_is_researched(tree, state, id) && !def->repeatable) {
         return false;
     }
 
     /* Check prerequisites */
-    return carbon_tech_has_prerequisites(tree, state, id);
+    return agentite_tech_has_prerequisites(tree, state, id);
 }
 
 /*============================================================================
  * Research Operations
  *============================================================================*/
 
-bool carbon_tech_start_research(Carbon_TechTree *tree,
-                                 Carbon_TechState *state,
+bool agentite_tech_start_research(Agentite_TechTree *tree,
+                                 Agentite_TechState *state,
                                  const char *id) {
     if (!tree || !state || !id) {
-        carbon_set_error("carbon_tech_start_research: invalid parameter");
+        agentite_set_error("agentite_tech_start_research: invalid parameter");
         return false;
     }
 
     /* Check if we can research this tech */
-    if (!carbon_tech_can_research(tree, state, id)) {
-        carbon_set_error("carbon_tech_start_research: cannot research %s", id);
+    if (!agentite_tech_can_research(tree, state, id)) {
+        agentite_set_error("agentite_tech_start_research: cannot research %s", id);
         return false;
     }
 
     /* Check for available research slot */
-    if (state->active_count >= CARBON_TECH_MAX_ACTIVE) {
-        carbon_set_error("carbon_tech_start_research: no available research slots");
+    if (state->active_count >= AGENTITE_TECH_MAX_ACTIVE) {
+        agentite_set_error("agentite_tech_start_research: no available research slots");
         return false;
     }
 
     /* Check if already researching this tech */
     for (int i = 0; i < state->active_count; i++) {
         if (strcmp(state->active[i].tech_id, id) == 0) {
-            carbon_set_error("carbon_tech_start_research: already researching %s", id);
+            agentite_set_error("agentite_tech_start_research: already researching %s", id);
             return false;
         }
     }
 
-    const Carbon_TechDef *def = carbon_tech_find(tree, id);
+    const Agentite_TechDef *def = agentite_tech_find(tree, id);
     int tech_index = find_tech_index(tree, id);
 
     /* Calculate cost (may scale for repeatable techs) */
-    int32_t cost = carbon_tech_calculate_cost(def, state->repeat_count[tech_index]);
+    int32_t cost = agentite_tech_calculate_cost(def, state->repeat_count[tech_index]);
 
     /* Initialize research slot */
-    Carbon_ActiveResearch *slot = &state->active[state->active_count];
+    Agentite_ActiveResearch *slot = &state->active[state->active_count];
     strncpy(slot->tech_id, id, sizeof(slot->tech_id) - 1);
     slot->tech_id[sizeof(slot->tech_id) - 1] = '\0';
     slot->points_invested = 0;
@@ -276,26 +276,26 @@ bool carbon_tech_start_research(Carbon_TechTree *tree,
     state->active_count++;
 
     /* Emit event */
-    emit_tech_event(tree, CARBON_EVENT_TECH_STARTED, tech_index, def->name);
+    emit_tech_event(tree, AGENTITE_EVENT_TECH_STARTED, tech_index, def->name);
 
     return true;
 }
 
-bool carbon_tech_add_points(Carbon_TechTree *tree,
-                             Carbon_TechState *state,
+bool agentite_tech_add_points(Agentite_TechTree *tree,
+                             Agentite_TechState *state,
                              int32_t points) {
-    return carbon_tech_add_points_to_slot(tree, state, 0, points);
+    return agentite_tech_add_points_to_slot(tree, state, 0, points);
 }
 
-bool carbon_tech_add_points_to_slot(Carbon_TechTree *tree,
-                                     Carbon_TechState *state,
+bool agentite_tech_add_points_to_slot(Agentite_TechTree *tree,
+                                     Agentite_TechState *state,
                                      int slot,
                                      int32_t points) {
     if (!tree || !state) return false;
     if (slot < 0 || slot >= state->active_count) return false;
     if (points <= 0) return false;
 
-    Carbon_ActiveResearch *active = &state->active[slot];
+    Agentite_ActiveResearch *active = &state->active[slot];
     if (active->tech_id[0] == '\0') return false;
 
     active->points_invested += points;
@@ -311,7 +311,7 @@ bool carbon_tech_add_points_to_slot(Carbon_TechTree *tree,
         for (int i = slot; i < state->active_count - 1; i++) {
             state->active[i] = state->active[i + 1];
         }
-        memset(&state->active[state->active_count - 1], 0, sizeof(Carbon_ActiveResearch));
+        memset(&state->active[state->active_count - 1], 0, sizeof(Agentite_ActiveResearch));
         state->active_count--;
 
         return true;
@@ -320,8 +320,8 @@ bool carbon_tech_add_points_to_slot(Carbon_TechTree *tree,
     return false;
 }
 
-void carbon_tech_complete(Carbon_TechTree *tree,
-                           Carbon_TechState *state,
+void agentite_tech_complete(Agentite_TechTree *tree,
+                           Agentite_TechState *state,
                            const char *id) {
     if (!tree || !state || !id) return;
 
@@ -335,7 +335,7 @@ void carbon_tech_complete(Carbon_TechTree *tree,
             for (int j = i; j < state->active_count - 1; j++) {
                 state->active[j] = state->active[j + 1];
             }
-            memset(&state->active[state->active_count - 1], 0, sizeof(Carbon_ActiveResearch));
+            memset(&state->active[state->active_count - 1], 0, sizeof(Agentite_ActiveResearch));
             state->active_count--;
             break;
         }
@@ -344,7 +344,7 @@ void carbon_tech_complete(Carbon_TechTree *tree,
     complete_tech_internal(tree, state, index);
 }
 
-void carbon_tech_cancel_research(Carbon_TechState *state, int slot) {
+void agentite_tech_cancel_research(Agentite_TechState *state, int slot) {
     if (!state) return;
     if (slot < 0 || slot >= state->active_count) return;
 
@@ -352,11 +352,11 @@ void carbon_tech_cancel_research(Carbon_TechState *state, int slot) {
     for (int i = slot; i < state->active_count - 1; i++) {
         state->active[i] = state->active[i + 1];
     }
-    memset(&state->active[state->active_count - 1], 0, sizeof(Carbon_ActiveResearch));
+    memset(&state->active[state->active_count - 1], 0, sizeof(Agentite_ActiveResearch));
     state->active_count--;
 }
 
-void carbon_tech_cancel_all_research(Carbon_TechState *state) {
+void agentite_tech_cancel_all_research(Agentite_TechState *state) {
     if (!state) return;
     memset(state->active, 0, sizeof(state->active));
     state->active_count = 0;
@@ -366,10 +366,10 @@ void carbon_tech_cancel_all_research(Carbon_TechState *state) {
  * Progress Queries
  *============================================================================*/
 
-float carbon_tech_get_progress(const Carbon_TechState *state, int slot) {
+float agentite_tech_get_progress(const Agentite_TechState *state, int slot) {
     if (!state || slot < 0 || slot >= state->active_count) return 0.0f;
 
-    const Carbon_ActiveResearch *active = &state->active[slot];
+    const Agentite_ActiveResearch *active = &state->active[slot];
     if (active->points_required <= 0) return 0.0f;
 
     float progress = (float)active->points_invested / (float)active->points_required;
@@ -379,15 +379,15 @@ float carbon_tech_get_progress(const Carbon_TechState *state, int slot) {
     return progress;
 }
 
-int32_t carbon_tech_get_remaining(const Carbon_TechState *state, int slot) {
+int32_t agentite_tech_get_remaining(const Agentite_TechState *state, int slot) {
     if (!state || slot < 0 || slot >= state->active_count) return 0;
 
-    const Carbon_ActiveResearch *active = &state->active[slot];
+    const Agentite_ActiveResearch *active = &state->active[slot];
     int32_t remaining = active->points_required - active->points_invested;
     return remaining > 0 ? remaining : 0;
 }
 
-bool carbon_tech_is_researching(const Carbon_TechState *state, const char *id) {
+bool agentite_tech_is_researching(const Agentite_TechState *state, const char *id) {
     if (!state || !id) return false;
 
     for (int i = 0; i < state->active_count; i++) {
@@ -398,12 +398,12 @@ bool carbon_tech_is_researching(const Carbon_TechState *state, const char *id) {
     return false;
 }
 
-int carbon_tech_active_count(const Carbon_TechState *state) {
+int agentite_tech_active_count(const Agentite_TechState *state) {
     return state ? state->active_count : 0;
 }
 
-int carbon_tech_get_repeat_count(const Carbon_TechTree *tree,
-                                  const Carbon_TechState *state,
+int agentite_tech_get_repeat_count(const Agentite_TechTree *tree,
+                                  const Agentite_TechState *state,
                                   const char *id) {
     if (!tree || !state || !id) return 0;
 
@@ -417,31 +417,31 @@ int carbon_tech_get_repeat_count(const Carbon_TechTree *tree,
  * Filtered Queries
  *============================================================================*/
 
-int carbon_tech_get_available(const Carbon_TechTree *tree,
-                               const Carbon_TechState *state,
-                               const Carbon_TechDef **out_defs,
+int agentite_tech_get_available(const Agentite_TechTree *tree,
+                               const Agentite_TechState *state,
+                               const Agentite_TechDef **out_defs,
                                int max_count) {
     if (!tree || !state || !out_defs || max_count <= 0) return 0;
 
     int count = 0;
     for (int i = 0; i < tree->tech_count && count < max_count; i++) {
-        const Carbon_TechDef *def = &tree->techs[i];
+        const Agentite_TechDef *def = &tree->techs[i];
 
         /* Skip hidden techs that don't have prerequisites met */
-        if (def->hidden && !carbon_tech_has_prerequisites(tree, state, def->id)) {
+        if (def->hidden && !agentite_tech_has_prerequisites(tree, state, def->id)) {
             continue;
         }
 
-        if (carbon_tech_can_research(tree, state, def->id)) {
+        if (agentite_tech_can_research(tree, state, def->id)) {
             out_defs[count++] = def;
         }
     }
     return count;
 }
 
-int carbon_tech_get_completed(const Carbon_TechTree *tree,
-                               const Carbon_TechState *state,
-                               const Carbon_TechDef **out_defs,
+int agentite_tech_get_completed(const Agentite_TechTree *tree,
+                               const Agentite_TechState *state,
+                               const Agentite_TechDef **out_defs,
                                int max_count) {
     if (!tree || !state || !out_defs || max_count <= 0) return 0;
 
@@ -454,9 +454,9 @@ int carbon_tech_get_completed(const Carbon_TechTree *tree,
     return count;
 }
 
-int carbon_tech_get_by_branch(const Carbon_TechTree *tree,
+int agentite_tech_get_by_branch(const Agentite_TechTree *tree,
                                int32_t branch,
-                               const Carbon_TechDef **out_defs,
+                               const Agentite_TechDef **out_defs,
                                int max_count) {
     if (!tree || !out_defs || max_count <= 0) return 0;
 
@@ -469,9 +469,9 @@ int carbon_tech_get_by_branch(const Carbon_TechTree *tree,
     return count;
 }
 
-int carbon_tech_get_by_tier(const Carbon_TechTree *tree,
+int agentite_tech_get_by_tier(const Agentite_TechTree *tree,
                              int32_t tier,
-                             const Carbon_TechDef **out_defs,
+                             const Agentite_TechDef **out_defs,
                              int max_count) {
     if (!tree || !out_defs || max_count <= 0) return 0;
 
@@ -488,8 +488,8 @@ int carbon_tech_get_by_tier(const Carbon_TechTree *tree,
  * Callbacks
  *============================================================================*/
 
-void carbon_tech_set_completion_callback(Carbon_TechTree *tree,
-                                          Carbon_TechCallback callback,
+void agentite_tech_set_completion_callback(Agentite_TechTree *tree,
+                                          Agentite_TechCallback callback,
                                           void *userdata) {
     if (!tree) return;
     tree->on_complete = callback;
@@ -500,33 +500,33 @@ void carbon_tech_set_completion_callback(Carbon_TechTree *tree,
  * Utility Functions
  *============================================================================*/
 
-const char *carbon_tech_effect_type_name(Carbon_TechEffectType type) {
+const char *agentite_tech_effect_type_name(Agentite_TechEffectType type) {
     switch (type) {
-        case CARBON_TECH_EFFECT_NONE:            return "None";
-        case CARBON_TECH_EFFECT_RESOURCE_BONUS:  return "Resource Bonus";
-        case CARBON_TECH_EFFECT_RESOURCE_CAP:    return "Resource Cap";
-        case CARBON_TECH_EFFECT_COST_REDUCTION:  return "Cost Reduction";
-        case CARBON_TECH_EFFECT_PRODUCTION_SPEED: return "Production Speed";
-        case CARBON_TECH_EFFECT_UNLOCK_UNIT:     return "Unlock Unit";
-        case CARBON_TECH_EFFECT_UNLOCK_BUILDING: return "Unlock Building";
-        case CARBON_TECH_EFFECT_UNLOCK_ABILITY:  return "Unlock Ability";
-        case CARBON_TECH_EFFECT_ATTACK_BONUS:    return "Attack Bonus";
-        case CARBON_TECH_EFFECT_DEFENSE_BONUS:   return "Defense Bonus";
-        case CARBON_TECH_EFFECT_HEALTH_BONUS:    return "Health Bonus";
-        case CARBON_TECH_EFFECT_RANGE_BONUS:     return "Range Bonus";
-        case CARBON_TECH_EFFECT_SPEED_BONUS:     return "Speed Bonus";
-        case CARBON_TECH_EFFECT_VISION_BONUS:    return "Vision Bonus";
-        case CARBON_TECH_EFFECT_EXPERIENCE_BONUS: return "Experience Bonus";
-        case CARBON_TECH_EFFECT_CUSTOM:          return "Custom";
+        case AGENTITE_TECH_EFFECT_NONE:            return "None";
+        case AGENTITE_TECH_EFFECT_RESOURCE_BONUS:  return "Resource Bonus";
+        case AGENTITE_TECH_EFFECT_RESOURCE_CAP:    return "Resource Cap";
+        case AGENTITE_TECH_EFFECT_COST_REDUCTION:  return "Cost Reduction";
+        case AGENTITE_TECH_EFFECT_PRODUCTION_SPEED: return "Production Speed";
+        case AGENTITE_TECH_EFFECT_UNLOCK_UNIT:     return "Unlock Unit";
+        case AGENTITE_TECH_EFFECT_UNLOCK_BUILDING: return "Unlock Building";
+        case AGENTITE_TECH_EFFECT_UNLOCK_ABILITY:  return "Unlock Ability";
+        case AGENTITE_TECH_EFFECT_ATTACK_BONUS:    return "Attack Bonus";
+        case AGENTITE_TECH_EFFECT_DEFENSE_BONUS:   return "Defense Bonus";
+        case AGENTITE_TECH_EFFECT_HEALTH_BONUS:    return "Health Bonus";
+        case AGENTITE_TECH_EFFECT_RANGE_BONUS:     return "Range Bonus";
+        case AGENTITE_TECH_EFFECT_SPEED_BONUS:     return "Speed Bonus";
+        case AGENTITE_TECH_EFFECT_VISION_BONUS:    return "Vision Bonus";
+        case AGENTITE_TECH_EFFECT_EXPERIENCE_BONUS: return "Experience Bonus";
+        case AGENTITE_TECH_EFFECT_CUSTOM:          return "Custom";
         default:
-            if (type >= CARBON_TECH_EFFECT_USER) {
+            if (type >= AGENTITE_TECH_EFFECT_USER) {
                 return "User-Defined";
             }
             return "Unknown";
     }
 }
 
-int32_t carbon_tech_calculate_cost(const Carbon_TechDef *def, int repeat_count) {
+int32_t agentite_tech_calculate_cost(const Agentite_TechDef *def, int repeat_count) {
     if (!def) return 0;
 
     int32_t base_cost = def->research_cost;

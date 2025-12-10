@@ -4,10 +4,10 @@
  * Planned buildings with progress tracking before actual construction.
  */
 
-#include "carbon/carbon.h"
-#include "carbon/construction.h"
-#include "carbon/error.h"
-#include "carbon/validate.h"
+#include "agentite/agentite.h"
+#include "agentite/construction.h"
+#include "agentite/error.h"
+#include "agentite/validate.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -17,21 +17,21 @@
  *============================================================================*/
 
 typedef struct GhostSlot {
-    Carbon_Ghost ghost;
+    Agentite_Ghost ghost;
     bool active;
 } GhostSlot;
 
-struct Carbon_ConstructionQueue {
+struct Agentite_ConstructionQueue {
     GhostSlot *slots;
     int capacity;
     int count;
     uint32_t next_id;
 
     /* Callbacks */
-    Carbon_ConstructionCallback callback;
+    Agentite_ConstructionCallback callback;
     void *callback_userdata;
 
-    Carbon_ConstructionCondition condition;
+    Agentite_ConstructionCondition condition;
     void *condition_userdata;
 };
 
@@ -39,8 +39,8 @@ struct Carbon_ConstructionQueue {
  * Helper Functions
  *============================================================================*/
 
-static GhostSlot *find_slot(Carbon_ConstructionQueue *queue, uint32_t ghost_id) {
-    if (!queue || ghost_id == CARBON_GHOST_INVALID) {
+static GhostSlot *find_slot(Agentite_ConstructionQueue *queue, uint32_t ghost_id) {
+    if (!queue || ghost_id == AGENTITE_GHOST_INVALID) {
         return NULL;
     }
 
@@ -53,11 +53,11 @@ static GhostSlot *find_slot(Carbon_ConstructionQueue *queue, uint32_t ghost_id) 
     return NULL;
 }
 
-static const GhostSlot *find_slot_const(const Carbon_ConstructionQueue *queue, uint32_t ghost_id) {
-    return find_slot((Carbon_ConstructionQueue *)queue, ghost_id);
+static const GhostSlot *find_slot_const(const Agentite_ConstructionQueue *queue, uint32_t ghost_id) {
+    return find_slot((Agentite_ConstructionQueue *)queue, ghost_id);
 }
 
-static void trigger_callback(Carbon_ConstructionQueue *queue, const Carbon_Ghost *ghost) {
+static void trigger_callback(Agentite_ConstructionQueue *queue, const Agentite_Ghost *ghost) {
     if (queue->callback) {
         queue->callback(queue, ghost, queue->callback_userdata);
     }
@@ -67,20 +67,20 @@ static void trigger_callback(Carbon_ConstructionQueue *queue, const Carbon_Ghost
  * Queue Creation and Destruction
  *============================================================================*/
 
-Carbon_ConstructionQueue *carbon_construction_create(int max_ghosts) {
+Agentite_ConstructionQueue *agentite_construction_create(int max_ghosts) {
     if (max_ghosts <= 0) {
         max_ghosts = 32;  /* Default capacity */
     }
 
-    Carbon_ConstructionQueue *queue = CARBON_ALLOC(Carbon_ConstructionQueue);
+    Agentite_ConstructionQueue *queue = AGENTITE_ALLOC(Agentite_ConstructionQueue);
     if (!queue) {
-        carbon_set_error("Failed to allocate construction queue");
+        agentite_set_error("Failed to allocate construction queue");
         return NULL;
     }
 
-    queue->slots = CARBON_ALLOC_ARRAY(GhostSlot, max_ghosts);
+    queue->slots = AGENTITE_ALLOC_ARRAY(GhostSlot, max_ghosts);
     if (!queue->slots) {
-        carbon_set_error("Failed to allocate ghost slots");
+        agentite_set_error("Failed to allocate ghost slots");
         free(queue);
         return NULL;
     }
@@ -91,7 +91,7 @@ Carbon_ConstructionQueue *carbon_construction_create(int max_ghosts) {
     return queue;
 }
 
-void carbon_construction_destroy(Carbon_ConstructionQueue *queue) {
+void agentite_construction_destroy(Agentite_ConstructionQueue *queue) {
     if (!queue) return;
 
     free(queue->slots);
@@ -102,29 +102,29 @@ void carbon_construction_destroy(Carbon_ConstructionQueue *queue) {
  * Ghost Management
  *============================================================================*/
 
-uint32_t carbon_construction_add_ghost(
-    Carbon_ConstructionQueue *queue,
+uint32_t agentite_construction_add_ghost(
+    Agentite_ConstructionQueue *queue,
     int x, int y,
     uint16_t building_type,
     uint8_t direction)
 {
-    return carbon_construction_add_ghost_ex(queue, x, y, building_type,
+    return agentite_construction_add_ghost_ex(queue, x, y, building_type,
                                              direction, 10.0f, -1);
 }
 
-uint32_t carbon_construction_add_ghost_ex(
-    Carbon_ConstructionQueue *queue,
+uint32_t agentite_construction_add_ghost_ex(
+    Agentite_ConstructionQueue *queue,
     int x, int y,
     uint16_t building_type,
     uint8_t direction,
     float base_duration,
     int32_t faction_id)
 {
-    CARBON_VALIDATE_PTR_RET(queue, CARBON_GHOST_INVALID);
+    AGENTITE_VALIDATE_PTR_RET(queue, AGENTITE_GHOST_INVALID);
 
     if (queue->count >= queue->capacity) {
-        carbon_set_error("Construction queue is full");
-        return CARBON_GHOST_INVALID;
+        agentite_set_error("Construction queue is full");
+        return AGENTITE_GHOST_INVALID;
     }
 
     /* Find first empty slot */
@@ -137,21 +137,21 @@ uint32_t carbon_construction_add_ghost_ex(
     }
 
     if (slot_idx < 0) {
-        carbon_set_error("No available slot in construction queue");
-        return CARBON_GHOST_INVALID;
+        agentite_set_error("No available slot in construction queue");
+        return AGENTITE_GHOST_INVALID;
     }
 
     GhostSlot *slot = &queue->slots[slot_idx];
-    Carbon_Ghost *ghost = &slot->ghost;
+    Agentite_Ghost *ghost = &slot->ghost;
 
     /* Initialize ghost */
-    memset(ghost, 0, sizeof(Carbon_Ghost));
+    memset(ghost, 0, sizeof(Agentite_Ghost));
     ghost->id = queue->next_id++;
     ghost->x = x;
     ghost->y = y;
     ghost->building_type = building_type;
     ghost->direction = direction & 3;
-    ghost->status = CARBON_GHOST_PENDING;
+    ghost->status = AGENTITE_GHOST_PENDING;
     ghost->progress = 0.0f;
     ghost->base_duration = base_duration > 0.0f ? base_duration : 10.0f;
     ghost->speed_multiplier = 1.0f;
@@ -164,11 +164,11 @@ uint32_t carbon_construction_add_ghost_ex(
     return ghost->id;
 }
 
-bool carbon_construction_remove_ghost(
-    Carbon_ConstructionQueue *queue,
+bool agentite_construction_remove_ghost(
+    Agentite_ConstructionQueue *queue,
     uint32_t ghost)
 {
-    CARBON_VALIDATE_PTR_RET(queue, false);
+    AGENTITE_VALIDATE_PTR_RET(queue, false);
 
     GhostSlot *slot = find_slot(queue, ghost);
     if (!slot) return false;
@@ -179,85 +179,85 @@ bool carbon_construction_remove_ghost(
     return true;
 }
 
-bool carbon_construction_cancel_ghost(
-    Carbon_ConstructionQueue *queue,
+bool agentite_construction_cancel_ghost(
+    Agentite_ConstructionQueue *queue,
     uint32_t ghost)
 {
-    CARBON_VALIDATE_PTR_RET(queue, false);
+    AGENTITE_VALIDATE_PTR_RET(queue, false);
 
     GhostSlot *slot = find_slot(queue, ghost);
     if (!slot) return false;
 
-    slot->ghost.status = CARBON_GHOST_CANCELLED;
+    slot->ghost.status = AGENTITE_GHOST_CANCELLED;
     trigger_callback(queue, &slot->ghost);
 
     return true;
 }
 
-Carbon_Ghost *carbon_construction_get_ghost(
-    Carbon_ConstructionQueue *queue,
+Agentite_Ghost *agentite_construction_get_ghost(
+    Agentite_ConstructionQueue *queue,
     uint32_t ghost)
 {
-    CARBON_VALIDATE_PTR_RET(queue, NULL);
+    AGENTITE_VALIDATE_PTR_RET(queue, NULL);
 
     GhostSlot *slot = find_slot(queue, ghost);
     return slot ? &slot->ghost : NULL;
 }
 
-const Carbon_Ghost *carbon_construction_get_ghost_const(
-    const Carbon_ConstructionQueue *queue,
+const Agentite_Ghost *agentite_construction_get_ghost_const(
+    const Agentite_ConstructionQueue *queue,
     uint32_t ghost)
 {
-    CARBON_VALIDATE_PTR_RET(queue, NULL);
+    AGENTITE_VALIDATE_PTR_RET(queue, NULL);
 
     const GhostSlot *slot = find_slot_const(queue, ghost);
     return slot ? &slot->ghost : NULL;
 }
 
-uint32_t carbon_construction_find_at(
-    const Carbon_ConstructionQueue *queue,
+uint32_t agentite_construction_find_at(
+    const Agentite_ConstructionQueue *queue,
     int x, int y)
 {
-    CARBON_VALIDATE_PTR_RET(queue, CARBON_GHOST_INVALID);
+    AGENTITE_VALIDATE_PTR_RET(queue, AGENTITE_GHOST_INVALID);
 
     for (int i = 0; i < queue->capacity; i++) {
         if (queue->slots[i].active) {
-            const Carbon_Ghost *g = &queue->slots[i].ghost;
+            const Agentite_Ghost *g = &queue->slots[i].ghost;
             if (g->x == x && g->y == y) {
                 return g->id;
             }
         }
     }
 
-    return CARBON_GHOST_INVALID;
+    return AGENTITE_GHOST_INVALID;
 }
 
-bool carbon_construction_has_ghost_at(
-    const Carbon_ConstructionQueue *queue,
+bool agentite_construction_has_ghost_at(
+    const Agentite_ConstructionQueue *queue,
     int x, int y)
 {
-    return carbon_construction_find_at(queue, x, y) != CARBON_GHOST_INVALID;
+    return agentite_construction_find_at(queue, x, y) != AGENTITE_GHOST_INVALID;
 }
 
 /*============================================================================
  * Construction Progress
  *============================================================================*/
 
-void carbon_construction_update(
-    Carbon_ConstructionQueue *queue,
+void agentite_construction_update(
+    Agentite_ConstructionQueue *queue,
     float delta_time)
 {
-    CARBON_VALIDATE_PTR(queue);
+    AGENTITE_VALIDATE_PTR(queue);
 
     if (delta_time <= 0.0f) return;
 
     for (int i = 0; i < queue->capacity; i++) {
         if (!queue->slots[i].active) continue;
 
-        Carbon_Ghost *ghost = &queue->slots[i].ghost;
+        Agentite_Ghost *ghost = &queue->slots[i].ghost;
 
         /* Only update ghosts that are actively constructing */
-        if (ghost->status != CARBON_GHOST_CONSTRUCTING) continue;
+        if (ghost->status != AGENTITE_GHOST_CONSTRUCTING) continue;
 
         /* Check condition callback if set */
         if (queue->condition) {
@@ -275,79 +275,79 @@ void carbon_construction_update(
         /* Check for completion */
         if (ghost->progress >= 1.0f) {
             ghost->progress = 1.0f;
-            ghost->status = CARBON_GHOST_COMPLETE;
+            ghost->status = AGENTITE_GHOST_COMPLETE;
             trigger_callback(queue, ghost);
         }
     }
 }
 
-bool carbon_construction_start(
-    Carbon_ConstructionQueue *queue,
+bool agentite_construction_start(
+    Agentite_ConstructionQueue *queue,
     uint32_t ghost)
 {
-    CARBON_VALIDATE_PTR_RET(queue, false);
+    AGENTITE_VALIDATE_PTR_RET(queue, false);
 
     GhostSlot *slot = find_slot(queue, ghost);
     if (!slot) return false;
 
-    if (slot->ghost.status != CARBON_GHOST_PENDING) {
+    if (slot->ghost.status != AGENTITE_GHOST_PENDING) {
         return false;
     }
 
-    slot->ghost.status = CARBON_GHOST_CONSTRUCTING;
+    slot->ghost.status = AGENTITE_GHOST_CONSTRUCTING;
     return true;
 }
 
-bool carbon_construction_pause(
-    Carbon_ConstructionQueue *queue,
+bool agentite_construction_pause(
+    Agentite_ConstructionQueue *queue,
     uint32_t ghost)
 {
-    CARBON_VALIDATE_PTR_RET(queue, false);
+    AGENTITE_VALIDATE_PTR_RET(queue, false);
 
     GhostSlot *slot = find_slot(queue, ghost);
     if (!slot) return false;
 
-    if (slot->ghost.status != CARBON_GHOST_CONSTRUCTING) {
+    if (slot->ghost.status != AGENTITE_GHOST_CONSTRUCTING) {
         return false;
     }
 
-    slot->ghost.status = CARBON_GHOST_PAUSED;
+    slot->ghost.status = AGENTITE_GHOST_PAUSED;
     return true;
 }
 
-bool carbon_construction_resume(
-    Carbon_ConstructionQueue *queue,
+bool agentite_construction_resume(
+    Agentite_ConstructionQueue *queue,
     uint32_t ghost)
 {
-    CARBON_VALIDATE_PTR_RET(queue, false);
+    AGENTITE_VALIDATE_PTR_RET(queue, false);
 
     GhostSlot *slot = find_slot(queue, ghost);
     if (!slot) return false;
 
-    if (slot->ghost.status != CARBON_GHOST_PAUSED) {
+    if (slot->ghost.status != AGENTITE_GHOST_PAUSED) {
         return false;
     }
 
-    slot->ghost.status = CARBON_GHOST_CONSTRUCTING;
+    slot->ghost.status = AGENTITE_GHOST_CONSTRUCTING;
     return true;
 }
 
-float carbon_construction_get_progress(
-    const Carbon_ConstructionQueue *queue,
+float agentite_construction_get_progress(
+    const Agentite_ConstructionQueue *queue,
     uint32_t ghost)
 {
-    CARBON_VALIDATE_PTR_RET(queue, -1.0f);
+    AGENTITE_VALIDATE_PTR_RET(queue, -1.0f);
 
     const GhostSlot *slot = find_slot_const(queue, ghost);
     return slot ? slot->ghost.progress : -1.0f;
 }
 
-bool carbon_construction_set_progress(
-    Carbon_ConstructionQueue *queue,
+bool agentite_construction_set_progress(
+    Agentite_ConstructionQueue *queue,
     uint32_t ghost,
     float progress)
 {
-    CARBON_VALIDATE_PTR_RET(queue, false);
+    AGENTITE_VALIDATE_PTR_RET(queue, false);
 
     GhostSlot *slot = find_slot(queue, ghost);
     if (!slot) return false;
@@ -359,26 +359,26 @@ bool carbon_construction_set_progress(
     slot->ghost.progress = progress;
 
     /* Check for completion */
-    if (progress >= 1.0f && slot->ghost.status == CARBON_GHOST_CONSTRUCTING) {
-        slot->ghost.status = CARBON_GHOST_COMPLETE;
+    if (progress >= 1.0f && slot->ghost.status == AGENTITE_GHOST_CONSTRUCTING) {
+        slot->ghost.status = AGENTITE_GHOST_COMPLETE;
         trigger_callback(queue, &slot->ghost);
     }
 
     return true;
 }
 
-bool carbon_construction_add_progress(
-    Carbon_ConstructionQueue *queue,
+bool agentite_construction_add_progress(
+    Agentite_ConstructionQueue *queue,
     uint32_t ghost,
     float amount)
 {
-    CARBON_VALIDATE_PTR_RET(queue, false);
+    AGENTITE_VALIDATE_PTR_RET(queue, false);
 
     GhostSlot *slot = find_slot(queue, ghost);
     if (!slot) return false;
 
     /* Only add progress to constructing ghosts */
-    if (slot->ghost.status != CARBON_GHOST_CONSTRUCTING) {
+    if (slot->ghost.status != AGENTITE_GHOST_CONSTRUCTING) {
         return false;
     }
 
@@ -387,40 +387,40 @@ bool carbon_construction_add_progress(
     /* Check for completion */
     if (slot->ghost.progress >= 1.0f) {
         slot->ghost.progress = 1.0f;
-        slot->ghost.status = CARBON_GHOST_COMPLETE;
+        slot->ghost.status = AGENTITE_GHOST_COMPLETE;
         trigger_callback(queue, &slot->ghost);
     }
 
     return true;
 }
 
-bool carbon_construction_is_complete(
-    const Carbon_ConstructionQueue *queue,
+bool agentite_construction_is_complete(
+    const Agentite_ConstructionQueue *queue,
     uint32_t ghost)
 {
-    CARBON_VALIDATE_PTR_RET(queue, false);
+    AGENTITE_VALIDATE_PTR_RET(queue, false);
 
     const GhostSlot *slot = find_slot_const(queue, ghost);
-    return slot && slot->ghost.status == CARBON_GHOST_COMPLETE;
+    return slot && slot->ghost.status == AGENTITE_GHOST_COMPLETE;
 }
 
-bool carbon_construction_complete_instant(
-    Carbon_ConstructionQueue *queue,
+bool agentite_construction_complete_instant(
+    Agentite_ConstructionQueue *queue,
     uint32_t ghost)
 {
-    CARBON_VALIDATE_PTR_RET(queue, false);
+    AGENTITE_VALIDATE_PTR_RET(queue, false);
 
     GhostSlot *slot = find_slot(queue, ghost);
     if (!slot) return false;
 
     /* Can only complete pending or constructing ghosts */
-    if (slot->ghost.status != CARBON_GHOST_PENDING &&
-        slot->ghost.status != CARBON_GHOST_CONSTRUCTING) {
+    if (slot->ghost.status != AGENTITE_GHOST_PENDING &&
+        slot->ghost.status != AGENTITE_GHOST_CONSTRUCTING) {
         return false;
     }
 
     slot->ghost.progress = 1.0f;
-    slot->ghost.status = CARBON_GHOST_COMPLETE;
+    slot->ghost.status = AGENTITE_GHOST_COMPLETE;
     trigger_callback(queue, &slot->ghost);
 
     return true;
@@ -430,12 +430,12 @@ bool carbon_construction_complete_instant(
  * Speed and Modifiers
  *============================================================================*/
 
-bool carbon_construction_set_speed(
-    Carbon_ConstructionQueue *queue,
+bool agentite_construction_set_speed(
+    Agentite_ConstructionQueue *queue,
     uint32_t ghost,
     float multiplier)
 {
-    CARBON_VALIDATE_PTR_RET(queue, false);
+    AGENTITE_VALIDATE_PTR_RET(queue, false);
 
     GhostSlot *slot = find_slot(queue, ghost);
     if (!slot) return false;
@@ -444,22 +444,22 @@ bool carbon_construction_set_speed(
     return true;
 }
 
-float carbon_construction_get_speed(
-    const Carbon_ConstructionQueue *queue,
+float agentite_construction_get_speed(
+    const Agentite_ConstructionQueue *queue,
     uint32_t ghost)
 {
-    CARBON_VALIDATE_PTR_RET(queue, 0.0f);
+    AGENTITE_VALIDATE_PTR_RET(queue, 0.0f);
 
     const GhostSlot *slot = find_slot_const(queue, ghost);
     return slot ? slot->ghost.speed_multiplier : 0.0f;
 }
 
-bool carbon_construction_set_duration(
-    Carbon_ConstructionQueue *queue,
+bool agentite_construction_set_duration(
+    Agentite_ConstructionQueue *queue,
     uint32_t ghost,
     float duration)
 {
-    CARBON_VALIDATE_PTR_RET(queue, false);
+    AGENTITE_VALIDATE_PTR_RET(queue, false);
 
     GhostSlot *slot = find_slot(queue, ghost);
     if (!slot) return false;
@@ -468,16 +468,16 @@ bool carbon_construction_set_duration(
     return true;
 }
 
-float carbon_construction_get_remaining_time(
-    const Carbon_ConstructionQueue *queue,
+float agentite_construction_get_remaining_time(
+    const Agentite_ConstructionQueue *queue,
     uint32_t ghost)
 {
-    CARBON_VALIDATE_PTR_RET(queue, -1.0f);
+    AGENTITE_VALIDATE_PTR_RET(queue, -1.0f);
 
     const GhostSlot *slot = find_slot_const(queue, ghost);
     if (!slot) return -1.0f;
 
-    const Carbon_Ghost *g = &slot->ghost;
+    const Agentite_Ghost *g = &slot->ghost;
     float remaining_progress = 1.0f - g->progress;
     float effective_speed = g->speed_multiplier > 0.0f ? g->speed_multiplier : 1.0f;
 
@@ -488,12 +488,12 @@ float carbon_construction_get_remaining_time(
  * Builder Assignment
  *============================================================================*/
 
-bool carbon_construction_set_builder(
-    Carbon_ConstructionQueue *queue,
+bool agentite_construction_set_builder(
+    Agentite_ConstructionQueue *queue,
     uint32_t ghost,
     int32_t builder_entity)
 {
-    CARBON_VALIDATE_PTR_RET(queue, false);
+    AGENTITE_VALIDATE_PTR_RET(queue, false);
 
     GhostSlot *slot = find_slot(queue, ghost);
     if (!slot) return false;
@@ -502,24 +502,24 @@ bool carbon_construction_set_builder(
     return true;
 }
 
-int32_t carbon_construction_get_builder(
-    const Carbon_ConstructionQueue *queue,
+int32_t agentite_construction_get_builder(
+    const Agentite_ConstructionQueue *queue,
     uint32_t ghost)
 {
-    CARBON_VALIDATE_PTR_RET(queue, -1);
+    AGENTITE_VALIDATE_PTR_RET(queue, -1);
 
     const GhostSlot *slot = find_slot_const(queue, ghost);
     return slot ? slot->ghost.builder_entity : -1;
 }
 
-int carbon_construction_find_by_builder(
-    const Carbon_ConstructionQueue *queue,
+int agentite_construction_find_by_builder(
+    const Agentite_ConstructionQueue *queue,
     int32_t builder_entity,
     uint32_t *out_handles,
     int max_handles)
 {
-    CARBON_VALIDATE_PTR_RET(queue, 0);
-    CARBON_VALIDATE_PTR_RET(out_handles, 0);
+    AGENTITE_VALIDATE_PTR_RET(queue, 0);
+    AGENTITE_VALIDATE_PTR_RET(out_handles, 0);
 
     int count = 0;
     for (int i = 0; i < queue->capacity && count < max_handles; i++) {
@@ -536,14 +536,14 @@ int carbon_construction_find_by_builder(
  * Faction Queries
  *============================================================================*/
 
-int carbon_construction_get_by_faction(
-    const Carbon_ConstructionQueue *queue,
+int agentite_construction_get_by_faction(
+    const Agentite_ConstructionQueue *queue,
     int32_t faction_id,
     uint32_t *out_handles,
     int max_handles)
 {
-    CARBON_VALIDATE_PTR_RET(queue, 0);
-    CARBON_VALIDATE_PTR_RET(out_handles, 0);
+    AGENTITE_VALIDATE_PTR_RET(queue, 0);
+    AGENTITE_VALIDATE_PTR_RET(out_handles, 0);
 
     int count = 0;
     for (int i = 0; i < queue->capacity && count < max_handles; i++) {
@@ -556,11 +556,11 @@ int carbon_construction_get_by_faction(
     return count;
 }
 
-int carbon_construction_count_by_faction(
-    const Carbon_ConstructionQueue *queue,
+int agentite_construction_count_by_faction(
+    const Agentite_ConstructionQueue *queue,
     int32_t faction_id)
 {
-    CARBON_VALIDATE_PTR_RET(queue, 0);
+    AGENTITE_VALIDATE_PTR_RET(queue, 0);
 
     int count = 0;
     for (int i = 0; i < queue->capacity; i++) {
@@ -573,17 +573,17 @@ int carbon_construction_count_by_faction(
     return count;
 }
 
-int carbon_construction_count_active_by_faction(
-    const Carbon_ConstructionQueue *queue,
+int agentite_construction_count_active_by_faction(
+    const Agentite_ConstructionQueue *queue,
     int32_t faction_id)
 {
-    CARBON_VALIDATE_PTR_RET(queue, 0);
+    AGENTITE_VALIDATE_PTR_RET(queue, 0);
 
     int count = 0;
     for (int i = 0; i < queue->capacity; i++) {
         if (queue->slots[i].active &&
             queue->slots[i].ghost.faction_id == faction_id &&
-            queue->slots[i].ghost.status == CARBON_GHOST_CONSTRUCTING) {
+            queue->slots[i].ghost.status == AGENTITE_GHOST_CONSTRUCTING) {
             count++;
         }
     }
@@ -595,18 +595,18 @@ int carbon_construction_count_active_by_faction(
  * Queue State
  *============================================================================*/
 
-int carbon_construction_count(const Carbon_ConstructionQueue *queue) {
-    CARBON_VALIDATE_PTR_RET(queue, 0);
+int agentite_construction_count(const Agentite_ConstructionQueue *queue) {
+    AGENTITE_VALIDATE_PTR_RET(queue, 0);
     return queue->count;
 }
 
-int carbon_construction_count_active(const Carbon_ConstructionQueue *queue) {
-    CARBON_VALIDATE_PTR_RET(queue, 0);
+int agentite_construction_count_active(const Agentite_ConstructionQueue *queue) {
+    AGENTITE_VALIDATE_PTR_RET(queue, 0);
 
     int count = 0;
     for (int i = 0; i < queue->capacity; i++) {
         if (queue->slots[i].active &&
-            queue->slots[i].ghost.status == CARBON_GHOST_CONSTRUCTING) {
+            queue->slots[i].ghost.status == AGENTITE_GHOST_CONSTRUCTING) {
             count++;
         }
     }
@@ -614,13 +614,13 @@ int carbon_construction_count_active(const Carbon_ConstructionQueue *queue) {
     return count;
 }
 
-int carbon_construction_count_complete(const Carbon_ConstructionQueue *queue) {
-    CARBON_VALIDATE_PTR_RET(queue, 0);
+int agentite_construction_count_complete(const Agentite_ConstructionQueue *queue) {
+    AGENTITE_VALIDATE_PTR_RET(queue, 0);
 
     int count = 0;
     for (int i = 0; i < queue->capacity; i++) {
         if (queue->slots[i].active &&
-            queue->slots[i].ghost.status == CARBON_GHOST_COMPLETE) {
+            queue->slots[i].ghost.status == AGENTITE_GHOST_COMPLETE) {
             count++;
         }
     }
@@ -628,23 +628,23 @@ int carbon_construction_count_complete(const Carbon_ConstructionQueue *queue) {
     return count;
 }
 
-bool carbon_construction_is_full(const Carbon_ConstructionQueue *queue) {
-    CARBON_VALIDATE_PTR_RET(queue, true);
+bool agentite_construction_is_full(const Agentite_ConstructionQueue *queue) {
+    AGENTITE_VALIDATE_PTR_RET(queue, true);
     return queue->count >= queue->capacity;
 }
 
-int carbon_construction_capacity(const Carbon_ConstructionQueue *queue) {
-    CARBON_VALIDATE_PTR_RET(queue, 0);
+int agentite_construction_capacity(const Agentite_ConstructionQueue *queue) {
+    AGENTITE_VALIDATE_PTR_RET(queue, 0);
     return queue->capacity;
 }
 
-int carbon_construction_get_all(
-    const Carbon_ConstructionQueue *queue,
+int agentite_construction_get_all(
+    const Agentite_ConstructionQueue *queue,
     uint32_t *out_handles,
     int max_handles)
 {
-    CARBON_VALIDATE_PTR_RET(queue, 0);
-    CARBON_VALIDATE_PTR_RET(out_handles, 0);
+    AGENTITE_VALIDATE_PTR_RET(queue, 0);
+    AGENTITE_VALIDATE_PTR_RET(out_handles, 0);
 
     int count = 0;
     for (int i = 0; i < queue->capacity && count < max_handles; i++) {
@@ -656,8 +656,8 @@ int carbon_construction_get_all(
     return count;
 }
 
-void carbon_construction_clear(Carbon_ConstructionQueue *queue) {
-    CARBON_VALIDATE_PTR(queue);
+void agentite_construction_clear(Agentite_ConstructionQueue *queue) {
+    AGENTITE_VALIDATE_PTR(queue);
 
     for (int i = 0; i < queue->capacity; i++) {
         queue->slots[i].active = false;
@@ -670,23 +670,23 @@ void carbon_construction_clear(Carbon_ConstructionQueue *queue) {
  * Callbacks
  *============================================================================*/
 
-void carbon_construction_set_callback(
-    Carbon_ConstructionQueue *queue,
-    Carbon_ConstructionCallback callback,
+void agentite_construction_set_callback(
+    Agentite_ConstructionQueue *queue,
+    Agentite_ConstructionCallback callback,
     void *userdata)
 {
-    CARBON_VALIDATE_PTR(queue);
+    AGENTITE_VALIDATE_PTR(queue);
 
     queue->callback = callback;
     queue->callback_userdata = userdata;
 }
 
-void carbon_construction_set_condition_callback(
-    Carbon_ConstructionQueue *queue,
-    Carbon_ConstructionCondition callback,
+void agentite_construction_set_condition_callback(
+    Agentite_ConstructionQueue *queue,
+    Agentite_ConstructionCondition callback,
     void *userdata)
 {
-    CARBON_VALIDATE_PTR(queue);
+    AGENTITE_VALIDATE_PTR(queue);
 
     queue->condition = callback;
     queue->condition_userdata = userdata;
@@ -696,12 +696,12 @@ void carbon_construction_set_condition_callback(
  * Metadata
  *============================================================================*/
 
-bool carbon_construction_set_metadata(
-    Carbon_ConstructionQueue *queue,
+bool agentite_construction_set_metadata(
+    Agentite_ConstructionQueue *queue,
     uint32_t ghost,
     uint32_t metadata)
 {
-    CARBON_VALIDATE_PTR_RET(queue, false);
+    AGENTITE_VALIDATE_PTR_RET(queue, false);
 
     GhostSlot *slot = find_slot(queue, ghost);
     if (!slot) return false;
@@ -710,22 +710,22 @@ bool carbon_construction_set_metadata(
     return true;
 }
 
-uint32_t carbon_construction_get_metadata(
-    const Carbon_ConstructionQueue *queue,
+uint32_t agentite_construction_get_metadata(
+    const Agentite_ConstructionQueue *queue,
     uint32_t ghost)
 {
-    CARBON_VALIDATE_PTR_RET(queue, 0);
+    AGENTITE_VALIDATE_PTR_RET(queue, 0);
 
     const GhostSlot *slot = find_slot_const(queue, ghost);
     return slot ? slot->ghost.metadata : 0;
 }
 
-bool carbon_construction_set_userdata(
-    Carbon_ConstructionQueue *queue,
+bool agentite_construction_set_userdata(
+    Agentite_ConstructionQueue *queue,
     uint32_t ghost,
     void *userdata)
 {
-    CARBON_VALIDATE_PTR_RET(queue, false);
+    AGENTITE_VALIDATE_PTR_RET(queue, false);
 
     GhostSlot *slot = find_slot(queue, ghost);
     if (!slot) return false;
@@ -734,11 +734,11 @@ bool carbon_construction_set_userdata(
     return true;
 }
 
-void *carbon_construction_get_userdata(
-    const Carbon_ConstructionQueue *queue,
+void *agentite_construction_get_userdata(
+    const Agentite_ConstructionQueue *queue,
     uint32_t ghost)
 {
-    CARBON_VALIDATE_PTR_RET(queue, NULL);
+    AGENTITE_VALIDATE_PTR_RET(queue, NULL);
 
     const GhostSlot *slot = find_slot_const(queue, ghost);
     return slot ? slot->ghost.userdata : NULL;
@@ -748,13 +748,13 @@ void *carbon_construction_get_userdata(
  * Utility Functions
  *============================================================================*/
 
-const char *carbon_ghost_status_name(Carbon_GhostStatus status) {
+const char *agentite_ghost_status_name(Agentite_GhostStatus status) {
     switch (status) {
-        case CARBON_GHOST_PENDING:      return "Pending";
-        case CARBON_GHOST_CONSTRUCTING: return "Constructing";
-        case CARBON_GHOST_COMPLETE:     return "Complete";
-        case CARBON_GHOST_CANCELLED:    return "Cancelled";
-        case CARBON_GHOST_PAUSED:       return "Paused";
+        case AGENTITE_GHOST_PENDING:      return "Pending";
+        case AGENTITE_GHOST_CONSTRUCTING: return "Constructing";
+        case AGENTITE_GHOST_COMPLETE:     return "Complete";
+        case AGENTITE_GHOST_CANCELLED:    return "Cancelled";
+        case AGENTITE_GHOST_PAUSED:       return "Paused";
         default:                        return "Unknown";
     }
 }

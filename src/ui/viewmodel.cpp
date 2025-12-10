@@ -5,10 +5,10 @@
  * change detection, and event-driven updates.
  */
 
-#include "carbon/carbon.h"
-#include "carbon/viewmodel.h"
-#include "carbon/event.h"
-#include "carbon/error.h"
+#include "agentite/agentite.h"
+#include "agentite/viewmodel.h"
+#include "agentite/event.h"
+#include "agentite/error.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -24,7 +24,7 @@
 typedef struct {
     uint32_t id;                    /* Listener ID */
     uint32_t observable_id;         /* Observable this listens to (0 = all) */
-    Carbon_VMCallback callback;
+    Agentite_VMCallback callback;
     void *userdata;
     bool active;
 } VMListener;
@@ -35,21 +35,21 @@ typedef struct {
 typedef struct {
     uint32_t id;                    /* Observable ID */
     char name[64];                  /* Observable name */
-    Carbon_VMValue value;           /* Current value */
-    Carbon_VMValue old_value;       /* Previous value (for batch) */
+    Agentite_VMValue value;           /* Current value */
+    Agentite_VMValue old_value;       /* Previous value (for batch) */
     bool changed;                   /* Changed during batch */
 
     /* Validator */
-    Carbon_VMValidator validator;
+    Agentite_VMValidator validator;
     void *validator_userdata;
 
     /* Formatter */
-    Carbon_VMFormatter formatter;
+    Agentite_VMFormatter formatter;
     void *formatter_userdata;
 
     /* Computed value support */
     bool is_computed;
-    Carbon_VMComputed compute;
+    Agentite_VMComputed compute;
     void *compute_userdata;
     uint32_t dependencies[8];
     int dep_count;
@@ -60,24 +60,24 @@ typedef struct {
 /**
  * View model internal structure
  */
-struct Carbon_ViewModel {
+struct Agentite_ViewModel {
     /* Observables */
-    VMObservable observables[CARBON_VM_MAX_OBSERVABLES];
+    VMObservable observables[AGENTITE_VM_MAX_OBSERVABLES];
     int observable_count;
     uint32_t next_observable_id;
 
     /* Listeners */
-    VMListener listeners[CARBON_VM_MAX_OBSERVABLES * 4];
+    VMListener listeners[AGENTITE_VM_MAX_OBSERVABLES * 4];
     int listener_count;
     uint32_t next_listener_id;
 
     /* Batch mode */
     bool batching;
-    uint32_t batch_changed[CARBON_VM_MAX_OBSERVABLES];
+    uint32_t batch_changed[AGENTITE_VM_MAX_OBSERVABLES];
     int batch_changed_count;
 
     /* Event dispatcher (optional) */
-    Carbon_EventDispatcher *events;
+    Agentite_EventDispatcher *events;
 };
 
 /*============================================================================
@@ -87,8 +87,8 @@ struct Carbon_ViewModel {
 /**
  * Find observable by ID
  */
-static VMObservable *find_observable(Carbon_ViewModel *vm, uint32_t id) {
-    if (!vm || id == CARBON_VM_INVALID_ID) return NULL;
+static VMObservable *find_observable(Agentite_ViewModel *vm, uint32_t id) {
+    if (!vm || id == AGENTITE_VM_INVALID_ID) return NULL;
 
     for (int i = 0; i < vm->observable_count; i++) {
         if (vm->observables[i].id == id && vm->observables[i].active) {
@@ -101,7 +101,7 @@ static VMObservable *find_observable(Carbon_ViewModel *vm, uint32_t id) {
 /**
  * Find observable by name
  */
-static VMObservable *find_observable_by_name(Carbon_ViewModel *vm, const char *name) {
+static VMObservable *find_observable_by_name(Agentite_ViewModel *vm, const char *name) {
     if (!vm || !name) return NULL;
 
     for (int i = 0; i < vm->observable_count; i++) {
@@ -116,11 +116,11 @@ static VMObservable *find_observable_by_name(Carbon_ViewModel *vm, const char *n
 /**
  * Notify listeners of a change
  */
-static void notify_listeners(Carbon_ViewModel *vm, VMObservable *obs,
-                             const Carbon_VMValue *old_value) {
+static void notify_listeners(Agentite_ViewModel *vm, VMObservable *obs,
+                             const Agentite_VMValue *old_value) {
     if (!vm || !obs) return;
 
-    Carbon_VMChangeEvent event = {
+    Agentite_VMChangeEvent event = {
         .id = obs->id,
         .name = obs->name,
         .type = obs->value.type,
@@ -139,10 +139,10 @@ static void notify_listeners(Carbon_ViewModel *vm, VMObservable *obs,
 
     /* Emit event if dispatcher is set */
     if (vm->events) {
-        Carbon_Event e = { .type = CARBON_EVENT_UI_VALUE_CHANGED };
+        Agentite_Event e = { .type = AGENTITE_EVENT_UI_VALUE_CHANGED };
         e.ui.widget_id = obs->id;
         e.ui.widget_name = obs->name;
-        carbon_event_emit(vm->events, &e);
+        agentite_event_emit(vm->events, &e);
     }
 
     /* Update computed values that depend on this */
@@ -153,10 +153,10 @@ static void notify_listeners(Carbon_ViewModel *vm, VMObservable *obs,
         for (int j = 0; j < computed->dep_count; j++) {
             if (computed->dependencies[j] == obs->id) {
                 /* Recalculate */
-                Carbon_VMValue new_val = computed->compute(vm, computed->id,
+                Agentite_VMValue new_val = computed->compute(vm, computed->id,
                                                            computed->compute_userdata);
-                if (!carbon_vm_values_equal(&computed->value, &new_val)) {
-                    Carbon_VMValue old = computed->value;
+                if (!agentite_vm_values_equal(&computed->value, &new_val)) {
+                    Agentite_VMValue old = computed->value;
                     computed->value = new_val;
                     notify_listeners(vm, computed, &old);
                 }
@@ -169,22 +169,22 @@ static void notify_listeners(Carbon_ViewModel *vm, VMObservable *obs,
 /**
  * Define a generic observable
  */
-static uint32_t define_observable(Carbon_ViewModel *vm, const char *name,
-                                   const Carbon_VMValue *initial) {
+static uint32_t define_observable(Agentite_ViewModel *vm, const char *name,
+                                   const Agentite_VMValue *initial) {
     if (!vm || !name) {
-        carbon_set_error("carbon_vm_define: null parameter");
-        return CARBON_VM_INVALID_ID;
+        agentite_set_error("agentite_vm_define: null parameter");
+        return AGENTITE_VM_INVALID_ID;
     }
 
     /* Check for duplicate */
     if (find_observable_by_name(vm, name)) {
-        carbon_set_error("carbon_vm_define: observable '%s' already exists", name);
-        return CARBON_VM_INVALID_ID;
+        agentite_set_error("agentite_vm_define: observable '%s' already exists", name);
+        return AGENTITE_VM_INVALID_ID;
     }
 
-    if (vm->observable_count >= CARBON_VM_MAX_OBSERVABLES) {
-        carbon_set_error("carbon_vm_define: max observables reached");
-        return CARBON_VM_INVALID_ID;
+    if (vm->observable_count >= AGENTITE_VM_MAX_OBSERVABLES) {
+        agentite_set_error("agentite_vm_define: max observables reached");
+        return AGENTITE_VM_INVALID_ID;
     }
 
     VMObservable *obs = &vm->observables[vm->observable_count++];
@@ -201,14 +201,14 @@ static uint32_t define_observable(Carbon_ViewModel *vm, const char *name,
 /**
  * Set value with change detection
  */
-static bool set_value(Carbon_ViewModel *vm, uint32_t id,
-                      const Carbon_VMValue *new_value) {
+static bool set_value(Agentite_ViewModel *vm, uint32_t id,
+                      const Agentite_VMValue *new_value) {
     VMObservable *obs = find_observable(vm, id);
     if (!obs) return false;
 
     /* Type check */
     if (obs->value.type != new_value->type) {
-        carbon_set_error("carbon_vm_set: type mismatch");
+        agentite_set_error("agentite_vm_set: type mismatch");
         return false;
     }
 
@@ -220,11 +220,11 @@ static bool set_value(Carbon_ViewModel *vm, uint32_t id,
     }
 
     /* Check if changed */
-    if (carbon_vm_values_equal(&obs->value, new_value)) {
+    if (agentite_vm_values_equal(&obs->value, new_value)) {
         return false;
     }
 
-    Carbon_VMValue old_value = obs->value;
+    Agentite_VMValue old_value = obs->value;
     obs->value = *new_value;
 
     if (vm->batching) {
@@ -246,14 +246,14 @@ static bool set_value(Carbon_ViewModel *vm, uint32_t id,
  * Creation and Destruction
  *============================================================================*/
 
-Carbon_ViewModel *carbon_vm_create(void) {
-    return carbon_vm_create_with_events(NULL);
+Agentite_ViewModel *agentite_vm_create(void) {
+    return agentite_vm_create_with_events(NULL);
 }
 
-Carbon_ViewModel *carbon_vm_create_with_events(Carbon_EventDispatcher *events) {
-    Carbon_ViewModel *vm = CARBON_ALLOC(Carbon_ViewModel);
+Agentite_ViewModel *agentite_vm_create_with_events(Agentite_EventDispatcher *events) {
+    Agentite_ViewModel *vm = AGENTITE_ALLOC(Agentite_ViewModel);
     if (!vm) {
-        carbon_set_error("carbon_vm_create: allocation failed");
+        agentite_set_error("agentite_vm_create: allocation failed");
         return NULL;
     }
 
@@ -264,7 +264,7 @@ Carbon_ViewModel *carbon_vm_create_with_events(Carbon_EventDispatcher *events) {
     return vm;
 }
 
-void carbon_vm_destroy(Carbon_ViewModel *vm) {
+void agentite_vm_destroy(Agentite_ViewModel *vm) {
     if (vm) {
         free(vm);
     }
@@ -274,132 +274,132 @@ void carbon_vm_destroy(Carbon_ViewModel *vm) {
  * Observable Definition
  *============================================================================*/
 
-uint32_t carbon_vm_define_int(Carbon_ViewModel *vm, const char *name, int32_t initial) {
-    Carbon_VMValue val = { .type = CARBON_VM_TYPE_INT, .i32 = initial };
+uint32_t agentite_vm_define_int(Agentite_ViewModel *vm, const char *name, int32_t initial) {
+    Agentite_VMValue val = { .type = AGENTITE_VM_TYPE_INT, .i32 = initial };
     return define_observable(vm, name, &val);
 }
 
-uint32_t carbon_vm_define_int64(Carbon_ViewModel *vm, const char *name, int64_t initial) {
-    Carbon_VMValue val = { .type = CARBON_VM_TYPE_INT64, .i64 = initial };
+uint32_t agentite_vm_define_int64(Agentite_ViewModel *vm, const char *name, int64_t initial) {
+    Agentite_VMValue val = { .type = AGENTITE_VM_TYPE_INT64, .i64 = initial };
     return define_observable(vm, name, &val);
 }
 
-uint32_t carbon_vm_define_float(Carbon_ViewModel *vm, const char *name, float initial) {
-    Carbon_VMValue val = { .type = CARBON_VM_TYPE_FLOAT, .f32 = initial };
+uint32_t agentite_vm_define_float(Agentite_ViewModel *vm, const char *name, float initial) {
+    Agentite_VMValue val = { .type = AGENTITE_VM_TYPE_FLOAT, .f32 = initial };
     return define_observable(vm, name, &val);
 }
 
-uint32_t carbon_vm_define_double(Carbon_ViewModel *vm, const char *name, double initial) {
-    Carbon_VMValue val = { .type = CARBON_VM_TYPE_DOUBLE, .f64 = initial };
+uint32_t agentite_vm_define_double(Agentite_ViewModel *vm, const char *name, double initial) {
+    Agentite_VMValue val = { .type = AGENTITE_VM_TYPE_DOUBLE, .f64 = initial };
     return define_observable(vm, name, &val);
 }
 
-uint32_t carbon_vm_define_bool(Carbon_ViewModel *vm, const char *name, bool initial) {
-    Carbon_VMValue val = { .type = CARBON_VM_TYPE_BOOL, .b = initial };
+uint32_t agentite_vm_define_bool(Agentite_ViewModel *vm, const char *name, bool initial) {
+    Agentite_VMValue val = { .type = AGENTITE_VM_TYPE_BOOL, .b = initial };
     return define_observable(vm, name, &val);
 }
 
-uint32_t carbon_vm_define_string(Carbon_ViewModel *vm, const char *name, const char *initial) {
-    Carbon_VMValue val = { .type = CARBON_VM_TYPE_STRING };
+uint32_t agentite_vm_define_string(Agentite_ViewModel *vm, const char *name, const char *initial) {
+    Agentite_VMValue val = { .type = AGENTITE_VM_TYPE_STRING };
     if (initial) {
-        strncpy(val.str, initial, CARBON_VM_MAX_STRING_LENGTH - 1);
-        val.str[CARBON_VM_MAX_STRING_LENGTH - 1] = '\0';
+        strncpy(val.str, initial, AGENTITE_VM_MAX_STRING_LENGTH - 1);
+        val.str[AGENTITE_VM_MAX_STRING_LENGTH - 1] = '\0';
     }
     return define_observable(vm, name, &val);
 }
 
-uint32_t carbon_vm_define_ptr(Carbon_ViewModel *vm, const char *name, void *initial) {
-    Carbon_VMValue val = { .type = CARBON_VM_TYPE_POINTER, .ptr = initial };
+uint32_t agentite_vm_define_ptr(Agentite_ViewModel *vm, const char *name, void *initial) {
+    Agentite_VMValue val = { .type = AGENTITE_VM_TYPE_POINTER, .ptr = initial };
     return define_observable(vm, name, &val);
 }
 
-uint32_t carbon_vm_define_vec2(Carbon_ViewModel *vm, const char *name, float x, float y) {
-    Carbon_VMValue val = { .type = CARBON_VM_TYPE_VEC2, .vec2 = { x, y } };
+uint32_t agentite_vm_define_vec2(Agentite_ViewModel *vm, const char *name, float x, float y) {
+    Agentite_VMValue val = { .type = AGENTITE_VM_TYPE_VEC2, .vec2 = { x, y } };
     return define_observable(vm, name, &val);
 }
 
-uint32_t carbon_vm_define_vec3(Carbon_ViewModel *vm, const char *name,
+uint32_t agentite_vm_define_vec3(Agentite_ViewModel *vm, const char *name,
                                 float x, float y, float z) {
-    Carbon_VMValue val = { .type = CARBON_VM_TYPE_VEC3, .vec3 = { x, y, z } };
+    Agentite_VMValue val = { .type = AGENTITE_VM_TYPE_VEC3, .vec3 = { x, y, z } };
     return define_observable(vm, name, &val);
 }
 
-uint32_t carbon_vm_define_vec4(Carbon_ViewModel *vm, const char *name,
+uint32_t agentite_vm_define_vec4(Agentite_ViewModel *vm, const char *name,
                                 float x, float y, float z, float w) {
-    Carbon_VMValue val = { .type = CARBON_VM_TYPE_VEC4, .vec4 = { x, y, z, w } };
+    Agentite_VMValue val = { .type = AGENTITE_VM_TYPE_VEC4, .vec4 = { x, y, z, w } };
     return define_observable(vm, name, &val);
 }
 
-uint32_t carbon_vm_define_color(Carbon_ViewModel *vm, const char *name,
+uint32_t agentite_vm_define_color(Agentite_ViewModel *vm, const char *name,
                                  float r, float g, float b, float a) {
-    return carbon_vm_define_vec4(vm, name, r, g, b, a);
+    return agentite_vm_define_vec4(vm, name, r, g, b, a);
 }
 
 /*============================================================================
  * Value Setters
  *============================================================================*/
 
-bool carbon_vm_set_int(Carbon_ViewModel *vm, uint32_t id, int32_t value) {
-    Carbon_VMValue val = { .type = CARBON_VM_TYPE_INT, .i32 = value };
+bool agentite_vm_set_int(Agentite_ViewModel *vm, uint32_t id, int32_t value) {
+    Agentite_VMValue val = { .type = AGENTITE_VM_TYPE_INT, .i32 = value };
     return set_value(vm, id, &val);
 }
 
-bool carbon_vm_set_int64(Carbon_ViewModel *vm, uint32_t id, int64_t value) {
-    Carbon_VMValue val = { .type = CARBON_VM_TYPE_INT64, .i64 = value };
+bool agentite_vm_set_int64(Agentite_ViewModel *vm, uint32_t id, int64_t value) {
+    Agentite_VMValue val = { .type = AGENTITE_VM_TYPE_INT64, .i64 = value };
     return set_value(vm, id, &val);
 }
 
-bool carbon_vm_set_float(Carbon_ViewModel *vm, uint32_t id, float value) {
-    Carbon_VMValue val = { .type = CARBON_VM_TYPE_FLOAT, .f32 = value };
+bool agentite_vm_set_float(Agentite_ViewModel *vm, uint32_t id, float value) {
+    Agentite_VMValue val = { .type = AGENTITE_VM_TYPE_FLOAT, .f32 = value };
     return set_value(vm, id, &val);
 }
 
-bool carbon_vm_set_double(Carbon_ViewModel *vm, uint32_t id, double value) {
-    Carbon_VMValue val = { .type = CARBON_VM_TYPE_DOUBLE, .f64 = value };
+bool agentite_vm_set_double(Agentite_ViewModel *vm, uint32_t id, double value) {
+    Agentite_VMValue val = { .type = AGENTITE_VM_TYPE_DOUBLE, .f64 = value };
     return set_value(vm, id, &val);
 }
 
-bool carbon_vm_set_bool(Carbon_ViewModel *vm, uint32_t id, bool value) {
-    Carbon_VMValue val = { .type = CARBON_VM_TYPE_BOOL, .b = value };
+bool agentite_vm_set_bool(Agentite_ViewModel *vm, uint32_t id, bool value) {
+    Agentite_VMValue val = { .type = AGENTITE_VM_TYPE_BOOL, .b = value };
     return set_value(vm, id, &val);
 }
 
-bool carbon_vm_set_string(Carbon_ViewModel *vm, uint32_t id, const char *value) {
-    Carbon_VMValue val = { .type = CARBON_VM_TYPE_STRING };
+bool agentite_vm_set_string(Agentite_ViewModel *vm, uint32_t id, const char *value) {
+    Agentite_VMValue val = { .type = AGENTITE_VM_TYPE_STRING };
     if (value) {
-        strncpy(val.str, value, CARBON_VM_MAX_STRING_LENGTH - 1);
-        val.str[CARBON_VM_MAX_STRING_LENGTH - 1] = '\0';
+        strncpy(val.str, value, AGENTITE_VM_MAX_STRING_LENGTH - 1);
+        val.str[AGENTITE_VM_MAX_STRING_LENGTH - 1] = '\0';
     }
     return set_value(vm, id, &val);
 }
 
-bool carbon_vm_set_ptr(Carbon_ViewModel *vm, uint32_t id, void *value) {
-    Carbon_VMValue val = { .type = CARBON_VM_TYPE_POINTER, .ptr = value };
+bool agentite_vm_set_ptr(Agentite_ViewModel *vm, uint32_t id, void *value) {
+    Agentite_VMValue val = { .type = AGENTITE_VM_TYPE_POINTER, .ptr = value };
     return set_value(vm, id, &val);
 }
 
-bool carbon_vm_set_vec2(Carbon_ViewModel *vm, uint32_t id, float x, float y) {
-    Carbon_VMValue val = { .type = CARBON_VM_TYPE_VEC2, .vec2 = { x, y } };
+bool agentite_vm_set_vec2(Agentite_ViewModel *vm, uint32_t id, float x, float y) {
+    Agentite_VMValue val = { .type = AGENTITE_VM_TYPE_VEC2, .vec2 = { x, y } };
     return set_value(vm, id, &val);
 }
 
-bool carbon_vm_set_vec3(Carbon_ViewModel *vm, uint32_t id, float x, float y, float z) {
-    Carbon_VMValue val = { .type = CARBON_VM_TYPE_VEC3, .vec3 = { x, y, z } };
+bool agentite_vm_set_vec3(Agentite_ViewModel *vm, uint32_t id, float x, float y, float z) {
+    Agentite_VMValue val = { .type = AGENTITE_VM_TYPE_VEC3, .vec3 = { x, y, z } };
     return set_value(vm, id, &val);
 }
 
-bool carbon_vm_set_vec4(Carbon_ViewModel *vm, uint32_t id,
+bool agentite_vm_set_vec4(Agentite_ViewModel *vm, uint32_t id,
                          float x, float y, float z, float w) {
-    Carbon_VMValue val = { .type = CARBON_VM_TYPE_VEC4, .vec4 = { x, y, z, w } };
+    Agentite_VMValue val = { .type = AGENTITE_VM_TYPE_VEC4, .vec4 = { x, y, z, w } };
     return set_value(vm, id, &val);
 }
 
-bool carbon_vm_set_color(Carbon_ViewModel *vm, uint32_t id,
+bool agentite_vm_set_color(Agentite_ViewModel *vm, uint32_t id,
                           float r, float g, float b, float a) {
-    return carbon_vm_set_vec4(vm, id, r, g, b, a);
+    return agentite_vm_set_vec4(vm, id, r, g, b, a);
 }
 
-bool carbon_vm_set_value(Carbon_ViewModel *vm, uint32_t id, const Carbon_VMValue *value) {
+bool agentite_vm_set_value(Agentite_ViewModel *vm, uint32_t id, const Agentite_VMValue *value) {
     if (!value) return false;
     return set_value(vm, id, value);
 }
@@ -408,75 +408,75 @@ bool carbon_vm_set_value(Carbon_ViewModel *vm, uint32_t id, const Carbon_VMValue
  * Value Getters
  *============================================================================*/
 
-int32_t carbon_vm_get_int(const Carbon_ViewModel *vm, uint32_t id) {
-    VMObservable *obs = find_observable((Carbon_ViewModel *)vm, id);
-    if (!obs || obs->value.type != CARBON_VM_TYPE_INT) return 0;
+int32_t agentite_vm_get_int(const Agentite_ViewModel *vm, uint32_t id) {
+    VMObservable *obs = find_observable((Agentite_ViewModel *)vm, id);
+    if (!obs || obs->value.type != AGENTITE_VM_TYPE_INT) return 0;
     return obs->value.i32;
 }
 
-int64_t carbon_vm_get_int64(const Carbon_ViewModel *vm, uint32_t id) {
-    VMObservable *obs = find_observable((Carbon_ViewModel *)vm, id);
-    if (!obs || obs->value.type != CARBON_VM_TYPE_INT64) return 0;
+int64_t agentite_vm_get_int64(const Agentite_ViewModel *vm, uint32_t id) {
+    VMObservable *obs = find_observable((Agentite_ViewModel *)vm, id);
+    if (!obs || obs->value.type != AGENTITE_VM_TYPE_INT64) return 0;
     return obs->value.i64;
 }
 
-float carbon_vm_get_float(const Carbon_ViewModel *vm, uint32_t id) {
-    VMObservable *obs = find_observable((Carbon_ViewModel *)vm, id);
-    if (!obs || obs->value.type != CARBON_VM_TYPE_FLOAT) return 0.0f;
+float agentite_vm_get_float(const Agentite_ViewModel *vm, uint32_t id) {
+    VMObservable *obs = find_observable((Agentite_ViewModel *)vm, id);
+    if (!obs || obs->value.type != AGENTITE_VM_TYPE_FLOAT) return 0.0f;
     return obs->value.f32;
 }
 
-double carbon_vm_get_double(const Carbon_ViewModel *vm, uint32_t id) {
-    VMObservable *obs = find_observable((Carbon_ViewModel *)vm, id);
-    if (!obs || obs->value.type != CARBON_VM_TYPE_DOUBLE) return 0.0;
+double agentite_vm_get_double(const Agentite_ViewModel *vm, uint32_t id) {
+    VMObservable *obs = find_observable((Agentite_ViewModel *)vm, id);
+    if (!obs || obs->value.type != AGENTITE_VM_TYPE_DOUBLE) return 0.0;
     return obs->value.f64;
 }
 
-bool carbon_vm_get_bool(const Carbon_ViewModel *vm, uint32_t id) {
-    VMObservable *obs = find_observable((Carbon_ViewModel *)vm, id);
-    if (!obs || obs->value.type != CARBON_VM_TYPE_BOOL) return false;
+bool agentite_vm_get_bool(const Agentite_ViewModel *vm, uint32_t id) {
+    VMObservable *obs = find_observable((Agentite_ViewModel *)vm, id);
+    if (!obs || obs->value.type != AGENTITE_VM_TYPE_BOOL) return false;
     return obs->value.b;
 }
 
-const char *carbon_vm_get_string(const Carbon_ViewModel *vm, uint32_t id) {
-    VMObservable *obs = find_observable((Carbon_ViewModel *)vm, id);
-    if (!obs || obs->value.type != CARBON_VM_TYPE_STRING) return "";
+const char *agentite_vm_get_string(const Agentite_ViewModel *vm, uint32_t id) {
+    VMObservable *obs = find_observable((Agentite_ViewModel *)vm, id);
+    if (!obs || obs->value.type != AGENTITE_VM_TYPE_STRING) return "";
     return obs->value.str;
 }
 
-void *carbon_vm_get_ptr(const Carbon_ViewModel *vm, uint32_t id) {
-    VMObservable *obs = find_observable((Carbon_ViewModel *)vm, id);
-    if (!obs || obs->value.type != CARBON_VM_TYPE_POINTER) return NULL;
+void *agentite_vm_get_ptr(const Agentite_ViewModel *vm, uint32_t id) {
+    VMObservable *obs = find_observable((Agentite_ViewModel *)vm, id);
+    if (!obs || obs->value.type != AGENTITE_VM_TYPE_POINTER) return NULL;
     return obs->value.ptr;
 }
 
-Carbon_VMVec2 carbon_vm_get_vec2(const Carbon_ViewModel *vm, uint32_t id) {
-    VMObservable *obs = find_observable((Carbon_ViewModel *)vm, id);
-    if (!obs || obs->value.type != CARBON_VM_TYPE_VEC2) {
-        return (Carbon_VMVec2){ 0, 0 };
+Agentite_VMVec2 agentite_vm_get_vec2(const Agentite_ViewModel *vm, uint32_t id) {
+    VMObservable *obs = find_observable((Agentite_ViewModel *)vm, id);
+    if (!obs || obs->value.type != AGENTITE_VM_TYPE_VEC2) {
+        return (Agentite_VMVec2){ 0, 0 };
     }
     return obs->value.vec2;
 }
 
-Carbon_VMVec3 carbon_vm_get_vec3(const Carbon_ViewModel *vm, uint32_t id) {
-    VMObservable *obs = find_observable((Carbon_ViewModel *)vm, id);
-    if (!obs || obs->value.type != CARBON_VM_TYPE_VEC3) {
-        return (Carbon_VMVec3){ 0, 0, 0 };
+Agentite_VMVec3 agentite_vm_get_vec3(const Agentite_ViewModel *vm, uint32_t id) {
+    VMObservable *obs = find_observable((Agentite_ViewModel *)vm, id);
+    if (!obs || obs->value.type != AGENTITE_VM_TYPE_VEC3) {
+        return (Agentite_VMVec3){ 0, 0, 0 };
     }
     return obs->value.vec3;
 }
 
-Carbon_VMVec4 carbon_vm_get_vec4(const Carbon_ViewModel *vm, uint32_t id) {
-    VMObservable *obs = find_observable((Carbon_ViewModel *)vm, id);
-    if (!obs || obs->value.type != CARBON_VM_TYPE_VEC4) {
-        return (Carbon_VMVec4){ 0, 0, 0, 0 };
+Agentite_VMVec4 agentite_vm_get_vec4(const Agentite_ViewModel *vm, uint32_t id) {
+    VMObservable *obs = find_observable((Agentite_ViewModel *)vm, id);
+    if (!obs || obs->value.type != AGENTITE_VM_TYPE_VEC4) {
+        return (Agentite_VMVec4){ 0, 0, 0, 0 };
     }
     return obs->value.vec4;
 }
 
-bool carbon_vm_get_value(const Carbon_ViewModel *vm, uint32_t id, Carbon_VMValue *out) {
+bool agentite_vm_get_value(const Agentite_ViewModel *vm, uint32_t id, Agentite_VMValue *out) {
     if (!out) return false;
-    VMObservable *obs = find_observable((Carbon_ViewModel *)vm, id);
+    VMObservable *obs = find_observable((Agentite_ViewModel *)vm, id);
     if (!obs) return false;
     *out = obs->value;
     return true;
@@ -486,26 +486,26 @@ bool carbon_vm_get_value(const Carbon_ViewModel *vm, uint32_t id, Carbon_VMValue
  * Lookup and Query
  *============================================================================*/
 
-uint32_t carbon_vm_find(const Carbon_ViewModel *vm, const char *name) {
-    VMObservable *obs = find_observable_by_name((Carbon_ViewModel *)vm, name);
-    return obs ? obs->id : CARBON_VM_INVALID_ID;
+uint32_t agentite_vm_find(const Agentite_ViewModel *vm, const char *name) {
+    VMObservable *obs = find_observable_by_name((Agentite_ViewModel *)vm, name);
+    return obs ? obs->id : AGENTITE_VM_INVALID_ID;
 }
 
-const char *carbon_vm_get_name(const Carbon_ViewModel *vm, uint32_t id) {
-    VMObservable *obs = find_observable((Carbon_ViewModel *)vm, id);
+const char *agentite_vm_get_name(const Agentite_ViewModel *vm, uint32_t id) {
+    VMObservable *obs = find_observable((Agentite_ViewModel *)vm, id);
     return obs ? obs->name : NULL;
 }
 
-Carbon_VMType carbon_vm_get_type(const Carbon_ViewModel *vm, uint32_t id) {
-    VMObservable *obs = find_observable((Carbon_ViewModel *)vm, id);
-    return obs ? obs->value.type : CARBON_VM_TYPE_NONE;
+Agentite_VMType agentite_vm_get_type(const Agentite_ViewModel *vm, uint32_t id) {
+    VMObservable *obs = find_observable((Agentite_ViewModel *)vm, id);
+    return obs ? obs->value.type : AGENTITE_VM_TYPE_NONE;
 }
 
-bool carbon_vm_exists(const Carbon_ViewModel *vm, uint32_t id) {
-    return find_observable((Carbon_ViewModel *)vm, id) != NULL;
+bool agentite_vm_exists(const Agentite_ViewModel *vm, uint32_t id) {
+    return find_observable((Agentite_ViewModel *)vm, id) != NULL;
 }
 
-int carbon_vm_count(const Carbon_ViewModel *vm) {
+int agentite_vm_count(const Agentite_ViewModel *vm) {
     if (!vm) return 0;
     int count = 0;
     for (int i = 0; i < vm->observable_count; i++) {
@@ -518,9 +518,9 @@ int carbon_vm_count(const Carbon_ViewModel *vm) {
  * Change Notification
  *============================================================================*/
 
-uint32_t carbon_vm_subscribe(Carbon_ViewModel *vm,
+uint32_t agentite_vm_subscribe(Agentite_ViewModel *vm,
                               uint32_t id,
-                              Carbon_VMCallback callback,
+                              Agentite_VMCallback callback,
                               void *userdata) {
     if (!vm || !callback) return 0;
 
@@ -534,8 +534,8 @@ uint32_t carbon_vm_subscribe(Carbon_ViewModel *vm,
     }
 
     if (slot < 0) {
-        if (vm->listener_count >= CARBON_VM_MAX_OBSERVABLES * 4) {
-            carbon_set_error("carbon_vm_subscribe: max listeners reached");
+        if (vm->listener_count >= AGENTITE_VM_MAX_OBSERVABLES * 4) {
+            agentite_set_error("agentite_vm_subscribe: max listeners reached");
             return 0;
         }
         slot = vm->listener_count++;
@@ -551,13 +551,13 @@ uint32_t carbon_vm_subscribe(Carbon_ViewModel *vm,
     return l->id;
 }
 
-uint32_t carbon_vm_subscribe_all(Carbon_ViewModel *vm,
-                                  Carbon_VMCallback callback,
+uint32_t agentite_vm_subscribe_all(Agentite_ViewModel *vm,
+                                  Agentite_VMCallback callback,
                                   void *userdata) {
-    return carbon_vm_subscribe(vm, 0, callback, userdata);
+    return agentite_vm_subscribe(vm, 0, callback, userdata);
 }
 
-void carbon_vm_unsubscribe(Carbon_ViewModel *vm, uint32_t listener_id) {
+void agentite_vm_unsubscribe(Agentite_ViewModel *vm, uint32_t listener_id) {
     if (!vm || listener_id == 0) return;
 
     for (int i = 0; i < vm->listener_count; i++) {
@@ -568,13 +568,13 @@ void carbon_vm_unsubscribe(Carbon_ViewModel *vm, uint32_t listener_id) {
     }
 }
 
-void carbon_vm_notify(Carbon_ViewModel *vm, uint32_t id) {
+void agentite_vm_notify(Agentite_ViewModel *vm, uint32_t id) {
     VMObservable *obs = find_observable(vm, id);
     if (!obs) return;
     notify_listeners(vm, obs, &obs->value);
 }
 
-void carbon_vm_notify_all(Carbon_ViewModel *vm) {
+void agentite_vm_notify_all(Agentite_ViewModel *vm) {
     if (!vm) return;
 
     for (int i = 0; i < vm->observable_count; i++) {
@@ -588,13 +588,13 @@ void carbon_vm_notify_all(Carbon_ViewModel *vm) {
  * Batch Updates
  *============================================================================*/
 
-void carbon_vm_begin_batch(Carbon_ViewModel *vm) {
+void agentite_vm_begin_batch(Agentite_ViewModel *vm) {
     if (!vm) return;
     vm->batching = true;
     vm->batch_changed_count = 0;
 }
 
-void carbon_vm_commit_batch(Carbon_ViewModel *vm) {
+void agentite_vm_commit_batch(Agentite_ViewModel *vm) {
     if (!vm || !vm->batching) return;
 
     vm->batching = false;
@@ -611,7 +611,7 @@ void carbon_vm_commit_batch(Carbon_ViewModel *vm) {
     vm->batch_changed_count = 0;
 }
 
-void carbon_vm_cancel_batch(Carbon_ViewModel *vm) {
+void agentite_vm_cancel_batch(Agentite_ViewModel *vm) {
     if (!vm || !vm->batching) return;
 
     /* Revert all changes */
@@ -627,7 +627,7 @@ void carbon_vm_cancel_batch(Carbon_ViewModel *vm) {
     vm->batch_changed_count = 0;
 }
 
-bool carbon_vm_is_batching(const Carbon_ViewModel *vm) {
+bool agentite_vm_is_batching(const Agentite_ViewModel *vm) {
     return vm ? vm->batching : false;
 }
 
@@ -635,9 +635,9 @@ bool carbon_vm_is_batching(const Carbon_ViewModel *vm) {
  * Validation
  *============================================================================*/
 
-void carbon_vm_set_validator(Carbon_ViewModel *vm,
+void agentite_vm_set_validator(Agentite_ViewModel *vm,
                               uint32_t id,
-                              Carbon_VMValidator validator,
+                              Agentite_VMValidator validator,
                               void *userdata) {
     VMObservable *obs = find_observable(vm, id);
     if (!obs) return;
@@ -650,9 +650,9 @@ void carbon_vm_set_validator(Carbon_ViewModel *vm,
  * Formatting
  *============================================================================*/
 
-void carbon_vm_set_formatter(Carbon_ViewModel *vm,
+void agentite_vm_set_formatter(Agentite_ViewModel *vm,
                               uint32_t id,
-                              Carbon_VMFormatter formatter,
+                              Agentite_VMFormatter formatter,
                               void *userdata) {
     VMObservable *obs = find_observable(vm, id);
     if (!obs) return;
@@ -661,44 +661,44 @@ void carbon_vm_set_formatter(Carbon_ViewModel *vm,
     obs->formatter_userdata = userdata;
 }
 
-int carbon_vm_format(const Carbon_ViewModel *vm,
+int agentite_vm_format(const Agentite_ViewModel *vm,
                       uint32_t id,
                       char *buffer,
                       size_t size) {
     if (!vm || !buffer || size == 0) return 0;
 
-    VMObservable *obs = find_observable((Carbon_ViewModel *)vm, id);
+    VMObservable *obs = find_observable((Agentite_ViewModel *)vm, id);
     if (!obs) return 0;
 
     /* Use custom formatter if set */
     if (obs->formatter) {
-        return obs->formatter((Carbon_ViewModel *)vm, id, &obs->value,
+        return obs->formatter((Agentite_ViewModel *)vm, id, &obs->value,
                               buffer, size, obs->formatter_userdata);
     }
 
     /* Default formatting */
     switch (obs->value.type) {
-        case CARBON_VM_TYPE_INT:
+        case AGENTITE_VM_TYPE_INT:
             return snprintf(buffer, size, "%d", obs->value.i32);
-        case CARBON_VM_TYPE_INT64:
+        case AGENTITE_VM_TYPE_INT64:
             return snprintf(buffer, size, "%lld", (long long)obs->value.i64);
-        case CARBON_VM_TYPE_FLOAT:
+        case AGENTITE_VM_TYPE_FLOAT:
             return snprintf(buffer, size, "%.2f", obs->value.f32);
-        case CARBON_VM_TYPE_DOUBLE:
+        case AGENTITE_VM_TYPE_DOUBLE:
             return snprintf(buffer, size, "%.4f", obs->value.f64);
-        case CARBON_VM_TYPE_BOOL:
+        case AGENTITE_VM_TYPE_BOOL:
             return snprintf(buffer, size, "%s", obs->value.b ? "true" : "false");
-        case CARBON_VM_TYPE_STRING:
+        case AGENTITE_VM_TYPE_STRING:
             return snprintf(buffer, size, "%s", obs->value.str);
-        case CARBON_VM_TYPE_POINTER:
+        case AGENTITE_VM_TYPE_POINTER:
             return snprintf(buffer, size, "%p", obs->value.ptr);
-        case CARBON_VM_TYPE_VEC2:
+        case AGENTITE_VM_TYPE_VEC2:
             return snprintf(buffer, size, "(%.2f, %.2f)",
                             obs->value.vec2.x, obs->value.vec2.y);
-        case CARBON_VM_TYPE_VEC3:
+        case AGENTITE_VM_TYPE_VEC3:
             return snprintf(buffer, size, "(%.2f, %.2f, %.2f)",
                             obs->value.vec3.x, obs->value.vec3.y, obs->value.vec3.z);
-        case CARBON_VM_TYPE_VEC4:
+        case AGENTITE_VM_TYPE_VEC4:
             return snprintf(buffer, size, "(%.2f, %.2f, %.2f, %.2f)",
                             obs->value.vec4.x, obs->value.vec4.y,
                             obs->value.vec4.z, obs->value.vec4.w);
@@ -707,31 +707,31 @@ int carbon_vm_format(const Carbon_ViewModel *vm,
     }
 }
 
-int carbon_vm_format_ex(const Carbon_ViewModel *vm,
+int agentite_vm_format_ex(const Agentite_ViewModel *vm,
                          uint32_t id,
                          char *buffer,
                          size_t size,
                          const char *format) {
     if (!vm || !buffer || size == 0 || !format) return 0;
 
-    VMObservable *obs = find_observable((Carbon_ViewModel *)vm, id);
+    VMObservable *obs = find_observable((Agentite_ViewModel *)vm, id);
     if (!obs) return 0;
 
     switch (obs->value.type) {
-        case CARBON_VM_TYPE_INT:
+        case AGENTITE_VM_TYPE_INT:
             return snprintf(buffer, size, format, obs->value.i32);
-        case CARBON_VM_TYPE_INT64:
+        case AGENTITE_VM_TYPE_INT64:
             return snprintf(buffer, size, format, obs->value.i64);
-        case CARBON_VM_TYPE_FLOAT:
+        case AGENTITE_VM_TYPE_FLOAT:
             return snprintf(buffer, size, format, obs->value.f32);
-        case CARBON_VM_TYPE_DOUBLE:
+        case AGENTITE_VM_TYPE_DOUBLE:
             return snprintf(buffer, size, format, obs->value.f64);
-        case CARBON_VM_TYPE_BOOL:
+        case AGENTITE_VM_TYPE_BOOL:
             return snprintf(buffer, size, format, obs->value.b ? 1 : 0);
-        case CARBON_VM_TYPE_STRING:
+        case AGENTITE_VM_TYPE_STRING:
             return snprintf(buffer, size, format, obs->value.str);
         default:
-            return carbon_vm_format(vm, id, buffer, size);
+            return agentite_vm_format(vm, id, buffer, size);
     }
 }
 
@@ -739,24 +739,24 @@ int carbon_vm_format_ex(const Carbon_ViewModel *vm,
  * Computed Values
  *============================================================================*/
 
-uint32_t carbon_vm_define_computed(Carbon_ViewModel *vm,
+uint32_t agentite_vm_define_computed(Agentite_ViewModel *vm,
                                     const char *name,
-                                    Carbon_VMType type,
-                                    Carbon_VMComputed compute,
+                                    Agentite_VMType type,
+                                    Agentite_VMComputed compute,
                                     void *userdata,
                                     const uint32_t *dependencies,
                                     int dep_count) {
-    if (!vm || !name || !compute) return CARBON_VM_INVALID_ID;
+    if (!vm || !name || !compute) return AGENTITE_VM_INVALID_ID;
 
     if (dep_count > 8) dep_count = 8;
 
     /* Initial value */
-    Carbon_VMValue initial = { .type = type };
+    Agentite_VMValue initial = { .type = type };
     uint32_t id = define_observable(vm, name, &initial);
-    if (id == CARBON_VM_INVALID_ID) return id;
+    if (id == AGENTITE_VM_INVALID_ID) return id;
 
     VMObservable *obs = find_observable(vm, id);
-    if (!obs) return CARBON_VM_INVALID_ID;
+    if (!obs) return AGENTITE_VM_INVALID_ID;
 
     obs->is_computed = true;
     obs->compute = compute;
@@ -776,48 +776,48 @@ uint32_t carbon_vm_define_computed(Carbon_ViewModel *vm,
  * Utility Functions
  *============================================================================*/
 
-const char *carbon_vm_type_name(Carbon_VMType type) {
+const char *agentite_vm_type_name(Agentite_VMType type) {
     switch (type) {
-        case CARBON_VM_TYPE_NONE:    return "none";
-        case CARBON_VM_TYPE_INT:     return "int";
-        case CARBON_VM_TYPE_INT64:   return "int64";
-        case CARBON_VM_TYPE_FLOAT:   return "float";
-        case CARBON_VM_TYPE_DOUBLE:  return "double";
-        case CARBON_VM_TYPE_BOOL:    return "bool";
-        case CARBON_VM_TYPE_STRING:  return "string";
-        case CARBON_VM_TYPE_POINTER: return "pointer";
-        case CARBON_VM_TYPE_VEC2:    return "vec2";
-        case CARBON_VM_TYPE_VEC3:    return "vec3";
-        case CARBON_VM_TYPE_VEC4:    return "vec4";
+        case AGENTITE_VM_TYPE_NONE:    return "none";
+        case AGENTITE_VM_TYPE_INT:     return "int";
+        case AGENTITE_VM_TYPE_INT64:   return "int64";
+        case AGENTITE_VM_TYPE_FLOAT:   return "float";
+        case AGENTITE_VM_TYPE_DOUBLE:  return "double";
+        case AGENTITE_VM_TYPE_BOOL:    return "bool";
+        case AGENTITE_VM_TYPE_STRING:  return "string";
+        case AGENTITE_VM_TYPE_POINTER: return "pointer";
+        case AGENTITE_VM_TYPE_VEC2:    return "vec2";
+        case AGENTITE_VM_TYPE_VEC3:    return "vec3";
+        case AGENTITE_VM_TYPE_VEC4:    return "vec4";
         default: return "unknown";
     }
 }
 
-bool carbon_vm_values_equal(const Carbon_VMValue *a, const Carbon_VMValue *b) {
+bool agentite_vm_values_equal(const Agentite_VMValue *a, const Agentite_VMValue *b) {
     if (!a || !b) return false;
     if (a->type != b->type) return false;
 
     switch (a->type) {
-        case CARBON_VM_TYPE_INT:
+        case AGENTITE_VM_TYPE_INT:
             return a->i32 == b->i32;
-        case CARBON_VM_TYPE_INT64:
+        case AGENTITE_VM_TYPE_INT64:
             return a->i64 == b->i64;
-        case CARBON_VM_TYPE_FLOAT:
+        case AGENTITE_VM_TYPE_FLOAT:
             return a->f32 == b->f32;
-        case CARBON_VM_TYPE_DOUBLE:
+        case AGENTITE_VM_TYPE_DOUBLE:
             return a->f64 == b->f64;
-        case CARBON_VM_TYPE_BOOL:
+        case AGENTITE_VM_TYPE_BOOL:
             return a->b == b->b;
-        case CARBON_VM_TYPE_STRING:
+        case AGENTITE_VM_TYPE_STRING:
             return strcmp(a->str, b->str) == 0;
-        case CARBON_VM_TYPE_POINTER:
+        case AGENTITE_VM_TYPE_POINTER:
             return a->ptr == b->ptr;
-        case CARBON_VM_TYPE_VEC2:
+        case AGENTITE_VM_TYPE_VEC2:
             return a->vec2.x == b->vec2.x && a->vec2.y == b->vec2.y;
-        case CARBON_VM_TYPE_VEC3:
+        case AGENTITE_VM_TYPE_VEC3:
             return a->vec3.x == b->vec3.x && a->vec3.y == b->vec3.y &&
                    a->vec3.z == b->vec3.z;
-        case CARBON_VM_TYPE_VEC4:
+        case AGENTITE_VM_TYPE_VEC4:
             return a->vec4.x == b->vec4.x && a->vec4.y == b->vec4.y &&
                    a->vec4.z == b->vec4.z && a->vec4.w == b->vec4.w;
         default:
@@ -825,14 +825,14 @@ bool carbon_vm_values_equal(const Carbon_VMValue *a, const Carbon_VMValue *b) {
     }
 }
 
-void carbon_vm_value_copy(Carbon_VMValue *dest, const Carbon_VMValue *src) {
+void agentite_vm_value_copy(Agentite_VMValue *dest, const Agentite_VMValue *src) {
     if (!dest || !src) return;
     *dest = *src;
 }
 
-void carbon_vm_value_clear(Carbon_VMValue *value) {
+void agentite_vm_value_clear(Agentite_VMValue *value) {
     if (!value) return;
-    Carbon_VMType type = value->type;
-    memset(value, 0, sizeof(Carbon_VMValue));
+    Agentite_VMType type = value->type;
+    memset(value, 0, sizeof(Agentite_VMValue));
     value->type = type;
 }

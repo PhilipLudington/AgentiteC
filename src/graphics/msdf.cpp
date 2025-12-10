@@ -10,9 +10,9 @@
  * - Shape utilities (bounds, winding, normalize)
  */
 
-#include "carbon/msdf.h"
-#include "carbon/carbon.h"
-#include "carbon/error.h"
+#include "agentite/msdf.h"
+#include "agentite/agentite.h"
+#include "agentite/error.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -35,9 +35,9 @@
 
 MSDF_Shape *msdf_shape_create(void)
 {
-    MSDF_Shape *shape = CARBON_ALLOC(MSDF_Shape);
+    MSDF_Shape *shape = AGENTITE_ALLOC(MSDF_Shape);
     if (!shape) {
-        carbon_set_error("Failed to allocate MSDF shape");
+        agentite_set_error("Failed to allocate MSDF shape");
         return NULL;
     }
 
@@ -70,10 +70,10 @@ MSDF_Contour *msdf_shape_add_contour(MSDF_Shape *shape)
             ? INITIAL_CONTOUR_CAPACITY
             : shape->contour_capacity * 2;
 
-        MSDF_Contour *new_contours = CARBON_REALLOC(
+        MSDF_Contour *new_contours = AGENTITE_REALLOC(
             shape->contours, MSDF_Contour, new_capacity);
         if (!new_contours) {
-            carbon_set_error("Failed to grow contour array");
+            agentite_set_error("Failed to grow contour array");
             return NULL;
         }
 
@@ -101,10 +101,10 @@ void msdf_contour_add_edge(MSDF_Contour *contour, const MSDF_EdgeSegment *edge)
             ? INITIAL_EDGE_CAPACITY
             : contour->edge_capacity * 2;
 
-        MSDF_EdgeSegment *new_edges = CARBON_REALLOC(
+        MSDF_EdgeSegment *new_edges = AGENTITE_REALLOC(
             contour->edges, MSDF_EdgeSegment, new_capacity);
         if (!new_edges) {
-            carbon_set_error("Failed to grow edge array");
+            agentite_set_error("Failed to grow edge array");
             return;
         }
 
@@ -158,7 +158,7 @@ MSDF_Shape *msdf_shape_from_glyph(const stbtt_fontinfo *font_info,
                                    double scale)
 {
     if (!font_info) {
-        carbon_set_error("NULL font_info");
+        agentite_set_error("NULL font_info");
         return NULL;
     }
 
@@ -278,7 +278,7 @@ MSDF_Shape *msdf_shape_from_codepoint(const stbtt_fontinfo *font_info,
                                        double scale)
 {
     if (!font_info) {
-        carbon_set_error("NULL font_info");
+        agentite_set_error("NULL font_info");
         return NULL;
     }
 
@@ -919,14 +919,14 @@ MSDF_SignedDistance msdf_edge_signed_distance(const MSDF_EdgeSegment *edge,
 bool msdf_bitmap_alloc(MSDF_Bitmap *bitmap, int width, int height, MSDF_BitmapFormat format)
 {
     if (!bitmap || width <= 0 || height <= 0) {
-        carbon_set_error("Invalid bitmap parameters");
+        agentite_set_error("Invalid bitmap parameters");
         return false;
     }
 
     size_t size = (size_t)width * height * format * sizeof(float);
     bitmap->data = (float *)malloc(size);
     if (!bitmap->data) {
-        carbon_set_error("Failed to allocate bitmap");
+        agentite_set_error("Failed to allocate bitmap");
         return false;
     }
 

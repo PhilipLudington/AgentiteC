@@ -1,25 +1,25 @@
 /*
- * Carbon UI - Widget Implementations
+ * Agentite UI - Widget Implementations
  */
 
-#include "carbon/ui.h"
+#include "agentite/ui.h"
 #include <string.h>
 #include <stdio.h>
 
 /* Forward declarations */
-extern CUI_Id cui_make_id(CUI_Context *ctx, const char *str);
-extern CUI_Id cui_make_id_int(CUI_Context *ctx, const char *str, int n);
-extern CUI_Rect cui_allocate_rect(CUI_Context *ctx, float width, float height);
+extern AUI_Id aui_make_id(AUI_Context *ctx, const char *str);
+extern AUI_Id aui_make_id_int(AUI_Context *ctx, const char *str, int n);
+extern AUI_Rect aui_allocate_rect(AUI_Context *ctx, float width, float height);
 
 /* ============================================================================
  * Widget Helpers
  * ============================================================================ */
 
 /* Check if mouse is over a widget and handle hot/active state */
-static bool cui_widget_behavior(CUI_Context *ctx, CUI_Id id, CUI_Rect rect,
+static bool aui_widget_behavior(AUI_Context *ctx, AUI_Id id, AUI_Rect rect,
                                 bool *out_hovered, bool *out_held)
 {
-    bool hovered = cui_rect_contains(rect, ctx->input.mouse_x, ctx->input.mouse_y);
+    bool hovered = aui_rect_contains(rect, ctx->input.mouse_x, ctx->input.mouse_y);
     bool pressed = false;
 
     if (hovered) {
@@ -29,7 +29,7 @@ static bool cui_widget_behavior(CUI_Context *ctx, CUI_Id id, CUI_Rect rect,
     if (ctx->active == id) {
         if (ctx->input.mouse_released[0]) {
             pressed = hovered;  /* Click = released while hovered */
-            ctx->active = CUI_ID_NONE;
+            ctx->active = AUI_ID_NONE;
         }
     } else if (hovered && ctx->input.mouse_pressed[0]) {
         ctx->active = id;
@@ -42,7 +42,7 @@ static bool cui_widget_behavior(CUI_Context *ctx, CUI_Id id, CUI_Rect rect,
 }
 
 /* Get widget background color based on state */
-static uint32_t cui_widget_bg_color(CUI_Context *ctx, bool hovered, bool held, bool disabled)
+static uint32_t aui_widget_bg_color(AUI_Context *ctx, bool hovered, bool held, bool disabled)
 {
     if (disabled) return ctx->theme.bg_widget_disabled;
     if (held) return ctx->theme.bg_widget_active;
@@ -54,124 +54,124 @@ static uint32_t cui_widget_bg_color(CUI_Context *ctx, bool hovered, bool held, b
  * Labels
  * ============================================================================ */
 
-void cui_label(CUI_Context *ctx, const char *text)
+void aui_label(AUI_Context *ctx, const char *text)
 {
-    cui_label_colored(ctx, text, ctx->theme.text);
+    aui_label_colored(ctx, text, ctx->theme.text);
 }
 
-void cui_label_colored(CUI_Context *ctx, const char *text, uint32_t color)
+void aui_label_colored(AUI_Context *ctx, const char *text, uint32_t color)
 {
     if (!ctx || !text) return;
 
-    float text_w = cui_text_width(ctx, text);
-    float text_h = cui_text_height(ctx);
+    float text_w = aui_text_width(ctx, text);
+    float text_h = aui_text_height(ctx);
 
-    CUI_Rect rect = cui_allocate_rect(ctx, text_w, text_h);
+    AUI_Rect rect = aui_allocate_rect(ctx, text_w, text_h);
 
     /* Center text vertically */
     float y = rect.y + (rect.h - text_h) * 0.5f;
 
-    cui_draw_text(ctx, text, rect.x, y, color);
+    aui_draw_text(ctx, text, rect.x, y, color);
 }
 
 /* ============================================================================
  * Buttons
  * ============================================================================ */
 
-bool cui_button(CUI_Context *ctx, const char *label)
+bool aui_button(AUI_Context *ctx, const char *label)
 {
-    return cui_button_ex(ctx, label, 0, 0);
+    return aui_button_ex(ctx, label, 0, 0);
 }
 
-bool cui_button_ex(CUI_Context *ctx, const char *label, float width, float height)
+bool aui_button_ex(AUI_Context *ctx, const char *label, float width, float height)
 {
     if (!ctx || !label) return false;
 
-    CUI_Id id = cui_make_id(ctx, label);
+    AUI_Id id = aui_make_id(ctx, label);
 
     /* Calculate button size */
-    float text_w = cui_text_width(ctx, label);
-    float text_h = cui_text_height(ctx);
+    float text_w = aui_text_width(ctx, label);
+    float text_h = aui_text_height(ctx);
     float btn_w = width > 0 ? width : text_w + ctx->theme.padding * 2;
     float btn_h = height > 0 ? height : ctx->theme.widget_height;
 
-    CUI_Rect rect = cui_allocate_rect(ctx, btn_w, btn_h);
+    AUI_Rect rect = aui_allocate_rect(ctx, btn_w, btn_h);
 
     /* Handle interaction */
     bool hovered, held;
-    bool pressed = cui_widget_behavior(ctx, id, rect, &hovered, &held);
+    bool pressed = aui_widget_behavior(ctx, id, rect, &hovered, &held);
 
     /* Draw button background */
-    uint32_t bg = cui_widget_bg_color(ctx, hovered, held, false);
-    cui_draw_rect_rounded(ctx, rect.x, rect.y, rect.w, rect.h, bg, ctx->theme.corner_radius);
+    uint32_t bg = aui_widget_bg_color(ctx, hovered, held, false);
+    aui_draw_rect_rounded(ctx, rect.x, rect.y, rect.w, rect.h, bg, ctx->theme.corner_radius);
 
     /* Draw text centered */
     float text_x = rect.x + (rect.w - text_w) * 0.5f;
     float text_y = rect.y + (rect.h - text_h) * 0.5f;
-    cui_draw_text(ctx, label, text_x, text_y, ctx->theme.text);
+    aui_draw_text(ctx, label, text_x, text_y, ctx->theme.text);
 
     return pressed;
 }
 
 /* Semantic button variants using theme semantic colors */
-static bool cui_button_semantic(CUI_Context *ctx, const char *label,
+static bool aui_button_semantic(AUI_Context *ctx, const char *label,
                                  uint32_t color, uint32_t color_hover,
                                  float width, float height)
 {
     if (!ctx || !label) return false;
 
-    CUI_Id id = cui_make_id(ctx, label);
+    AUI_Id id = aui_make_id(ctx, label);
 
-    float text_w = cui_text_width(ctx, label);
-    float text_h = cui_text_height(ctx);
+    float text_w = aui_text_width(ctx, label);
+    float text_h = aui_text_height(ctx);
     float btn_w = width > 0 ? width : text_w + ctx->theme.padding * 2;
     float btn_h = height > 0 ? height : ctx->theme.widget_height;
 
-    CUI_Rect rect = cui_allocate_rect(ctx, btn_w, btn_h);
+    AUI_Rect rect = aui_allocate_rect(ctx, btn_w, btn_h);
 
     bool hovered, held;
-    bool pressed = cui_widget_behavior(ctx, id, rect, &hovered, &held);
+    bool pressed = aui_widget_behavior(ctx, id, rect, &hovered, &held);
 
     /* Use semantic color based on state */
-    uint32_t bg = held ? cui_color_darken(color, 0.15f) :
+    uint32_t bg = held ? aui_color_darken(color, 0.15f) :
                   (hovered ? color_hover : color);
-    cui_draw_rect_rounded(ctx, rect.x, rect.y, rect.w, rect.h, bg, ctx->theme.corner_radius);
+    aui_draw_rect_rounded(ctx, rect.x, rect.y, rect.w, rect.h, bg, ctx->theme.corner_radius);
 
     /* Use highlight text for contrast on colored backgrounds */
     float text_x = rect.x + (rect.w - text_w) * 0.5f;
     float text_y = rect.y + (rect.h - text_h) * 0.5f;
-    cui_draw_text(ctx, label, text_x, text_y, ctx->theme.text_highlight);
+    aui_draw_text(ctx, label, text_x, text_y, ctx->theme.text_highlight);
 
     return pressed;
 }
 
-bool cui_button_primary(CUI_Context *ctx, const char *label)
+bool aui_button_primary(AUI_Context *ctx, const char *label)
 {
-    return cui_button_semantic(ctx, label,
+    return aui_button_semantic(ctx, label,
                                 ctx->theme.accent, ctx->theme.accent_hover, 0, 0);
 }
 
-bool cui_button_success(CUI_Context *ctx, const char *label)
+bool aui_button_success(AUI_Context *ctx, const char *label)
 {
-    return cui_button_semantic(ctx, label,
+    return aui_button_semantic(ctx, label,
                                 ctx->theme.success, ctx->theme.success_hover, 0, 0);
 }
 
-bool cui_button_warning(CUI_Context *ctx, const char *label)
+bool aui_button_warning(AUI_Context *ctx, const char *label)
 {
-    return cui_button_semantic(ctx, label,
+    return aui_button_semantic(ctx, label,
                                 ctx->theme.warning, ctx->theme.warning_hover, 0, 0);
 }
 
-bool cui_button_danger(CUI_Context *ctx, const char *label)
+bool aui_button_danger(AUI_Context *ctx, const char *label)
 {
-    return cui_button_semantic(ctx, label,
+    return aui_button_semantic(ctx, label,
                                 ctx->theme.danger, ctx->theme.danger_hover, 0, 0);
 }
 
-bool cui_button_info(CUI_Context *ctx, const char *label)
+bool aui_button_info(AUI_Context *ctx, const char *label)
 {
-    return cui_button_semantic(ctx, label,
+    return aui_button_semantic(ctx, label,
                                 ctx->theme.info, ctx->theme.info_hover, 0, 0);
 }
 
@@ -179,20 +179,20 @@ bool cui_button_info(CUI_Context *ctx, const char *label)
  * Checkbox
  * ============================================================================ */
 
-bool cui_checkbox(CUI_Context *ctx, const char *label, bool *value)
+bool aui_checkbox(AUI_Context *ctx, const char *label, bool *value)
 {
     if (!ctx || !label || !value) return false;
 
-    CUI_Id id = cui_make_id(ctx, label);
+    AUI_Id id = aui_make_id(ctx, label);
 
     float box_size = ctx->theme.widget_height - 8;
-    float text_w = cui_text_width(ctx, label);
+    float text_w = aui_text_width(ctx, label);
     float total_w = box_size + ctx->theme.spacing + text_w;
 
-    CUI_Rect rect = cui_allocate_rect(ctx, total_w, ctx->theme.widget_height);
+    AUI_Rect rect = aui_allocate_rect(ctx, total_w, ctx->theme.widget_height);
 
     /* Checkbox box rect */
-    CUI_Rect box_rect = {
+    AUI_Rect box_rect = {
         rect.x,
         rect.y + (rect.h - box_size) * 0.5f,
         box_size,
@@ -201,46 +201,46 @@ bool cui_checkbox(CUI_Context *ctx, const char *label, bool *value)
 
     /* Handle interaction */
     bool hovered, held;
-    bool pressed = cui_widget_behavior(ctx, id, rect, &hovered, &held);
+    bool pressed = aui_widget_behavior(ctx, id, rect, &hovered, &held);
 
     if (pressed) {
         *value = !*value;
     }
 
     /* Draw checkbox box */
-    uint32_t bg = cui_widget_bg_color(ctx, hovered, held, false);
-    cui_draw_rect_rounded(ctx, box_rect.x, box_rect.y, box_rect.w, box_rect.h,
+    uint32_t bg = aui_widget_bg_color(ctx, hovered, held, false);
+    aui_draw_rect_rounded(ctx, box_rect.x, box_rect.y, box_rect.w, box_rect.h,
                           bg, ctx->theme.corner_radius);
 
     /* Draw checkmark if checked */
     if (*value) {
         float pad = box_size * 0.2f;
-        cui_draw_rect(ctx, box_rect.x + pad, box_rect.y + pad,
+        aui_draw_rect(ctx, box_rect.x + pad, box_rect.y + pad,
                       box_rect.w - pad * 2, box_rect.h - pad * 2,
                       ctx->theme.accent);
     }
 
     /* Draw label */
     float text_x = box_rect.x + box_size + ctx->theme.spacing;
-    float text_y = rect.y + (rect.h - cui_text_height(ctx)) * 0.5f;
-    cui_draw_text(ctx, label, text_x, text_y, ctx->theme.text);
+    float text_y = rect.y + (rect.h - aui_text_height(ctx)) * 0.5f;
+    aui_draw_text(ctx, label, text_x, text_y, ctx->theme.text);
 
     return pressed;
 }
 
-bool cui_radio(CUI_Context *ctx, const char *label, int *value, int option)
+bool aui_radio(AUI_Context *ctx, const char *label, int *value, int option)
 {
     if (!ctx || !label || !value) return false;
 
-    CUI_Id id = cui_make_id_int(ctx, label, option);
+    AUI_Id id = aui_make_id_int(ctx, label, option);
 
     float box_size = ctx->theme.widget_height - 8;
-    float text_w = cui_text_width(ctx, label);
+    float text_w = aui_text_width(ctx, label);
     float total_w = box_size + ctx->theme.spacing + text_w;
 
-    CUI_Rect rect = cui_allocate_rect(ctx, total_w, ctx->theme.widget_height);
+    AUI_Rect rect = aui_allocate_rect(ctx, total_w, ctx->theme.widget_height);
 
-    CUI_Rect box_rect = {
+    AUI_Rect box_rect = {
         rect.x,
         rect.y + (rect.h - box_size) * 0.5f,
         box_size,
@@ -248,29 +248,29 @@ bool cui_radio(CUI_Context *ctx, const char *label, int *value, int option)
     };
 
     bool hovered, held;
-    bool pressed = cui_widget_behavior(ctx, id, rect, &hovered, &held);
+    bool pressed = aui_widget_behavior(ctx, id, rect, &hovered, &held);
 
     if (pressed) {
         *value = option;
     }
 
     /* Draw radio circle (approximated with rect for now) */
-    uint32_t bg = cui_widget_bg_color(ctx, hovered, held, false);
-    cui_draw_rect_rounded(ctx, box_rect.x, box_rect.y, box_rect.w, box_rect.h,
+    uint32_t bg = aui_widget_bg_color(ctx, hovered, held, false);
+    aui_draw_rect_rounded(ctx, box_rect.x, box_rect.y, box_rect.w, box_rect.h,
                           bg, box_size * 0.5f);
 
     /* Draw inner dot if selected */
     if (*value == option) {
         float pad = box_size * 0.3f;
-        cui_draw_rect_rounded(ctx, box_rect.x + pad, box_rect.y + pad,
+        aui_draw_rect_rounded(ctx, box_rect.x + pad, box_rect.y + pad,
                               box_rect.w - pad * 2, box_rect.h - pad * 2,
                               ctx->theme.accent, (box_size - pad * 2) * 0.5f);
     }
 
     /* Draw label */
     float text_x = box_rect.x + box_size + ctx->theme.spacing;
-    float text_y = rect.y + (rect.h - cui_text_height(ctx)) * 0.5f;
-    cui_draw_text(ctx, label, text_x, text_y, ctx->theme.text);
+    float text_y = rect.y + (rect.h - aui_text_height(ctx)) * 0.5f;
+    aui_draw_text(ctx, label, text_x, text_y, ctx->theme.text);
 
     return pressed;
 }
@@ -279,23 +279,23 @@ bool cui_radio(CUI_Context *ctx, const char *label, int *value, int option)
  * Sliders
  * ============================================================================ */
 
-bool cui_slider_float(CUI_Context *ctx, const char *label, float *value,
+bool aui_slider_float(AUI_Context *ctx, const char *label, float *value,
                       float min, float max)
 {
     if (!ctx || !label || !value) return false;
 
-    CUI_Id id = cui_make_id(ctx, label);
+    AUI_Id id = aui_make_id(ctx, label);
 
     /* Layout: label on left, slider on right */
-    float label_w = cui_text_width(ctx, label);
+    float label_w = aui_text_width(ctx, label);
     float slider_w = 150.0f;  /* Fixed slider width */
     float total_w = label_w + ctx->theme.spacing + slider_w;
 
-    CUI_Rect rect = cui_allocate_rect(ctx, total_w, ctx->theme.widget_height);
+    AUI_Rect rect = aui_allocate_rect(ctx, total_w, ctx->theme.widget_height);
 
     /* Slider track rect */
     float track_h = 6.0f;
-    CUI_Rect track_rect = {
+    AUI_Rect track_rect = {
         rect.x + label_w + ctx->theme.spacing,
         rect.y + (rect.h - track_h) * 0.5f,
         slider_w,
@@ -309,11 +309,11 @@ bool cui_slider_float(CUI_Context *ctx, const char *label, float *value,
     if (t_current > 1) t_current = 1;
     float grab_x = track_rect.x + track_rect.w * t_current - grab_size * 0.5f;
     float grab_y = rect.y + (rect.h - grab_size) * 0.5f;
-    CUI_Rect grab_rect = { grab_x, grab_y, grab_size, grab_size };
+    AUI_Rect grab_rect = { grab_x, grab_y, grab_size, grab_size };
 
     /* Handle interaction - check both track and grab handle */
-    bool track_hovered = cui_rect_contains(track_rect, ctx->input.mouse_x, ctx->input.mouse_y);
-    bool grab_hovered = cui_rect_contains(grab_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+    bool track_hovered = aui_rect_contains(track_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+    bool grab_hovered = aui_rect_contains(grab_rect, ctx->input.mouse_x, ctx->input.mouse_y);
     bool hovered = track_hovered || grab_hovered;
     bool changed = false;
 
@@ -337,41 +337,41 @@ bool cui_slider_float(CUI_Context *ctx, const char *label, float *value,
                 changed = true;
             }
         } else {
-            ctx->active = CUI_ID_NONE;
+            ctx->active = AUI_ID_NONE;
         }
     }
 
     /* Draw label */
-    float text_y = rect.y + (rect.h - cui_text_height(ctx)) * 0.5f;
-    cui_draw_text(ctx, label, rect.x, text_y, ctx->theme.text);
+    float text_y = rect.y + (rect.h - aui_text_height(ctx)) * 0.5f;
+    aui_draw_text(ctx, label, rect.x, text_y, ctx->theme.text);
 
     /* Draw track */
-    cui_draw_rect_rounded(ctx, track_rect.x, track_rect.y, track_rect.w, track_rect.h,
+    aui_draw_rect_rounded(ctx, track_rect.x, track_rect.y, track_rect.w, track_rect.h,
                           ctx->theme.slider_track, track_h * 0.5f);
 
     /* Draw filled portion */
     float filled_w = track_rect.w * t_current;
     if (filled_w > 0) {
-        cui_draw_rect_rounded(ctx, track_rect.x, track_rect.y, filled_w, track_rect.h,
+        aui_draw_rect_rounded(ctx, track_rect.x, track_rect.y, filled_w, track_rect.h,
                               ctx->theme.accent, track_h * 0.5f);
     }
 
     /* Draw grab handle (using pre-calculated position) */
     uint32_t grab_color = (ctx->active == id || hovered) ?
         ctx->theme.bg_widget_hover : ctx->theme.slider_grab;
-    cui_draw_rect_rounded(ctx, grab_rect.x, grab_rect.y, grab_rect.w, grab_rect.h,
+    aui_draw_rect_rounded(ctx, grab_rect.x, grab_rect.y, grab_rect.w, grab_rect.h,
                           grab_color, grab_size * 0.5f);
 
     return changed;
 }
 
-bool cui_slider_int(CUI_Context *ctx, const char *label, int *value,
+bool aui_slider_int(AUI_Context *ctx, const char *label, int *value,
                     int min, int max)
 {
     if (!value) return false;
 
     float fval = (float)*value;
-    bool changed = cui_slider_float(ctx, label, &fval, (float)min, (float)max);
+    bool changed = aui_slider_float(ctx, label, &fval, (float)min, (float)max);
     if (changed) {
         *value = (int)(fval + 0.5f);  /* Round to nearest */
     }
@@ -382,14 +382,14 @@ bool cui_slider_int(CUI_Context *ctx, const char *label, int *value,
  * Progress Bar
  * ============================================================================ */
 
-void cui_progress_bar(CUI_Context *ctx, float value, float min, float max)
+void aui_progress_bar(AUI_Context *ctx, float value, float min, float max)
 {
     if (!ctx) return;
 
-    CUI_Rect rect = cui_allocate_rect(ctx, 0, ctx->theme.widget_height);
+    AUI_Rect rect = aui_allocate_rect(ctx, 0, ctx->theme.widget_height);
 
     /* Draw background */
-    cui_draw_rect_rounded(ctx, rect.x, rect.y, rect.w, rect.h,
+    aui_draw_rect_rounded(ctx, rect.x, rect.y, rect.w, rect.h,
                           ctx->theme.slider_track, ctx->theme.corner_radius);
 
     /* Draw filled portion */
@@ -398,20 +398,20 @@ void cui_progress_bar(CUI_Context *ctx, float value, float min, float max)
     if (t > 1) t = 1;
     float filled_w = rect.w * t;
     if (filled_w > 0) {
-        cui_draw_rect_rounded(ctx, rect.x, rect.y, filled_w, rect.h,
+        aui_draw_rect_rounded(ctx, rect.x, rect.y, filled_w, rect.h,
                               ctx->theme.progress_fill, ctx->theme.corner_radius);
     }
 }
 
-void cui_progress_bar_colored(CUI_Context *ctx, float value, float min, float max,
+void aui_progress_bar_colored(AUI_Context *ctx, float value, float min, float max,
                                uint32_t fill_color)
 {
     if (!ctx) return;
 
-    CUI_Rect rect = cui_allocate_rect(ctx, 0, ctx->theme.widget_height);
+    AUI_Rect rect = aui_allocate_rect(ctx, 0, ctx->theme.widget_height);
 
     /* Draw background */
-    cui_draw_rect_rounded(ctx, rect.x, rect.y, rect.w, rect.h,
+    aui_draw_rect_rounded(ctx, rect.x, rect.y, rect.w, rect.h,
                           ctx->theme.slider_track, ctx->theme.corner_radius);
 
     /* Draw filled portion with custom color */
@@ -420,7 +420,7 @@ void cui_progress_bar_colored(CUI_Context *ctx, float value, float min, float ma
     if (t > 1) t = 1;
     float filled_w = rect.w * t;
     if (filled_w > 0) {
-        cui_draw_rect_rounded(ctx, rect.x, rect.y, filled_w, rect.h,
+        aui_draw_rect_rounded(ctx, rect.x, rect.y, filled_w, rect.h,
                               fill_color, ctx->theme.corner_radius);
     }
 }
@@ -429,26 +429,26 @@ void cui_progress_bar_colored(CUI_Context *ctx, float value, float min, float ma
  * Text Input
  * ============================================================================ */
 
-bool cui_textbox(CUI_Context *ctx, const char *label, char *buffer, int buffer_size)
+bool aui_textbox(AUI_Context *ctx, const char *label, char *buffer, int buffer_size)
 {
-    return cui_textbox_ex(ctx, label, buffer, buffer_size, 0);
+    return aui_textbox_ex(ctx, label, buffer, buffer_size, 0);
 }
 
-bool cui_textbox_ex(CUI_Context *ctx, const char *label, char *buffer,
+bool aui_textbox_ex(AUI_Context *ctx, const char *label, char *buffer,
                     int buffer_size, float width)
 {
     if (!ctx || !label || !buffer) return false;
 
-    CUI_Id id = cui_make_id(ctx, label);
+    AUI_Id id = aui_make_id(ctx, label);
 
-    float label_w = cui_text_width(ctx, label);
+    float label_w = aui_text_width(ctx, label);
     float input_w = width > 0 ? width : 150.0f;
     float total_w = label_w + ctx->theme.spacing + input_w;
 
-    CUI_Rect rect = cui_allocate_rect(ctx, total_w, ctx->theme.widget_height);
+    AUI_Rect rect = aui_allocate_rect(ctx, total_w, ctx->theme.widget_height);
 
     /* Input field rect */
-    CUI_Rect input_rect = {
+    AUI_Rect input_rect = {
         rect.x + label_w + ctx->theme.spacing,
         rect.y,
         input_w,
@@ -459,7 +459,7 @@ bool cui_textbox_ex(CUI_Context *ctx, const char *label, char *buffer,
     float available_w = input_w - ctx->theme.padding * 2;
 
     /* Handle interaction */
-    bool hovered = cui_rect_contains(input_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+    bool hovered = aui_rect_contains(input_rect, ctx->input.mouse_x, ctx->input.mouse_y);
     bool changed = false;
 
     if (hovered && ctx->input.mouse_pressed[0]) {
@@ -486,7 +486,7 @@ bool cui_textbox_ex(CUI_Context *ctx, const char *label, char *buffer,
                     test_buffer[test_len] = '\0';
 
                     /* Check if text fits visually */
-                    float new_text_w = cui_text_width(ctx, test_buffer);
+                    float new_text_w = aui_text_width(ctx, test_buffer);
                     if (new_text_w <= available_w) {
                         /* Text fits - apply the change */
                         memcpy(buffer, test_buffer, test_len + 1);
@@ -509,41 +509,41 @@ bool cui_textbox_ex(CUI_Context *ctx, const char *label, char *buffer,
         /* Handle escape/enter to unfocus */
         if (ctx->input.keys_pressed[SDL_SCANCODE_ESCAPE] ||
             ctx->input.keys_pressed[SDL_SCANCODE_RETURN]) {
-            ctx->focused = CUI_ID_NONE;
+            ctx->focused = AUI_ID_NONE;
         }
     }
 
     /* Draw label */
-    float text_y = rect.y + (rect.h - cui_text_height(ctx)) * 0.5f;
-    cui_draw_text(ctx, label, rect.x, text_y, ctx->theme.text);
+    float text_y = rect.y + (rect.h - aui_text_height(ctx)) * 0.5f;
+    aui_draw_text(ctx, label, rect.x, text_y, ctx->theme.text);
 
     /* Draw input background */
     bool focused = (ctx->focused == id);
     uint32_t bg = focused ? ctx->theme.bg_widget_active :
                   (hovered ? ctx->theme.bg_widget_hover : ctx->theme.bg_widget);
-    cui_draw_rect_rounded(ctx, input_rect.x, input_rect.y, input_rect.w, input_rect.h,
+    aui_draw_rect_rounded(ctx, input_rect.x, input_rect.y, input_rect.w, input_rect.h,
                           bg, ctx->theme.corner_radius);
 
     /* Draw border when focused */
     if (focused) {
-        cui_draw_rect_outline(ctx, input_rect.x, input_rect.y, input_rect.w, input_rect.h,
+        aui_draw_rect_outline(ctx, input_rect.x, input_rect.y, input_rect.w, input_rect.h,
                               ctx->theme.accent, 2.0f);
     }
 
     /* Draw text content (clipped to input area) */
     float text_x = input_rect.x + ctx->theme.padding;
-    cui_push_scissor(ctx, input_rect.x + ctx->theme.padding, input_rect.y,
+    aui_push_scissor(ctx, input_rect.x + ctx->theme.padding, input_rect.y,
                      input_rect.w - ctx->theme.padding * 2, input_rect.h);
-    cui_draw_text(ctx, buffer, text_x, text_y, ctx->theme.text);
-    cui_pop_scissor(ctx);
+    aui_draw_text(ctx, buffer, text_x, text_y, ctx->theme.text);
+    aui_pop_scissor(ctx);
 
     /* Draw cursor when focused */
     if (focused) {
-        float cursor_x = text_x + cui_text_width(ctx, buffer);
+        float cursor_x = text_x + aui_text_width(ctx, buffer);
         /* Clamp cursor to visible area */
         float max_cursor_x = input_rect.x + input_rect.w - ctx->theme.padding;
         if (cursor_x > max_cursor_x) cursor_x = max_cursor_x;
-        cui_draw_rect(ctx, cursor_x, input_rect.y + 4, 2, input_rect.h - 8,
+        aui_draw_rect(ctx, cursor_x, input_rect.y + 4, 2, input_rect.h - 8,
                       ctx->theme.text);
     }
 
@@ -554,21 +554,21 @@ bool cui_textbox_ex(CUI_Context *ctx, const char *label, char *buffer,
  * Dropdown
  * ============================================================================ */
 
-bool cui_dropdown(CUI_Context *ctx, const char *label, int *selected,
+bool aui_dropdown(AUI_Context *ctx, const char *label, int *selected,
                   const char **items, int count)
 {
     if (!ctx || !label || !selected || !items || count <= 0) return false;
 
-    CUI_Id id = cui_make_id(ctx, label);
+    AUI_Id id = aui_make_id(ctx, label);
 
-    float label_w = cui_text_width(ctx, label);
+    float label_w = aui_text_width(ctx, label);
     float dropdown_w = 150.0f;
     float total_w = label_w + ctx->theme.spacing + dropdown_w;
 
-    CUI_Rect rect = cui_allocate_rect(ctx, total_w, ctx->theme.widget_height);
+    AUI_Rect rect = aui_allocate_rect(ctx, total_w, ctx->theme.widget_height);
 
     /* Dropdown button rect */
-    CUI_Rect btn_rect = {
+    AUI_Rect btn_rect = {
         rect.x + label_w + ctx->theme.spacing,
         rect.y,
         dropdown_w,
@@ -577,7 +577,7 @@ bool cui_dropdown(CUI_Context *ctx, const char *label, int *selected,
 
     /* Handle interaction */
     bool hovered, held;
-    bool pressed = cui_widget_behavior(ctx, id, btn_rect, &hovered, &held);
+    bool pressed = aui_widget_behavior(ctx, id, btn_rect, &hovered, &held);
 
     /* Check if this dropdown's popup changed selection last frame */
     bool changed = false;
@@ -588,7 +588,7 @@ bool cui_dropdown(CUI_Context *ctx, const char *label, int *selected,
 
     if (pressed) {
         if (ctx->open_popup == id) {
-            ctx->open_popup = CUI_ID_NONE;
+            ctx->open_popup = AUI_ID_NONE;
             ctx->popup_items = NULL;
             ctx->popup_selected = NULL;
         } else {
@@ -606,25 +606,25 @@ bool cui_dropdown(CUI_Context *ctx, const char *label, int *selected,
     }
 
     /* Draw label */
-    float text_y = rect.y + (rect.h - cui_text_height(ctx)) * 0.5f;
-    cui_draw_text(ctx, label, rect.x, text_y, ctx->theme.text);
+    float text_y = rect.y + (rect.h - aui_text_height(ctx)) * 0.5f;
+    aui_draw_text(ctx, label, rect.x, text_y, ctx->theme.text);
 
     /* Draw dropdown button */
-    uint32_t bg = cui_widget_bg_color(ctx, hovered, held, false);
-    cui_draw_rect_rounded(ctx, btn_rect.x, btn_rect.y, btn_rect.w, btn_rect.h,
+    uint32_t bg = aui_widget_bg_color(ctx, hovered, held, false);
+    aui_draw_rect_rounded(ctx, btn_rect.x, btn_rect.y, btn_rect.w, btn_rect.h,
                           bg, ctx->theme.corner_radius);
 
     /* Draw selected item text */
     const char *selected_text = (*selected >= 0 && *selected < count) ?
                                 items[*selected] : "";
     float item_x = btn_rect.x + ctx->theme.padding;
-    cui_draw_text(ctx, selected_text, item_x, text_y, ctx->theme.text);
+    aui_draw_text(ctx, selected_text, item_x, text_y, ctx->theme.text);
 
     /* Draw dropdown arrow */
     float arrow_x = btn_rect.x + btn_rect.w - 20;
-    cui_draw_text(ctx, "v", arrow_x, text_y, ctx->theme.text_dim);
+    aui_draw_text(ctx, "v", arrow_x, text_y, ctx->theme.text_dim);
 
-    /* Popup is now drawn in cui_end_frame() for proper z-ordering */
+    /* Popup is now drawn in aui_end_frame() for proper z-ordering */
 
     return changed;
 }
@@ -633,22 +633,22 @@ bool cui_dropdown(CUI_Context *ctx, const char *label, int *selected,
  * Listbox
  * ============================================================================ */
 
-bool cui_listbox(CUI_Context *ctx, const char *label, int *selected,
+bool aui_listbox(AUI_Context *ctx, const char *label, int *selected,
                  const char **items, int count, float height)
 {
     if (!ctx || !label || !selected || !items) return false;
 
-    CUI_Id id = cui_make_id(ctx, label);
-    CUI_Id scrollbar_id = cui_make_id_int(ctx, label, 0x5C801L);  /* Unique ID for scrollbar */
+    AUI_Id id = aui_make_id(ctx, label);
+    AUI_Id scrollbar_id = aui_make_id_int(ctx, label, 0x5C801L);  /* Unique ID for scrollbar */
 
     /* Draw label */
-    float label_h = cui_text_height(ctx) + ctx->theme.spacing;
-    CUI_Rect label_rect = cui_allocate_rect(ctx, 0, label_h);
-    cui_draw_text(ctx, label, label_rect.x, label_rect.y, ctx->theme.text);
+    float label_h = aui_text_height(ctx) + ctx->theme.spacing;
+    AUI_Rect label_rect = aui_allocate_rect(ctx, 0, label_h);
+    aui_draw_text(ctx, label, label_rect.x, label_rect.y, ctx->theme.text);
 
     /* List area (full width) */
     float list_h = height > 0 ? height : 150.0f;
-    CUI_Rect full_rect = cui_allocate_rect(ctx, 0, list_h);
+    AUI_Rect full_rect = aui_allocate_rect(ctx, 0, list_h);
 
     /* Calculate content height and whether scrollbar is needed */
     float content_h = count * ctx->theme.widget_height;
@@ -656,19 +656,19 @@ bool cui_listbox(CUI_Context *ctx, const char *label, int *selected,
     bool needs_scrollbar = content_h > list_h;
 
     /* Content area (minus scrollbar if needed) */
-    CUI_Rect list_rect = full_rect;
+    AUI_Rect list_rect = full_rect;
     if (needs_scrollbar) {
         list_rect.w -= scrollbar_w;
     }
 
     /* Draw background */
-    cui_draw_rect(ctx, full_rect.x, full_rect.y, full_rect.w, full_rect.h,
+    aui_draw_rect(ctx, full_rect.x, full_rect.y, full_rect.w, full_rect.h,
                   ctx->theme.bg_widget);
-    cui_draw_rect_outline(ctx, full_rect.x, full_rect.y, full_rect.w, full_rect.h,
+    aui_draw_rect_outline(ctx, full_rect.x, full_rect.y, full_rect.w, full_rect.h,
                           ctx->theme.border, 1.0f);
 
     /* Get scroll state */
-    CUI_WidgetState *state = cui_get_state(ctx, id);
+    AUI_WidgetState *state = aui_get_state(ctx, id);
     float scroll_y = state ? state->scroll_y : 0;
     float max_scroll = content_h - list_h;
     if (max_scroll < 0) max_scroll = 0;
@@ -681,7 +681,7 @@ bool cui_listbox(CUI_Context *ctx, const char *label, int *selected,
     }
 
     /* Handle scroll wheel */
-    bool list_hovered = cui_rect_contains(full_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+    bool list_hovered = aui_rect_contains(full_rect, ctx->input.mouse_x, ctx->input.mouse_y);
     if (list_hovered) {
         ctx->hot = id;
         if (state && ctx->input.scroll_y != 0.0f && needs_scrollbar) {
@@ -695,7 +695,7 @@ bool cui_listbox(CUI_Context *ctx, const char *label, int *selected,
 
     /* Scrollbar handling */
     if (needs_scrollbar && state) {
-        CUI_Rect scrollbar_rect = {
+        AUI_Rect scrollbar_rect = {
             full_rect.x + full_rect.w - scrollbar_w,
             full_rect.y,
             scrollbar_w,
@@ -703,7 +703,7 @@ bool cui_listbox(CUI_Context *ctx, const char *label, int *selected,
         };
 
         /* Draw scrollbar track */
-        cui_draw_rect(ctx, scrollbar_rect.x, scrollbar_rect.y,
+        aui_draw_rect(ctx, scrollbar_rect.x, scrollbar_rect.y,
                       scrollbar_rect.w, scrollbar_rect.h,
                       ctx->theme.scrollbar);
 
@@ -716,7 +716,7 @@ bool cui_listbox(CUI_Context *ctx, const char *label, int *selected,
         float scroll_ratio = (max_scroll > 0) ? (scroll_y / max_scroll) : 0;
         float thumb_y = scrollbar_rect.y + thumb_travel * scroll_ratio;
 
-        CUI_Rect thumb_rect = {
+        AUI_Rect thumb_rect = {
             scrollbar_rect.x + 2,
             thumb_y,
             scrollbar_rect.w - 4,
@@ -724,8 +724,8 @@ bool cui_listbox(CUI_Context *ctx, const char *label, int *selected,
         };
 
         /* Handle scrollbar interaction */
-        bool thumb_hovered = cui_rect_contains(thumb_rect, ctx->input.mouse_x, ctx->input.mouse_y);
-        bool track_hovered = cui_rect_contains(scrollbar_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+        bool thumb_hovered = aui_rect_contains(thumb_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+        bool track_hovered = aui_rect_contains(scrollbar_rect, ctx->input.mouse_x, ctx->input.mouse_y);
 
         if (thumb_hovered || track_hovered) {
             ctx->hot = scrollbar_id;
@@ -755,7 +755,7 @@ bool cui_listbox(CUI_Context *ctx, const char *label, int *selected,
                 state->scroll_y = new_ratio * max_scroll;
                 scroll_y = state->scroll_y;
             } else {
-                ctx->active = CUI_ID_NONE;
+                ctx->active = AUI_ID_NONE;
             }
         }
 
@@ -768,12 +768,12 @@ bool cui_listbox(CUI_Context *ctx, const char *label, int *selected,
         bool thumb_active = (ctx->active == scrollbar_id);
         uint32_t thumb_color = thumb_active ? ctx->theme.accent :
                                (thumb_hovered ? ctx->theme.bg_widget_hover : ctx->theme.scrollbar_grab);
-        cui_draw_rect_rounded(ctx, thumb_rect.x, thumb_rect.y, thumb_rect.w, thumb_rect.h,
+        aui_draw_rect_rounded(ctx, thumb_rect.x, thumb_rect.y, thumb_rect.w, thumb_rect.h,
                               thumb_color, ctx->theme.corner_radius);
     }
 
     /* Draw items (clipped to content area) */
-    cui_push_scissor(ctx, list_rect.x, list_rect.y, list_rect.w, list_rect.h);
+    aui_push_scissor(ctx, list_rect.x, list_rect.y, list_rect.w, list_rect.h);
 
     bool changed = false;
     for (int i = 0; i < count; i++) {
@@ -785,26 +785,26 @@ bool cui_listbox(CUI_Context *ctx, const char *label, int *selected,
             continue;
         }
 
-        CUI_Rect item_rect = {
+        AUI_Rect item_rect = {
             list_rect.x,
             item_y,
             list_rect.w,
             ctx->theme.widget_height
         };
 
-        bool item_hovered = cui_rect_contains(item_rect,
+        bool item_hovered = aui_rect_contains(item_rect,
                                                ctx->input.mouse_x,
                                                ctx->input.mouse_y);
-        item_hovered = item_hovered && cui_rect_contains(list_rect,
+        item_hovered = item_hovered && aui_rect_contains(list_rect,
                                                           ctx->input.mouse_x,
                                                           ctx->input.mouse_y);
 
         /* Draw selection/hover background */
         if (i == *selected) {
-            cui_draw_rect(ctx, item_rect.x, item_rect.y, item_rect.w, item_rect.h,
+            aui_draw_rect(ctx, item_rect.x, item_rect.y, item_rect.w, item_rect.h,
                           ctx->theme.accent);
         } else if (item_hovered) {
-            cui_draw_rect(ctx, item_rect.x, item_rect.y, item_rect.w, item_rect.h,
+            aui_draw_rect(ctx, item_rect.x, item_rect.y, item_rect.w, item_rect.h,
                           ctx->theme.bg_widget_hover);
         }
 
@@ -815,12 +815,12 @@ bool cui_listbox(CUI_Context *ctx, const char *label, int *selected,
         }
 
         /* Draw item text */
-        float text_y = item_rect.y + (item_rect.h - cui_text_height(ctx)) * 0.5f;
-        cui_draw_text(ctx, items[i], item_rect.x + ctx->theme.padding,
+        float text_y = item_rect.y + (item_rect.h - aui_text_height(ctx)) * 0.5f;
+        aui_draw_text(ctx, items[i], item_rect.x + ctx->theme.padding,
                       text_y, ctx->theme.text);
     }
 
-    cui_pop_scissor(ctx);
+    aui_pop_scissor(ctx);
 
     return changed;
 }
@@ -829,35 +829,35 @@ bool cui_listbox(CUI_Context *ctx, const char *label, int *selected,
  * Collapsing Header
  * ============================================================================ */
 
-bool cui_collapsing_header(CUI_Context *ctx, const char *label)
+bool aui_collapsing_header(AUI_Context *ctx, const char *label)
 {
     if (!ctx || !label) return false;
 
-    CUI_Id id = cui_make_id(ctx, label);
-    CUI_WidgetState *state = cui_get_state(ctx, id);
+    AUI_Id id = aui_make_id(ctx, label);
+    AUI_WidgetState *state = aui_get_state(ctx, id);
 
-    CUI_Rect rect = cui_allocate_rect(ctx, 0, ctx->theme.widget_height);
+    AUI_Rect rect = aui_allocate_rect(ctx, 0, ctx->theme.widget_height);
 
     bool hovered, held;
-    bool pressed = cui_widget_behavior(ctx, id, rect, &hovered, &held);
+    bool pressed = aui_widget_behavior(ctx, id, rect, &hovered, &held);
 
     if (pressed && state) {
         state->expanded = !state->expanded;
     }
 
     /* Draw background */
-    uint32_t bg = cui_widget_bg_color(ctx, hovered, held, false);
-    cui_draw_rect_rounded(ctx, rect.x, rect.y, rect.w, rect.h, bg, ctx->theme.corner_radius);
+    uint32_t bg = aui_widget_bg_color(ctx, hovered, held, false);
+    aui_draw_rect_rounded(ctx, rect.x, rect.y, rect.w, rect.h, bg, ctx->theme.corner_radius);
 
     /* Draw arrow */
     float arrow_x = rect.x + ctx->theme.padding;
-    float text_y = rect.y + (rect.h - cui_text_height(ctx)) * 0.5f;
+    float text_y = rect.y + (rect.h - aui_text_height(ctx)) * 0.5f;
     const char *arrow = (state && state->expanded) ? "v" : ">";
-    cui_draw_text(ctx, arrow, arrow_x, text_y, ctx->theme.text);
+    aui_draw_text(ctx, arrow, arrow_x, text_y, ctx->theme.text);
 
     /* Draw label */
     float label_x = arrow_x + 20;
-    cui_draw_text(ctx, label, label_x, text_y, ctx->theme.text);
+    aui_draw_text(ctx, label, label_x, text_y, ctx->theme.text);
 
     return state && state->expanded;
 }
@@ -866,20 +866,20 @@ bool cui_collapsing_header(CUI_Context *ctx, const char *label)
  * Panels
  * ============================================================================ */
 
-bool cui_begin_panel(CUI_Context *ctx, const char *name,
+bool aui_begin_panel(AUI_Context *ctx, const char *name,
                      float x, float y, float w, float h, uint32_t flags)
 {
     if (!ctx || !name) return false;
 
-    CUI_Id id = cui_make_id(ctx, name);
+    AUI_Id id = aui_make_id(ctx, name);
     (void)id;  /* Used for dragging in full implementation */
 
-    CUI_Rect rect = {x, y, w, h};
+    AUI_Rect rect = {x, y, w, h};
 
     /* Handle dragging if movable */
-    if (flags & CUI_PANEL_MOVABLE) {
-        CUI_Rect title_rect = {x, y, w, ctx->theme.widget_height};
-        bool in_title = cui_rect_contains(title_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+    if (flags & AUI_PANEL_MOVABLE) {
+        AUI_Rect title_rect = {x, y, w, ctx->theme.widget_height};
+        bool in_title = aui_rect_contains(title_rect, ctx->input.mouse_x, ctx->input.mouse_y);
 
         if (in_title && ctx->input.mouse_pressed[0]) {
             ctx->active = id;
@@ -890,35 +890,35 @@ bool cui_begin_panel(CUI_Context *ctx, const char *name,
         }
 
         if (ctx->active == id && ctx->input.mouse_released[0]) {
-            ctx->active = CUI_ID_NONE;
+            ctx->active = AUI_ID_NONE;
         }
     }
 
     /* Draw panel background */
-    cui_draw_rect_rounded(ctx, rect.x, rect.y, rect.w, rect.h,
+    aui_draw_rect_rounded(ctx, rect.x, rect.y, rect.w, rect.h,
                           ctx->theme.bg_panel, ctx->theme.corner_radius);
 
     /* Draw border */
-    if (flags & CUI_PANEL_BORDER) {
-        cui_draw_rect_outline(ctx, rect.x, rect.y, rect.w, rect.h,
+    if (flags & AUI_PANEL_BORDER) {
+        aui_draw_rect_outline(ctx, rect.x, rect.y, rect.w, rect.h,
                               ctx->theme.border, ctx->theme.border_width);
     }
 
     /* Draw title bar */
     float content_start_y = rect.y;
-    if (flags & CUI_PANEL_TITLE_BAR) {
+    if (flags & AUI_PANEL_TITLE_BAR) {
         float title_h = ctx->theme.widget_height;
-        cui_draw_rect(ctx, rect.x, rect.y, rect.w, title_h,
+        aui_draw_rect(ctx, rect.x, rect.y, rect.w, title_h,
                       ctx->theme.bg_widget);
 
-        float text_y = rect.y + (title_h - cui_text_height(ctx)) * 0.5f;
-        cui_draw_text(ctx, name, rect.x + ctx->theme.padding, text_y, ctx->theme.text);
+        float text_y = rect.y + (title_h - aui_text_height(ctx)) * 0.5f;
+        aui_draw_text(ctx, name, rect.x + ctx->theme.padding, text_y, ctx->theme.text);
 
         content_start_y = rect.y + title_h;
     }
 
     /* Push layout for panel content */
-    CUI_LayoutFrame *frame = &ctx->layout_stack[ctx->layout_depth++];
+    AUI_LayoutFrame *frame = &ctx->layout_stack[ctx->layout_depth++];
     frame->bounds = rect;
     frame->bounds.y = content_start_y;
     frame->bounds.h = rect.h - (content_start_y - rect.y);
@@ -929,16 +929,16 @@ bool cui_begin_panel(CUI_Context *ctx, const char *name,
     frame->horizontal = false;
     frame->has_clip = false;
 
-    cui_push_id(ctx, name);
+    aui_push_id(ctx, name);
 
     return true;
 }
 
-void cui_end_panel(CUI_Context *ctx)
+void aui_end_panel(AUI_Context *ctx)
 {
     if (!ctx) return;
 
-    cui_pop_id(ctx);
+    aui_pop_id(ctx);
 
     if (ctx->layout_depth > 1) {
         ctx->layout_depth--;
@@ -949,15 +949,15 @@ void cui_end_panel(CUI_Context *ctx)
  * Tooltip
  * ============================================================================ */
 
-void cui_tooltip(CUI_Context *ctx, const char *text)
+void aui_tooltip(AUI_Context *ctx, const char *text)
 {
     if (!ctx || !text) return;
 
     /* Only show if something is hovered */
-    if (ctx->hot == CUI_ID_NONE) return;
+    if (ctx->hot == AUI_ID_NONE) return;
 
-    float text_w = cui_text_width(ctx, text);
-    float text_h = cui_text_height(ctx);
+    float text_w = aui_text_width(ctx, text);
+    float text_h = aui_text_height(ctx);
     float pad = ctx->theme.padding;
 
     float x = ctx->input.mouse_x + 16;
@@ -972,11 +972,11 @@ void cui_tooltip(CUI_Context *ctx, const char *text)
     }
 
     /* Draw tooltip */
-    cui_draw_rect_rounded(ctx, x, y, text_w + pad * 2, text_h + pad * 2,
+    aui_draw_rect_rounded(ctx, x, y, text_w + pad * 2, text_h + pad * 2,
                           ctx->theme.bg_panel, ctx->theme.corner_radius);
-    cui_draw_rect_outline(ctx, x, y, text_w + pad * 2, text_h + pad * 2,
+    aui_draw_rect_outline(ctx, x, y, text_w + pad * 2, text_h + pad * 2,
                           ctx->theme.border, 1.0f);
-    cui_draw_text(ctx, text, x + pad, y + pad, ctx->theme.text);
+    aui_draw_text(ctx, text, x + pad, y + pad, ctx->theme.text);
 }
 
 /* ============================================================================
@@ -985,9 +985,9 @@ void cui_tooltip(CUI_Context *ctx, const char *text)
 
 #include <stdlib.h>
 
-CUI_MultiSelectState cui_multi_select_create(int capacity)
+AUI_MultiSelectState aui_multi_select_create(int capacity)
 {
-    CUI_MultiSelectState state = {0};
+    AUI_MultiSelectState state = {0};
     state.capacity = capacity;
     state.selected_indices = (int *)calloc(capacity, sizeof(int));
     state.anchor_index = -1;
@@ -995,7 +995,7 @@ CUI_MultiSelectState cui_multi_select_create(int capacity)
     return state;
 }
 
-void cui_multi_select_destroy(CUI_MultiSelectState *state)
+void aui_multi_select_destroy(AUI_MultiSelectState *state)
 {
     if (!state) return;
     free(state->selected_indices);
@@ -1004,7 +1004,7 @@ void cui_multi_select_destroy(CUI_MultiSelectState *state)
     state->selected_count = 0;
 }
 
-void cui_multi_select_clear(CUI_MultiSelectState *state)
+void aui_multi_select_clear(AUI_MultiSelectState *state)
 {
     if (!state) return;
     state->selected_count = 0;
@@ -1012,7 +1012,7 @@ void cui_multi_select_clear(CUI_MultiSelectState *state)
     state->last_clicked = -1;
 }
 
-bool cui_multi_select_is_selected(CUI_MultiSelectState *state, int index)
+bool aui_multi_select_is_selected(AUI_MultiSelectState *state, int index)
 {
     if (!state) return false;
     for (int i = 0; i < state->selected_count; i++) {
@@ -1022,15 +1022,15 @@ bool cui_multi_select_is_selected(CUI_MultiSelectState *state, int index)
 }
 
 /* Internal: add index to selection if not already selected */
-static void cui_multi_select_add(CUI_MultiSelectState *state, int index)
+static void aui_multi_select_add(AUI_MultiSelectState *state, int index)
 {
     if (!state || state->selected_count >= state->capacity) return;
-    if (cui_multi_select_is_selected(state, index)) return;
+    if (aui_multi_select_is_selected(state, index)) return;
     state->selected_indices[state->selected_count++] = index;
 }
 
 /* Internal: remove index from selection */
-static void cui_multi_select_remove(CUI_MultiSelectState *state, int index)
+static void aui_multi_select_remove(AUI_MultiSelectState *state, int index)
 {
     if (!state) return;
     for (int i = 0; i < state->selected_count; i++) {
@@ -1046,22 +1046,22 @@ static void cui_multi_select_remove(CUI_MultiSelectState *state, int index)
 }
 
 /* Internal: toggle selection of index */
-static void cui_multi_select_toggle(CUI_MultiSelectState *state, int index)
+static void aui_multi_select_toggle(AUI_MultiSelectState *state, int index)
 {
-    if (cui_multi_select_is_selected(state, index)) {
-        cui_multi_select_remove(state, index);
+    if (aui_multi_select_is_selected(state, index)) {
+        aui_multi_select_remove(state, index);
     } else {
-        cui_multi_select_add(state, index);
+        aui_multi_select_add(state, index);
     }
 }
 
-void cui_multi_select_begin(CUI_Context *ctx, CUI_MultiSelectState *state)
+void aui_multi_select_begin(AUI_Context *ctx, AUI_MultiSelectState *state)
 {
     if (!ctx || !state) return;
     ctx->multi_select = state;
 }
 
-bool cui_multi_select_item(CUI_Context *ctx, CUI_MultiSelectState *state,
+bool aui_multi_select_item(AUI_Context *ctx, AUI_MultiSelectState *state,
                            int index, bool *is_selected)
 {
     if (!ctx || !state) return false;
@@ -1080,7 +1080,7 @@ bool cui_multi_select_item(CUI_Context *ctx, CUI_MultiSelectState *state,
 
         if (ctx->input.ctrl) {
             /* Ctrl+Click: toggle single item */
-            cui_multi_select_toggle(state, index);
+            aui_multi_select_toggle(state, index);
             state->anchor_index = index;
             changed = true;
         } else if (ctx->input.shift && state->anchor_index >= 0) {
@@ -1099,7 +1099,7 @@ bool cui_multi_select_item(CUI_Context *ctx, CUI_MultiSelectState *state,
         } else {
             /* Regular click: select single, clear others */
             state->selected_count = 0;
-            cui_multi_select_add(state, index);
+            aui_multi_select_add(state, index);
             state->anchor_index = index;
             changed = true;
         }
@@ -1107,11 +1107,11 @@ bool cui_multi_select_item(CUI_Context *ctx, CUI_MultiSelectState *state,
         state->last_clicked = index;
     }
 
-    if (is_selected) *is_selected = cui_multi_select_is_selected(state, index);
+    if (is_selected) *is_selected = aui_multi_select_is_selected(state, index);
     return changed;
 }
 
-void cui_multi_select_end(CUI_Context *ctx)
+void aui_multi_select_end(AUI_Context *ctx)
 {
     if (!ctx) return;
     ctx->multi_select = NULL;

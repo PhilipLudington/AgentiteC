@@ -5,49 +5,49 @@ Chunk-based tilemap for large maps with multiple layers and efficient frustum cu
 ## Quick Start
 
 ```c
-#include "carbon/tilemap.h"
+#include "agentite/tilemap.h"
 
 // Create tileset from texture (e.g., 4x4 grid of 32px tiles)
-Carbon_Texture *tex = carbon_texture_load(sr, "assets/tileset.png");
-Carbon_Tileset *tileset = carbon_tileset_create(tex, 32, 32);
+Agentite_Texture *tex = agentite_texture_load(sr, "assets/tileset.png");
+Agentite_Tileset *tileset = agentite_tileset_create(tex, 32, 32);
 
 // Create tilemap (100x100 tiles)
-Carbon_Tilemap *tilemap = carbon_tilemap_create(tileset, 100, 100);
+Agentite_Tilemap *tilemap = agentite_tilemap_create(tileset, 100, 100);
 
 // Add layers (rendered back to front)
-int ground = carbon_tilemap_add_layer(tilemap, "ground");
-int objects = carbon_tilemap_add_layer(tilemap, "objects");
+int ground = agentite_tilemap_add_layer(tilemap, "ground");
+int objects = agentite_tilemap_add_layer(tilemap, "objects");
 
 // Set tiles (tile ID 0 = empty, 1+ = valid tile)
-carbon_tilemap_fill(tilemap, ground, 0, 0, 100, 100, 1);
-carbon_tilemap_set_tile(tilemap, objects, 50, 50, 5);
+agentite_tilemap_fill(tilemap, ground, 0, 0, 100, 100, 1);
+agentite_tilemap_set_tile(tilemap, objects, 50, 50, 5);
 ```
 
 ## Rendering
 
 ```c
 // During sprite batch, before upload
-carbon_sprite_begin(sr, NULL);
-carbon_tilemap_render(tilemap, sr, camera);  // Automatic frustum culling
+agentite_sprite_begin(sr, NULL);
+agentite_tilemap_render(tilemap, sr, camera);  // Automatic frustum culling
 // ... other sprites ...
-carbon_sprite_upload(sr, cmd);
+agentite_sprite_upload(sr, cmd);
 // ... render pass ...
-carbon_sprite_render(sr, cmd, pass);
+agentite_sprite_render(sr, cmd, pass);
 ```
 
 ## Layer Properties
 
 ```c
-carbon_tilemap_set_layer_visible(tilemap, objects, true);
-carbon_tilemap_set_layer_opacity(tilemap, objects, 0.8f);
+agentite_tilemap_set_layer_visible(tilemap, objects, true);
+agentite_tilemap_set_layer_opacity(tilemap, objects, 0.8f);
 ```
 
 ## Coordinate Conversion
 
 ```c
 int tile_x, tile_y;
-carbon_tilemap_world_to_tile(tilemap, world_x, world_y, &tile_x, &tile_y);
-Carbon_TileID tile = carbon_tilemap_get_tile(tilemap, ground, tile_x, tile_y);
+agentite_tilemap_world_to_tile(tilemap, world_x, world_y, &tile_x, &tile_y);
+Agentite_TileID tile = agentite_tilemap_get_tile(tilemap, ground, tile_x, tile_y);
 ```
 
 ## Key Features

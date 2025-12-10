@@ -1,7 +1,7 @@
-#include "carbon/carbon.h"
+#include "agentite/agentite.h"
 #include "game.h"
 #include "systems/systems.h"
-#include "carbon/error.h"
+#include "agentite/error.h"
 #include <stdlib.h>
 
 /* External state check functions */
@@ -12,21 +12,21 @@ extern void game_state_playing_clear_pause(void);
 extern bool game_state_paused_resume_clicked(void);
 extern void game_state_paused_clear_resume(void);
 
-Game *game_init(Carbon_GameContext *ctx) {
+Game *game_init(Agentite_GameContext *ctx) {
     if (!ctx) {
-        carbon_set_error("Game init: NULL context");
+        agentite_set_error("Game init: NULL context");
         return NULL;
     }
 
-    Game *game = CARBON_ALLOC(Game);
+    Game *game = AGENTITE_ALLOC(Game);
     if (!game) {
-        carbon_set_error("Game init: Failed to allocate game");
+        agentite_set_error("Game init: Failed to allocate game");
         return NULL;
     }
 
     /* Register game-specific components */
     if (ctx->ecs) {
-        ecs_world_t *w = carbon_ecs_get_world(ctx->ecs);
+        ecs_world_t *w = agentite_ecs_get_world(ctx->ecs);
         game_components_register(w);
         game_systems_register(w);
     }
@@ -34,7 +34,7 @@ Game *game_init(Carbon_GameContext *ctx) {
     /* Create state machine */
     game->state_machine = game_state_machine_create();
     if (!game->state_machine) {
-        carbon_set_error("Game init: Failed to create state machine");
+        agentite_set_error("Game init: Failed to create state machine");
         free(game);
         return NULL;
     }
@@ -69,7 +69,7 @@ void game_shutdown(Game *game) {
     free(game);
 }
 
-void game_update(Game *game, Carbon_GameContext *ctx) {
+void game_update(Game *game, Agentite_GameContext *ctx) {
     if (!game || !ctx) return;
 
     float dt = ctx->delta_time;
@@ -107,7 +107,7 @@ void game_update(Game *game, Carbon_GameContext *ctx) {
     }
 }
 
-void game_render(Game *game, Carbon_GameContext *ctx,
+void game_render(Game *game, Agentite_GameContext *ctx,
                  SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass) {
     if (!game || !ctx) return;
 

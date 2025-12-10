@@ -1,13 +1,13 @@
-#include "carbon/carbon.h"
-#include "carbon/loan.h"
-#include "carbon/math_safe.h"
-#include "carbon/validate.h"
+#include "agentite/agentite.h"
+#include "agentite/loan.h"
+#include "agentite/math_safe.h"
+#include "agentite/validate.h"
 #include <stdlib.h>
 #include <string.h>
 
 /* Loan system structure */
-struct Carbon_LoanSystem {
-    Carbon_LoanTier tiers[CARBON_LOAN_MAX_TIERS];
+struct Agentite_LoanSystem {
+    Agentite_LoanTier tiers[AGENTITE_LOAN_MAX_TIERS];
     int tier_count;
 };
 
@@ -15,21 +15,21 @@ struct Carbon_LoanSystem {
  * Loan System Management
  *============================================================================*/
 
-Carbon_LoanSystem *carbon_loan_create(void) {
-    Carbon_LoanSystem *loans = CARBON_ALLOC(Carbon_LoanSystem);
+Agentite_LoanSystem *agentite_loan_create(void) {
+    Agentite_LoanSystem *loans = AGENTITE_ALLOC(Agentite_LoanSystem);
     return loans;
 }
 
-void carbon_loan_destroy(Carbon_LoanSystem *loans) {
+void agentite_loan_destroy(Agentite_LoanSystem *loans) {
     free(loans);
 }
 
-int carbon_loan_add_tier(Carbon_LoanSystem *loans, const char *name,
+int agentite_loan_add_tier(Agentite_LoanSystem *loans, const char *name,
                          int32_t principal, float interest_rate) {
-    CARBON_VALIDATE_PTR_RET(loans, -1);
-    CARBON_VALIDATE_PTR_RET(name, -1);
+    AGENTITE_VALIDATE_PTR_RET(loans, -1);
+    AGENTITE_VALIDATE_PTR_RET(name, -1);
 
-    if (loans->tier_count >= CARBON_LOAN_MAX_TIERS) {
+    if (loans->tier_count >= AGENTITE_LOAN_MAX_TIERS) {
         return -1;
     }
     if (principal <= 0 || interest_rate < 0.0f) {
@@ -37,10 +37,10 @@ int carbon_loan_add_tier(Carbon_LoanSystem *loans, const char *name,
     }
 
     int index = loans->tier_count;
-    Carbon_LoanTier *tier = &loans->tiers[index];
+    Agentite_LoanTier *tier = &loans->tiers[index];
 
-    strncpy(tier->name, name, CARBON_LOAN_NAME_LEN - 1);
-    tier->name[CARBON_LOAN_NAME_LEN - 1] = '\0';
+    strncpy(tier->name, name, AGENTITE_LOAN_NAME_LEN - 1);
+    tier->name[AGENTITE_LOAN_NAME_LEN - 1] = '\0';
     tier->principal = principal;
     tier->interest_rate = interest_rate;
 
@@ -48,11 +48,11 @@ int carbon_loan_add_tier(Carbon_LoanSystem *loans, const char *name,
     return index;
 }
 
-int carbon_loan_get_tier_count(const Carbon_LoanSystem *loans) {
+int agentite_loan_get_tier_count(const Agentite_LoanSystem *loans) {
     return loans ? loans->tier_count : 0;
 }
 
-const Carbon_LoanTier *carbon_loan_get_tier(const Carbon_LoanSystem *loans, int index) {
+const Agentite_LoanTier *agentite_loan_get_tier(const Agentite_LoanSystem *loans, int index) {
     if (!loans || index < 0 || index >= loans->tier_count) {
         return NULL;
     }
@@ -63,8 +63,8 @@ const Carbon_LoanTier *carbon_loan_get_tier(const Carbon_LoanSystem *loans, int 
  * Loan State Management
  *============================================================================*/
 
-void carbon_loan_state_init(Carbon_LoanState *state) {
-    CARBON_VALIDATE_PTR(state);
+void agentite_loan_state_init(Agentite_LoanState *state) {
+    AGENTITE_VALIDATE_PTR(state);
 
     state->active_tier = -1;
     state->principal = 0;
@@ -73,20 +73,20 @@ void carbon_loan_state_init(Carbon_LoanState *state) {
     state->periods_held = 0;
 }
 
-bool carbon_loan_can_take(const Carbon_LoanState *state) {
+bool agentite_loan_can_take(const Agentite_LoanState *state) {
     return state && state->active_tier < 0;
 }
 
-bool carbon_loan_take(Carbon_LoanState *state, const Carbon_LoanSystem *loans,
+bool agentite_loan_take(Agentite_LoanState *state, const Agentite_LoanSystem *loans,
                       int tier, int32_t *out_money) {
-    CARBON_VALIDATE_PTR_RET(state, false);
-    CARBON_VALIDATE_PTR_RET(loans, false);
+    AGENTITE_VALIDATE_PTR_RET(state, false);
+    AGENTITE_VALIDATE_PTR_RET(loans, false);
 
-    if (!carbon_loan_can_take(state)) {
+    if (!agentite_loan_can_take(state)) {
         return false;
     }
 
-    const Carbon_LoanTier *tier_info = carbon_loan_get_tier(loans, tier);
+    const Agentite_LoanTier *tier_info = agentite_loan_get_tier(loans, tier);
     if (!tier_info) {
         return false;
     }
@@ -103,15 +103,15 @@ bool carbon_loan_take(Carbon_LoanState *state, const Carbon_LoanSystem *loans,
     return true;
 }
 
-bool carbon_loan_can_repay(const Carbon_LoanState *state, int32_t available_money) {
+bool agentite_loan_can_repay(const Agentite_LoanState *state, int32_t available_money) {
     if (!state || state->active_tier < 0) {
         return false;
     }
     return available_money >= state->amount_owed;
 }
 
-bool carbon_loan_repay(Carbon_LoanState *state, int32_t *out_cost) {
-    CARBON_VALIDATE_PTR_RET(state, false);
+bool agentite_loan_repay(Agentite_LoanState *state, int32_t *out_cost) {
+    AGENTITE_VALIDATE_PTR_RET(state, false);
 
     if (state->active_tier < 0) {
         return false;
@@ -124,7 +124,7 @@ bool carbon_loan_repay(Carbon_LoanState *state, int32_t *out_cost) {
     /* Calculate interest portion of repayment */
     int32_t interest_portion = state->amount_owed - state->principal;
     if (interest_portion > 0) {
-        state->total_interest_paid = carbon_safe_add(state->total_interest_paid, interest_portion);
+        state->total_interest_paid = agentite_safe_add(state->total_interest_paid, interest_portion);
     }
 
     /* Clear loan */
@@ -136,8 +136,8 @@ bool carbon_loan_repay(Carbon_LoanState *state, int32_t *out_cost) {
     return true;
 }
 
-int32_t carbon_loan_pay(Carbon_LoanState *state, int32_t amount) {
-    CARBON_VALIDATE_PTR_RET(state, 0);
+int32_t agentite_loan_pay(Agentite_LoanState *state, int32_t amount) {
+    AGENTITE_VALIDATE_PTR_RET(state, 0);
 
     if (state->active_tier < 0 || amount <= 0) {
         return 0;
@@ -162,15 +162,15 @@ int32_t carbon_loan_pay(Carbon_LoanState *state, int32_t amount) {
     return actual_payment;
 }
 
-int32_t carbon_loan_charge_interest(Carbon_LoanState *state, const Carbon_LoanSystem *loans) {
-    CARBON_VALIDATE_PTR_RET(state, 0);
-    CARBON_VALIDATE_PTR_RET(loans, 0);
+int32_t agentite_loan_charge_interest(Agentite_LoanState *state, const Agentite_LoanSystem *loans) {
+    AGENTITE_VALIDATE_PTR_RET(state, 0);
+    AGENTITE_VALIDATE_PTR_RET(loans, 0);
 
     if (state->active_tier < 0) {
         return 0;
     }
 
-    const Carbon_LoanTier *tier = carbon_loan_get_tier(loans, state->active_tier);
+    const Agentite_LoanTier *tier = agentite_loan_get_tier(loans, state->active_tier);
     if (!tier) {
         return 0;
     }
@@ -180,8 +180,8 @@ int32_t carbon_loan_charge_interest(Carbon_LoanState *state, const Carbon_LoanSy
     int32_t interest = (int32_t)(interest_f + 0.5f);  /* Round to nearest */
 
     if (interest > 0) {
-        state->amount_owed = carbon_safe_add(state->amount_owed, interest);
-        state->total_interest_paid = carbon_safe_add(state->total_interest_paid, interest);
+        state->amount_owed = agentite_safe_add(state->amount_owed, interest);
+        state->total_interest_paid = agentite_safe_add(state->total_interest_paid, interest);
     }
 
     state->periods_held++;
@@ -193,28 +193,28 @@ int32_t carbon_loan_charge_interest(Carbon_LoanState *state, const Carbon_LoanSy
  * Queries
  *============================================================================*/
 
-bool carbon_loan_is_active(const Carbon_LoanState *state) {
+bool agentite_loan_is_active(const Agentite_LoanState *state) {
     return state && state->active_tier >= 0;
 }
 
-int32_t carbon_loan_get_amount_owed(const Carbon_LoanState *state) {
+int32_t agentite_loan_get_amount_owed(const Agentite_LoanState *state) {
     return (state && state->active_tier >= 0) ? state->amount_owed : 0;
 }
 
-int32_t carbon_loan_get_principal(const Carbon_LoanState *state) {
+int32_t agentite_loan_get_principal(const Agentite_LoanState *state) {
     return (state && state->active_tier >= 0) ? state->principal : 0;
 }
 
-int32_t carbon_loan_get_total_interest(const Carbon_LoanState *state) {
+int32_t agentite_loan_get_total_interest(const Agentite_LoanState *state) {
     return state ? state->total_interest_paid : 0;
 }
 
-int32_t carbon_loan_get_projected_interest(const Carbon_LoanState *state, const Carbon_LoanSystem *loans) {
+int32_t agentite_loan_get_projected_interest(const Agentite_LoanState *state, const Agentite_LoanSystem *loans) {
     if (!state || !loans || state->active_tier < 0) {
         return 0;
     }
 
-    const Carbon_LoanTier *tier = carbon_loan_get_tier(loans, state->active_tier);
+    const Agentite_LoanTier *tier = agentite_loan_get_tier(loans, state->active_tier);
     if (!tier) {
         return 0;
     }
@@ -223,11 +223,11 @@ int32_t carbon_loan_get_projected_interest(const Carbon_LoanState *state, const 
     return (int32_t)(interest_f + 0.5f);
 }
 
-const char *carbon_loan_get_tier_name(const Carbon_LoanState *state, const Carbon_LoanSystem *loans) {
+const char *agentite_loan_get_tier_name(const Agentite_LoanState *state, const Agentite_LoanSystem *loans) {
     if (!state || !loans || state->active_tier < 0) {
         return NULL;
     }
 
-    const Carbon_LoanTier *tier = carbon_loan_get_tier(loans, state->active_tier);
+    const Agentite_LoanTier *tier = agentite_loan_get_tier(loans, state->active_tier);
     return tier ? tier->name : NULL;
 }

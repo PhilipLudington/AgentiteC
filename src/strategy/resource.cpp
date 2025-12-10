@@ -1,6 +1,6 @@
-#include "carbon/resource.h"
+#include "agentite/resource.h"
 
-void carbon_resource_init(Carbon_Resource *r, int initial, int maximum, int per_turn) {
+void agentite_resource_init(Agentite_Resource *r, int initial, int maximum, int per_turn) {
     if (!r) return;
 
     r->current = initial;
@@ -9,19 +9,19 @@ void carbon_resource_init(Carbon_Resource *r, int initial, int maximum, int per_
     r->per_turn_modifier = 1.0f;
 }
 
-void carbon_resource_tick(Carbon_Resource *r) {
+void agentite_resource_tick(Agentite_Resource *r) {
     if (!r) return;
 
     int gain = (int)(r->per_turn_base * r->per_turn_modifier);
-    carbon_resource_add(r, gain);
+    agentite_resource_add(r, gain);
 }
 
-bool carbon_resource_can_afford(const Carbon_Resource *r, int amount) {
+bool agentite_resource_can_afford(const Agentite_Resource *r, int amount) {
     if (!r) return false;
     return r->current >= amount;
 }
 
-bool carbon_resource_spend(Carbon_Resource *r, int amount) {
+bool agentite_resource_spend(Agentite_Resource *r, int amount) {
     if (!r || amount < 0) return false;
     if (r->current < amount) return false;
 
@@ -29,7 +29,7 @@ bool carbon_resource_spend(Carbon_Resource *r, int amount) {
     return true;
 }
 
-void carbon_resource_add(Carbon_Resource *r, int amount) {
+void agentite_resource_add(Agentite_Resource *r, int amount) {
     if (!r) return;
 
     r->current += amount;
@@ -45,7 +45,7 @@ void carbon_resource_add(Carbon_Resource *r, int amount) {
     }
 }
 
-void carbon_resource_set(Carbon_Resource *r, int value) {
+void agentite_resource_set(Agentite_Resource *r, int value) {
     if (!r) return;
 
     r->current = value;
@@ -58,17 +58,17 @@ void carbon_resource_set(Carbon_Resource *r, int value) {
     }
 }
 
-void carbon_resource_set_modifier(Carbon_Resource *r, float modifier) {
+void agentite_resource_set_modifier(Agentite_Resource *r, float modifier) {
     if (!r) return;
     r->per_turn_modifier = modifier;
 }
 
-void carbon_resource_set_per_turn(Carbon_Resource *r, int per_turn) {
+void agentite_resource_set_per_turn(Agentite_Resource *r, int per_turn) {
     if (!r) return;
     r->per_turn_base = per_turn;
 }
 
-void carbon_resource_set_max(Carbon_Resource *r, int maximum) {
+void agentite_resource_set_max(Agentite_Resource *r, int maximum) {
     if (!r) return;
     r->maximum = maximum;
 
@@ -78,7 +78,7 @@ void carbon_resource_set_max(Carbon_Resource *r, int maximum) {
     }
 }
 
-int carbon_resource_preview_tick(const Carbon_Resource *r) {
+int agentite_resource_preview_tick(const Agentite_Resource *r) {
     if (!r) return 0;
     return (int)(r->per_turn_base * r->per_turn_modifier);
 }

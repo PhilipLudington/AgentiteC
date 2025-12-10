@@ -1,27 +1,27 @@
 /*
- * Carbon UI - Core Context and Lifecycle
+ * Agentite UI - Core Context and Lifecycle
  */
 
-#include "carbon/ui.h"
-#include "carbon/error.h"
+#include "agentite/ui.h"
+#include "agentite/error.h"
 #include <stdlib.h>
 #include <string.h>
 
 /* Forward declarations from other UI modules */
-extern void cui_state_clear(CUI_Context *ctx);
-extern void cui_state_gc(CUI_Context *ctx, uint64_t max_age);
-extern bool cui_create_pipeline(CUI_Context *ctx);
-extern void cui_destroy_pipeline(CUI_Context *ctx);
-extern bool cui_load_font(CUI_Context *ctx, const char *path, float size);
-extern void cui_free_font(CUI_Context *ctx);
+extern void aui_state_clear(AUI_Context *ctx);
+extern void aui_state_gc(AUI_Context *ctx, uint64_t max_age);
+extern bool aui_create_pipeline(AUI_Context *ctx);
+extern void aui_destroy_pipeline(AUI_Context *ctx);
+extern bool aui_load_font(AUI_Context *ctx, const char *path, float size);
+extern void aui_free_font(AUI_Context *ctx);
 
 /* ============================================================================
  * Theme System
  * ============================================================================ */
 
-CUI_Theme cui_theme_dark(void)
+AUI_Theme aui_theme_dark(void)
 {
-    CUI_Theme theme = {0};
+    AUI_Theme theme = {0};
 
     /* Background colors */
     theme.bg_panel          = 0xF21A1A2E;  /* Dark blue, slight transparency */
@@ -74,9 +74,9 @@ CUI_Theme cui_theme_dark(void)
     return theme;
 }
 
-CUI_Theme cui_theme_light(void)
+AUI_Theme aui_theme_light(void)
 {
-    CUI_Theme theme = {0};
+    AUI_Theme theme = {0};
 
     /* Background colors */
     theme.bg_panel          = 0xF2F5F5F5;  /* Light gray, slight transparency */
@@ -129,59 +129,59 @@ CUI_Theme cui_theme_light(void)
     return theme;
 }
 
-void cui_set_theme(CUI_Context *ctx, const CUI_Theme *theme)
+void aui_set_theme(AUI_Context *ctx, const AUI_Theme *theme)
 {
     if (!ctx || !theme) return;
     ctx->theme = *theme;
 }
 
-const CUI_Theme *cui_get_theme(const CUI_Context *ctx)
+const AUI_Theme *aui_get_theme(const AUI_Context *ctx)
 {
     if (!ctx) return NULL;
     return &ctx->theme;
 }
 
-void cui_theme_set_accent(CUI_Theme *theme, uint32_t color)
+void aui_theme_set_accent(AUI_Theme *theme, uint32_t color)
 {
     if (!theme) return;
     theme->accent = color;
-    theme->accent_hover = cui_color_brighten(color, 0.15f);
-    theme->accent_active = cui_color_darken(color, 0.15f);
+    theme->accent_hover = aui_color_brighten(color, 0.15f);
+    theme->accent_active = aui_color_darken(color, 0.15f);
     theme->slider_grab = color;
     theme->progress_fill = color;
-    theme->selection = cui_color_alpha(color, 0.5f);
+    theme->selection = aui_color_alpha(color, 0.5f);
 }
 
-void cui_theme_set_semantic_colors(CUI_Theme *theme,
+void aui_theme_set_semantic_colors(AUI_Theme *theme,
                                     uint32_t success, uint32_t warning,
                                     uint32_t danger, uint32_t info)
 {
     if (!theme) return;
     theme->success = success;
-    theme->success_hover = cui_color_brighten(success, 0.15f);
+    theme->success_hover = aui_color_brighten(success, 0.15f);
     theme->warning = warning;
-    theme->warning_hover = cui_color_brighten(warning, 0.15f);
+    theme->warning_hover = aui_color_brighten(warning, 0.15f);
     theme->danger = danger;
-    theme->danger_hover = cui_color_brighten(danger, 0.15f);
+    theme->danger_hover = aui_color_brighten(danger, 0.15f);
     theme->info = info;
-    theme->info_hover = cui_color_brighten(info, 0.15f);
+    theme->info_hover = aui_color_brighten(info, 0.15f);
 }
 
-static void cui_init_theme(CUI_Context *ctx)
+static void aui_init_theme(AUI_Context *ctx)
 {
-    ctx->theme = cui_theme_dark();
+    ctx->theme = aui_theme_dark();
 }
 
 /* ============================================================================
  * Lifecycle
  * ============================================================================ */
 
-CUI_Context *cui_init(SDL_GPUDevice *gpu, SDL_Window *window, int width, int height,
+AUI_Context *aui_init(SDL_GPUDevice *gpu, SDL_Window *window, int width, int height,
                       const char *font_path, float font_size)
 {
-    CUI_Context *ctx = (CUI_Context *)calloc(1, sizeof(CUI_Context));
+    AUI_Context *ctx = (AUI_Context *)calloc(1, sizeof(AUI_Context));
     if (!ctx) {
-        carbon_set_error("CUI: Failed to allocate context");
+        agentite_set_error("CUI: Failed to allocate context");
         return NULL;
     }
 
@@ -191,36 +191,36 @@ CUI_Context *cui_init(SDL_GPUDevice *gpu, SDL_Window *window, int width, int hei
     ctx->height = height;
 
     /* Initialize theme */
-    cui_init_theme(ctx);
+    aui_init_theme(ctx);
 
     /* Allocate vertex/index buffers (CPU side) */
     ctx->vertex_capacity = 65536;
     ctx->index_capacity = 98304;  /* 1.5x vertices for quads */
-    ctx->vertices = (CUI_Vertex *)malloc(ctx->vertex_capacity * sizeof(CUI_Vertex));
+    ctx->vertices = (AUI_Vertex *)malloc(ctx->vertex_capacity * sizeof(AUI_Vertex));
     ctx->indices = (uint16_t *)malloc(ctx->index_capacity * sizeof(uint16_t));
 
     if (!ctx->vertices || !ctx->indices) {
-        carbon_set_error("CUI: Failed to allocate vertex/index arrays");
-        cui_shutdown(ctx);
+        agentite_set_error("CUI: Failed to allocate vertex/index arrays");
+        aui_shutdown(ctx);
         return NULL;
     }
 
     /* Create GPU pipeline and resources */
-    if (!cui_create_pipeline(ctx)) {
-        carbon_set_error("CUI: Failed to create GPU pipeline");
-        cui_shutdown(ctx);
+    if (!aui_create_pipeline(ctx)) {
+        agentite_set_error("CUI: Failed to create GPU pipeline");
+        aui_shutdown(ctx);
         return NULL;
     }
 
     /* Load font */
-    if (font_path && !cui_load_font(ctx, font_path, font_size)) {
-        carbon_set_error("CUI: Failed to load font '%s'", font_path);
-        cui_shutdown(ctx);
+    if (font_path && !aui_load_font(ctx, font_path, font_size)) {
+        agentite_set_error("CUI: Failed to load font '%s'", font_path);
+        aui_shutdown(ctx);
         return NULL;
     }
 
     /* Initialize layout with full screen */
-    ctx->layout_stack[0].bounds = (CUI_Rect){0, 0, (float)width, (float)height};
+    ctx->layout_stack[0].bounds = (AUI_Rect){0, 0, (float)width, (float)height};
     ctx->layout_stack[0].cursor_x = 0;
     ctx->layout_stack[0].cursor_y = 0;
     ctx->layout_stack[0].spacing = ctx->theme.spacing;
@@ -232,13 +232,13 @@ CUI_Context *cui_init(SDL_GPUDevice *gpu, SDL_Window *window, int width, int hei
     return ctx;
 }
 
-void cui_shutdown(CUI_Context *ctx)
+void aui_shutdown(AUI_Context *ctx)
 {
     if (!ctx) return;
 
-    cui_destroy_pipeline(ctx);
-    cui_free_font(ctx);
-    cui_state_clear(ctx);
+    aui_destroy_pipeline(ctx);
+    aui_free_font(ctx);
+    aui_state_clear(ctx);
 
     free(ctx->vertices);
     free(ctx->indices);
@@ -249,9 +249,9 @@ void cui_shutdown(CUI_Context *ctx)
 }
 
 /* Forward declaration from ui_draw.cpp */
-extern void cui_reset_draw_state(CUI_Context *ctx);
+extern void aui_reset_draw_state(AUI_Context *ctx);
 
-void cui_begin_frame(CUI_Context *ctx, float delta_time)
+void aui_begin_frame(AUI_Context *ctx, float delta_time)
 {
     if (!ctx) return;
 
@@ -259,7 +259,7 @@ void cui_begin_frame(CUI_Context *ctx, float delta_time)
     ctx->frame_count++;
 
     /* Reset draw state (buffers, command queue, layers) */
-    cui_reset_draw_state(ctx);
+    aui_reset_draw_state(ctx);
 
     /* Reset layout to root */
     ctx->layout_depth = 1;
@@ -270,21 +270,21 @@ void cui_begin_frame(CUI_Context *ctx, float delta_time)
     ctx->scissor_depth = 0;
 
     /* Clear hot widget (will be set during widget processing) */
-    ctx->hot = CUI_ID_NONE;
+    ctx->hot = AUI_ID_NONE;
 
     /* Garbage collect old state entries every 60 frames */
     if (ctx->frame_count % 60 == 0) {
-        cui_state_gc(ctx, 300);  /* Remove entries not used for 5 seconds */
+        aui_state_gc(ctx, 300);  /* Remove entries not used for 5 seconds */
     }
 }
 
 /* Forward declaration for deferred popup rendering */
-extern void cui_draw_rect(CUI_Context *ctx, float x, float y, float w, float h, uint32_t color);
-extern void cui_draw_rect_outline(CUI_Context *ctx, float x, float y, float w, float h, uint32_t color, float thickness);
-extern float cui_draw_text(CUI_Context *ctx, const char *text, float x, float y, uint32_t color);
-extern float cui_text_height(CUI_Context *ctx);
+extern void aui_draw_rect(AUI_Context *ctx, float x, float y, float w, float h, uint32_t color);
+extern void aui_draw_rect_outline(AUI_Context *ctx, float x, float y, float w, float h, uint32_t color, float thickness);
+extern float aui_draw_text(AUI_Context *ctx, const char *text, float x, float y, uint32_t color);
+extern float aui_text_height(AUI_Context *ctx);
 
-void cui_end_frame(CUI_Context *ctx)
+void aui_end_frame(AUI_Context *ctx)
 {
     if (!ctx) return;
 
@@ -294,10 +294,10 @@ void cui_end_frame(CUI_Context *ctx)
 
     /* Handle text input start/stop based on focus changes */
     if (ctx->focused != ctx->prev_focused) {
-        if (ctx->focused != CUI_ID_NONE && ctx->window) {
+        if (ctx->focused != AUI_ID_NONE && ctx->window) {
             /* A widget gained focus - start text input */
             SDL_StartTextInput(ctx->window);
-        } else if (ctx->prev_focused != CUI_ID_NONE && ctx->window) {
+        } else if (ctx->prev_focused != AUI_ID_NONE && ctx->window) {
             /* Focus was lost - stop text input */
             SDL_StopTextInput(ctx->window);
         }
@@ -305,50 +305,50 @@ void cui_end_frame(CUI_Context *ctx)
     }
 
     /* Draw deferred popup (renders on top of everything) */
-    if (ctx->open_popup != CUI_ID_NONE && ctx->popup_items && ctx->popup_selected) {
+    if (ctx->open_popup != AUI_ID_NONE && ctx->popup_items && ctx->popup_selected) {
         /* Draw popup background */
-        cui_draw_rect(ctx, ctx->popup_rect.x, ctx->popup_rect.y,
+        aui_draw_rect(ctx, ctx->popup_rect.x, ctx->popup_rect.y,
                       ctx->popup_rect.w, ctx->popup_rect.h,
                       ctx->theme.bg_panel);
-        cui_draw_rect_outline(ctx, ctx->popup_rect.x, ctx->popup_rect.y,
+        aui_draw_rect_outline(ctx, ctx->popup_rect.x, ctx->popup_rect.y,
                               ctx->popup_rect.w, ctx->popup_rect.h,
                               ctx->theme.border, 1.0f);
 
         /* Draw popup items */
         for (int i = 0; i < ctx->popup_count; i++) {
-            CUI_Rect item_rect = {
+            AUI_Rect item_rect = {
                 ctx->popup_rect.x,
                 ctx->popup_rect.y + i * ctx->theme.widget_height,
                 ctx->popup_rect.w,
                 ctx->theme.widget_height
             };
 
-            bool item_hovered = cui_rect_contains(item_rect,
+            bool item_hovered = aui_rect_contains(item_rect,
                                                    ctx->input.mouse_x,
                                                    ctx->input.mouse_y);
 
             if (item_hovered) {
-                cui_draw_rect(ctx, item_rect.x, item_rect.y, item_rect.w, item_rect.h,
+                aui_draw_rect(ctx, item_rect.x, item_rect.y, item_rect.w, item_rect.h,
                               ctx->theme.bg_widget_hover);
 
                 if (ctx->input.mouse_pressed[0]) {
                     *ctx->popup_selected = i;
-                    ctx->open_popup = CUI_ID_NONE;
+                    ctx->open_popup = AUI_ID_NONE;
                     ctx->popup_changed = true;
                 }
             }
 
-            float item_text_y = item_rect.y + (item_rect.h - cui_text_height(ctx)) * 0.5f;
-            cui_draw_text(ctx, ctx->popup_items[i], item_rect.x + ctx->theme.padding,
+            float item_text_y = item_rect.y + (item_rect.h - aui_text_height(ctx)) * 0.5f;
+            aui_draw_text(ctx, ctx->popup_items[i], item_rect.x + ctx->theme.padding,
                           item_text_y, ctx->theme.text);
         }
     }
 
     /* Close popup if clicked outside */
-    if (ctx->open_popup != CUI_ID_NONE && ctx->input.mouse_pressed[0]) {
-        if (!cui_rect_contains(ctx->popup_rect,
+    if (ctx->open_popup != AUI_ID_NONE && ctx->input.mouse_pressed[0]) {
+        if (!aui_rect_contains(ctx->popup_rect,
                                ctx->input.mouse_x, ctx->input.mouse_y)) {
-            ctx->open_popup = CUI_ID_NONE;
+            ctx->open_popup = AUI_ID_NONE;
         }
     }
 
@@ -368,7 +368,7 @@ void cui_end_frame(CUI_Context *ctx)
     ctx->input.scroll_y = 0;
 }
 
-void cui_set_screen_size(CUI_Context *ctx, int width, int height)
+void aui_set_screen_size(AUI_Context *ctx, int width, int height)
 {
     if (!ctx) return;
     ctx->width = width;
@@ -381,7 +381,7 @@ void cui_set_screen_size(CUI_Context *ctx, int width, int height)
  * Event Processing
  * ============================================================================ */
 
-bool cui_process_event(CUI_Context *ctx, const SDL_Event *event)
+bool aui_process_event(AUI_Context *ctx, const SDL_Event *event)
 {
     if (!ctx || !event) return false;
 
@@ -397,7 +397,7 @@ bool cui_process_event(CUI_Context *ctx, const SDL_Event *event)
             ctx->input.mouse_down[btn] = true;
             ctx->input.mouse_pressed[btn] = true;
         }
-        return ctx->hot != CUI_ID_NONE;  /* Consume if over UI */
+        return ctx->hot != AUI_ID_NONE;  /* Consume if over UI */
 
     case SDL_EVENT_MOUSE_BUTTON_UP:
         if (event->button.button <= 3) {
@@ -405,7 +405,7 @@ bool cui_process_event(CUI_Context *ctx, const SDL_Event *event)
             ctx->input.mouse_down[btn] = false;
             ctx->input.mouse_released[btn] = true;
         }
-        return ctx->active != CUI_ID_NONE;
+        return ctx->active != AUI_ID_NONE;
 
     case SDL_EVENT_MOUSE_WHEEL:
         ctx->input.scroll_x = event->wheel.x;
@@ -421,7 +421,7 @@ bool cui_process_event(CUI_Context *ctx, const SDL_Event *event)
         ctx->input.shift = (event->key.mod & SDL_KMOD_SHIFT) != 0;
         ctx->input.ctrl = (event->key.mod & SDL_KMOD_CTRL) != 0;
         ctx->input.alt = (event->key.mod & SDL_KMOD_ALT) != 0;
-        return ctx->focused != CUI_ID_NONE;
+        return ctx->focused != AUI_ID_NONE;
 
     case SDL_EVENT_KEY_UP:
         if (event->key.scancode < 512) {
@@ -433,7 +433,7 @@ bool cui_process_event(CUI_Context *ctx, const SDL_Event *event)
         return false;
 
     case SDL_EVENT_TEXT_INPUT:
-        if (ctx->focused != CUI_ID_NONE) {
+        if (ctx->focused != AUI_ID_NONE) {
             size_t len = strlen(event->text.text);
             if (ctx->input.text_input_len + len < sizeof(ctx->input.text_input) - 1) {
                 memcpy(ctx->input.text_input + ctx->input.text_input_len,
@@ -454,18 +454,18 @@ bool cui_process_event(CUI_Context *ctx, const SDL_Event *event)
  * Utility Functions
  * ============================================================================ */
 
-uint32_t cui_rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
+uint32_t aui_rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
     return ((uint32_t)a << 24) | ((uint32_t)b << 16) |
            ((uint32_t)g << 8) | (uint32_t)r;
 }
 
-uint32_t cui_rgb(uint8_t r, uint8_t g, uint8_t b)
+uint32_t aui_rgb(uint8_t r, uint8_t g, uint8_t b)
 {
-    return cui_rgba(r, g, b, 255);
+    return aui_rgba(r, g, b, 255);
 }
 
-uint32_t cui_color_lerp(uint32_t a, uint32_t b, float t)
+uint32_t aui_color_lerp(uint32_t a, uint32_t b, float t)
 {
     if (t <= 0.0f) return a;
     if (t >= 1.0f) return b;
@@ -485,16 +485,16 @@ uint32_t cui_color_lerp(uint32_t a, uint32_t b, float t)
     uint8_t rb = (uint8_t)(ab + (bb - ab) * t);
     uint8_t ra = (uint8_t)(aa + (ba - aa) * t);
 
-    return cui_rgba(rr, rg, rb, ra);
+    return aui_rgba(rr, rg, rb, ra);
 }
 
-uint32_t cui_color_alpha(uint32_t color, float alpha)
+uint32_t aui_color_alpha(uint32_t color, float alpha)
 {
     uint8_t a = (uint8_t)(((color >> 24) & 0xFF) * alpha);
     return (color & 0x00FFFFFF) | ((uint32_t)a << 24);
 }
 
-uint32_t cui_color_brighten(uint32_t color, float amount)
+uint32_t aui_color_brighten(uint32_t color, float amount)
 {
     uint8_t r = (color >> 0) & 0xFF;
     uint8_t g = (color >> 8) & 0xFF;
@@ -509,10 +509,10 @@ uint32_t cui_color_brighten(uint32_t color, float amount)
     if (ng > 255) ng = 255;
     if (nb > 255) nb = 255;
 
-    return cui_rgba((uint8_t)nr, (uint8_t)ng, (uint8_t)nb, a);
+    return aui_rgba((uint8_t)nr, (uint8_t)ng, (uint8_t)nb, a);
 }
 
-uint32_t cui_color_darken(uint32_t color, float amount)
+uint32_t aui_color_darken(uint32_t color, float amount)
 {
     uint8_t r = (color >> 0) & 0xFF;
     uint8_t g = (color >> 8) & 0xFF;
@@ -527,23 +527,23 @@ uint32_t cui_color_darken(uint32_t color, float amount)
     if (ng < 0) ng = 0;
     if (nb < 0) nb = 0;
 
-    return cui_rgba((uint8_t)nr, (uint8_t)ng, (uint8_t)nb, a);
+    return aui_rgba((uint8_t)nr, (uint8_t)ng, (uint8_t)nb, a);
 }
 
-bool cui_rect_contains(CUI_Rect rect, float x, float y)
+bool aui_rect_contains(AUI_Rect rect, float x, float y)
 {
     return x >= rect.x && x < rect.x + rect.w &&
            y >= rect.y && y < rect.y + rect.h;
 }
 
-CUI_Rect cui_rect_intersect(CUI_Rect a, CUI_Rect b)
+AUI_Rect aui_rect_intersect(AUI_Rect a, AUI_Rect b)
 {
     float x1 = (a.x > b.x) ? a.x : b.x;
     float y1 = (a.y > b.y) ? a.y : b.y;
     float x2 = (a.x + a.w < b.x + b.w) ? a.x + a.w : b.x + b.w;
     float y2 = (a.y + a.h < b.y + b.h) ? a.y + a.h : b.y + b.h;
 
-    CUI_Rect result;
+    AUI_Rect result;
     result.x = x1;
     result.y = y1;
     result.w = (x2 > x1) ? x2 - x1 : 0;

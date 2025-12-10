@@ -4,7 +4,9 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ## Project Overview
 
-Carbon is a C-based game engine targeting strategy games. Uses SDL3 with SDL_GPU for cross-platform rendering (Metal on macOS, Vulkan on Linux, D3D12/Vulkan on Windows).
+Agentite is a C-based game engine targeting strategy games and AI agent development. Uses SDL3 with SDL_GPU for cross-platform rendering (Metal on macOS, Vulkan on Linux, D3D12/Vulkan on Windows).
+
+**Status:** Experimental - all systems are under active development.
 
 ## Build Commands
 
@@ -20,48 +22,48 @@ make info         # Show build configuration
 
 ```
 src/
-├── main.c              # Entry point, game loop
+├── main.cpp            # Entry point, game loop
 ├── core/
-│   ├── engine.c        # SDL3/GPU setup, frame management
-│   ├── error.c         # Error handling
-│   ├── event.c         # Pub-sub event dispatcher
-│   ├── command.c       # Command queue for validated actions
-│   ├── formula.c       # Expression evaluation engine
-│   └── game_context.c  # Unified system container
-├── ecs/ecs.c           # ECS wrapper around Flecs
+│   ├── engine.cpp      # SDL3/GPU setup, frame management
+│   ├── error.cpp       # Error handling
+│   ├── event.cpp       # Pub-sub event dispatcher
+│   ├── command.cpp     # Command queue for validated actions
+│   ├── formula.cpp     # Expression evaluation engine
+│   └── game_context.cpp # Unified system container
+├── ecs/ecs.cpp         # ECS wrapper around Flecs
 ├── graphics/
-│   ├── sprite.c        # Batched sprite rendering
-│   ├── animation.c     # Sprite animation
-│   ├── camera.c        # 2D camera
-│   ├── camera3d.c      # 3D orbital camera
-│   ├── tilemap.c       # Chunk-based tilemap
-│   └── text.c          # TrueType + SDF fonts
-├── audio/audio.c       # Sound/music playback
-├── input/input.c       # Action-based input
+│   ├── sprite.cpp      # Batched sprite rendering
+│   ├── animation.cpp   # Sprite animation
+│   ├── camera.cpp      # 2D camera
+│   ├── camera3d.cpp    # 3D orbital camera
+│   ├── tilemap.cpp     # Chunk-based tilemap
+│   └── text.cpp        # TrueType + SDF fonts
+├── audio/audio.cpp     # Sound/music playback
+├── input/input.cpp     # Action-based input
 ├── ai/
-│   ├── pathfinding.c   # A* pathfinding
-│   ├── personality.c   # AI personality system
-│   ├── ai_tracks.c     # Multi-track AI decisions
-│   ├── blackboard.c    # Shared AI coordination
-│   ├── htn.c           # HTN AI planner
-│   └── task.c          # Task queue system
+│   ├── pathfinding.cpp # A* pathfinding
+│   ├── personality.cpp # AI personality system
+│   ├── ai_tracks.cpp   # Multi-track AI decisions
+│   ├── blackboard.cpp  # Shared AI coordination
+│   ├── htn.cpp         # HTN AI planner
+│   └── task.cpp        # Task queue system
 ├── strategy/           # Turn-based strategy systems
-│   ├── turn.c, resource.c, tech.c, victory.c
-│   ├── fog.c, spatial.c, modifier.c
-│   ├── construction.c, blueprint.c
-│   ├── anomaly.c, siege.c, biome.c
+│   ├── turn.cpp, resource.cpp, tech.cpp, victory.cpp
+│   ├── fog.cpp, spatial.cpp, modifier.cpp
+│   ├── construction.cpp, blueprint.cpp
+│   ├── anomaly.cpp, siege.cpp, biome.cpp
 │   └── ... (see docs/README.md for full list)
-├── ui/                 # Immediate-mode GUI
+├── ui/                 # Immediate-mode GUI (AUI)
 └── game/               # Game template
 
-include/carbon/         # Public API headers
+include/agentite/       # Public API headers
 lib/                    # Dependencies (flecs, stb, cglm)
 ```
 
 **Core engine flow:**
-1. `carbon_init()` - Creates window, initializes SDL3, creates GPU device
-2. Main loop: `carbon_begin_frame()` → `carbon_poll_events()` → `carbon_begin_render_pass()` → render → `carbon_end_render_pass()` → `carbon_end_frame()`
-3. `carbon_shutdown()` - Cleanup
+1. `agentite_init()` - Creates window, initializes SDL3, creates GPU device
+2. Main loop: `agentite_begin_frame()` → `agentite_poll_events()` → `agentite_begin_render_pass()` → render → `agentite_end_render_pass()` → `agentite_end_frame()`
+3. `agentite_shutdown()` - Cleanup
 
 ## API Documentation
 
@@ -75,25 +77,25 @@ See [docs/README.md](docs/README.md) for comprehensive API documentation organiz
 ## Quick Start (New Game)
 
 ```c
-#include "carbon/game_context.h"
+#include "agentite/game_context.h"
 
 int main(int argc, char *argv[]) {
-    Carbon_GameContextConfig config = CARBON_GAME_CONTEXT_DEFAULT;
+    Agentite_GameContextConfig config = AGENTITE_GAME_CONTEXT_DEFAULT;
     config.window_title = "My Game";
     config.font_path = "assets/fonts/font.ttf";
 
-    Carbon_GameContext *ctx = carbon_game_context_create(&config);
+    Agentite_GameContext *ctx = agentite_game_context_create(&config);
     if (!ctx) return 1;
 
-    while (carbon_game_context_is_running(ctx)) {
-        carbon_game_context_begin_frame(ctx);
-        carbon_game_context_poll_events(ctx);
+    while (agentite_game_context_is_running(ctx)) {
+        agentite_game_context_begin_frame(ctx);
+        agentite_game_context_poll_events(ctx);
         // game_update()...
         // render...
-        carbon_game_context_end_frame(ctx);
+        agentite_game_context_end_frame(ctx);
     }
 
-    carbon_game_context_destroy(ctx);
+    agentite_game_context_destroy(ctx);
     return 0;
 }
 ```
@@ -111,7 +113,7 @@ typedef struct C_Projectile {
 ECS_COMPONENT_DECLARE(C_Projectile);
 ```
 
-2. Register in `src/game/components.c`:
+2. Register in `src/game/components.cpp`:
 ```c
 ECS_COMPONENT_DEFINE(world, C_Projectile);
 ```
@@ -133,20 +135,20 @@ void ProjectileSystem(ecs_iter_t *it) {
 
 ### Adding a New Game State
 
-1. Create state file `src/game/states/newstate.c` with `enter`, `exit`, `update`, `render` functions
+1. Create state file `src/game/states/newstate.cpp` with `enter`, `exit`, `update`, `render` functions
 2. Add to state enum in `src/game/states/state.h`
-3. Register in `src/game/game.c` with `game_state_machine_register()`
+3. Register in `src/game/game.cpp` with `game_state_machine_register()`
 
 ### Render Loop Pattern
 
 ```c
 // Before render pass - upload batched data
-carbon_sprite_begin(sr, NULL);
-carbon_sprite_draw(sr, &sprite, x, y);
-carbon_sprite_upload(sr, cmd);
+agentite_sprite_begin(sr, NULL);
+agentite_sprite_draw(sr, &sprite, x, y);
+agentite_sprite_upload(sr, cmd);
 
 // During render pass
-carbon_sprite_render(sr, cmd, pass);
+agentite_sprite_render(sr, cmd, pass);
 ```
 
 ## Troubleshooting
@@ -162,7 +164,7 @@ brew install sdl3
 ### Runtime Issues
 
 **Black screen:**
-- Check `carbon_begin_render_pass()` return value
+- Check `agentite_begin_render_pass()` return value
 - Ensure upload calls happen before render pass
 
 **Sprites not showing:**
@@ -170,23 +172,23 @@ brew install sdl3
 - Verify batch order: `begin` → `draw` → `upload` → render pass → `render`
 
 **Input not working:**
-- Call `carbon_input_begin_frame()` at start of frame
-- Call `carbon_input_update()` after polling events
+- Call `agentite_input_begin_frame()` at start of frame
+- Call `agentite_input_update()` after polling events
 - Check UI isn't consuming events
 
 ### Error Handling
 
 ```c
-Carbon_Texture *tex = carbon_texture_load(sprites, "missing.png");
+Agentite_Texture *tex = agentite_texture_load(sprites, "missing.png");
 if (!tex) {
-    SDL_Log("Failed: %s", carbon_get_last_error());
+    SDL_Log("Failed: %s", agentite_get_last_error());
 }
 ```
 
 ## Development Notes
 
 - Target platforms: macOS, Linux, Windows
-- Language: C11
+- Language: C11 headers, C++17 implementation
 - Graphics: SDL3 SDL_GPU (auto-selects Metal/Vulkan/D3D12)
 - ECS: Flecs v4.0.0
 - Math: cglm (SIMD-optimized)

@@ -1,12 +1,12 @@
-#include "carbon/carbon.h"
-#include "carbon/ui.h"
-#include "carbon/ecs.h"
-#include "carbon/sprite.h"
-#include "carbon/camera.h"
-#include "carbon/input.h"
-#include "carbon/audio.h"
-#include "carbon/tilemap.h"
-#include "carbon/text.h"
+#include "agentite/agentite.h"
+#include "agentite/ui.h"
+#include "agentite/ecs.h"
+#include "agentite/sprite.h"
+#include "agentite/camera.h"
+#include "agentite/input.h"
+#include "agentite/audio.h"
+#include "agentite/tilemap.h"
+#include "agentite/text.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -72,7 +72,7 @@ static void *create_test_beep_wav(int frequency, float duration, float volume, s
 }
 
 /* Helper: Create a procedural tileset texture (4x4 grid of different colored tiles) */
-static Carbon_Texture *create_tileset_texture(Carbon_SpriteRenderer *sr, int tile_size)
+static Agentite_Texture *create_tileset_texture(Agentite_SpriteRenderer *sr, int tile_size)
 {
     int cols = 4, rows = 4;
     int size = tile_size * cols;
@@ -125,13 +125,13 @@ static Carbon_Texture *create_tileset_texture(Carbon_SpriteRenderer *sr, int til
         }
     }
 
-    Carbon_Texture *tex = carbon_texture_create(sr, size, size, pixels);
+    Agentite_Texture *tex = agentite_texture_create(sr, size, size, pixels);
     free(pixels);
     return tex;
 }
 
 /* Helper: Create a procedural checkerboard texture */
-static Carbon_Texture *create_test_texture(Carbon_SpriteRenderer *sr, int size, int tile_size)
+static Agentite_Texture *create_test_texture(Agentite_SpriteRenderer *sr, int size, int tile_size)
 {
     unsigned char *pixels = malloc(size * size * 4);
     if (!pixels) return NULL;
@@ -157,7 +157,7 @@ static Carbon_Texture *create_test_texture(Carbon_SpriteRenderer *sr, int size, 
         }
     }
 
-    Carbon_Texture *tex = carbon_texture_create(sr, size, size, pixels);
+    Agentite_Texture *tex = agentite_texture_create(sr, size, size, pixels);
     free(pixels);
     return tex;
 }
@@ -167,8 +167,8 @@ int main(int argc, char *argv[]) {
     (void)argv;
 
     /* Configure engine */
-    Carbon_Config config = {
-        .window_title = "Carbon Engine - Tilemap Demo",
+    Agentite_Config config = {
+        .window_title = "Agentite Engine - Tilemap Demo",
         .window_width = 1280,
         .window_height = 720,
         .fullscreen = false,
@@ -176,16 +176,16 @@ int main(int argc, char *argv[]) {
     };
 
     /* Initialize engine */
-    Carbon_Engine *engine = carbon_init(&config);
+    Agentite_Engine *engine = agentite_init(&config);
     if (!engine) {
-        fprintf(stderr, "Failed to initialize Carbon Engine\n");
+        fprintf(stderr, "Failed to initialize Agentite Engine\n");
         return 1;
     }
 
     /* Initialize UI system */
-    CUI_Context *ui = cui_init(
-        carbon_get_gpu_device(engine),
-        carbon_get_window(engine),
+    AUI_Context *ui = aui_init(
+        agentite_get_gpu_device(engine),
+        agentite_get_window(engine),
         config.window_width,
         config.window_height,
         "assets/fonts/Roboto-Regular.ttf",  /* Font path */
@@ -194,78 +194,78 @@ int main(int argc, char *argv[]) {
 
     if (!ui) {
         fprintf(stderr, "Failed to initialize UI system\n");
-        carbon_shutdown(engine);
+        agentite_shutdown(engine);
         return 1;
     }
 
     /* Initialize sprite renderer */
-    Carbon_SpriteRenderer *sprites = carbon_sprite_init(
-        carbon_get_gpu_device(engine),
-        carbon_get_window(engine)
+    Agentite_SpriteRenderer *sprites = agentite_sprite_init(
+        agentite_get_gpu_device(engine),
+        agentite_get_window(engine)
     );
 
     if (!sprites) {
         fprintf(stderr, "Failed to initialize sprite renderer\n");
-        cui_shutdown(ui);
-        carbon_shutdown(engine);
+        aui_shutdown(ui);
+        agentite_shutdown(engine);
         return 1;
     }
 
     /* Initialize camera */
-    Carbon_Camera *camera = carbon_camera_create(
+    Agentite_Camera *camera = agentite_camera_create(
         (float)config.window_width,
         (float)config.window_height
     );
     if (!camera) {
         fprintf(stderr, "Failed to create camera\n");
-        carbon_sprite_shutdown(sprites);
-        cui_shutdown(ui);
-        carbon_shutdown(engine);
+        agentite_sprite_shutdown(sprites);
+        aui_shutdown(ui);
+        agentite_shutdown(engine);
         return 1;
     }
 
     /* Connect camera to sprite renderer */
-    carbon_sprite_set_camera(sprites, camera);
+    agentite_sprite_set_camera(sprites, camera);
 
     /* Center camera on the tilemap (50x50 tiles * 48px = 2400x2400, center at 1200,1200) */
-    carbon_camera_set_position(camera, 1200.0f, 1200.0f);
+    agentite_camera_set_position(camera, 1200.0f, 1200.0f);
 
     SDL_Log("Camera initialized at (1200, 1200)");
 
     /* Create test texture */
-    Carbon_Texture *tex_checker = create_test_texture(sprites, 64, 8);
+    Agentite_Texture *tex_checker = create_test_texture(sprites, 64, 8);
 
     if (!tex_checker) {
         fprintf(stderr, "Failed to create test texture\n");
-        carbon_sprite_shutdown(sprites);
-        cui_shutdown(ui);
-        carbon_shutdown(engine);
+        agentite_sprite_shutdown(sprites);
+        aui_shutdown(ui);
+        agentite_shutdown(engine);
         return 1;
     }
 
     /* Create sprite from texture */
-    Carbon_Sprite sprite_checker = carbon_sprite_from_texture(tex_checker);
+    Agentite_Sprite sprite_checker = agentite_sprite_from_texture(tex_checker);
 
     SDL_Log("Sprite system initialized with test textures");
 
     /* Initialize text renderer */
-    Carbon_TextRenderer *text = carbon_text_init(
-        carbon_get_gpu_device(engine),
-        carbon_get_window(engine)
+    Agentite_TextRenderer *text = agentite_text_init(
+        agentite_get_gpu_device(engine),
+        agentite_get_window(engine)
     );
     if (!text) {
         fprintf(stderr, "Failed to initialize text renderer\n");
-        carbon_texture_destroy(sprites, tex_checker);
-        carbon_camera_destroy(camera);
-        carbon_sprite_shutdown(sprites);
-        cui_shutdown(ui);
-        carbon_shutdown(engine);
+        agentite_texture_destroy(sprites, tex_checker);
+        agentite_camera_destroy(camera);
+        agentite_sprite_shutdown(sprites);
+        aui_shutdown(ui);
+        agentite_shutdown(engine);
         return 1;
     }
 
     /* Load fonts */
-    Carbon_Font *font_large = carbon_font_load(text, "assets/fonts/Roboto-Regular.ttf", 32.0f);
-    Carbon_Font *font_small = carbon_font_load(text, "assets/fonts/Roboto-Regular.ttf", 18.0f);
+    Agentite_Font *font_large = agentite_font_load(text, "assets/fonts/Roboto-Regular.ttf", 32.0f);
+    Agentite_Font *font_small = agentite_font_load(text, "assets/fonts/Roboto-Regular.ttf", 18.0f);
 
     if (!font_large || !font_small) {
         SDL_Log("Warning: Could not load fonts, text rendering will be skipped");
@@ -274,7 +274,7 @@ int main(int argc, char *argv[]) {
     }
 
     /* Load MSDF font for sharp text at any scale */
-    Carbon_SDFFont *msdf_font = carbon_sdf_font_load(text,
+    Agentite_SDFFont *msdf_font = agentite_sdf_font_load(text,
         "assets/fonts/Roboto-Regular-msdf.png",
         "assets/fonts/Roboto-Regular-msdf.json");
 
@@ -282,29 +282,29 @@ int main(int argc, char *argv[]) {
         SDL_Log("Warning: Could not load MSDF font, SDF text rendering will be skipped");
     } else {
         SDL_Log("MSDF font loaded successfully (type: %s)",
-                carbon_sdf_font_get_type(msdf_font) == CARBON_SDF_TYPE_MSDF ? "MSDF" : "SDF");
+                agentite_sdf_font_get_type(msdf_font) == AGENTITE_SDF_TYPE_MSDF ? "MSDF" : "SDF");
     }
 
     /* Initialize ECS world */
-    Carbon_World *ecs_world = carbon_ecs_init();
+    Agentite_World *ecs_world = agentite_ecs_init();
     if (!ecs_world) {
         fprintf(stderr, "Failed to initialize ECS world\n");
-        carbon_texture_destroy(sprites, tex_checker);
-        carbon_sprite_shutdown(sprites);
-        cui_shutdown(ui);
-        carbon_shutdown(engine);
+        agentite_texture_destroy(sprites, tex_checker);
+        agentite_sprite_shutdown(sprites);
+        aui_shutdown(ui);
+        agentite_shutdown(engine);
         return 1;
     }
 
     /* Create some demo entities */
-    ecs_world_t *w = carbon_ecs_get_world(ecs_world);
+    ecs_world_t *w = agentite_ecs_get_world(ecs_world);
 
-    ecs_entity_t player = carbon_ecs_entity_new_named(ecs_world, "Player");
+    ecs_entity_t player = agentite_ecs_entity_new_named(ecs_world, "Player");
     ecs_set(w, player, C_Position, { .x = 100.0f, .y = 100.0f });
     ecs_set(w, player, C_Velocity, { .vx = 0.0f, .vy = 0.0f });
     ecs_set(w, player, C_Health, { .health = 100, .max_health = 100 });
 
-    ecs_entity_t enemy = carbon_ecs_entity_new_named(ecs_world, "Enemy");
+    ecs_entity_t enemy = agentite_ecs_entity_new_named(ecs_world, "Enemy");
     ecs_set(w, enemy, C_Position, { .x = 500.0f, .y = 300.0f });
     ecs_set(w, enemy, C_Velocity, { .vx = -10.0f, .vy = 5.0f });
     ecs_set(w, enemy, C_Health, { .health = 50, .max_health = 50 });
@@ -313,69 +313,69 @@ int main(int argc, char *argv[]) {
     SDL_Log("Created enemy entity: %llu", (unsigned long long)enemy);
 
     /* Initialize input system */
-    Carbon_Input *input = carbon_input_init();
+    Agentite_Input *input = agentite_input_init();
     if (!input) {
         fprintf(stderr, "Failed to initialize input system\n");
-        carbon_ecs_shutdown(ecs_world);
-        carbon_texture_destroy(sprites, tex_checker);
-        carbon_camera_destroy(camera);
-        carbon_sprite_shutdown(sprites);
-        cui_shutdown(ui);
-        carbon_shutdown(engine);
+        agentite_ecs_shutdown(ecs_world);
+        agentite_texture_destroy(sprites, tex_checker);
+        agentite_camera_destroy(camera);
+        agentite_sprite_shutdown(sprites);
+        aui_shutdown(ui);
+        agentite_shutdown(engine);
         return 1;
     }
 
     /* Register input actions and bind keys */
-    int action_cam_up = carbon_input_register_action(input, "cam_up");
-    int action_cam_down = carbon_input_register_action(input, "cam_down");
-    int action_cam_left = carbon_input_register_action(input, "cam_left");
-    int action_cam_right = carbon_input_register_action(input, "cam_right");
-    int action_cam_rot_left = carbon_input_register_action(input, "cam_rot_left");
-    int action_cam_rot_right = carbon_input_register_action(input, "cam_rot_right");
-    int action_cam_reset = carbon_input_register_action(input, "cam_reset");
-    int action_zoom_in = carbon_input_register_action(input, "zoom_in");
-    int action_zoom_out = carbon_input_register_action(input, "zoom_out");
-    int action_quit = carbon_input_register_action(input, "quit");
+    int action_cam_up = agentite_input_register_action(input, "cam_up");
+    int action_cam_down = agentite_input_register_action(input, "cam_down");
+    int action_cam_left = agentite_input_register_action(input, "cam_left");
+    int action_cam_right = agentite_input_register_action(input, "cam_right");
+    int action_cam_rot_left = agentite_input_register_action(input, "cam_rot_left");
+    int action_cam_rot_right = agentite_input_register_action(input, "cam_rot_right");
+    int action_cam_reset = agentite_input_register_action(input, "cam_reset");
+    int action_zoom_in = agentite_input_register_action(input, "zoom_in");
+    int action_zoom_out = agentite_input_register_action(input, "zoom_out");
+    int action_quit = agentite_input_register_action(input, "quit");
 
     /* Bind keyboard keys */
-    carbon_input_bind_key(input, action_cam_up, SDL_SCANCODE_W);
-    carbon_input_bind_key(input, action_cam_up, SDL_SCANCODE_UP);
-    carbon_input_bind_key(input, action_cam_down, SDL_SCANCODE_S);
-    carbon_input_bind_key(input, action_cam_down, SDL_SCANCODE_DOWN);
-    carbon_input_bind_key(input, action_cam_left, SDL_SCANCODE_A);
-    carbon_input_bind_key(input, action_cam_left, SDL_SCANCODE_LEFT);
-    carbon_input_bind_key(input, action_cam_right, SDL_SCANCODE_D);
-    carbon_input_bind_key(input, action_cam_right, SDL_SCANCODE_RIGHT);
-    carbon_input_bind_key(input, action_cam_rot_left, SDL_SCANCODE_Q);
-    carbon_input_bind_key(input, action_cam_rot_right, SDL_SCANCODE_E);
-    carbon_input_bind_key(input, action_cam_reset, SDL_SCANCODE_R);
-    carbon_input_bind_key(input, action_quit, SDL_SCANCODE_ESCAPE);
+    agentite_input_bind_key(input, action_cam_up, SDL_SCANCODE_W);
+    agentite_input_bind_key(input, action_cam_up, SDL_SCANCODE_UP);
+    agentite_input_bind_key(input, action_cam_down, SDL_SCANCODE_S);
+    agentite_input_bind_key(input, action_cam_down, SDL_SCANCODE_DOWN);
+    agentite_input_bind_key(input, action_cam_left, SDL_SCANCODE_A);
+    agentite_input_bind_key(input, action_cam_left, SDL_SCANCODE_LEFT);
+    agentite_input_bind_key(input, action_cam_right, SDL_SCANCODE_D);
+    agentite_input_bind_key(input, action_cam_right, SDL_SCANCODE_RIGHT);
+    agentite_input_bind_key(input, action_cam_rot_left, SDL_SCANCODE_Q);
+    agentite_input_bind_key(input, action_cam_rot_right, SDL_SCANCODE_E);
+    agentite_input_bind_key(input, action_cam_reset, SDL_SCANCODE_R);
+    agentite_input_bind_key(input, action_quit, SDL_SCANCODE_ESCAPE);
 
     /* Bind gamepad (if connected) */
-    carbon_input_bind_gamepad_axis(input, action_cam_left, SDL_GAMEPAD_AXIS_LEFTX, 0.3f, false);
-    carbon_input_bind_gamepad_axis(input, action_cam_right, SDL_GAMEPAD_AXIS_LEFTX, 0.3f, true);
-    carbon_input_bind_gamepad_axis(input, action_cam_up, SDL_GAMEPAD_AXIS_LEFTY, 0.3f, false);
-    carbon_input_bind_gamepad_axis(input, action_cam_down, SDL_GAMEPAD_AXIS_LEFTY, 0.3f, true);
-    carbon_input_bind_gamepad_button(input, action_cam_rot_left, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
-    carbon_input_bind_gamepad_button(input, action_cam_rot_right, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
-    carbon_input_bind_gamepad_button(input, action_cam_reset, SDL_GAMEPAD_BUTTON_SOUTH);
-    carbon_input_bind_gamepad_axis(input, action_zoom_in, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, 0.1f, true);
-    carbon_input_bind_gamepad_axis(input, action_zoom_out, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, 0.1f, true);
-    carbon_input_bind_gamepad_button(input, action_quit, SDL_GAMEPAD_BUTTON_BACK);
+    agentite_input_bind_gamepad_axis(input, action_cam_left, SDL_GAMEPAD_AXIS_LEFTX, 0.3f, false);
+    agentite_input_bind_gamepad_axis(input, action_cam_right, SDL_GAMEPAD_AXIS_LEFTX, 0.3f, true);
+    agentite_input_bind_gamepad_axis(input, action_cam_up, SDL_GAMEPAD_AXIS_LEFTY, 0.3f, false);
+    agentite_input_bind_gamepad_axis(input, action_cam_down, SDL_GAMEPAD_AXIS_LEFTY, 0.3f, true);
+    agentite_input_bind_gamepad_button(input, action_cam_rot_left, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+    agentite_input_bind_gamepad_button(input, action_cam_rot_right, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+    agentite_input_bind_gamepad_button(input, action_cam_reset, SDL_GAMEPAD_BUTTON_SOUTH);
+    agentite_input_bind_gamepad_axis(input, action_zoom_in, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, 0.1f, true);
+    agentite_input_bind_gamepad_axis(input, action_zoom_out, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, 0.1f, true);
+    agentite_input_bind_gamepad_button(input, action_quit, SDL_GAMEPAD_BUTTON_BACK);
 
     SDL_Log("Input system initialized with action bindings");
 
     /* Initialize audio system */
-    Carbon_Audio *audio = carbon_audio_init();
+    Agentite_Audio *audio = agentite_audio_init();
     if (!audio) {
         fprintf(stderr, "Failed to initialize audio system\n");
-        carbon_input_shutdown(input);
-        carbon_ecs_shutdown(ecs_world);
-        carbon_texture_destroy(sprites, tex_checker);
-        carbon_camera_destroy(camera);
-        carbon_sprite_shutdown(sprites);
-        cui_shutdown(ui);
-        carbon_shutdown(engine);
+        agentite_input_shutdown(input);
+        agentite_ecs_shutdown(ecs_world);
+        agentite_texture_destroy(sprites, tex_checker);
+        agentite_camera_destroy(camera);
+        agentite_sprite_shutdown(sprites);
+        aui_shutdown(ui);
+        agentite_shutdown(engine);
         return 1;
     }
 
@@ -385,9 +385,9 @@ int main(int argc, char *argv[]) {
     void *click_wav = create_test_beep_wav(880, 0.05f, 0.3f, &click_size); /* A5 note, click */
     void *ping_wav = create_test_beep_wav(1760, 0.3f, 0.4f, &ping_size);   /* A6 note, ping */
 
-    Carbon_Sound *sound_beep = beep_wav ? carbon_sound_load_wav_memory(audio, beep_wav, beep_size) : NULL;
-    Carbon_Sound *sound_click = click_wav ? carbon_sound_load_wav_memory(audio, click_wav, click_size) : NULL;
-    Carbon_Sound *sound_ping = ping_wav ? carbon_sound_load_wav_memory(audio, ping_wav, ping_size) : NULL;
+    Agentite_Sound *sound_beep = beep_wav ? agentite_sound_load_wav_memory(audio, beep_wav, beep_size) : NULL;
+    Agentite_Sound *sound_click = click_wav ? agentite_sound_load_wav_memory(audio, click_wav, click_size) : NULL;
+    Agentite_Sound *sound_ping = ping_wav ? agentite_sound_load_wav_memory(audio, ping_wav, ping_size) : NULL;
 
     free(beep_wav);
     free(click_wav);
@@ -396,67 +396,67 @@ int main(int argc, char *argv[]) {
     SDL_Log("Audio system initialized with test sounds");
 
     /* Initialize tilemap system */
-    Carbon_Texture *tileset_tex = create_tileset_texture(sprites, 48);  /* 48x48 pixel tiles */
+    Agentite_Texture *tileset_tex = create_tileset_texture(sprites, 48);  /* 48x48 pixel tiles */
     if (!tileset_tex) {
         fprintf(stderr, "Failed to create tileset texture\n");
     }
 
-    Carbon_Tileset *tileset = tileset_tex ? carbon_tileset_create(tileset_tex, 48, 48) : NULL;
-    Carbon_Tilemap *tilemap = NULL;
+    Agentite_Tileset *tileset = tileset_tex ? agentite_tileset_create(tileset_tex, 48, 48) : NULL;
+    Agentite_Tilemap *tilemap = NULL;
 
     if (tileset) {
         /* Create a 50x50 tile map with 48px tiles (2400x2400 pixels in world space)
          * At 1280x720 viewport, ~27x15 tiles visible at zoom 1.0 (~400 tiles)
          * With 2 layers that's ~800 sprites, well under the 4096 batch limit */
-        tilemap = carbon_tilemap_create(tileset, 50, 50);
+        tilemap = agentite_tilemap_create(tileset, 50, 50);
         if (tilemap) {
             /* Add layers */
-            int ground_layer = carbon_tilemap_add_layer(tilemap, "ground");
-            int decor_layer = carbon_tilemap_add_layer(tilemap, "decorations");
+            int ground_layer = agentite_tilemap_add_layer(tilemap, "ground");
+            int decor_layer = agentite_tilemap_add_layer(tilemap, "decorations");
 
             /* Fill ground with grass (tile ID 1 = forest green) */
-            carbon_tilemap_fill(tilemap, ground_layer, 0, 0, 50, 50, 1);
+            agentite_tilemap_fill(tilemap, ground_layer, 0, 0, 50, 50, 1);
 
             /* Add some terrain variety */
             /* Water (tile 13 = blue) in a lake pattern */
-            carbon_tilemap_fill(tilemap, ground_layer, 12, 12, 10, 7, 13);
-            carbon_tilemap_fill(tilemap, ground_layer, 15, 19, 5, 3, 13);
+            agentite_tilemap_fill(tilemap, ground_layer, 12, 12, 10, 7, 13);
+            agentite_tilemap_fill(tilemap, ground_layer, 15, 19, 5, 3, 13);
 
             /* Sand beach around water (tile 11 = sandy) */
-            carbon_tilemap_fill(tilemap, ground_layer, 11, 11, 12, 1, 11);
-            carbon_tilemap_fill(tilemap, ground_layer, 11, 19, 12, 1, 11);
-            carbon_tilemap_fill(tilemap, ground_layer, 11, 11, 1, 9, 11);
-            carbon_tilemap_fill(tilemap, ground_layer, 22, 11, 1, 9, 11);
+            agentite_tilemap_fill(tilemap, ground_layer, 11, 11, 12, 1, 11);
+            agentite_tilemap_fill(tilemap, ground_layer, 11, 19, 12, 1, 11);
+            agentite_tilemap_fill(tilemap, ground_layer, 11, 11, 1, 9, 11);
+            agentite_tilemap_fill(tilemap, ground_layer, 22, 11, 1, 9, 11);
 
             /* Stone path (tile 6 = gray) */
-            carbon_tilemap_fill(tilemap, ground_layer, 25, 0, 2, 50, 6);
+            agentite_tilemap_fill(tilemap, ground_layer, 25, 0, 2, 50, 6);
 
             /* Dirt patches (tile 9 = brown) */
-            carbon_tilemap_fill(tilemap, ground_layer, 32, 20, 6, 6, 9);
-            carbon_tilemap_fill(tilemap, ground_layer, 40, 35, 5, 5, 9);
+            agentite_tilemap_fill(tilemap, ground_layer, 32, 20, 6, 6, 9);
+            agentite_tilemap_fill(tilemap, ground_layer, 40, 35, 5, 5, 9);
 
             /* Dark grass variation (tile 3 = olive) */
-            carbon_tilemap_fill(tilemap, ground_layer, 4, 35, 8, 8, 3);
+            agentite_tilemap_fill(tilemap, ground_layer, 4, 35, 8, 8, 3);
 
             /* Light grass patches (tile 2 = lime) */
-            carbon_tilemap_fill(tilemap, ground_layer, 35, 4, 6, 6, 2);
+            agentite_tilemap_fill(tilemap, ground_layer, 35, 4, 6, 6, 2);
 
             /* Add some decorations (tile 16 = gold, used as decoration markers) */
-            carbon_tilemap_set_tile(tilemap, decor_layer, 25, 25, 16);
-            carbon_tilemap_set_tile(tilemap, decor_layer, 40, 12, 16);
-            carbon_tilemap_set_tile(tilemap, decor_layer, 7, 40, 16);
+            agentite_tilemap_set_tile(tilemap, decor_layer, 25, 25, 16);
+            agentite_tilemap_set_tile(tilemap, decor_layer, 40, 12, 16);
+            agentite_tilemap_set_tile(tilemap, decor_layer, 7, 40, 16);
 
             /* Set decorations layer to slightly transparent */
-            carbon_tilemap_set_layer_opacity(tilemap, decor_layer, 0.8f);
+            agentite_tilemap_set_layer_opacity(tilemap, decor_layer, 0.8f);
 
             SDL_Log("Tilemap initialized: 50x50 tiles @ 48px (2400x2400 world units)");
         }
     }
 
     /* Register audio test action */
-    int action_play_sound = carbon_input_register_action(input, "play_sound");
-    carbon_input_bind_key(input, action_play_sound, SDL_SCANCODE_SPACE);
-    carbon_input_bind_gamepad_button(input, action_play_sound, SDL_GAMEPAD_BUTTON_SOUTH);
+    int action_play_sound = agentite_input_register_action(input, "play_sound");
+    agentite_input_bind_key(input, action_play_sound, SDL_SCANCODE_SPACE);
+    agentite_input_bind_gamepad_button(input, action_play_sound, SDL_GAMEPAD_BUTTON_SOUTH);
 
     /* Demo state */
     bool checkbox_value = false;
@@ -479,53 +479,53 @@ int main(int argc, char *argv[]) {
     float mouse_world_x = 0.0f, mouse_world_y = 0.0f;
 
     /* Main game loop */
-    while (carbon_is_running(engine)) {
-        carbon_begin_frame(engine);
+    while (agentite_is_running(engine)) {
+        agentite_begin_frame(engine);
 
         /* Begin input frame (reset per-frame state) */
-        carbon_input_begin_frame(input);
+        agentite_input_begin_frame(input);
 
         /* Process events - UI gets first chance, then input system */
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             /* Let UI process the event first */
-            if (cui_process_event(ui, &event)) {
+            if (aui_process_event(ui, &event)) {
                 continue;  /* UI consumed the event */
             }
 
             /* Let input system process the event */
-            carbon_input_process_event(input, &event);
+            agentite_input_process_event(input, &event);
 
             /* Handle quit event */
             if (event.type == SDL_EVENT_QUIT) {
-                carbon_quit(engine);
+                agentite_quit(engine);
             }
         }
 
         /* Update input state (compute just_pressed/released) */
-        carbon_input_update(input);
+        agentite_input_update(input);
 
         /* Get delta time */
-        float dt = carbon_get_delta_time(engine);
+        float dt = agentite_get_delta_time(engine);
 
         /* Handle quit action */
-        if (carbon_input_action_just_pressed(input, action_quit)) {
-            carbon_quit(engine);
+        if (agentite_input_action_just_pressed(input, action_quit)) {
+            agentite_quit(engine);
         }
 
         /* Play test sound on spacebar */
-        if (carbon_input_action_just_pressed(input, action_play_sound)) {
+        if (agentite_input_action_just_pressed(input, action_play_sound)) {
             if (sound_beep) {
-                carbon_sound_play(audio, sound_beep);
+                agentite_sound_play(audio, sound_beep);
             }
         }
 
         /* Update audio system */
-        carbon_audio_update(audio);
+        agentite_audio_update(audio);
 
         /* Handle mouse wheel zoom */
         float scroll_x, scroll_y;
-        carbon_input_get_scroll(input, &scroll_x, &scroll_y);
+        agentite_input_get_scroll(input, &scroll_x, &scroll_y);
         if (scroll_y > 0) {
             target_zoom *= 1.15f;
         } else if (scroll_y < 0) {
@@ -533,12 +533,12 @@ int main(int argc, char *argv[]) {
         }
 
         /* Handle gamepad trigger zoom */
-        if (carbon_input_action_pressed(input, action_zoom_in)) {
-            float val = carbon_input_action_value(input, action_zoom_in);
+        if (agentite_input_action_pressed(input, action_zoom_in)) {
+            float val = agentite_input_action_value(input, action_zoom_in);
             target_zoom *= 1.0f + 0.5f * val * dt;
         }
-        if (carbon_input_action_pressed(input, action_zoom_out)) {
-            float val = carbon_input_action_value(input, action_zoom_out);
+        if (agentite_input_action_pressed(input, action_zoom_out)) {
+            float val = agentite_input_action_value(input, action_zoom_out);
             target_zoom /= 1.0f + 0.5f * val * dt;
         }
 
@@ -547,43 +547,43 @@ int main(int argc, char *argv[]) {
         if (target_zoom > 10.0f) target_zoom = 10.0f;
 
         /* Camera controls - using actions (supports keyboard + gamepad) */
-        float cam_speed = 300.0f / carbon_camera_get_zoom(camera);  /* Faster when zoomed out */
+        float cam_speed = 300.0f / agentite_camera_get_zoom(camera);  /* Faster when zoomed out */
 
-        if (carbon_input_action_pressed(input, action_cam_up))
-            carbon_camera_move(camera, 0, -cam_speed * dt);
-        if (carbon_input_action_pressed(input, action_cam_down))
-            carbon_camera_move(camera, 0, cam_speed * dt);
-        if (carbon_input_action_pressed(input, action_cam_left))
-            carbon_camera_move(camera, -cam_speed * dt, 0);
-        if (carbon_input_action_pressed(input, action_cam_right))
-            carbon_camera_move(camera, cam_speed * dt, 0);
-        if (carbon_input_action_pressed(input, action_cam_rot_left)) {
-            float rot = carbon_camera_get_rotation(camera);
-            carbon_camera_set_rotation(camera, rot - 60.0f * dt);
+        if (agentite_input_action_pressed(input, action_cam_up))
+            agentite_camera_move(camera, 0, -cam_speed * dt);
+        if (agentite_input_action_pressed(input, action_cam_down))
+            agentite_camera_move(camera, 0, cam_speed * dt);
+        if (agentite_input_action_pressed(input, action_cam_left))
+            agentite_camera_move(camera, -cam_speed * dt, 0);
+        if (agentite_input_action_pressed(input, action_cam_right))
+            agentite_camera_move(camera, cam_speed * dt, 0);
+        if (agentite_input_action_pressed(input, action_cam_rot_left)) {
+            float rot = agentite_camera_get_rotation(camera);
+            agentite_camera_set_rotation(camera, rot - 60.0f * dt);
         }
-        if (carbon_input_action_pressed(input, action_cam_rot_right)) {
-            float rot = carbon_camera_get_rotation(camera);
-            carbon_camera_set_rotation(camera, rot + 60.0f * dt);
+        if (agentite_input_action_pressed(input, action_cam_rot_right)) {
+            float rot = agentite_camera_get_rotation(camera);
+            agentite_camera_set_rotation(camera, rot + 60.0f * dt);
         }
-        if (carbon_input_action_just_pressed(input, action_cam_reset)) {
+        if (agentite_input_action_just_pressed(input, action_cam_reset)) {
             /* Reset camera to tilemap center */
-            carbon_camera_set_position(camera, 1200.0f, 1200.0f);
-            carbon_camera_set_rotation(camera, 0.0f);
+            agentite_camera_set_position(camera, 1200.0f, 1200.0f);
+            agentite_camera_set_rotation(camera, 0.0f);
             target_zoom = 1.0f;
         }
 
         /* Smooth zoom interpolation */
-        float current_zoom = carbon_camera_get_zoom(camera);
+        float current_zoom = agentite_camera_get_zoom(camera);
         float new_zoom = current_zoom + (target_zoom - current_zoom) * 5.0f * dt;
-        carbon_camera_set_zoom(camera, new_zoom);
+        agentite_camera_set_zoom(camera, new_zoom);
 
         /* Update camera matrices */
-        carbon_camera_update(camera);
+        agentite_camera_update(camera);
 
         /* Get mouse position in world coordinates */
         float mouse_x, mouse_y;
-        carbon_input_get_mouse_position(input, &mouse_x, &mouse_y);
-        carbon_camera_screen_to_world(camera, mouse_x, mouse_y, &mouse_world_x, &mouse_world_y);
+        agentite_input_get_mouse_position(input, &mouse_x, &mouse_y);
+        agentite_camera_screen_to_world(camera, mouse_x, mouse_y, &mouse_world_x, &mouse_world_y);
 
         /* Update sprite animation */
         sprite_time += dt;
@@ -591,7 +591,7 @@ int main(int argc, char *argv[]) {
         if (sprite_rotation > 360.0f) sprite_rotation -= 360.0f;
 
         /* Progress ECS systems */
-        carbon_ecs_progress(ecs_world, dt);
+        agentite_ecs_progress(ecs_world, dt);
 
         /* Update enemy position (simple demo movement) */
         const C_Position *enemy_pos = ecs_get(w, enemy, C_Position);
@@ -609,184 +609,184 @@ int main(int argc, char *argv[]) {
         }
 
         /* Begin UI frame */
-        cui_begin_frame(ui, dt);
+        aui_begin_frame(ui, dt);
 
         /* Draw a demo panel */
-        if (cui_begin_panel(ui, "Game Settings", 50, 50, 300, 400,
-                           CUI_PANEL_TITLE_BAR | CUI_PANEL_BORDER)) {
+        if (aui_begin_panel(ui, "Game Settings", 50, 50, 300, 400,
+                           AUI_PANEL_TITLE_BAR | AUI_PANEL_BORDER)) {
 
-            cui_label(ui, "Welcome to Carbon UI!");
-            cui_spacing(ui, 10);
+            aui_label(ui, "Welcome to Agentite UI!");
+            aui_spacing(ui, 10);
 
-            if (cui_button(ui, "Start Game")) {
+            if (aui_button(ui, "Start Game")) {
                 SDL_Log("Start Game clicked!");
             }
 
-            if (cui_button(ui, "Load Game")) {
+            if (aui_button(ui, "Load Game")) {
                 SDL_Log("Load Game clicked!");
             }
 
-            cui_separator(ui);
+            aui_separator(ui);
 
-            cui_checkbox(ui, "Enable Music", &checkbox_value);
+            aui_checkbox(ui, "Enable Music", &checkbox_value);
 
-            cui_slider_float(ui, "Volume", &slider_value, 0.0f, 1.0f);
+            aui_slider_float(ui, "Volume", &slider_value, 0.0f, 1.0f);
 
-            cui_spacing(ui, 5);
+            aui_spacing(ui, 5);
 
-            cui_dropdown(ui, "Difficulty", &dropdown_selection,
+            aui_dropdown(ui, "Difficulty", &dropdown_selection,
                         dropdown_items, 4);
 
-            cui_spacing(ui, 5);
+            aui_spacing(ui, 5);
 
-            cui_textbox(ui, "Name", textbox_buffer, sizeof(textbox_buffer));
+            aui_textbox(ui, "Name", textbox_buffer, sizeof(textbox_buffer));
 
-            cui_end_panel(ui);
+            aui_end_panel(ui);
         }
 
         /* Draw a second panel for unit selection */
-        if (cui_begin_panel(ui, "Units", 400, 50, 250, 300,
-                           CUI_PANEL_TITLE_BAR | CUI_PANEL_BORDER)) {
+        if (aui_begin_panel(ui, "Units", 400, 50, 250, 300,
+                           AUI_PANEL_TITLE_BAR | AUI_PANEL_BORDER)) {
 
-            cui_label(ui, "Select Unit Type:");
-            cui_listbox(ui, "##units", &listbox_selection,
+            aui_label(ui, "Select Unit Type:");
+            aui_listbox(ui, "##units", &listbox_selection,
                        listbox_items, 7, 150);
 
-            cui_spacing(ui, 10);
+            aui_spacing(ui, 10);
 
-            if (cui_button(ui, "Deploy Unit")) {
+            if (aui_button(ui, "Deploy Unit")) {
                 SDL_Log("Deploying: %s", listbox_items[listbox_selection]);
             }
 
-            cui_end_panel(ui);
+            aui_end_panel(ui);
         }
 
         /* Draw ECS entity info panel */
-        if (cui_begin_panel(ui, "ECS Entities", 700, 50, 280, 200,
-                           CUI_PANEL_TITLE_BAR | CUI_PANEL_BORDER)) {
+        if (aui_begin_panel(ui, "ECS Entities", 700, 50, 280, 200,
+                           AUI_PANEL_TITLE_BAR | AUI_PANEL_BORDER)) {
 
-            cui_label(ui, "Player Entity:");
+            aui_label(ui, "Player Entity:");
             const C_Position *p_pos = ecs_get(w, player, C_Position);
             const C_Health *p_hp = ecs_get(w, player, C_Health);
             if (p_pos) {
                 char buf[64];
                 snprintf(buf, sizeof(buf), "  Pos: (%.0f, %.0f)", p_pos->x, p_pos->y);
-                cui_label(ui, buf);
+                aui_label(ui, buf);
             }
             if (p_hp) {
                 char buf[64];
                 snprintf(buf, sizeof(buf), "  HP: %d/%d", p_hp->health, p_hp->max_health);
-                cui_label(ui, buf);
+                aui_label(ui, buf);
             }
 
-            cui_separator(ui);
+            aui_separator(ui);
 
-            cui_label(ui, "Enemy Entity:");
+            aui_label(ui, "Enemy Entity:");
             const C_Health *e_hp = ecs_get(w, enemy, C_Health);
             if (enemy_pos) {
                 char buf[64];
                 snprintf(buf, sizeof(buf), "  Pos: (%.0f, %.0f)", enemy_pos->x, enemy_pos->y);
-                cui_label(ui, buf);
+                aui_label(ui, buf);
             }
             if (e_hp) {
                 char buf[64];
                 snprintf(buf, sizeof(buf), "  HP: %d/%d", e_hp->health, e_hp->max_health);
-                cui_label(ui, buf);
+                aui_label(ui, buf);
             }
 
-            cui_end_panel(ui);
+            aui_end_panel(ui);
         }
 
         /* Draw Camera controls panel */
-        if (cui_begin_panel(ui, "Camera", 700, 260, 280, 180,
-                           CUI_PANEL_TITLE_BAR | CUI_PANEL_BORDER)) {
+        if (aui_begin_panel(ui, "Camera", 700, 260, 280, 180,
+                           AUI_PANEL_TITLE_BAR | AUI_PANEL_BORDER)) {
 
             float cam_x, cam_y;
-            carbon_camera_get_position(camera, &cam_x, &cam_y);
-            float cam_zoom = carbon_camera_get_zoom(camera);
-            float cam_rot = carbon_camera_get_rotation(camera);
+            agentite_camera_get_position(camera, &cam_x, &cam_y);
+            float cam_zoom = agentite_camera_get_zoom(camera);
+            float cam_rot = agentite_camera_get_rotation(camera);
 
             char buf[64];
             snprintf(buf, sizeof(buf), "Position: (%.0f, %.0f)", cam_x, cam_y);
-            cui_label(ui, buf);
+            aui_label(ui, buf);
             snprintf(buf, sizeof(buf), "Zoom: %.2fx", cam_zoom);
-            cui_label(ui, buf);
+            aui_label(ui, buf);
             snprintf(buf, sizeof(buf), "Rotation: %.1f deg", cam_rot);
-            cui_label(ui, buf);
+            aui_label(ui, buf);
 
-            cui_separator(ui);
+            aui_separator(ui);
 
             snprintf(buf, sizeof(buf), "Mouse World: (%.0f, %.0f)", mouse_world_x, mouse_world_y);
-            cui_label(ui, buf);
+            aui_label(ui, buf);
 
-            cui_spacing(ui, 5);
-            cui_label(ui, "WASD: Pan | Wheel: Zoom");
-            cui_label(ui, "Q/E: Rotate | R: Reset");
+            aui_spacing(ui, 5);
+            aui_label(ui, "WASD: Pan | Wheel: Zoom");
+            aui_label(ui, "Q/E: Rotate | R: Reset");
 
-            cui_end_panel(ui);
+            aui_end_panel(ui);
         }
 
         /* Draw Audio panel */
-        if (cui_begin_panel(ui, "Audio", 700, 450, 280, 200,
-                           CUI_PANEL_TITLE_BAR | CUI_PANEL_BORDER)) {
+        if (aui_begin_panel(ui, "Audio", 700, 450, 280, 200,
+                           AUI_PANEL_TITLE_BAR | AUI_PANEL_BORDER)) {
 
             /* Master volume slider */
-            float master_vol = carbon_audio_get_master_volume(audio);
-            if (cui_slider_float(ui, "Master", &master_vol, 0.0f, 1.0f)) {
-                carbon_audio_set_master_volume(audio, master_vol);
+            float master_vol = agentite_audio_get_master_volume(audio);
+            if (aui_slider_float(ui, "Master", &master_vol, 0.0f, 1.0f)) {
+                agentite_audio_set_master_volume(audio, master_vol);
             }
 
             /* Sound volume slider */
-            float sound_vol = carbon_audio_get_sound_volume(audio);
-            if (cui_slider_float(ui, "Sounds", &sound_vol, 0.0f, 1.0f)) {
-                carbon_audio_set_sound_volume(audio, sound_vol);
+            float sound_vol = agentite_audio_get_sound_volume(audio);
+            if (aui_slider_float(ui, "Sounds", &sound_vol, 0.0f, 1.0f)) {
+                agentite_audio_set_sound_volume(audio, sound_vol);
             }
 
-            cui_separator(ui);
+            aui_separator(ui);
 
             /* Sound test buttons */
-            if (cui_button(ui, "Beep (440Hz)") && sound_beep) {
-                carbon_sound_play(audio, sound_beep);
+            if (aui_button(ui, "Beep (440Hz)") && sound_beep) {
+                agentite_sound_play(audio, sound_beep);
             }
-            if (cui_button(ui, "Click (880Hz)") && sound_click) {
-                carbon_sound_play(audio, sound_click);
+            if (aui_button(ui, "Click (880Hz)") && sound_click) {
+                agentite_sound_play(audio, sound_click);
             }
-            if (cui_button(ui, "Ping (1760Hz)") && sound_ping) {
-                carbon_sound_play(audio, sound_ping);
+            if (aui_button(ui, "Ping (1760Hz)") && sound_ping) {
+                agentite_sound_play(audio, sound_ping);
             }
 
-            cui_spacing(ui, 5);
-            cui_label(ui, "Space: Play beep");
+            aui_spacing(ui, 5);
+            aui_label(ui, "Space: Play beep");
 
-            cui_end_panel(ui);
+            aui_end_panel(ui);
         }
 
         /* Draw some standalone widgets */
-        cui_progress_bar(ui, slider_value, 0.0f, 1.0f);
+        aui_progress_bar(ui, slider_value, 0.0f, 1.0f);
 
         /* End UI frame */
-        cui_end_frame(ui);
+        aui_end_frame(ui);
 
         /* MSDF text scale for pulsing effect */
         float msdf_scale = 0.8f + 0.3f * sinf(sprite_time * 2.5f);
 
         /* Build sprite batch */
-        carbon_sprite_begin(sprites, NULL);
+        agentite_sprite_begin(sprites, NULL);
 
         /* Render tilemap first (background) */
         if (tilemap) {
-            carbon_tilemap_render(tilemap, sprites, camera);
+            agentite_tilemap_render(tilemap, sprites, camera);
         }
 
         /* Draw some demo sprites in the background area */
         /* Row of static checkerboard sprites */
         for (int i = 0; i < 8; i++) {
-            carbon_sprite_draw(sprites, &sprite_checker,
+            agentite_sprite_draw(sprites, &sprite_checker,
                                700.0f + i * 70.0f, 400.0f);
         }
 
         /* Rotating sprite */
-        carbon_sprite_draw_ex(sprites, &sprite_checker,
+        agentite_sprite_draw_ex(sprites, &sprite_checker,
                               800.0f, 500.0f,
                               2.0f, 2.0f,
                               sprite_rotation,
@@ -794,104 +794,104 @@ int main(int argc, char *argv[]) {
 
         /* Bouncing/pulsing sprite */
         float pulse = 1.0f + 0.3f * sinf(sprite_time * 3.0f);
-        carbon_sprite_draw_scaled(sprites, &sprite_checker,
+        agentite_sprite_draw_scaled(sprites, &sprite_checker,
                                   950.0f, 500.0f,
                                   pulse, pulse);
 
         /* Tinted sprites - using same texture for consistent batching */
-        carbon_sprite_draw_tinted(sprites, &sprite_checker,
+        agentite_sprite_draw_tinted(sprites, &sprite_checker,
                                   1050.0f, 450.0f,
                                   1.0f, 0.3f, 0.3f, 1.0f);  /* Red tint */
-        carbon_sprite_draw_tinted(sprites, &sprite_checker,
+        agentite_sprite_draw_tinted(sprites, &sprite_checker,
                                   1050.0f, 550.0f,
                                   0.3f, 1.0f, 0.3f, 1.0f);  /* Green tint */
 
         /* Acquire command buffer for GPU operations */
-        SDL_GPUCommandBuffer *cmd = carbon_acquire_command_buffer(engine);
+        SDL_GPUCommandBuffer *cmd = agentite_acquire_command_buffer(engine);
         if (cmd) {
             /* Upload sprite data to GPU (must be done BEFORE render pass) */
-            carbon_sprite_upload(sprites, cmd);
+            agentite_sprite_upload(sprites, cmd);
 
             /* Upload UI data to GPU (must be done BEFORE render pass) */
-            cui_upload(ui, cmd);
+            aui_upload(ui, cmd);
 
             /* Build text batches - can now queue multiple batches before render */
 
             /* Batch 1: Bitmap font text */
             if (font_small) {
-                carbon_text_begin(text);
-                carbon_text_printf(text, font_small, 1100.0f, 20.0f, "FPS: %.0f", 1.0f / dt);
-                carbon_text_draw_colored(text, font_small, "Bitmap Font:", 550.0f, 520.0f, 0.8f, 0.8f, 0.8f, 1.0f);
-                carbon_text_draw_colored(text, font_small, "Red Text", 550.0f, 540.0f, 1.0f, 0.3f, 0.3f, 1.0f);
-                carbon_text_draw_colored(text, font_small, "Green Text", 550.0f, 560.0f, 0.3f, 1.0f, 0.3f, 1.0f);
-                carbon_text_draw_colored(text, font_small, "Blue Text", 550.0f, 580.0f, 0.3f, 0.5f, 1.0f, 1.0f);
+                agentite_text_begin(text);
+                agentite_text_printf(text, font_small, 1100.0f, 20.0f, "FPS: %.0f", 1.0f / dt);
+                agentite_text_draw_colored(text, font_small, "Bitmap Font:", 550.0f, 520.0f, 0.8f, 0.8f, 0.8f, 1.0f);
+                agentite_text_draw_colored(text, font_small, "Red Text", 550.0f, 540.0f, 1.0f, 0.3f, 0.3f, 1.0f);
+                agentite_text_draw_colored(text, font_small, "Green Text", 550.0f, 560.0f, 0.3f, 1.0f, 0.3f, 1.0f);
+                agentite_text_draw_colored(text, font_small, "Blue Text", 550.0f, 580.0f, 0.3f, 0.5f, 1.0f, 1.0f);
                 float text_scale = 1.0f + 0.2f * sinf(sprite_time * 2.0f);
-                carbon_text_draw_scaled(text, font_small, "Pulsing!", 550.0f, 605.0f, text_scale);
-                carbon_text_end(text);
+                agentite_text_draw_scaled(text, font_small, "Pulsing!", 550.0f, 605.0f, text_scale);
+                agentite_text_end(text);
             }
 
             /* Batch 2: MSDF font with outline effect */
             if (msdf_font) {
-                carbon_text_begin(text);
-                carbon_sdf_text_set_outline(text, 0.2f, 0.1f, 0.1f, 0.1f, 1.0f);
-                carbon_sdf_text_draw_colored(text, msdf_font, "MSDF Text Demo", 450.0f, 50.0f, 1.2f,
+                agentite_text_begin(text);
+                agentite_sdf_text_set_outline(text, 0.2f, 0.1f, 0.1f, 0.1f, 1.0f);
+                agentite_sdf_text_draw_colored(text, msdf_font, "MSDF Text Demo", 450.0f, 50.0f, 1.2f,
                                              1.0f, 0.9f, 0.4f, 1.0f);
-                carbon_sdf_text_draw_colored(text, msdf_font, "MSDF Font:", 120.0f, 520.0f, 0.8f,
+                agentite_sdf_text_draw_colored(text, msdf_font, "MSDF Font:", 120.0f, 520.0f, 0.8f,
                                              0.8f, 0.8f, 0.8f, 1.0f);
-                carbon_sdf_text_draw_colored(text, msdf_font, "Outlined", 120.0f, 550.0f, 1.0f,
+                agentite_sdf_text_draw_colored(text, msdf_font, "Outlined", 120.0f, 550.0f, 1.0f,
                                              1.0f, 1.0f, 1.0f, 1.0f);
-                carbon_sdf_text_draw_colored(text, msdf_font, "Sharp!", 280.0f, 550.0f, msdf_scale,
+                agentite_sdf_text_draw_colored(text, msdf_font, "Sharp!", 280.0f, 550.0f, msdf_scale,
                                              0.4f, 1.0f, 0.6f, 1.0f);
-                carbon_sdf_text_draw_colored(text, msdf_font, "With Outline!", 120.0f, 590.0f, 1.0f,
+                agentite_sdf_text_draw_colored(text, msdf_font, "With Outline!", 120.0f, 590.0f, 1.0f,
                                              0.5f, 0.8f, 1.0f, 1.0f);
-                carbon_text_end(text);
+                agentite_text_end(text);
             }
 
             /* Upload all queued batches at once */
-            carbon_text_upload(text, cmd);
+            agentite_text_upload(text, cmd);
 
             /* Begin render pass */
-            if (carbon_begin_render_pass(engine, 0.1f, 0.1f, 0.15f, 1.0f)) {
-                SDL_GPURenderPass *pass = carbon_get_render_pass(engine);
+            if (agentite_begin_render_pass(engine, 0.1f, 0.1f, 0.15f, 1.0f)) {
+                SDL_GPURenderPass *pass = agentite_get_render_pass(engine);
 
                 /* Render sprites first (background) */
-                carbon_sprite_render(sprites, cmd, pass);
+                agentite_sprite_render(sprites, cmd, pass);
 
                 /* Render UI on top */
-                cui_render(ui, cmd, pass);
+                aui_render(ui, cmd, pass);
 
                 /* Render all queued text batches (bitmap and MSDF) */
-                carbon_text_render(text, cmd, pass);
+                agentite_text_render(text, cmd, pass);
 
-                carbon_end_render_pass(engine);
+                agentite_end_render_pass(engine);
             }
         }
 
         /* End sprite batch (cleanup state) */
-        carbon_sprite_end(sprites, NULL, NULL);
+        agentite_sprite_end(sprites, NULL, NULL);
 
-        carbon_end_frame(engine);
+        agentite_end_frame(engine);
     }
 
     /* Cleanup */
-    if (tilemap) carbon_tilemap_destroy(tilemap);
-    if (tileset) carbon_tileset_destroy(tileset);
-    if (tileset_tex) carbon_texture_destroy(sprites, tileset_tex);
-    if (sound_beep) carbon_sound_destroy(audio, sound_beep);
-    if (sound_click) carbon_sound_destroy(audio, sound_click);
-    if (sound_ping) carbon_sound_destroy(audio, sound_ping);
-    carbon_audio_shutdown(audio);
-    carbon_input_shutdown(input);
-    carbon_ecs_shutdown(ecs_world);
-    if (font_large) carbon_font_destroy(text, font_large);
-    if (font_small) carbon_font_destroy(text, font_small);
-    if (msdf_font) carbon_sdf_font_destroy(text, msdf_font);
-    carbon_text_shutdown(text);
-    carbon_texture_destroy(sprites, tex_checker);
-    carbon_camera_destroy(camera);
-    carbon_sprite_shutdown(sprites);
-    cui_shutdown(ui);
-    carbon_shutdown(engine);
+    if (tilemap) agentite_tilemap_destroy(tilemap);
+    if (tileset) agentite_tileset_destroy(tileset);
+    if (tileset_tex) agentite_texture_destroy(sprites, tileset_tex);
+    if (sound_beep) agentite_sound_destroy(audio, sound_beep);
+    if (sound_click) agentite_sound_destroy(audio, sound_click);
+    if (sound_ping) agentite_sound_destroy(audio, sound_ping);
+    agentite_audio_shutdown(audio);
+    agentite_input_shutdown(input);
+    agentite_ecs_shutdown(ecs_world);
+    if (font_large) agentite_font_destroy(text, font_large);
+    if (font_small) agentite_font_destroy(text, font_small);
+    if (msdf_font) agentite_sdf_font_destroy(text, msdf_font);
+    agentite_text_shutdown(text);
+    agentite_texture_destroy(sprites, tex_checker);
+    agentite_camera_destroy(camera);
+    agentite_sprite_shutdown(sprites);
+    aui_shutdown(ui);
+    agentite_shutdown(engine);
 
     return 0;
 }

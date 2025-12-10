@@ -1,8 +1,8 @@
 #ifndef GAME_SYSTEMS_H
 #define GAME_SYSTEMS_H
 
-#include "carbon/ecs.h"
-#include "carbon/game_context.h"
+#include "agentite/ecs.h"
+#include "agentite/game_context.h"
 
 /**
  * Game ECS Systems

@@ -1,9 +1,9 @@
 /*
- * Carbon UI - Rich Styling System Implementation
+ * Agentite UI - Rich Styling System Implementation
  */
 
-#include "carbon/ui_style.h"
-#include "carbon/ui.h"
+#include "agentite/ui_style.h"
+#include "agentite/ui.h"
 #include <string.h>
 #include <math.h>
 #include <stdlib.h>
@@ -12,11 +12,11 @@
  * Gradient Helper Functions
  * ============================================================================ */
 
-CUI_Gradient cui_gradient_linear(float angle_degrees, uint32_t color1, uint32_t color2)
+AUI_Gradient aui_gradient_linear(float angle_degrees, uint32_t color1, uint32_t color2)
 {
-    CUI_Gradient g;
+    AUI_Gradient g;
     memset(&g, 0, sizeof(g));
-    g.type = CUI_GRADIENT_LINEAR;
+    g.type = AUI_GRADIENT_LINEAR;
     g.angle = angle_degrees;
     g.stop_count = 2;
     g.stops[0].position = 0.0f;
@@ -26,26 +26,26 @@ CUI_Gradient cui_gradient_linear(float angle_degrees, uint32_t color1, uint32_t 
     return g;
 }
 
-CUI_Gradient cui_gradient_linear_stops(float angle_degrees,
-                                        const CUI_GradientStop *stops, int count)
+AUI_Gradient aui_gradient_linear_stops(float angle_degrees,
+                                        const AUI_GradientStop *stops, int count)
 {
-    CUI_Gradient g;
+    AUI_Gradient g;
     memset(&g, 0, sizeof(g));
-    g.type = CUI_GRADIENT_LINEAR;
+    g.type = AUI_GRADIENT_LINEAR;
     g.angle = angle_degrees;
-    g.stop_count = count < CUI_MAX_GRADIENT_STOPS ? count : CUI_MAX_GRADIENT_STOPS;
+    g.stop_count = count < AUI_MAX_GRADIENT_STOPS ? count : AUI_MAX_GRADIENT_STOPS;
     for (int i = 0; i < g.stop_count; i++) {
         g.stops[i] = stops[i];
     }
     return g;
 }
 
-CUI_Gradient cui_gradient_radial(float center_x, float center_y, float radius,
+AUI_Gradient aui_gradient_radial(float center_x, float center_y, float radius,
                                   uint32_t inner_color, uint32_t outer_color)
 {
-    CUI_Gradient g;
+    AUI_Gradient g;
     memset(&g, 0, sizeof(g));
-    g.type = CUI_GRADIENT_RADIAL;
+    g.type = AUI_GRADIENT_RADIAL;
     g.center_x = center_x;
     g.center_y = center_y;
     g.radius = radius;
@@ -61,48 +61,48 @@ CUI_Gradient cui_gradient_radial(float center_x, float center_y, float radius,
  * Style Creation
  * ============================================================================ */
 
-CUI_Style cui_style_default(void)
+AUI_Style aui_style_default(void)
 {
-    CUI_Style style;
+    AUI_Style style;
     memset(&style, 0, sizeof(style));
     style.opacity = 1.0f;
-    style.background.type = CUI_BG_NONE;
-    style.background_hover.type = CUI_BG_NONE;
-    style.background_active.type = CUI_BG_NONE;
-    style.background_disabled.type = CUI_BG_NONE;
+    style.background.type = AUI_BG_NONE;
+    style.background_hover.type = AUI_BG_NONE;
+    style.background_active.type = AUI_BG_NONE;
+    style.background_disabled.type = AUI_BG_NONE;
     style.text_color = 0xFFFFFFFF;          /* White text by default */
     style.text_color_hover = 0xFFFFFFFF;
     style.text_color_disabled = 0x888888FF; /* Gray for disabled */
-    style.text = cui_text_style_default();
+    style.text = aui_text_style_default();
     return style;
 }
 
-CUI_Style cui_style_from_theme(const CUI_Context *ctx)
+AUI_Style aui_style_from_theme(const AUI_Context *ctx)
 {
-    CUI_Style style = cui_style_default();
+    AUI_Style style = aui_style_default();
     if (!ctx) return style;
 
-    const CUI_Theme *theme = cui_get_theme(ctx);
+    const AUI_Theme *theme = aui_get_theme(ctx);
 
     /* Set colors from theme */
-    style.background = cui_bg_solid(theme->bg_widget);
-    style.background_hover = cui_bg_solid(theme->bg_widget_hover);
-    style.background_active = cui_bg_solid(theme->bg_widget_active);
-    style.background_disabled = cui_bg_solid(theme->bg_widget_disabled);
+    style.background = aui_bg_solid(theme->bg_widget);
+    style.background_hover = aui_bg_solid(theme->bg_widget_hover);
+    style.background_active = aui_bg_solid(theme->bg_widget_active);
+    style.background_disabled = aui_bg_solid(theme->bg_widget_disabled);
 
-    style.border = cui_border(theme->border_width, theme->border);
-    style.corner_radius = cui_corners_uniform(theme->corner_radius);
+    style.border = aui_border(theme->border_width, theme->border);
+    style.corner_radius = aui_corners_uniform(theme->corner_radius);
 
     style.text_color = theme->text;
     style.text_color_hover = theme->text_highlight;
     style.text_color_disabled = theme->text_disabled;
 
-    style.padding = cui_edges_uniform(theme->padding);
+    style.padding = aui_edges_uniform(theme->padding);
 
     return style;
 }
 
-void cui_style_merge(CUI_Style *dst, const CUI_Style *src)
+void aui_style_merge(AUI_Style *dst, const AUI_Style *src)
 {
     if (!dst || !src) return;
 
@@ -131,10 +131,10 @@ void cui_style_merge(CUI_Style *dst, const CUI_Style *src)
     }
 
     /* Merge backgrounds */
-    if (src->background.type != CUI_BG_NONE) dst->background = src->background;
-    if (src->background_hover.type != CUI_BG_NONE) dst->background_hover = src->background_hover;
-    if (src->background_active.type != CUI_BG_NONE) dst->background_active = src->background_active;
-    if (src->background_disabled.type != CUI_BG_NONE) dst->background_disabled = src->background_disabled;
+    if (src->background.type != AUI_BG_NONE) dst->background = src->background;
+    if (src->background_hover.type != AUI_BG_NONE) dst->background_hover = src->background_hover;
+    if (src->background_active.type != AUI_BG_NONE) dst->background_active = src->background_active;
+    if (src->background_disabled.type != AUI_BG_NONE) dst->background_disabled = src->background_disabled;
 
     /* Merge shadows */
     if (src->shadow_count > 0) {
@@ -163,9 +163,9 @@ void cui_style_merge(CUI_Style *dst, const CUI_Style *src)
     if (src->max_height > 0) dst->max_height = src->max_height;
 
     /* Merge text style */
-    if (src->text.align != CUI_TEXT_ALIGN_LEFT) dst->text.align = src->text.align;
-    if (src->text.valign != CUI_TEXT_VALIGN_MIDDLE) dst->text.valign = src->text.valign;
-    if (src->text.overflow != CUI_TEXT_OVERFLOW_VISIBLE) dst->text.overflow = src->text.overflow;
+    if (src->text.align != AUI_TEXT_ALIGN_LEFT) dst->text.align = src->text.align;
+    if (src->text.valign != AUI_TEXT_VALIGN_MIDDLE) dst->text.valign = src->text.valign;
+    if (src->text.overflow != AUI_TEXT_OVERFLOW_VISIBLE) dst->text.overflow = src->text.overflow;
     if (src->text.line_height != 1.0f && src->text.line_height > 0) dst->text.line_height = src->text.line_height;
     if (src->text.letter_spacing != 0) dst->text.letter_spacing = src->text.letter_spacing;
     if (src->text.word_spacing != 0) dst->text.word_spacing = src->text.word_spacing;
@@ -177,49 +177,49 @@ void cui_style_merge(CUI_Style *dst, const CUI_Style *src)
 /* ============================================================================
  * Style Stack Implementation
  *
- * The style stack is stored in an extended CUI_Context.
+ * The style stack is stored in an extended AUI_Context.
  * For now, we'll use a simple approach with function-local static storage
- * until we extend CUI_Context properly.
+ * until we extend AUI_Context properly.
  * ============================================================================ */
 
-#define CUI_STYLE_STACK_SIZE 32
+#define AUI_STYLE_STACK_SIZE 32
 
-typedef struct CUI_StyleStackEntry {
-    CUI_Style style;
+typedef struct AUI_StyleStackEntry {
+    AUI_Style style;
     bool active;
-} CUI_StyleStackEntry;
+} AUI_StyleStackEntry;
 
-typedef struct CUI_StyleVarEntry {
-    CUI_StyleVar var;
+typedef struct AUI_StyleVarEntry {
+    AUI_StyleVar var;
     float old_value;
-} CUI_StyleVarEntry;
+} AUI_StyleVarEntry;
 
-typedef struct CUI_StyleColorEntry {
-    CUI_StyleColor color;
+typedef struct AUI_StyleColorEntry {
+    AUI_StyleColor color;
     uint32_t old_value;
-} CUI_StyleColorEntry;
+} AUI_StyleColorEntry;
 
-/* Static storage for style stack (will be moved to CUI_Context later) */
-static CUI_StyleStackEntry s_style_stack[CUI_STYLE_STACK_SIZE];
+/* Static storage for style stack (will be moved to AUI_Context later) */
+static AUI_StyleStackEntry s_style_stack[AUI_STYLE_STACK_SIZE];
 static int s_style_stack_depth = 0;
 
-static CUI_StyleVarEntry s_var_stack[CUI_STYLE_STACK_SIZE];
+static AUI_StyleVarEntry s_var_stack[AUI_STYLE_STACK_SIZE];
 static int s_var_stack_depth = 0;
 
-static CUI_StyleColorEntry s_color_stack[CUI_STYLE_STACK_SIZE];
+static AUI_StyleColorEntry s_color_stack[AUI_STYLE_STACK_SIZE];
 static int s_color_stack_depth = 0;
 
-static CUI_Style s_current_style;
+static AUI_Style s_current_style;
 static bool s_current_style_initialized = false;
 
-void cui_push_style(CUI_Context *ctx, const CUI_Style *style)
+void aui_push_style(AUI_Context *ctx, const AUI_Style *style)
 {
     if (!ctx || !style) return;
-    if (s_style_stack_depth >= CUI_STYLE_STACK_SIZE) return;
+    if (s_style_stack_depth >= AUI_STYLE_STACK_SIZE) return;
 
     /* Initialize current style if needed */
     if (!s_current_style_initialized) {
-        s_current_style = cui_style_from_theme(ctx);
+        s_current_style = aui_style_from_theme(ctx);
         s_current_style_initialized = true;
     }
 
@@ -229,10 +229,10 @@ void cui_push_style(CUI_Context *ctx, const CUI_Style *style)
     s_style_stack_depth++;
 
     /* Merge new style */
-    cui_style_merge(&s_current_style, style);
+    aui_style_merge(&s_current_style, style);
 }
 
-void cui_pop_style(CUI_Context *ctx)
+void aui_pop_style(AUI_Context *ctx)
 {
     (void)ctx;
     if (s_style_stack_depth <= 0) return;
@@ -241,37 +241,37 @@ void cui_pop_style(CUI_Context *ctx)
     s_current_style = s_style_stack[s_style_stack_depth].style;
 }
 
-static float *cui_style_get_var_ptr(CUI_Style *style, CUI_StyleVar var)
+static float *aui_style_get_var_ptr(AUI_Style *style, AUI_StyleVar var)
 {
     switch (var) {
-        case CUI_STYLEVAR_PADDING_TOP: return &style->padding.top;
-        case CUI_STYLEVAR_PADDING_RIGHT: return &style->padding.right;
-        case CUI_STYLEVAR_PADDING_BOTTOM: return &style->padding.bottom;
-        case CUI_STYLEVAR_PADDING_LEFT: return &style->padding.left;
-        case CUI_STYLEVAR_MARGIN_TOP: return &style->margin.top;
-        case CUI_STYLEVAR_MARGIN_RIGHT: return &style->margin.right;
-        case CUI_STYLEVAR_MARGIN_BOTTOM: return &style->margin.bottom;
-        case CUI_STYLEVAR_MARGIN_LEFT: return &style->margin.left;
-        case CUI_STYLEVAR_BORDER_WIDTH: return &style->border.width.top;
-        case CUI_STYLEVAR_CORNER_RADIUS: return &style->corner_radius.top_left;
-        case CUI_STYLEVAR_OPACITY: return &style->opacity;
-        case CUI_STYLEVAR_FONT_SIZE: return &style->font_size;
+        case AUI_STYLEVAR_PADDING_TOP: return &style->padding.top;
+        case AUI_STYLEVAR_PADDING_RIGHT: return &style->padding.right;
+        case AUI_STYLEVAR_PADDING_BOTTOM: return &style->padding.bottom;
+        case AUI_STYLEVAR_PADDING_LEFT: return &style->padding.left;
+        case AUI_STYLEVAR_MARGIN_TOP: return &style->margin.top;
+        case AUI_STYLEVAR_MARGIN_RIGHT: return &style->margin.right;
+        case AUI_STYLEVAR_MARGIN_BOTTOM: return &style->margin.bottom;
+        case AUI_STYLEVAR_MARGIN_LEFT: return &style->margin.left;
+        case AUI_STYLEVAR_BORDER_WIDTH: return &style->border.width.top;
+        case AUI_STYLEVAR_CORNER_RADIUS: return &style->corner_radius.top_left;
+        case AUI_STYLEVAR_OPACITY: return &style->opacity;
+        case AUI_STYLEVAR_FONT_SIZE: return &style->font_size;
         default: return NULL;
     }
 }
 
-void cui_push_style_var(CUI_Context *ctx, CUI_StyleVar var, float value)
+void aui_push_style_var(AUI_Context *ctx, AUI_StyleVar var, float value)
 {
     if (!ctx) return;
-    if (s_var_stack_depth >= CUI_STYLE_STACK_SIZE) return;
+    if (s_var_stack_depth >= AUI_STYLE_STACK_SIZE) return;
 
     /* Initialize current style if needed */
     if (!s_current_style_initialized) {
-        s_current_style = cui_style_from_theme(ctx);
+        s_current_style = aui_style_from_theme(ctx);
         s_current_style_initialized = true;
     }
 
-    float *ptr = cui_style_get_var_ptr(&s_current_style, var);
+    float *ptr = aui_style_get_var_ptr(&s_current_style, var);
     if (!ptr) return;
 
     /* Save old value */
@@ -283,52 +283,52 @@ void cui_push_style_var(CUI_Context *ctx, CUI_StyleVar var, float value)
     *ptr = value;
 
     /* For uniform properties, set all related values */
-    if (var == CUI_STYLEVAR_BORDER_WIDTH) {
-        s_current_style.border.width = cui_edges_uniform(value);
-    } else if (var == CUI_STYLEVAR_CORNER_RADIUS) {
-        s_current_style.corner_radius = cui_corners_uniform(value);
+    if (var == AUI_STYLEVAR_BORDER_WIDTH) {
+        s_current_style.border.width = aui_edges_uniform(value);
+    } else if (var == AUI_STYLEVAR_CORNER_RADIUS) {
+        s_current_style.corner_radius = aui_corners_uniform(value);
     }
 }
 
-void cui_pop_style_var(CUI_Context *ctx)
+void aui_pop_style_var(AUI_Context *ctx)
 {
     (void)ctx;
     if (s_var_stack_depth <= 0) return;
 
     s_var_stack_depth--;
-    CUI_StyleVarEntry *entry = &s_var_stack[s_var_stack_depth];
+    AUI_StyleVarEntry *entry = &s_var_stack[s_var_stack_depth];
 
-    float *ptr = cui_style_get_var_ptr(&s_current_style, entry->var);
+    float *ptr = aui_style_get_var_ptr(&s_current_style, entry->var);
     if (ptr) {
         *ptr = entry->old_value;
     }
 }
 
-static uint32_t *cui_style_get_color_ptr(CUI_Style *style, CUI_StyleColor color)
+static uint32_t *aui_style_get_color_ptr(AUI_Style *style, AUI_StyleColor color)
 {
     switch (color) {
-        case CUI_STYLECOLOR_BG: return &style->background.solid_color;
-        case CUI_STYLECOLOR_BG_HOVER: return &style->background_hover.solid_color;
-        case CUI_STYLECOLOR_BG_ACTIVE: return &style->background_active.solid_color;
-        case CUI_STYLECOLOR_BORDER: return &style->border.color;
-        case CUI_STYLECOLOR_TEXT: return &style->text_color;
-        case CUI_STYLECOLOR_TEXT_HOVER: return &style->text_color_hover;
+        case AUI_STYLECOLOR_BG: return &style->background.solid_color;
+        case AUI_STYLECOLOR_BG_HOVER: return &style->background_hover.solid_color;
+        case AUI_STYLECOLOR_BG_ACTIVE: return &style->background_active.solid_color;
+        case AUI_STYLECOLOR_BORDER: return &style->border.color;
+        case AUI_STYLECOLOR_TEXT: return &style->text_color;
+        case AUI_STYLECOLOR_TEXT_HOVER: return &style->text_color_hover;
         default: return NULL;
     }
 }
 
-void cui_push_style_color(CUI_Context *ctx, CUI_StyleColor color, uint32_t value)
+void aui_push_style_color(AUI_Context *ctx, AUI_StyleColor color, uint32_t value)
 {
     if (!ctx) return;
-    if (s_color_stack_depth >= CUI_STYLE_STACK_SIZE) return;
+    if (s_color_stack_depth >= AUI_STYLE_STACK_SIZE) return;
 
     /* Initialize current style if needed */
     if (!s_current_style_initialized) {
-        s_current_style = cui_style_from_theme(ctx);
+        s_current_style = aui_style_from_theme(ctx);
         s_current_style_initialized = true;
     }
 
-    uint32_t *ptr = cui_style_get_color_ptr(&s_current_style, color);
+    uint32_t *ptr = aui_style_get_color_ptr(&s_current_style, color);
     if (!ptr) return;
 
     /* Save old value */
@@ -340,33 +340,33 @@ void cui_push_style_color(CUI_Context *ctx, CUI_StyleColor color, uint32_t value
     *ptr = value;
 
     /* Ensure background type is solid when setting color */
-    if (color == CUI_STYLECOLOR_BG) {
-        s_current_style.background.type = CUI_BG_SOLID;
-    } else if (color == CUI_STYLECOLOR_BG_HOVER) {
-        s_current_style.background_hover.type = CUI_BG_SOLID;
-    } else if (color == CUI_STYLECOLOR_BG_ACTIVE) {
-        s_current_style.background_active.type = CUI_BG_SOLID;
+    if (color == AUI_STYLECOLOR_BG) {
+        s_current_style.background.type = AUI_BG_SOLID;
+    } else if (color == AUI_STYLECOLOR_BG_HOVER) {
+        s_current_style.background_hover.type = AUI_BG_SOLID;
+    } else if (color == AUI_STYLECOLOR_BG_ACTIVE) {
+        s_current_style.background_active.type = AUI_BG_SOLID;
     }
 }
 
-void cui_pop_style_color(CUI_Context *ctx)
+void aui_pop_style_color(AUI_Context *ctx)
 {
     (void)ctx;
     if (s_color_stack_depth <= 0) return;
 
     s_color_stack_depth--;
-    CUI_StyleColorEntry *entry = &s_color_stack[s_color_stack_depth];
+    AUI_StyleColorEntry *entry = &s_color_stack[s_color_stack_depth];
 
-    uint32_t *ptr = cui_style_get_color_ptr(&s_current_style, entry->color);
+    uint32_t *ptr = aui_style_get_color_ptr(&s_current_style, entry->color);
     if (ptr) {
         *ptr = entry->old_value;
     }
 }
 
-const CUI_Style *cui_get_current_style(const CUI_Context *ctx)
+const AUI_Style *aui_get_current_style(const AUI_Context *ctx)
 {
     if (!s_current_style_initialized && ctx) {
-        s_current_style = cui_style_from_theme(ctx);
+        s_current_style = aui_style_from_theme(ctx);
         s_current_style_initialized = true;
     }
     return &s_current_style;
@@ -376,21 +376,21 @@ const CUI_Style *cui_get_current_style(const CUI_Context *ctx)
  * Style Class Registry
  * ============================================================================ */
 
-#define CUI_MAX_STYLE_CLASSES 64
+#define AUI_MAX_STYLE_CLASSES 64
 
-static CUI_StyleClass s_style_classes[CUI_MAX_STYLE_CLASSES];
+static AUI_StyleClass s_style_classes[AUI_MAX_STYLE_CLASSES];
 static int s_style_class_count = 0;
 
-bool cui_register_style_class(CUI_Context *ctx, const char *name,
-                               const CUI_Style *style, const char *parent_name)
+bool aui_register_style_class(AUI_Context *ctx, const char *name,
+                               const AUI_Style *style, const char *parent_name)
 {
     (void)ctx;
     if (!name || !style) return false;
-    if (s_style_class_count >= CUI_MAX_STYLE_CLASSES) return false;
+    if (s_style_class_count >= AUI_MAX_STYLE_CLASSES) return false;
 
-    CUI_StyleClass *sc = &s_style_classes[s_style_class_count];
-    strncpy(sc->name, name, CUI_STYLE_CLASS_NAME_MAX - 1);
-    sc->name[CUI_STYLE_CLASS_NAME_MAX - 1] = '\0';
+    AUI_StyleClass *sc = &s_style_classes[s_style_class_count];
+    strncpy(sc->name, name, AUI_STYLE_CLASS_NAME_MAX - 1);
+    sc->name[AUI_STYLE_CLASS_NAME_MAX - 1] = '\0';
     sc->style = *style;
     sc->parent = NULL;
 
@@ -408,7 +408,7 @@ bool cui_register_style_class(CUI_Context *ctx, const char *name,
     return true;
 }
 
-CUI_StyleClass *cui_get_style_class(CUI_Context *ctx, const char *name)
+AUI_StyleClass *aui_get_style_class(AUI_Context *ctx, const char *name)
 {
     (void)ctx;
     if (!name) return NULL;
@@ -421,16 +421,16 @@ CUI_StyleClass *cui_get_style_class(CUI_Context *ctx, const char *name)
     return NULL;
 }
 
-CUI_Style cui_resolve_style_class(const CUI_StyleClass *style_class)
+AUI_Style aui_resolve_style_class(const AUI_StyleClass *style_class)
 {
-    CUI_Style result = cui_style_default();
+    AUI_Style result = aui_style_default();
     if (!style_class) return result;
 
     /* Build inheritance chain */
-    const CUI_StyleClass *chain[16];
+    const AUI_StyleClass *chain[16];
     int chain_len = 0;
 
-    const CUI_StyleClass *current = style_class;
+    const AUI_StyleClass *current = style_class;
     while (current && chain_len < 16) {
         chain[chain_len++] = current;
         current = current->parent;
@@ -438,7 +438,7 @@ CUI_Style cui_resolve_style_class(const CUI_StyleClass *style_class)
 
     /* Apply from root to leaf */
     for (int i = chain_len - 1; i >= 0; i--) {
-        cui_style_merge(&result, &chain[i]->style);
+        aui_style_merge(&result, &chain[i]->style);
     }
 
     return result;
@@ -448,12 +448,12 @@ CUI_Style cui_resolve_style_class(const CUI_StyleClass *style_class)
  * Color Interpolation Helpers
  * ============================================================================ */
 
-static inline uint8_t cui_lerp_u8(uint8_t a, uint8_t b, float t)
+static inline uint8_t aui_lerp_u8(uint8_t a, uint8_t b, float t)
 {
     return (uint8_t)(a + (b - a) * t);
 }
 
-static uint32_t cui_color_at_position(const CUI_Gradient *g, float pos)
+static uint32_t aui_color_at_position(const AUI_Gradient *g, float pos)
 {
     if (g->stop_count == 0) return 0xFFFFFFFF;
     if (g->stop_count == 1) return g->stops[0].color;
@@ -471,10 +471,10 @@ static uint32_t cui_color_at_position(const CUI_Gradient *g, float pos)
             uint32_t c1 = g->stops[i].color;
             uint32_t c2 = g->stops[i + 1].color;
 
-            uint8_t r = cui_lerp_u8((c1 >> 0) & 0xFF, (c2 >> 0) & 0xFF, t);
-            uint8_t g_ch = cui_lerp_u8((c1 >> 8) & 0xFF, (c2 >> 8) & 0xFF, t);
-            uint8_t b = cui_lerp_u8((c1 >> 16) & 0xFF, (c2 >> 16) & 0xFF, t);
-            uint8_t a = cui_lerp_u8((c1 >> 24) & 0xFF, (c2 >> 24) & 0xFF, t);
+            uint8_t r = aui_lerp_u8((c1 >> 0) & 0xFF, (c2 >> 0) & 0xFF, t);
+            uint8_t g_ch = aui_lerp_u8((c1 >> 8) & 0xFF, (c2 >> 8) & 0xFF, t);
+            uint8_t b = aui_lerp_u8((c1 >> 16) & 0xFF, (c2 >> 16) & 0xFF, t);
+            uint8_t a = aui_lerp_u8((c1 >> 24) & 0xFF, (c2 >> 24) & 0xFF, t);
 
             return (a << 24) | (b << 16) | (g_ch << 8) | r;
         }
@@ -488,7 +488,7 @@ static uint32_t cui_color_at_position(const CUI_Gradient *g, float pos)
  * ============================================================================ */
 
 /* Helper: Apply opacity to a color */
-static uint32_t cui_apply_opacity(uint32_t color, float opacity)
+static uint32_t aui_apply_opacity(uint32_t color, float opacity)
 {
     if (opacity >= 1.0f) return color;
     if (opacity <= 0.0f) return color & 0x00FFFFFF;
@@ -498,12 +498,12 @@ static uint32_t cui_apply_opacity(uint32_t color, float opacity)
     return (color & 0x00FFFFFF) | ((uint32_t)a << 24);
 }
 
-void cui_draw_gradient(CUI_Context *ctx, float x, float y, float w, float h,
-                       const CUI_Gradient *gradient)
+void aui_draw_gradient(AUI_Context *ctx, float x, float y, float w, float h,
+                       const AUI_Gradient *gradient)
 {
     if (!ctx || !gradient || w <= 0 || h <= 0) return;
 
-    if (gradient->type == CUI_GRADIENT_LINEAR) {
+    if (gradient->type == AUI_GRADIENT_LINEAR) {
         /* Linear gradient: draw as a series of vertical/horizontal strips */
         float angle_rad = gradient->angle * 3.14159265f / 180.0f;
         float cos_a = cosf(angle_rad);
@@ -518,8 +518,8 @@ void cui_draw_gradient(CUI_Context *ctx, float x, float y, float w, float h,
             float t0 = (float)i / strips;
             float t1 = (float)(i + 1) / strips;
 
-            uint32_t c0 = cui_color_at_position(gradient, t0);
-            uint32_t c1 = cui_color_at_position(gradient, t1);
+            uint32_t c0 = aui_color_at_position(gradient, t0);
+            uint32_t c1 = aui_color_at_position(gradient, t1);
 
             /* For horizontal gradient (angle = 0) */
             if (fabsf(cos_a) > fabsf(sin_a)) {
@@ -527,17 +527,17 @@ void cui_draw_gradient(CUI_Context *ctx, float x, float y, float w, float h,
                 float x1 = x + w * t1;
                 /* Draw quad with gradient colors at vertices */
                 /* Simplified: use average color per strip */
-                uint32_t avg = cui_color_at_position(gradient, (t0 + t1) * 0.5f);
-                cui_draw_rect(ctx, x0, y, x1 - x0, h, avg);
+                uint32_t avg = aui_color_at_position(gradient, (t0 + t1) * 0.5f);
+                aui_draw_rect(ctx, x0, y, x1 - x0, h, avg);
             } else {
                 /* Vertical gradient */
                 float y0 = y + h * t0;
                 float y1 = y + h * t1;
-                uint32_t avg = cui_color_at_position(gradient, (t0 + t1) * 0.5f);
-                cui_draw_rect(ctx, x, y0, w, y1 - y0, avg);
+                uint32_t avg = aui_color_at_position(gradient, (t0 + t1) * 0.5f);
+                aui_draw_rect(ctx, x, y0, w, y1 - y0, avg);
             }
         }
-    } else if (gradient->type == CUI_GRADIENT_RADIAL) {
+    } else if (gradient->type == AUI_GRADIENT_RADIAL) {
         /* Radial gradient: draw as concentric circles */
         /* Simplified: draw as a series of rectangles (full implementation would need circles) */
         float cx = x + w * gradient->center_x;
@@ -551,7 +551,7 @@ void cui_draw_gradient(CUI_Context *ctx, float x, float y, float w, float h,
         for (int i = rings - 1; i >= 0; i--) {
             float t = (float)i / rings;
             float r = max_r * (1.0f - t);
-            uint32_t color = cui_color_at_position(gradient, t);
+            uint32_t color = aui_color_at_position(gradient, t);
 
             /* Draw approximate circle as rect (proper implementation would draw arcs) */
             float rx = cx - r;
@@ -566,14 +566,14 @@ void cui_draw_gradient(CUI_Context *ctx, float x, float y, float w, float h,
             if (ry + rh > y + h) rh = y + h - ry;
 
             if (rw > 0 && rh > 0) {
-                cui_draw_rect(ctx, rx, ry, rw, rh, color);
+                aui_draw_rect(ctx, rx, ry, rw, rh, color);
             }
         }
     }
 }
 
-void cui_draw_shadow(CUI_Context *ctx, float x, float y, float w, float h,
-                     const CUI_Shadow *shadow, CUI_CornerRadius corners)
+void aui_draw_shadow(AUI_Context *ctx, float x, float y, float w, float h,
+                     const AUI_Shadow *shadow, AUI_CornerRadius corners)
 {
     if (!ctx || !shadow) return;
 
@@ -590,8 +590,8 @@ void cui_draw_shadow(CUI_Context *ctx, float x, float y, float w, float h,
             if (edge_h > 0) {
                 for (int i = 0; i < (int)edge_h; i++) {
                     float t = 1.0f - (float)i / edge_h;
-                    uint32_t c = cui_apply_opacity(color, t * 0.5f);
-                    cui_draw_rect(ctx, x, y + i, w, 1, c);
+                    uint32_t c = aui_apply_opacity(color, t * 0.5f);
+                    aui_draw_rect(ctx, x, y + i, w, 1, c);
                 }
             }
         }
@@ -602,8 +602,8 @@ void cui_draw_shadow(CUI_Context *ctx, float x, float y, float w, float h,
             if (edge_w > 0) {
                 for (int i = 0; i < (int)edge_w; i++) {
                     float t = 1.0f - (float)i / edge_w;
-                    uint32_t c = cui_apply_opacity(color, t * 0.5f);
-                    cui_draw_rect(ctx, x + i, y, 1, h, c);
+                    uint32_t c = aui_apply_opacity(color, t * 0.5f);
+                    aui_draw_rect(ctx, x + i, y, 1, h, c);
                 }
             }
         }
@@ -630,35 +630,35 @@ void cui_draw_shadow(CUI_Context *ctx, float x, float y, float w, float h,
                 float t = (float)i / layers;
                 float expand = blur * t;
                 float alpha = (1.0f - t) * 0.3f;
-                uint32_t c = cui_apply_opacity(shadow->color, alpha);
-                cui_draw_rect(ctx, sx - expand, sy - expand,
+                uint32_t c = aui_apply_opacity(shadow->color, alpha);
+                aui_draw_rect(ctx, sx - expand, sy - expand,
                               sw + expand * 2, sh + expand * 2, c);
             }
         }
 
         /* Core shadow */
-        cui_draw_rect(ctx, sx, sy, sw, sh, cui_apply_opacity(shadow->color, 0.4f));
+        aui_draw_rect(ctx, sx, sy, sw, sh, aui_apply_opacity(shadow->color, 0.4f));
     }
 }
 
-void cui_draw_nineslice(CUI_Context *ctx, float x, float y, float w, float h,
-                        struct Carbon_Texture *texture,
+void aui_draw_nineslice(AUI_Context *ctx, float x, float y, float w, float h,
+                        struct Agentite_Texture *texture,
                         float src_x, float src_y, float src_w, float src_h,
-                        CUI_Edges margins)
+                        AUI_Edges margins)
 {
     if (!ctx || !texture || w <= 0 || h <= 0) return;
 
-    /* TODO: Implement proper 9-slice rendering when Carbon_Texture is available */
+    /* TODO: Implement proper 9-slice rendering when Agentite_Texture is available */
     /* For now, just draw a placeholder rect */
     (void)src_x; (void)src_y; (void)src_w; (void)src_h;
     (void)margins;
 
     /* Placeholder: draw a simple rect */
-    cui_draw_rect(ctx, x, y, w, h, 0x80808080);
+    aui_draw_rect(ctx, x, y, w, h, 0x80808080);
 }
 
 /* Draw a filled quarter circle using horizontal scanlines */
-static void cui_draw_corner_filled(CUI_Context *ctx, float cx, float cy, float r,
+static void aui_draw_corner_filled(AUI_Context *ctx, float cx, float cy, float r,
                                     int quadrant, uint32_t color)
 {
     if (r < 1.0f) return;
@@ -687,12 +687,12 @@ static void cui_draw_corner_filled(CUI_Context *ctx, float cx, float cy, float r
         float y1 = cy - sinf(a1) * r;
 
         /* Draw triangle from center to arc edge */
-        cui_draw_triangle(ctx, cx, cy, x0, y0, x1, y1, color);
+        aui_draw_triangle(ctx, cx, cy, x0, y0, x1, y1, color);
     }
 }
 
-void cui_draw_rect_rounded_ex(CUI_Context *ctx, float x, float y, float w, float h,
-                               uint32_t color, CUI_CornerRadius corners)
+void aui_draw_rect_rounded_ex(AUI_Context *ctx, float x, float y, float w, float h,
+                               uint32_t color, AUI_CornerRadius corners)
 {
     if (!ctx || w <= 0 || h <= 0) return;
 
@@ -701,7 +701,7 @@ void cui_draw_rect_rounded_ex(CUI_Context *ctx, float x, float y, float w, float
                         fmaxf(corners.bottom_left, corners.bottom_right));
 
     if (max_r < 1.0f) {
-        cui_draw_rect(ctx, x, y, w, h, color);
+        aui_draw_rect(ctx, x, y, w, h, color);
         return;
     }
 
@@ -718,7 +718,7 @@ void cui_draw_rect_rounded_ex(CUI_Context *ctx, float x, float y, float w, float
     float mid_bot = fmaxf(bl, br);
     float mid_h = h - mid_top - mid_bot;
     if (mid_h > 0) {
-        cui_draw_rect(ctx, x, y + mid_top, w, mid_h, color);
+        aui_draw_rect(ctx, x, y + mid_top, w, mid_h, color);
     }
 
     /* Top band (between left and right corners) */
@@ -726,7 +726,7 @@ void cui_draw_rect_rounded_ex(CUI_Context *ctx, float x, float y, float w, float
         float top_x = x + tl;
         float top_w = w - tl - tr;
         if (top_w > 0) {
-            cui_draw_rect(ctx, top_x, y, top_w, mid_top, color);
+            aui_draw_rect(ctx, top_x, y, top_w, mid_top, color);
         }
     }
 
@@ -735,20 +735,20 @@ void cui_draw_rect_rounded_ex(CUI_Context *ctx, float x, float y, float w, float
         float bot_x = x + bl;
         float bot_w = w - bl - br;
         if (bot_w > 0) {
-            cui_draw_rect(ctx, bot_x, y + h - mid_bot, bot_w, mid_bot, color);
+            aui_draw_rect(ctx, bot_x, y + h - mid_bot, bot_w, mid_bot, color);
         }
     }
 
     /* Draw corner fills */
-    if (tl > 0) cui_draw_corner_filled(ctx, x + tl, y + tl, tl, 0, color);
-    if (tr > 0) cui_draw_corner_filled(ctx, x + w - tr, y + tr, tr, 1, color);
-    if (br > 0) cui_draw_corner_filled(ctx, x + w - br, y + h - br, br, 2, color);
-    if (bl > 0) cui_draw_corner_filled(ctx, x + bl, y + h - bl, bl, 3, color);
+    if (tl > 0) aui_draw_corner_filled(ctx, x + tl, y + tl, tl, 0, color);
+    if (tr > 0) aui_draw_corner_filled(ctx, x + w - tr, y + tr, tr, 1, color);
+    if (br > 0) aui_draw_corner_filled(ctx, x + w - br, y + h - br, br, 2, color);
+    if (bl > 0) aui_draw_corner_filled(ctx, x + bl, y + h - bl, bl, 3, color);
 }
 
-void cui_draw_rect_rounded_outline(CUI_Context *ctx, float x, float y, float w, float h,
+void aui_draw_rect_rounded_outline(AUI_Context *ctx, float x, float y, float w, float h,
                                     uint32_t color, float thickness,
-                                    CUI_CornerRadius corners)
+                                    AUI_CornerRadius corners)
 {
     if (!ctx || w <= 0 || h <= 0 || thickness <= 0) return;
 
@@ -759,7 +759,7 @@ void cui_draw_rect_rounded_outline(CUI_Context *ctx, float x, float y, float w, 
                         fmaxf(corners.bottom_left, corners.bottom_right));
 
     if (max_r < 1.0f) {
-        cui_draw_rect_outline(ctx, x, y, w, h, color, thickness);
+        aui_draw_rect_outline(ctx, x, y, w, h, color, thickness);
         return;
     }
 
@@ -778,19 +778,19 @@ void cui_draw_rect_rounded_outline(CUI_Context *ctx, float x, float y, float w, 
 
     /* Top edge */
     if (w - tl - tr > 0)
-        cui_draw_rect(ctx, x + tl, y, w - tl - tr, t, color);
+        aui_draw_rect(ctx, x + tl, y, w - tl - tr, t, color);
 
     /* Bottom edge */
     if (w - bl - br > 0)
-        cui_draw_rect(ctx, x + bl, y + h - t, w - bl - br, t, color);
+        aui_draw_rect(ctx, x + bl, y + h - t, w - bl - br, t, color);
 
     /* Left edge */
     if (h - tl - bl > 0)
-        cui_draw_rect(ctx, x, y + tl, t, h - tl - bl, color);
+        aui_draw_rect(ctx, x, y + tl, t, h - tl - bl, color);
 
     /* Right edge */
     if (h - tr - br > 0)
-        cui_draw_rect(ctx, x + w - t, y + tr, t, h - tr - br, color);
+        aui_draw_rect(ctx, x + w - t, y + tr, t, h - tr - br, color);
 
     /* Draw corner arcs using small filled segments */
     int segments = 8;
@@ -807,10 +807,10 @@ void cui_draw_rect_rounded_outline(CUI_Context *ctx, float x, float y, float w, 
             float ix0 = cosf(a0) * (tl - t), iy0 = sinf(a0) * (tl - t);
             float ix1 = cosf(a1) * (tl - t), iy1 = sinf(a1) * (tl - t);
             if (tl > t) {
-                cui_draw_triangle(ctx, cx + ox0, cy - oy0, cx + ox1, cy - oy1, cx + ix1, cy - iy1, color);
-                cui_draw_triangle(ctx, cx + ox0, cy - oy0, cx + ix1, cy - iy1, cx + ix0, cy - iy0, color);
+                aui_draw_triangle(ctx, cx + ox0, cy - oy0, cx + ox1, cy - oy1, cx + ix1, cy - iy1, color);
+                aui_draw_triangle(ctx, cx + ox0, cy - oy0, cx + ix1, cy - iy1, cx + ix0, cy - iy0, color);
             } else {
-                cui_draw_triangle(ctx, cx + ox0, cy - oy0, cx + ox1, cy - oy1, cx, cy, color);
+                aui_draw_triangle(ctx, cx + ox0, cy - oy0, cx + ox1, cy - oy1, cx, cy, color);
             }
         }
     }
@@ -826,10 +826,10 @@ void cui_draw_rect_rounded_outline(CUI_Context *ctx, float x, float y, float w, 
             float ix0 = cosf(a0) * (tr - t), iy0 = sinf(a0) * (tr - t);
             float ix1 = cosf(a1) * (tr - t), iy1 = sinf(a1) * (tr - t);
             if (tr > t) {
-                cui_draw_triangle(ctx, cx + ox0, cy - oy0, cx + ox1, cy - oy1, cx + ix1, cy - iy1, color);
-                cui_draw_triangle(ctx, cx + ox0, cy - oy0, cx + ix1, cy - iy1, cx + ix0, cy - iy0, color);
+                aui_draw_triangle(ctx, cx + ox0, cy - oy0, cx + ox1, cy - oy1, cx + ix1, cy - iy1, color);
+                aui_draw_triangle(ctx, cx + ox0, cy - oy0, cx + ix1, cy - iy1, cx + ix0, cy - iy0, color);
             } else {
-                cui_draw_triangle(ctx, cx + ox0, cy - oy0, cx + ox1, cy - oy1, cx, cy, color);
+                aui_draw_triangle(ctx, cx + ox0, cy - oy0, cx + ox1, cy - oy1, cx, cy, color);
             }
         }
     }
@@ -845,10 +845,10 @@ void cui_draw_rect_rounded_outline(CUI_Context *ctx, float x, float y, float w, 
             float ix0 = cosf(a0) * (br - t), iy0 = sinf(a0) * (br - t);
             float ix1 = cosf(a1) * (br - t), iy1 = sinf(a1) * (br - t);
             if (br > t) {
-                cui_draw_triangle(ctx, cx + ox0, cy + oy0, cx + ox1, cy + oy1, cx + ix1, cy + iy1, color);
-                cui_draw_triangle(ctx, cx + ox0, cy + oy0, cx + ix1, cy + iy1, cx + ix0, cy + iy0, color);
+                aui_draw_triangle(ctx, cx + ox0, cy + oy0, cx + ox1, cy + oy1, cx + ix1, cy + iy1, color);
+                aui_draw_triangle(ctx, cx + ox0, cy + oy0, cx + ix1, cy + iy1, cx + ix0, cy + iy0, color);
             } else {
-                cui_draw_triangle(ctx, cx + ox0, cy + oy0, cx + ox1, cy + oy1, cx, cy, color);
+                aui_draw_triangle(ctx, cx + ox0, cy + oy0, cx + ox1, cy + oy1, cx, cy, color);
             }
         }
     }
@@ -864,17 +864,17 @@ void cui_draw_rect_rounded_outline(CUI_Context *ctx, float x, float y, float w, 
             float ix0 = cosf(a0) * (bl - t), iy0 = sinf(a0) * (bl - t);
             float ix1 = cosf(a1) * (bl - t), iy1 = sinf(a1) * (bl - t);
             if (bl > t) {
-                cui_draw_triangle(ctx, cx + ox0, cy + oy0, cx + ox1, cy + oy1, cx + ix1, cy + iy1, color);
-                cui_draw_triangle(ctx, cx + ox0, cy + oy0, cx + ix1, cy + iy1, cx + ix0, cy + iy0, color);
+                aui_draw_triangle(ctx, cx + ox0, cy + oy0, cx + ox1, cy + oy1, cx + ix1, cy + iy1, color);
+                aui_draw_triangle(ctx, cx + ox0, cy + oy0, cx + ix1, cy + iy1, cx + ix0, cy + iy0, color);
             } else {
-                cui_draw_triangle(ctx, cx + ox0, cy + oy0, cx + ox1, cy + oy1, cx, cy, color);
+                aui_draw_triangle(ctx, cx + ox0, cy + oy0, cx + ox1, cy + oy1, cx, cy, color);
             }
         }
     }
 }
 
-void cui_draw_styled_rect(CUI_Context *ctx, float x, float y, float w, float h,
-                          const CUI_Style *style)
+void aui_draw_styled_rect(AUI_Context *ctx, float x, float y, float w, float h,
+                          const AUI_Style *style)
 {
     if (!ctx || !style || w <= 0 || h <= 0) return;
 
@@ -889,34 +889,34 @@ void cui_draw_styled_rect(CUI_Context *ctx, float x, float y, float w, float h,
     /* Draw shadows first (behind everything) */
     for (int i = 0; i < style->shadow_count; i++) {
         if (!style->shadows[i].inset) {
-            cui_draw_shadow(ctx, x, y, w, h, &style->shadows[i], style->corner_radius);
+            aui_draw_shadow(ctx, x, y, w, h, &style->shadows[i], style->corner_radius);
         }
     }
 
     /* Draw background */
-    const CUI_Background *bg = &style->background;
+    const AUI_Background *bg = &style->background;
     float opacity = style->opacity;
 
     switch (bg->type) {
-        case CUI_BG_NONE:
+        case AUI_BG_NONE:
             break;
 
-        case CUI_BG_SOLID:
-            cui_draw_rect_rounded_ex(ctx, x, y, w, h,
-                                      cui_apply_opacity(bg->solid_color, opacity),
+        case AUI_BG_SOLID:
+            aui_draw_rect_rounded_ex(ctx, x, y, w, h,
+                                      aui_apply_opacity(bg->solid_color, opacity),
                                       style->corner_radius);
             break;
 
-        case CUI_BG_GRADIENT:
-            cui_draw_gradient(ctx, x, y, w, h, &bg->gradient);
+        case AUI_BG_GRADIENT:
+            aui_draw_gradient(ctx, x, y, w, h, &bg->gradient);
             break;
 
-        case CUI_BG_TEXTURE:
+        case AUI_BG_TEXTURE:
             /* TODO: Implement textured background */
             break;
 
-        case CUI_BG_NINESLICE:
-            cui_draw_nineslice(ctx, x, y, w, h,
+        case AUI_BG_NINESLICE:
+            aui_draw_nineslice(ctx, x, y, w, h,
                                bg->nineslice.texture,
                                bg->nineslice.src_x, bg->nineslice.src_y,
                                bg->nineslice.src_w, bg->nineslice.src_h,
@@ -927,7 +927,7 @@ void cui_draw_styled_rect(CUI_Context *ctx, float x, float y, float w, float h,
     /* Draw inset shadows (after background) */
     for (int i = 0; i < style->shadow_count; i++) {
         if (style->shadows[i].inset) {
-            cui_draw_shadow(ctx, x, y, w, h, &style->shadows[i], style->corner_radius);
+            aui_draw_shadow(ctx, x, y, w, h, &style->shadows[i], style->corner_radius);
         }
     }
 
@@ -935,38 +935,38 @@ void cui_draw_styled_rect(CUI_Context *ctx, float x, float y, float w, float h,
     if (style->border.width.top > 0 || style->border.width.right > 0 ||
         style->border.width.bottom > 0 || style->border.width.left > 0) {
 
-        uint32_t border_color = cui_apply_opacity(style->border.color, opacity);
+        uint32_t border_color = aui_apply_opacity(style->border.color, opacity);
 
         if (style->border.use_per_side_colors) {
             /* Per-side border colors */
             uint32_t colors[4];
             for (int i = 0; i < 4; i++) {
-                colors[i] = cui_apply_opacity(style->border.colors[i], opacity);
+                colors[i] = aui_apply_opacity(style->border.colors[i], opacity);
             }
 
             /* Top */
             if (style->border.width.top > 0) {
-                cui_draw_rect(ctx, x, y, w, style->border.width.top, colors[0]);
+                aui_draw_rect(ctx, x, y, w, style->border.width.top, colors[0]);
             }
             /* Right */
             if (style->border.width.right > 0) {
-                cui_draw_rect(ctx, x + w - style->border.width.right, y,
+                aui_draw_rect(ctx, x + w - style->border.width.right, y,
                               style->border.width.right, h, colors[1]);
             }
             /* Bottom */
             if (style->border.width.bottom > 0) {
-                cui_draw_rect(ctx, x, y + h - style->border.width.bottom,
+                aui_draw_rect(ctx, x, y + h - style->border.width.bottom,
                               w, style->border.width.bottom, colors[2]);
             }
             /* Left */
             if (style->border.width.left > 0) {
-                cui_draw_rect(ctx, x, y, style->border.width.left, h, colors[3]);
+                aui_draw_rect(ctx, x, y, style->border.width.left, h, colors[3]);
             }
         } else {
             /* Uniform border */
             float avg_width = (style->border.width.top + style->border.width.right +
                                style->border.width.bottom + style->border.width.left) / 4.0f;
-            cui_draw_rect_rounded_outline(ctx, x, y, w, h, border_color,
+            aui_draw_rect_rounded_outline(ctx, x, y, w, h, border_color,
                                            avg_width, style->corner_radius);
         }
     }
@@ -979,12 +979,12 @@ void cui_draw_styled_rect(CUI_Context *ctx, float x, float y, float w, float h,
 /* Static buffer for ellipsis truncation */
 static char s_ellipsis_buffer[1024];
 
-const char *cui_truncate_text_ellipsis(CUI_Context *ctx, const char *text,
+const char *aui_truncate_text_ellipsis(AUI_Context *ctx, const char *text,
                                         float max_width)
 {
     if (!ctx || !text || max_width <= 0) return text;
 
-    float text_w = cui_text_width(ctx, text);
+    float text_w = aui_text_width(ctx, text);
     if (text_w <= max_width) return text;
 
     /* Binary search for the right truncation point */
@@ -992,7 +992,7 @@ const char *cui_truncate_text_ellipsis(CUI_Context *ctx, const char *text,
     if (len == 0) return text;
 
     /* Measure ellipsis width */
-    float ellipsis_w = cui_text_width(ctx, "...");
+    float ellipsis_w = aui_text_width(ctx, "...");
     float available = max_width - ellipsis_w;
     if (available <= 0) {
         s_ellipsis_buffer[0] = '.';
@@ -1007,7 +1007,7 @@ const char *cui_truncate_text_ellipsis(CUI_Context *ctx, const char *text,
     for (size_t i = 1; i <= len && i < sizeof(s_ellipsis_buffer) - 4; i++) {
         strncpy(s_ellipsis_buffer, text, i);
         s_ellipsis_buffer[i] = '\0';
-        if (cui_text_width(ctx, s_ellipsis_buffer) > available) {
+        if (aui_text_width(ctx, s_ellipsis_buffer) > available) {
             break;
         }
         fit = i;
@@ -1029,13 +1029,13 @@ const char *cui_truncate_text_ellipsis(CUI_Context *ctx, const char *text,
 typedef struct {
     const char *start;
     size_t length;
-} CUI_TextLine;
+} AUI_TextLine;
 
-#define CUI_MAX_WRAP_LINES 64
+#define AUI_MAX_WRAP_LINES 64
 
-static int cui_wrap_text(CUI_Context *ctx, const char *text, float max_width,
+static int aui_wrap_text(AUI_Context *ctx, const char *text, float max_width,
                           float letter_spacing, float word_spacing,
-                          CUI_TextLine *lines, int max_lines_count)
+                          AUI_TextLine *lines, int max_lines_count)
 {
     if (!ctx || !text || !lines || max_width <= 0) return 0;
 
@@ -1058,7 +1058,7 @@ static int cui_wrap_text(CUI_Context *ctx, const char *text, float max_width,
         measure_buf[line_len] = '\0';
 
         /* Account for letter spacing (approximate) */
-        float line_w = cui_text_width(ctx, measure_buf);
+        float line_w = aui_text_width(ctx, measure_buf);
         if (letter_spacing != 0 && line_len > 1) {
             line_w += letter_spacing * (line_len - 1);
         }
@@ -1107,8 +1107,8 @@ static int cui_wrap_text(CUI_Context *ctx, const char *text, float max_width,
     return line_count;
 }
 
-float cui_measure_styled_text(CUI_Context *ctx, const char *text,
-                              float max_width, const CUI_TextStyle *style,
+float aui_measure_styled_text(AUI_Context *ctx, const char *text,
+                              float max_width, const AUI_TextStyle *style,
                               float *out_height)
 {
     if (!ctx || !text) {
@@ -1116,15 +1116,15 @@ float cui_measure_styled_text(CUI_Context *ctx, const char *text,
         return 0;
     }
 
-    CUI_TextStyle default_style = cui_text_style_default();
+    AUI_TextStyle default_style = aui_text_style_default();
     if (!style) style = &default_style;
 
-    float base_height = cui_text_height(ctx);
+    float base_height = aui_text_height(ctx);
     float line_h = base_height * style->line_height;
 
     /* Simple case: no wrapping */
-    if (!style->wrap && style->overflow != CUI_TEXT_OVERFLOW_WRAP) {
-        float w = cui_text_width(ctx, text);
+    if (!style->wrap && style->overflow != AUI_TEXT_OVERFLOW_WRAP) {
+        float w = aui_text_width(ctx, text);
         /* Add letter spacing */
         if (style->letter_spacing != 0) {
             size_t len = strlen(text);
@@ -1135,10 +1135,10 @@ float cui_measure_styled_text(CUI_Context *ctx, const char *text,
     }
 
     /* Wrapping case */
-    CUI_TextLine lines[CUI_MAX_WRAP_LINES];
-    int line_count = cui_wrap_text(ctx, text, max_width,
+    AUI_TextLine lines[AUI_MAX_WRAP_LINES];
+    int line_count = aui_wrap_text(ctx, text, max_width,
                                     style->letter_spacing, style->word_spacing,
-                                    lines, CUI_MAX_WRAP_LINES);
+                                    lines, AUI_MAX_WRAP_LINES);
 
     if (style->max_lines > 0 && line_count > style->max_lines) {
         line_count = style->max_lines;
@@ -1152,7 +1152,7 @@ float cui_measure_styled_text(CUI_Context *ctx, const char *text,
         if (len >= sizeof(line_buf)) len = sizeof(line_buf) - 1;
         strncpy(line_buf, lines[i].start, len);
         line_buf[len] = '\0';
-        float w = cui_text_width(ctx, line_buf);
+        float w = aui_text_width(ctx, line_buf);
         if (w > max_w) max_w = w;
     }
 
@@ -1160,32 +1160,32 @@ float cui_measure_styled_text(CUI_Context *ctx, const char *text,
     return max_w;
 }
 
-float cui_draw_styled_text(CUI_Context *ctx, const char *text,
+float aui_draw_styled_text(AUI_Context *ctx, const char *text,
                            float x, float y, float max_width, float max_height,
-                           uint32_t color, const CUI_TextStyle *style)
+                           uint32_t color, const AUI_TextStyle *style)
 {
     if (!ctx || !text || !text[0]) return 0;
 
-    CUI_TextStyle default_style = cui_text_style_default();
+    AUI_TextStyle default_style = aui_text_style_default();
     if (!style) style = &default_style;
 
-    float base_height = cui_text_height(ctx);
+    float base_height = aui_text_height(ctx);
     float line_h = base_height * style->line_height;
 
     /* Handle overflow modes */
-    bool should_wrap = style->wrap || style->overflow == CUI_TEXT_OVERFLOW_WRAP;
-    bool should_clip = style->overflow == CUI_TEXT_OVERFLOW_CLIP;
-    bool should_ellipsis = style->overflow == CUI_TEXT_OVERFLOW_ELLIPSIS;
+    bool should_wrap = style->wrap || style->overflow == AUI_TEXT_OVERFLOW_WRAP;
+    bool should_clip = style->overflow == AUI_TEXT_OVERFLOW_CLIP;
+    bool should_ellipsis = style->overflow == AUI_TEXT_OVERFLOW_ELLIPSIS;
 
     /* Build list of lines */
-    CUI_TextLine lines[CUI_MAX_WRAP_LINES];
+    AUI_TextLine lines[AUI_MAX_WRAP_LINES];
     int line_count = 1;
     char single_line_buf[512];
 
     if (should_wrap && max_width > 0) {
-        line_count = cui_wrap_text(ctx, text, max_width,
+        line_count = aui_wrap_text(ctx, text, max_width,
                                     style->letter_spacing, style->word_spacing,
-                                    lines, CUI_MAX_WRAP_LINES);
+                                    lines, AUI_MAX_WRAP_LINES);
     } else {
         /* Single line */
         lines[0].start = text;
@@ -1204,13 +1204,13 @@ float cui_draw_styled_text(CUI_Context *ctx, const char *text,
     float y_offset = 0;
     if (max_height > 0) {
         switch (style->valign) {
-            case CUI_TEXT_VALIGN_TOP:
+            case AUI_TEXT_VALIGN_TOP:
                 y_offset = 0;
                 break;
-            case CUI_TEXT_VALIGN_MIDDLE:
+            case AUI_TEXT_VALIGN_MIDDLE:
                 y_offset = (max_height - total_height) / 2;
                 break;
-            case CUI_TEXT_VALIGN_BOTTOM:
+            case AUI_TEXT_VALIGN_BOTTOM:
                 y_offset = max_height - total_height;
                 break;
         }
@@ -1220,7 +1220,7 @@ float cui_draw_styled_text(CUI_Context *ctx, const char *text,
     /* Set up clipping if needed */
     bool pushed_scissor = false;
     if (should_clip && max_width > 0 && max_height > 0) {
-        cui_push_scissor(ctx, x, y, max_width, max_height);
+        aui_push_scissor(ctx, x, y, max_width, max_height);
         pushed_scissor = true;
     }
 
@@ -1237,16 +1237,16 @@ float cui_draw_styled_text(CUI_Context *ctx, const char *text,
 
         /* Handle ellipsis for last line if we hit max_lines */
         if (should_ellipsis && max_width > 0) {
-            float line_w = cui_text_width(ctx, line_buf);
+            float line_w = aui_text_width(ctx, line_buf);
             if (line_w > max_width) {
-                const char *truncated = cui_truncate_text_ellipsis(ctx, line_buf, max_width);
+                const char *truncated = aui_truncate_text_ellipsis(ctx, line_buf, max_width);
                 strncpy(line_buf, truncated, sizeof(line_buf) - 1);
                 line_buf[sizeof(line_buf) - 1] = '\0';
             }
         }
 
         /* Measure line for horizontal alignment */
-        float line_w = cui_text_width(ctx, line_buf);
+        float line_w = aui_text_width(ctx, line_buf);
         if (style->letter_spacing != 0 && len > 1) {
             line_w += style->letter_spacing * (len - 1);
         }
@@ -1255,16 +1255,16 @@ float cui_draw_styled_text(CUI_Context *ctx, const char *text,
         float x_offset = 0;
         if (max_width > 0) {
             switch (style->align) {
-                case CUI_TEXT_ALIGN_LEFT:
+                case AUI_TEXT_ALIGN_LEFT:
                     x_offset = 0;
                     break;
-                case CUI_TEXT_ALIGN_CENTER:
+                case AUI_TEXT_ALIGN_CENTER:
                     x_offset = (max_width - line_w) / 2;
                     break;
-                case CUI_TEXT_ALIGN_RIGHT:
+                case AUI_TEXT_ALIGN_RIGHT:
                     x_offset = max_width - line_w;
                     break;
-                case CUI_TEXT_ALIGN_JUSTIFY:
+                case AUI_TEXT_ALIGN_JUSTIFY:
                     /* TODO: Implement justify by adjusting word_spacing */
                     x_offset = 0;
                     break;
@@ -1296,15 +1296,15 @@ float cui_draw_styled_text(CUI_Context *ctx, const char *text,
                     uint32_t c = (shadow_color & 0x00FFFFFF) | ((uint32_t)alpha << 24);
 
                     /* Draw at offsets to simulate blur */
-                    cui_draw_text(ctx, line_buf, shadow_x - offset, shadow_y, c);
-                    cui_draw_text(ctx, line_buf, shadow_x + offset, shadow_y, c);
-                    cui_draw_text(ctx, line_buf, shadow_x, shadow_y - offset, c);
-                    cui_draw_text(ctx, line_buf, shadow_x, shadow_y + offset, c);
+                    aui_draw_text(ctx, line_buf, shadow_x - offset, shadow_y, c);
+                    aui_draw_text(ctx, line_buf, shadow_x + offset, shadow_y, c);
+                    aui_draw_text(ctx, line_buf, shadow_x, shadow_y - offset, c);
+                    aui_draw_text(ctx, line_buf, shadow_x, shadow_y + offset, c);
                 }
             }
 
             /* Core shadow */
-            cui_draw_text(ctx, line_buf, shadow_x, shadow_y, style->shadow.color);
+            aui_draw_text(ctx, line_buf, shadow_x, shadow_y, style->shadow.color);
         }
 
         /* Draw the actual text */
@@ -1314,18 +1314,18 @@ float cui_draw_styled_text(CUI_Context *ctx, const char *text,
             char char_buf[2] = {0, 0};
             for (size_t c = 0; c < len; c++) {
                 char_buf[0] = line_buf[c];
-                cui_draw_text(ctx, char_buf, char_x, draw_y, color);
-                char_x += cui_text_width(ctx, char_buf) + style->letter_spacing;
+                aui_draw_text(ctx, char_buf, char_x, draw_y, color);
+                char_x += aui_text_width(ctx, char_buf) + style->letter_spacing;
             }
         } else {
-            cui_draw_text(ctx, line_buf, draw_x, draw_y, color);
+            aui_draw_text(ctx, line_buf, draw_x, draw_y, color);
         }
 
         current_y += line_h;
     }
 
     if (pushed_scissor) {
-        cui_pop_scissor(ctx);
+        aui_pop_scissor(ctx);
     }
 
     return total_height;

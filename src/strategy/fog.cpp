@@ -3,10 +3,10 @@
  * @brief Fog of War / Exploration System implementation
  */
 
-#include "carbon/carbon.h"
-#include "carbon/fog.h"
-#include "carbon/error.h"
-#include "carbon/validate.h"
+#include "agentite/agentite.h"
+#include "agentite/fog.h"
+#include "agentite/error.h"
+#include "agentite/validate.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -19,23 +19,23 @@
 /**
  * @brief Vision source data
  */
-typedef struct Carbon_VisionSourceData {
+typedef struct Agentite_VisionSourceData {
     int x;              /**< X position */
     int y;              /**< Y position */
     int radius;         /**< Vision radius */
     bool active;        /**< Is this slot in use */
-} Carbon_VisionSourceData;
+} Agentite_VisionSourceData;
 
 /**
  * @brief Fog of war structure
  */
-struct Carbon_FogOfWar {
+struct Agentite_FogOfWar {
     int width;                          /**< Map width */
     int height;                         /**< Map height */
     uint8_t *exploration;               /**< Exploration state grid (0=unexplored, 1+=explored) */
     uint8_t *visibility;                /**< Current visibility grid (0=not visible, 1+=visible) */
 
-    Carbon_VisionSourceData *sources;   /**< Vision sources array */
+    Agentite_VisionSourceData *sources;   /**< Vision sources array */
     int source_capacity;                /**< Sources array capacity */
     int source_count;                   /**< Active source count */
     uint32_t next_source_id;            /**< Next source ID to assign */
@@ -44,9 +44,9 @@ struct Carbon_FogOfWar {
     bool dirty;                         /**< Needs visibility recalculation */
 
     /* Callbacks */
-    Carbon_ExplorationCallback exploration_callback;
+    Agentite_ExplorationCallback exploration_callback;
     void *exploration_userdata;
-    Carbon_VisionBlockerCallback los_callback;
+    Agentite_VisionBlockerCallback los_callback;
     void *los_userdata;
 };
 
@@ -60,29 +60,29 @@ static inline int clamp_coord(int v, int min_val, int max_val) {
     return v;
 }
 
-static inline int get_index(Carbon_FogOfWar *fog, int x, int y) {
+static inline int get_index(Agentite_FogOfWar *fog, int x, int y) {
     return y * fog->width + x;
 }
 
-static inline bool in_bounds(Carbon_FogOfWar *fog, int x, int y) {
+static inline bool in_bounds(Agentite_FogOfWar *fog, int x, int y) {
     return x >= 0 && x < fog->width && y >= 0 && y < fog->height;
 }
 
 /**
  * @brief Find a vision source by ID
  */
-static Carbon_VisionSourceData *find_source(Carbon_FogOfWar *fog, Carbon_VisionSource id) {
-    if (id == CARBON_VISION_SOURCE_INVALID || id > (uint32_t)fog->source_capacity) {
+static Agentite_VisionSourceData *find_source(Agentite_FogOfWar *fog, Agentite_VisionSource id) {
+    if (id == AGENTITE_VISION_SOURCE_INVALID || id > (uint32_t)fog->source_capacity) {
         return NULL;
     }
-    Carbon_VisionSourceData *source = &fog->sources[id - 1];
+    Agentite_VisionSourceData *source = &fog->sources[id - 1];
     return source->active ? source : NULL;
 }
 
 /**
  * @brief Bresenham line check for LOS
  */
-static bool check_los_line(Carbon_FogOfWar *fog, int x1, int y1, int x2, int y2) {
+static bool check_los_line(Agentite_FogOfWar *fog, int x1, int y1, int x2, int y2) {
     if (!fog->los_callback) {
         return true;  /* No LOS checking, always visible */
     }
@@ -121,7 +121,7 @@ static bool check_los_line(Carbon_FogOfWar *fog, int x1, int y1, int x2, int y2)
 /**
  * @brief Apply visibility from a single source
  */
-static void apply_source_visibility(Carbon_FogOfWar *fog, Carbon_VisionSourceData *source) {
+static void apply_source_visibility(Agentite_FogOfWar *fog, Agentite_VisionSourceData *source) {
     int cx = source->x;
     int cy = source->y;
     int r = source->radius;
@@ -166,15 +166,15 @@ static void apply_source_visibility(Carbon_FogOfWar *fog, Carbon_VisionSourceDat
  * Creation and Destruction
  * ========================================================================= */
 
-Carbon_FogOfWar *carbon_fog_create(int width, int height) {
+Agentite_FogOfWar *agentite_fog_create(int width, int height) {
     if (width <= 0 || height <= 0) {
-        carbon_set_error("Fog: Invalid dimensions %dx%d", width, height);
+        agentite_set_error("Fog: Invalid dimensions %dx%d", width, height);
         return NULL;
     }
 
-    Carbon_FogOfWar *fog = CARBON_ALLOC(Carbon_FogOfWar);
+    Agentite_FogOfWar *fog = AGENTITE_ALLOC(Agentite_FogOfWar);
     if (!fog) {
-        carbon_set_error("Fog: Failed to allocate fog structure");
+        agentite_set_error("Fog: Failed to allocate fog structure");
         return NULL;
     }
 
@@ -186,7 +186,7 @@ Carbon_FogOfWar *carbon_fog_create(int width, int height) {
     fog->visibility = (uint8_t*)calloc(grid_size, sizeof(uint8_t));
 
     if (!fog->exploration || !fog->visibility) {
-        carbon_set_error("Fog: Failed to allocate grids");
+        agentite_set_error("Fog: Failed to allocate grids");
         free(fog->exploration);
         free(fog->visibility);
         free(fog);
@@ -194,10 +194,10 @@ Carbon_FogOfWar *carbon_fog_create(int width, int height) {
     }
 
     /* Allocate sources array */
-    fog->source_capacity = CARBON_FOG_MAX_SOURCES;
-    fog->sources = CARBON_ALLOC_ARRAY(Carbon_VisionSourceData, fog->source_capacity);
+    fog->source_capacity = AGENTITE_FOG_MAX_SOURCES;
+    fog->sources = AGENTITE_ALLOC_ARRAY(Agentite_VisionSourceData, fog->source_capacity);
     if (!fog->sources) {
-        carbon_set_error("Fog: Failed to allocate sources");
+        agentite_set_error("Fog: Failed to allocate sources");
         free(fog->exploration);
         free(fog->visibility);
         free(fog);
@@ -212,7 +212,7 @@ Carbon_FogOfWar *carbon_fog_create(int width, int height) {
     return fog;
 }
 
-void carbon_fog_destroy(Carbon_FogOfWar *fog) {
+void agentite_fog_destroy(Agentite_FogOfWar *fog) {
     if (!fog) return;
     free(fog->exploration);
     free(fog->visibility);
@@ -220,8 +220,8 @@ void carbon_fog_destroy(Carbon_FogOfWar *fog) {
     free(fog);
 }
 
-void carbon_fog_reset(Carbon_FogOfWar *fog) {
-    CARBON_VALIDATE_PTR(fog);
+void agentite_fog_reset(Agentite_FogOfWar *fog) {
+    AGENTITE_VALIDATE_PTR(fog);
 
     size_t grid_size = (size_t)fog->width * (size_t)fog->height;
     memset(fog->exploration, 0, grid_size);
@@ -235,16 +235,16 @@ void carbon_fog_reset(Carbon_FogOfWar *fog) {
     fog->dirty = false;
 }
 
-void carbon_fog_reveal_all(Carbon_FogOfWar *fog) {
-    CARBON_VALIDATE_PTR(fog);
+void agentite_fog_reveal_all(Agentite_FogOfWar *fog) {
+    AGENTITE_VALIDATE_PTR(fog);
 
     size_t grid_size = (size_t)fog->width * (size_t)fog->height;
     memset(fog->exploration, 1, grid_size);
     memset(fog->visibility, 1, grid_size);
 }
 
-void carbon_fog_explore_all(Carbon_FogOfWar *fog) {
-    CARBON_VALIDATE_PTR(fog);
+void agentite_fog_explore_all(Agentite_FogOfWar *fog) {
+    AGENTITE_VALIDATE_PTR(fog);
 
     size_t grid_size = (size_t)fog->width * (size_t)fog->height;
     memset(fog->exploration, 1, grid_size);
@@ -255,8 +255,8 @@ void carbon_fog_explore_all(Carbon_FogOfWar *fog) {
  * Vision Sources
  * ========================================================================= */
 
-Carbon_VisionSource carbon_fog_add_source(Carbon_FogOfWar *fog, int x, int y, int radius) {
-    CARBON_VALIDATE_PTR_RET(fog, CARBON_VISION_SOURCE_INVALID);
+Agentite_VisionSource agentite_fog_add_source(Agentite_FogOfWar *fog, int x, int y, int radius) {
+    AGENTITE_VALIDATE_PTR_RET(fog, AGENTITE_VISION_SOURCE_INVALID);
 
     /* Find free slot */
     int slot = -1;
@@ -268,8 +268,8 @@ Carbon_VisionSource carbon_fog_add_source(Carbon_FogOfWar *fog, int x, int y, in
     }
 
     if (slot < 0) {
-        carbon_set_error("Fog: Maximum vision sources reached (%d)", CARBON_FOG_MAX_SOURCES);
-        return CARBON_VISION_SOURCE_INVALID;
+        agentite_set_error("Fog: Maximum vision sources reached (%d)", AGENTITE_FOG_MAX_SOURCES);
+        return AGENTITE_VISION_SOURCE_INVALID;
     }
 
     fog->sources[slot].x = x;
@@ -279,13 +279,13 @@ Carbon_VisionSource carbon_fog_add_source(Carbon_FogOfWar *fog, int x, int y, in
     fog->source_count++;
     fog->dirty = true;
 
-    return (Carbon_VisionSource)(slot + 1);  /* IDs are 1-based */
+    return (Agentite_VisionSource)(slot + 1);  /* IDs are 1-based */
 }
 
-void carbon_fog_remove_source(Carbon_FogOfWar *fog, Carbon_VisionSource source) {
-    CARBON_VALIDATE_PTR(fog);
+void agentite_fog_remove_source(Agentite_FogOfWar *fog, Agentite_VisionSource source) {
+    AGENTITE_VALIDATE_PTR(fog);
 
-    Carbon_VisionSourceData *s = find_source(fog, source);
+    Agentite_VisionSourceData *s = find_source(fog, source);
     if (s) {
         s->active = false;
         fog->source_count--;
@@ -293,10 +293,10 @@ void carbon_fog_remove_source(Carbon_FogOfWar *fog, Carbon_VisionSource source) 
     }
 }
 
-void carbon_fog_move_source(Carbon_FogOfWar *fog, Carbon_VisionSource source, int new_x, int new_y) {
-    CARBON_VALIDATE_PTR(fog);
+void agentite_fog_move_source(Agentite_FogOfWar *fog, Agentite_VisionSource source, int new_x, int new_y) {
+    AGENTITE_VALIDATE_PTR(fog);
 
-    Carbon_VisionSourceData *s = find_source(fog, source);
+    Agentite_VisionSourceData *s = find_source(fog, source);
     if (s) {
         if (s->x != new_x || s->y != new_y) {
             s->x = new_x;
@@ -306,10 +306,10 @@ void carbon_fog_move_source(Carbon_FogOfWar *fog, Carbon_VisionSource source, in
     }
 }
 
-void carbon_fog_set_source_radius(Carbon_FogOfWar *fog, Carbon_VisionSource source, int new_radius) {
-    CARBON_VALIDATE_PTR(fog);
+void agentite_fog_set_source_radius(Agentite_FogOfWar *fog, Agentite_VisionSource source, int new_radius) {
+    AGENTITE_VALIDATE_PTR(fog);
 
-    Carbon_VisionSourceData *s = find_source(fog, source);
+    Agentite_VisionSourceData *s = find_source(fog, source);
     if (s) {
         new_radius = new_radius > 0 ? new_radius : 0;
         if (s->radius != new_radius) {
@@ -319,11 +319,11 @@ void carbon_fog_set_source_radius(Carbon_FogOfWar *fog, Carbon_VisionSource sour
     }
 }
 
-bool carbon_fog_get_source(Carbon_FogOfWar *fog, Carbon_VisionSource source,
+bool agentite_fog_get_source(Agentite_FogOfWar *fog, Agentite_VisionSource source,
                            int *out_x, int *out_y, int *out_radius) {
-    CARBON_VALIDATE_PTR_RET(fog, false);
+    AGENTITE_VALIDATE_PTR_RET(fog, false);
 
-    Carbon_VisionSourceData *s = find_source(fog, source);
+    Agentite_VisionSourceData *s = find_source(fog, source);
     if (!s) return false;
 
     if (out_x) *out_x = s->x;
@@ -332,8 +332,8 @@ bool carbon_fog_get_source(Carbon_FogOfWar *fog, Carbon_VisionSource source,
     return true;
 }
 
-void carbon_fog_clear_sources(Carbon_FogOfWar *fog) {
-    CARBON_VALIDATE_PTR(fog);
+void agentite_fog_clear_sources(Agentite_FogOfWar *fog) {
+    AGENTITE_VALIDATE_PTR(fog);
 
     for (int i = 0; i < fog->source_capacity; i++) {
         fog->sources[i].active = false;
@@ -346,8 +346,8 @@ void carbon_fog_clear_sources(Carbon_FogOfWar *fog) {
     memset(fog->visibility, 0, grid_size);
 }
 
-int carbon_fog_source_count(Carbon_FogOfWar *fog) {
-    CARBON_VALIDATE_PTR_RET(fog, 0);
+int agentite_fog_source_count(Agentite_FogOfWar *fog) {
+    AGENTITE_VALIDATE_PTR_RET(fog, 0);
     return fog->source_count;
 }
 
@@ -355,15 +355,15 @@ int carbon_fog_source_count(Carbon_FogOfWar *fog) {
  * Visibility Updates
  * ========================================================================= */
 
-void carbon_fog_update(Carbon_FogOfWar *fog) {
-    CARBON_VALIDATE_PTR(fog);
+void agentite_fog_update(Agentite_FogOfWar *fog) {
+    AGENTITE_VALIDATE_PTR(fog);
 
     if (!fog->dirty) return;
-    carbon_fog_force_update(fog);
+    agentite_fog_force_update(fog);
 }
 
-void carbon_fog_force_update(Carbon_FogOfWar *fog) {
-    CARBON_VALIDATE_PTR(fog);
+void agentite_fog_force_update(Agentite_FogOfWar *fog) {
+    AGENTITE_VALIDATE_PTR(fog);
 
     /* Clear current visibility */
     size_t grid_size = (size_t)fog->width * (size_t)fog->height;
@@ -383,72 +383,72 @@ void carbon_fog_force_update(Carbon_FogOfWar *fog) {
  * Visibility Queries
  * ========================================================================= */
 
-Carbon_VisibilityState carbon_fog_get_state(Carbon_FogOfWar *fog, int x, int y) {
-    CARBON_VALIDATE_PTR_RET(fog, CARBON_VIS_UNEXPLORED);
+Agentite_VisibilityState agentite_fog_get_state(Agentite_FogOfWar *fog, int x, int y) {
+    AGENTITE_VALIDATE_PTR_RET(fog, AGENTITE_VIS_UNEXPLORED);
 
     if (!in_bounds(fog, x, y)) {
-        return CARBON_VIS_UNEXPLORED;
+        return AGENTITE_VIS_UNEXPLORED;
     }
 
     int idx = get_index(fog, x, y);
 
     if (fog->visibility[idx] > 0) {
-        return CARBON_VIS_VISIBLE;
+        return AGENTITE_VIS_VISIBLE;
     } else if (fog->exploration[idx] > 0) {
-        return CARBON_VIS_EXPLORED;
+        return AGENTITE_VIS_EXPLORED;
     } else {
-        return CARBON_VIS_UNEXPLORED;
+        return AGENTITE_VIS_UNEXPLORED;
     }
 }
 
-bool carbon_fog_is_visible(Carbon_FogOfWar *fog, int x, int y) {
-    CARBON_VALIDATE_PTR_RET(fog, false);
+bool agentite_fog_is_visible(Agentite_FogOfWar *fog, int x, int y) {
+    AGENTITE_VALIDATE_PTR_RET(fog, false);
 
     if (!in_bounds(fog, x, y)) return false;
     return fog->visibility[get_index(fog, x, y)] > 0;
 }
 
-bool carbon_fog_is_explored(Carbon_FogOfWar *fog, int x, int y) {
-    CARBON_VALIDATE_PTR_RET(fog, false);
+bool agentite_fog_is_explored(Agentite_FogOfWar *fog, int x, int y) {
+    AGENTITE_VALIDATE_PTR_RET(fog, false);
 
     if (!in_bounds(fog, x, y)) return false;
     int idx = get_index(fog, x, y);
     return fog->exploration[idx] > 0 || fog->visibility[idx] > 0;
 }
 
-bool carbon_fog_is_unexplored(Carbon_FogOfWar *fog, int x, int y) {
-    CARBON_VALIDATE_PTR_RET(fog, true);
+bool agentite_fog_is_unexplored(Agentite_FogOfWar *fog, int x, int y) {
+    AGENTITE_VALIDATE_PTR_RET(fog, true);
 
     if (!in_bounds(fog, x, y)) return true;
     int idx = get_index(fog, x, y);
     return fog->exploration[idx] == 0 && fog->visibility[idx] == 0;
 }
 
-float carbon_fog_get_alpha(Carbon_FogOfWar *fog, int x, int y) {
-    CARBON_VALIDATE_PTR_RET(fog, 0.0f);
+float agentite_fog_get_alpha(Agentite_FogOfWar *fog, int x, int y) {
+    AGENTITE_VALIDATE_PTR_RET(fog, 0.0f);
 
-    Carbon_VisibilityState state = carbon_fog_get_state(fog, x, y);
+    Agentite_VisibilityState state = agentite_fog_get_state(fog, x, y);
     switch (state) {
-        case CARBON_VIS_VISIBLE:
+        case AGENTITE_VIS_VISIBLE:
             return 1.0f;
-        case CARBON_VIS_EXPLORED:
+        case AGENTITE_VIS_EXPLORED:
             return fog->shroud_alpha;
-        case CARBON_VIS_UNEXPLORED:
+        case AGENTITE_VIS_UNEXPLORED:
         default:
             return 0.0f;
     }
 }
 
-void carbon_fog_set_shroud_alpha(Carbon_FogOfWar *fog, float alpha) {
-    CARBON_VALIDATE_PTR(fog);
+void agentite_fog_set_shroud_alpha(Agentite_FogOfWar *fog, float alpha) {
+    AGENTITE_VALIDATE_PTR(fog);
 
     if (alpha < 0.0f) alpha = 0.0f;
     if (alpha > 1.0f) alpha = 1.0f;
     fog->shroud_alpha = alpha;
 }
 
-float carbon_fog_get_shroud_alpha(Carbon_FogOfWar *fog) {
-    CARBON_VALIDATE_PTR_RET(fog, 0.5f);
+float agentite_fog_get_shroud_alpha(Agentite_FogOfWar *fog) {
+    AGENTITE_VALIDATE_PTR_RET(fog, 0.5f);
     return fog->shroud_alpha;
 }
 
@@ -456,8 +456,8 @@ float carbon_fog_get_shroud_alpha(Carbon_FogOfWar *fog) {
  * Region Queries
  * ========================================================================= */
 
-bool carbon_fog_any_visible_in_rect(Carbon_FogOfWar *fog, int x1, int y1, int x2, int y2) {
-    CARBON_VALIDATE_PTR_RET(fog, false);
+bool agentite_fog_any_visible_in_rect(Agentite_FogOfWar *fog, int x1, int y1, int x2, int y2) {
+    AGENTITE_VALIDATE_PTR_RET(fog, false);
 
     /* Normalize and clamp coordinates */
     if (x1 > x2) { int t = x1; x1 = x2; x2 = t; }
@@ -477,8 +477,8 @@ bool carbon_fog_any_visible_in_rect(Carbon_FogOfWar *fog, int x1, int y1, int x2
     return false;
 }
 
-bool carbon_fog_all_visible_in_rect(Carbon_FogOfWar *fog, int x1, int y1, int x2, int y2) {
-    CARBON_VALIDATE_PTR_RET(fog, false);
+bool agentite_fog_all_visible_in_rect(Agentite_FogOfWar *fog, int x1, int y1, int x2, int y2) {
+    AGENTITE_VALIDATE_PTR_RET(fog, false);
 
     /* Normalize and clamp coordinates */
     if (x1 > x2) { int t = x1; x1 = x2; x2 = t; }
@@ -498,8 +498,8 @@ bool carbon_fog_all_visible_in_rect(Carbon_FogOfWar *fog, int x1, int y1, int x2
     return true;
 }
 
-int carbon_fog_count_visible_in_rect(Carbon_FogOfWar *fog, int x1, int y1, int x2, int y2) {
-    CARBON_VALIDATE_PTR_RET(fog, 0);
+int agentite_fog_count_visible_in_rect(Agentite_FogOfWar *fog, int x1, int y1, int x2, int y2) {
+    AGENTITE_VALIDATE_PTR_RET(fog, 0);
 
     /* Normalize and clamp coordinates */
     if (x1 > x2) { int t = x1; x1 = x2; x2 = t; }
@@ -524,8 +524,8 @@ int carbon_fog_count_visible_in_rect(Carbon_FogOfWar *fog, int x1, int y1, int x
  * Manual Exploration
  * ========================================================================= */
 
-void carbon_fog_explore_cell(Carbon_FogOfWar *fog, int x, int y) {
-    CARBON_VALIDATE_PTR(fog);
+void agentite_fog_explore_cell(Agentite_FogOfWar *fog, int x, int y) {
+    AGENTITE_VALIDATE_PTR(fog);
 
     if (!in_bounds(fog, x, y)) return;
 
@@ -538,8 +538,8 @@ void carbon_fog_explore_cell(Carbon_FogOfWar *fog, int x, int y) {
     }
 }
 
-void carbon_fog_explore_rect(Carbon_FogOfWar *fog, int x1, int y1, int x2, int y2) {
-    CARBON_VALIDATE_PTR(fog);
+void agentite_fog_explore_rect(Agentite_FogOfWar *fog, int x1, int y1, int x2, int y2) {
+    AGENTITE_VALIDATE_PTR(fog);
 
     /* Normalize and clamp coordinates */
     if (x1 > x2) { int t = x1; x1 = x2; x2 = t; }
@@ -551,13 +551,13 @@ void carbon_fog_explore_rect(Carbon_FogOfWar *fog, int x1, int y1, int x2, int y
 
     for (int y = y1; y <= y2; y++) {
         for (int x = x1; x <= x2; x++) {
-            carbon_fog_explore_cell(fog, x, y);
+            agentite_fog_explore_cell(fog, x, y);
         }
     }
 }
 
-void carbon_fog_explore_circle(Carbon_FogOfWar *fog, int center_x, int center_y, int radius) {
-    CARBON_VALIDATE_PTR(fog);
+void agentite_fog_explore_circle(Agentite_FogOfWar *fog, int center_x, int center_y, int radius) {
+    AGENTITE_VALIDATE_PTR(fog);
 
     if (radius < 0) radius = 0;
     int r_sq = radius * radius;
@@ -572,7 +572,7 @@ void carbon_fog_explore_circle(Carbon_FogOfWar *fog, int center_x, int center_y,
             int dx = x - center_x;
             int dy = y - center_y;
             if (dx * dx + dy * dy <= r_sq) {
-                carbon_fog_explore_cell(fog, x, y);
+                agentite_fog_explore_cell(fog, x, y);
             }
         }
     }
@@ -582,10 +582,10 @@ void carbon_fog_explore_circle(Carbon_FogOfWar *fog, int center_x, int center_y,
  * Callbacks
  * ========================================================================= */
 
-void carbon_fog_set_exploration_callback(Carbon_FogOfWar *fog,
-                                          Carbon_ExplorationCallback callback,
+void agentite_fog_set_exploration_callback(Agentite_FogOfWar *fog,
+                                          Agentite_ExplorationCallback callback,
                                           void *userdata) {
-    CARBON_VALIDATE_PTR(fog);
+    AGENTITE_VALIDATE_PTR(fog);
 
     fog->exploration_callback = callback;
     fog->exploration_userdata = userdata;
@@ -595,7 +595,7 @@ void carbon_fog_set_exploration_callback(Carbon_FogOfWar *fog,
  * Statistics
  * ========================================================================= */
 
-void carbon_fog_get_size(Carbon_FogOfWar *fog, int *out_width, int *out_height) {
+void agentite_fog_get_size(Agentite_FogOfWar *fog, int *out_width, int *out_height) {
     if (!fog) {
         if (out_width) *out_width = 0;
         if (out_height) *out_height = 0;
@@ -606,7 +606,7 @@ void carbon_fog_get_size(Carbon_FogOfWar *fog, int *out_width, int *out_height) 
     if (out_height) *out_height = fog->height;
 }
 
-void carbon_fog_get_stats(Carbon_FogOfWar *fog,
+void agentite_fog_get_stats(Agentite_FogOfWar *fog,
                           int *out_unexplored, int *out_explored, int *out_visible) {
     if (!fog) {
         if (out_unexplored) *out_unexplored = 0;
@@ -635,8 +635,8 @@ void carbon_fog_get_stats(Carbon_FogOfWar *fog,
     if (out_visible) *out_visible = visible;
 }
 
-float carbon_fog_get_exploration_percent(Carbon_FogOfWar *fog) {
-    CARBON_VALIDATE_PTR_RET(fog, 0.0f);
+float agentite_fog_get_exploration_percent(Agentite_FogOfWar *fog) {
+    AGENTITE_VALIDATE_PTR_RET(fog, 0.0f);
 
     int total = fog->width * fog->height;
     if (total == 0) return 0.0f;
@@ -656,10 +656,10 @@ float carbon_fog_get_exploration_percent(Carbon_FogOfWar *fog) {
  * Line of Sight
  * ========================================================================= */
 
-void carbon_fog_set_los_callback(Carbon_FogOfWar *fog,
-                                  Carbon_VisionBlockerCallback callback,
+void agentite_fog_set_los_callback(Agentite_FogOfWar *fog,
+                                  Agentite_VisionBlockerCallback callback,
                                   void *userdata) {
-    CARBON_VALIDATE_PTR(fog);
+    AGENTITE_VALIDATE_PTR(fog);
 
     fog->los_callback = callback;
     fog->los_userdata = userdata;
@@ -668,8 +668,8 @@ void carbon_fog_set_los_callback(Carbon_FogOfWar *fog,
     fog->dirty = true;
 }
 
-bool carbon_fog_has_los(Carbon_FogOfWar *fog, int x1, int y1, int x2, int y2) {
-    CARBON_VALIDATE_PTR_RET(fog, false);
+bool agentite_fog_has_los(Agentite_FogOfWar *fog, int x1, int y1, int x2, int y2) {
+    AGENTITE_VALIDATE_PTR_RET(fog, false);
 
     return check_los_line(fog, x1, y1, x2, y2);
 }

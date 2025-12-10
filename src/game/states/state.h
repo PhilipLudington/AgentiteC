@@ -1,7 +1,7 @@
 #ifndef GAME_STATE_H
 #define GAME_STATE_H
 
-#include "carbon/game_context.h"
+#include "agentite/game_context.h"
 #include <stdbool.h>
 
 /**
@@ -42,10 +42,10 @@ typedef struct GameStateMachine GameStateMachine;
  * State callbacks.
  * All callbacks receive the game context and can return data via userdata.
  */
-typedef void (*GameStateEnter)(Carbon_GameContext *ctx, void *userdata);
-typedef void (*GameStateExit)(Carbon_GameContext *ctx, void *userdata);
-typedef void (*GameStateUpdate)(Carbon_GameContext *ctx, float dt, void *userdata);
-typedef void (*GameStateRender)(Carbon_GameContext *ctx,
+typedef void (*GameStateEnter)(Agentite_GameContext *ctx, void *userdata);
+typedef void (*GameStateExit)(Agentite_GameContext *ctx, void *userdata);
+typedef void (*GameStateUpdate)(Agentite_GameContext *ctx, float dt, void *userdata);
+typedef void (*GameStateRender)(Agentite_GameContext *ctx,
                                  SDL_GPUCommandBuffer *cmd,
                                  SDL_GPURenderPass *pass,
                                  void *userdata);
@@ -106,7 +106,7 @@ void game_state_machine_register(GameStateMachine *sm, GameStateID id,
  * @param ctx Game context
  */
 void game_state_machine_change(GameStateMachine *sm, GameStateID id,
-                                Carbon_GameContext *ctx);
+                                Agentite_GameContext *ctx);
 
 /**
  * Update the current state.
@@ -115,7 +115,7 @@ void game_state_machine_change(GameStateMachine *sm, GameStateID id,
  * @param ctx Game context
  * @param dt Delta time
  */
-void game_state_machine_update(GameStateMachine *sm, Carbon_GameContext *ctx,
+void game_state_machine_update(GameStateMachine *sm, Agentite_GameContext *ctx,
                                 float dt);
 
 /**
@@ -126,7 +126,7 @@ void game_state_machine_update(GameStateMachine *sm, Carbon_GameContext *ctx,
  * @param cmd GPU command buffer
  * @param pass Render pass
  */
-void game_state_machine_render(GameStateMachine *sm, Carbon_GameContext *ctx,
+void game_state_machine_render(GameStateMachine *sm, Agentite_GameContext *ctx,
                                 SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass);
 
 /**
@@ -151,7 +151,7 @@ GameStateID game_state_machine_previous(GameStateMachine *sm);
  * @param sm State machine
  * @param ctx Game context
  */
-void game_state_machine_back(GameStateMachine *sm, Carbon_GameContext *ctx);
+void game_state_machine_back(GameStateMachine *sm, Agentite_GameContext *ctx);
 
 /*============================================================================
  * Built-in State Implementations

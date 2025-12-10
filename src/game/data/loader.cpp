@@ -1,6 +1,6 @@
-#include "carbon/carbon.h"
+#include "agentite/agentite.h"
 #include "loader.h"
-#include "carbon/error.h"
+#include "agentite/error.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -96,7 +96,7 @@ static bool parse_number(JsonParser *p, double *out) {
 static bool parse_array(JsonParser *p, JsonArray **out) {
     if (next(p) != '[') return false;
 
-    *out = CARBON_ALLOC(JsonArray);
+    *out = AGENTITE_ALLOC(JsonArray);
     if (!*out) return false;
 
     (*out)->capacity = 8;
@@ -132,7 +132,7 @@ static bool parse_array(JsonParser *p, JsonArray **out) {
 static bool parse_object(JsonParser *p, JsonObject **out) {
     if (next(p) != '{') return false;
 
-    *out = CARBON_ALLOC(JsonObject);
+    *out = AGENTITE_ALLOC(JsonObject);
     if (!*out) return false;
 
     (*out)->capacity = 8;
@@ -221,7 +221,7 @@ bool json_parse(const char *json, JsonValue *out_value) {
 bool json_parse_file(const char *path, JsonValue *out_value) {
     FILE *f = fopen(path, "rb");
     if (!f) {
-        carbon_set_error("Failed to open file: %s", path);
+        agentite_set_error("Failed to open file: %s", path);
         return false;
     }
 
@@ -232,7 +232,7 @@ bool json_parse_file(const char *path, JsonValue *out_value) {
     char *buffer = (char*)malloc(size + 1);
     if (!buffer) {
         fclose(f);
-        carbon_set_error("Failed to allocate buffer for file: %s", path);
+        agentite_set_error("Failed to allocate buffer for file: %s", path);
         return false;
     }
 
@@ -244,7 +244,7 @@ bool json_parse_file(const char *path, JsonValue *out_value) {
     free(buffer);
 
     if (!result) {
-        carbon_set_error("Failed to parse JSON file: %s", path);
+        agentite_set_error("Failed to parse JSON file: %s", path);
     }
 
     return result;

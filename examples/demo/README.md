@@ -41,61 +41,61 @@ make run-demo
 
 ### Initialization Order
 ```c
-Carbon_Engine *engine = carbon_init(&config);
-CUI_Context *ui = cui_init(...);
-Carbon_SpriteRenderer *sprites = carbon_sprite_init(...);
-Carbon_Camera *camera = carbon_camera_create(...);
-Carbon_TextRenderer *text = carbon_text_init(...);
-Carbon_World *ecs = carbon_ecs_init();
-Carbon_Input *input = carbon_input_init();
-Carbon_Audio *audio = carbon_audio_init();
+Agentite_Engine *engine = agentite_init(&config);
+AUI_Context *ui = aui_init(...);
+Agentite_SpriteRenderer *sprites = agentite_sprite_init(...);
+Agentite_Camera *camera = agentite_camera_create(...);
+Agentite_TextRenderer *text = agentite_text_init(...);
+Agentite_World *ecs = agentite_ecs_init();
+Agentite_Input *input = agentite_input_init();
+Agentite_Audio *audio = agentite_audio_init();
 ```
 
 ### Main Loop Pattern
 ```c
-while (carbon_is_running(engine)) {
-    carbon_begin_frame(engine);
-    carbon_input_begin_frame(input);
+while (agentite_is_running(engine)) {
+    agentite_begin_frame(engine);
+    agentite_input_begin_frame(input);
 
     // Poll events
     while (SDL_PollEvent(&event)) {
-        if (cui_process_event(ui, &event)) continue;
-        carbon_input_process_event(input, &event);
+        if (aui_process_event(ui, &event)) continue;
+        agentite_input_process_event(input, &event);
     }
-    carbon_input_update(input);
+    agentite_input_update(input);
 
     // Update logic...
 
     // Build batches before render pass
-    carbon_sprite_begin(sprites, NULL);
+    agentite_sprite_begin(sprites, NULL);
     // ... draw sprites ...
 
-    SDL_GPUCommandBuffer *cmd = carbon_acquire_command_buffer(engine);
-    carbon_sprite_upload(sprites, cmd);
-    cui_upload(ui, cmd);
-    carbon_text_upload(text, cmd);
+    SDL_GPUCommandBuffer *cmd = agentite_acquire_command_buffer(engine);
+    agentite_sprite_upload(sprites, cmd);
+    aui_upload(ui, cmd);
+    agentite_text_upload(text, cmd);
 
     // Render pass
-    if (carbon_begin_render_pass(engine, 0.1f, 0.1f, 0.15f, 1.0f)) {
-        SDL_GPURenderPass *pass = carbon_get_render_pass(engine);
-        carbon_sprite_render(sprites, cmd, pass);
-        cui_render(ui, cmd, pass);
-        carbon_text_render(text, cmd, pass);
-        carbon_end_render_pass(engine);
+    if (agentite_begin_render_pass(engine, 0.1f, 0.1f, 0.15f, 1.0f)) {
+        SDL_GPURenderPass *pass = agentite_get_render_pass(engine);
+        agentite_sprite_render(sprites, cmd, pass);
+        aui_render(ui, cmd, pass);
+        agentite_text_render(text, cmd, pass);
+        agentite_end_render_pass(engine);
     }
 
-    carbon_end_frame(engine);
+    agentite_end_frame(engine);
 }
 ```
 
 ### Cleanup Order (reverse of init)
 ```c
-carbon_audio_shutdown(audio);
-carbon_input_shutdown(input);
-carbon_ecs_shutdown(ecs);
-carbon_text_shutdown(text);
-carbon_camera_destroy(camera);
-carbon_sprite_shutdown(sprites);
-cui_shutdown(ui);
-carbon_shutdown(engine);
+agentite_audio_shutdown(audio);
+agentite_input_shutdown(input);
+agentite_ecs_shutdown(ecs);
+agentite_text_shutdown(text);
+agentite_camera_destroy(camera);
+agentite_sprite_shutdown(sprites);
+aui_shutdown(ui);
+agentite_shutdown(engine);
 ```

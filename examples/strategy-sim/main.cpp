@@ -18,9 +18,9 @@
  * - ESC: Quit
  */
 
-#include "carbon/carbon.h"
-#include "carbon/text.h"
-#include "carbon/input.h"
+#include "agentite/agentite.h"
+#include "agentite/text.h"
+#include "agentite/input.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,22 +44,22 @@ typedef enum {
 
 // Game state
 typedef struct {
-    Carbon_TurnManager turns;
-    Carbon_Resource money;
-    Carbon_Resource research_points;
+    Agentite_TurnManager turns;
+    Agentite_Resource money;
+    Agentite_Resource research_points;
 
     float emissions;           // 0.0 to 1.0 (target: reduce to 0)
     float approval;            // 0.0 to 1.0 (public approval rating)
 
-    Carbon_ModifierStack emissions_modifiers;
-    Carbon_ModifierStack income_modifiers;
+    Agentite_ModifierStack emissions_modifiers;
+    Agentite_ModifierStack income_modifiers;
 
-    Carbon_EventManager *events;
-    Carbon_UnlockTree *tech_tree;
-    Carbon_ResearchProgress research;
+    Agentite_EventManager *events;
+    Agentite_UnlockTree *tech_tree;
+    Agentite_ResearchProgress research;
 
-    Carbon_History *history;
-    Carbon_SaveManager *saves;
+    Agentite_History *history;
+    Agentite_SaveManager *saves;
 
     bool awaiting_choice;
     bool game_won;
@@ -87,13 +87,13 @@ static bool parse_policy(const char *key, toml_table_t *table, void *out, void *
     (void)userdata;
     PolicyDef *p = out;
 
-    carbon_toml_get_string(table, "id", p->id, sizeof(p->id));
-    carbon_toml_get_string(table, "name", p->name, sizeof(p->name));
-    carbon_toml_get_string(table, "description", p->description, sizeof(p->description));
-    carbon_toml_get_int(table, "cost", &p->cost);
-    carbon_toml_get_string(table, "category", p->category, sizeof(p->category));
-    carbon_toml_get_int(table, "effect_type", &p->effect_type);
-    carbon_toml_get_float(table, "effect_value", &p->effect_value);
+    agentite_toml_get_string(table, "id", p->id, sizeof(p->id));
+    agentite_toml_get_string(table, "name", p->name, sizeof(p->name));
+    agentite_toml_get_string(table, "description", p->description, sizeof(p->description));
+    agentite_toml_get_int(table, "cost", &p->cost);
+    agentite_toml_get_string(table, "category", p->category, sizeof(p->category));
+    agentite_toml_get_int(table, "effect_type", &p->effect_type);
+    agentite_toml_get_float(table, "effect_value", &p->effect_value);
 
     return true;
 }
@@ -102,26 +102,26 @@ static bool parse_policy(const char *key, toml_table_t *table, void *out, void *
 static bool parse_tech(const char *key, toml_table_t *table, void *out, void *userdata) {
     (void)key;
     (void)userdata;
-    Carbon_UnlockDef *t = out;
+    Agentite_UnlockDef *t = out;
 
-    carbon_toml_get_string(table, "id", t->id, sizeof(t->id));
-    carbon_toml_get_string(table, "name", t->name, sizeof(t->name));
-    carbon_toml_get_string(table, "description", t->description, sizeof(t->description));
-    carbon_toml_get_string(table, "category", t->category, sizeof(t->category));
-    carbon_toml_get_int(table, "cost", &t->cost);
-    carbon_toml_get_int(table, "effect_type", &t->effect_type);
-    carbon_toml_get_float(table, "effect_value", &t->effect_value);
+    agentite_toml_get_string(table, "id", t->id, sizeof(t->id));
+    agentite_toml_get_string(table, "name", t->name, sizeof(t->name));
+    agentite_toml_get_string(table, "description", t->description, sizeof(t->description));
+    agentite_toml_get_string(table, "category", t->category, sizeof(t->category));
+    agentite_toml_get_int(table, "cost", &t->cost);
+    agentite_toml_get_int(table, "effect_type", &t->effect_type);
+    agentite_toml_get_float(table, "effect_value", &t->effect_value);
 
     // Parse prerequisites array
     char **prereqs = NULL;
     int prereq_count = 0;
-    if (carbon_toml_get_string_array(table, "prerequisites", &prereqs, &prereq_count)) {
-        t->prereq_count = prereq_count > CARBON_UNLOCK_MAX_PREREQS ?
-                          CARBON_UNLOCK_MAX_PREREQS : prereq_count;
+    if (agentite_toml_get_string_array(table, "prerequisites", &prereqs, &prereq_count)) {
+        t->prereq_count = prereq_count > AGENTITE_UNLOCK_MAX_PREREQS ?
+                          AGENTITE_UNLOCK_MAX_PREREQS : prereq_count;
         for (int i = 0; i < t->prereq_count; i++) {
             strncpy(t->prerequisites[i], prereqs[i], sizeof(t->prerequisites[i]) - 1);
         }
-        carbon_toml_free_strings(prereqs, prereq_count);
+        agentite_toml_free_strings(prereqs, prereq_count);
     }
 
     return true;
@@ -130,49 +130,49 @@ static bool parse_tech(const char *key, toml_table_t *table, void *out, void *us
 // Initialize game state
 static void game_init(void) {
     // Turn manager
-    carbon_turn_init(&game.turns);
+    agentite_turn_init(&game.turns);
 
     // Resources
-    carbon_resource_init(&game.money, 100, 0, 20);        // Start with 100, gain 20/turn
-    carbon_resource_init(&game.research_points, 0, 0, 5); // Gain 5/turn
+    agentite_resource_init(&game.money, 100, 0, 20);        // Start with 100, gain 20/turn
+    agentite_resource_init(&game.research_points, 0, 0, 5); // Gain 5/turn
 
     // Starting values
     game.emissions = 0.8f;  // High emissions to start
     game.approval = 0.5f;   // Neutral approval
 
     // Modifier stacks
-    carbon_modifier_init(&game.emissions_modifiers);
-    carbon_modifier_init(&game.income_modifiers);
+    agentite_modifier_init(&game.emissions_modifiers);
+    agentite_modifier_init(&game.income_modifiers);
 
     // Event manager
-    game.events = carbon_event_create();
-    carbon_event_set_cooldown_between(game.events, 2);  // 2 turns between events
+    game.events = agentite_event_create();
+    agentite_event_set_cooldown_between(game.events, 2);  // 2 turns between events
 
     // Tech tree
-    game.tech_tree = carbon_unlock_create();
+    game.tech_tree = agentite_unlock_create();
 
     // Load tech definitions
-    Carbon_DataLoader *tech_loader = carbon_data_create();
-    if (carbon_data_load(tech_loader, "examples/strategy-sim/data/techs.toml",
-                         "tech", sizeof(Carbon_UnlockDef), parse_tech, NULL)) {
-        for (size_t i = 0; i < carbon_data_count(tech_loader); i++) {
-            Carbon_UnlockDef *def = carbon_data_get_by_index(tech_loader, i);
-            carbon_unlock_register(game.tech_tree, def);
+    Agentite_DataLoader *tech_loader = agentite_data_create();
+    if (agentite_data_load(tech_loader, "examples/strategy-sim/data/techs.toml",
+                         "tech", sizeof(Agentite_UnlockDef), parse_tech, NULL)) {
+        for (size_t i = 0; i < agentite_data_count(tech_loader); i++) {
+            Agentite_UnlockDef *def = agentite_data_get_by_index(tech_loader, i);
+            agentite_unlock_register(game.tech_tree, def);
         }
-        printf("Loaded %zu technologies\n", carbon_data_count(tech_loader));
+        printf("Loaded %zu technologies\n", agentite_data_count(tech_loader));
     }
-    carbon_data_destroy(tech_loader);
+    agentite_data_destroy(tech_loader);
 
     // History
-    game.history = carbon_history_create();
-    carbon_history_set_metric_name(game.history, METRIC_EMISSIONS, "Emissions");
-    carbon_history_set_metric_name(game.history, METRIC_MONEY, "Money");
-    carbon_history_set_metric_name(game.history, METRIC_APPROVAL, "Approval");
-    carbon_history_set_metric_name(game.history, METRIC_RESEARCH, "Research");
+    game.history = agentite_history_create();
+    agentite_history_set_metric_name(game.history, METRIC_EMISSIONS, "Emissions");
+    agentite_history_set_metric_name(game.history, METRIC_MONEY, "Money");
+    agentite_history_set_metric_name(game.history, METRIC_APPROVAL, "Approval");
+    agentite_history_set_metric_name(game.history, METRIC_RESEARCH, "Research");
 
     // Save manager
-    game.saves = carbon_save_create("saves");
-    carbon_save_set_version(game.saves, 1, 1);
+    game.saves = agentite_save_create("saves");
+    agentite_save_set_version(game.saves, 1, 1);
 
     game.awaiting_choice = false;
     game.game_won = false;
@@ -181,68 +181,68 @@ static void game_init(void) {
 
 // Record current metrics to history
 static void record_history_snapshot(void) {
-    Carbon_MetricSnapshot snap = {0};
+    Agentite_MetricSnapshot snap = {0};
     snap.turn = game.turns.turn_number;
     snap.values[METRIC_EMISSIONS] = game.emissions;
     snap.values[METRIC_MONEY] = (float)game.money.current;
     snap.values[METRIC_APPROVAL] = game.approval;
     snap.values[METRIC_RESEARCH] = (float)game.research_points.current;
 
-    carbon_history_add_snapshot(game.history, &snap);
+    agentite_history_add_snapshot(game.history, &snap);
 }
 
 // Apply modifier effects
 static void apply_modifiers(void) {
     // Apply emissions modifiers
-    float emissions_change = carbon_modifier_total(&game.emissions_modifiers);
+    float emissions_change = agentite_modifier_total(&game.emissions_modifiers);
     game.emissions += game.emissions * emissions_change * 0.1f;  // 10% of modifier per turn
     if (game.emissions < 0.0f) game.emissions = 0.0f;
     if (game.emissions > 1.0f) game.emissions = 1.0f;
 
     // Apply income modifiers
-    float income_mod = 1.0f + carbon_modifier_total(&game.income_modifiers);
-    carbon_resource_set_modifier(&game.money, income_mod);
+    float income_mod = 1.0f + agentite_modifier_total(&game.income_modifiers);
+    agentite_resource_set_modifier(&game.money, income_mod);
 }
 
 // Check win/lose conditions
 static void check_end_conditions(void) {
     if (game.emissions <= 0.05f && game.approval > 0.3f) {
         game.game_won = true;
-        carbon_history_add_event_ex(game.history, game.turns.turn_number, 0,
+        agentite_history_add_event_ex(game.history, game.turns.turn_number, 0,
                                      "Victory!", "Emissions reduced to near zero!",
                                      0.8f, game.emissions);
     }
 
     if (game.approval <= 0.0f) {
         game.game_lost = true;
-        carbon_history_add_event_ex(game.history, game.turns.turn_number, 1,
+        agentite_history_add_event_ex(game.history, game.turns.turn_number, 1,
                                      "Defeat", "Lost public support entirely.",
                                      0.5f, game.approval);
     }
 }
 
 // Serialize game state for saving
-static bool serialize_game(void *gs, Carbon_SaveWriter *writer) {
+static bool serialize_game(void *gs, Agentite_SaveWriter *writer) {
     GameState *g = gs;
 
-    carbon_save_write_int(writer, "turn", g->turns.turn_number);
-    carbon_save_write_int(writer, "money", g->money.current);
-    carbon_save_write_int(writer, "research", g->research_points.current);
-    carbon_save_write_float(writer, "emissions", g->emissions);
-    carbon_save_write_float(writer, "approval", g->approval);
+    agentite_save_write_int(writer, "turn", g->turns.turn_number);
+    agentite_save_write_int(writer, "money", g->money.current);
+    agentite_save_write_int(writer, "research", g->research_points.current);
+    agentite_save_write_float(writer, "emissions", g->emissions);
+    agentite_save_write_float(writer, "approval", g->approval);
 
     return true;
 }
 
 // Deserialize game state when loading
-static bool deserialize_game(void *gs, Carbon_SaveReader *reader) {
+static bool deserialize_game(void *gs, Agentite_SaveReader *reader) {
     GameState *g = gs;
 
-    carbon_save_read_int(reader, "turn", &g->turns.turn_number);
-    carbon_save_read_int(reader, "money", &g->money.current);
-    carbon_save_read_int(reader, "research", &g->research_points.current);
-    carbon_save_read_float(reader, "emissions", &g->emissions);
-    carbon_save_read_float(reader, "approval", &g->approval);
+    agentite_save_read_int(reader, "turn", &g->turns.turn_number);
+    agentite_save_read_int(reader, "money", &g->money.current);
+    agentite_save_read_int(reader, "research", &g->research_points.current);
+    agentite_save_read_float(reader, "emissions", &g->emissions);
+    agentite_save_read_float(reader, "approval", &g->approval);
 
     return true;
 }
@@ -254,34 +254,34 @@ static void process_turn(void) {
 
     // World update phase - apply modifiers and tick resources
     apply_modifiers();
-    carbon_resource_tick(&game.money);
-    carbon_resource_tick(&game.research_points);
+    agentite_resource_tick(&game.money);
+    agentite_resource_tick(&game.research_points);
 
     // Process ongoing research
-    if (carbon_unlock_is_researching(&game.research)) {
-        if (carbon_unlock_add_points(game.tech_tree, &game.research, 5)) {
+    if (agentite_unlock_is_researching(&game.research)) {
+        if (agentite_unlock_add_points(game.tech_tree, &game.research, 5)) {
             printf("Research completed!\n");
 
             // Apply tech effect
-            const Carbon_UnlockDef *tech = carbon_unlock_find(game.tech_tree,
+            const Agentite_UnlockDef *tech = agentite_unlock_find(game.tech_tree,
                                                                game.research.current_id);
             if (tech && tech->effect_type == EFFECT_EMISSIONS) {
                 char source[64];
                 snprintf(source, sizeof(source), "tech_%s", tech->id);
-                carbon_modifier_add(&game.emissions_modifiers, source, tech->effect_value);
+                agentite_modifier_add(&game.emissions_modifiers, source, tech->effect_value);
             }
         }
     }
 
     // Event phase - check triggers
-    Carbon_TriggerContext ctx = {0};
-    carbon_trigger_context_add(&ctx, "turn", (float)game.turns.turn_number);
-    carbon_trigger_context_add(&ctx, "emissions", game.emissions);
-    carbon_trigger_context_add(&ctx, "approval", game.approval);
-    carbon_trigger_context_add(&ctx, "research_points", (float)game.research_points.current);
+    Agentite_TriggerContext ctx = {0};
+    agentite_trigger_context_add(&ctx, "turn", (float)game.turns.turn_number);
+    agentite_trigger_context_add(&ctx, "emissions", game.emissions);
+    agentite_trigger_context_add(&ctx, "approval", game.approval);
+    agentite_trigger_context_add(&ctx, "research_points", (float)game.research_points.current);
 
-    if (carbon_event_check_triggers(game.events, &ctx)) {
-        const Carbon_ActiveEvent *event = carbon_event_get_pending(game.events);
+    if (agentite_event_check_triggers(game.events, &ctx)) {
+        const Agentite_ActiveEvent *event = agentite_event_get_pending(game.events);
         printf("\n=== EVENT: %s ===\n%s\n", event->def->name, event->def->description);
         for (int i = 0; i < event->def->choice_count; i++) {
             printf("[%d] %s - %s\n", i + 1,
@@ -302,8 +302,8 @@ static void process_turn(void) {
 static void handle_event_choice(int choice) {
     if (!game.awaiting_choice) return;
 
-    if (carbon_event_choose(game.events, choice)) {
-        const Carbon_EventChoice *chosen = carbon_event_get_chosen(game.events);
+    if (agentite_event_choose(game.events, choice)) {
+        const Agentite_EventChoice *chosen = agentite_event_get_chosen(game.events);
         if (chosen) {
             // Apply effects
             for (int i = 0; i < chosen->effect_count; i++) {
@@ -312,7 +312,7 @@ static void handle_event_choice(int choice) {
                         game.emissions += chosen->effects[i].value;
                         break;
                     case EFFECT_INCOME:
-                        carbon_resource_add(&game.money, (int)chosen->effects[i].value);
+                        agentite_resource_add(&game.money, (int)chosen->effects[i].value);
                         break;
                     case EFFECT_APPROVAL:
                         game.approval += chosen->effects[i].value;
@@ -322,15 +322,15 @@ static void handle_event_choice(int choice) {
                 }
             }
         }
-        carbon_event_clear_pending(game.events);
+        agentite_event_clear_pending(game.events);
         game.awaiting_choice = false;
     }
 }
 
 // Start researching a tech
 static void start_research(const char *tech_id) {
-    if (carbon_unlock_can_research(game.tech_tree, tech_id)) {
-        carbon_unlock_start_research(game.tech_tree, &game.research, tech_id);
+    if (agentite_unlock_can_research(game.tech_tree, tech_id)) {
+        agentite_unlock_start_research(game.tech_tree, &game.research, tech_id);
         printf("Started researching: %s\n", tech_id);
     }
 }
@@ -340,28 +340,28 @@ int main(int argc, char *argv[]) {
     (void)argv;
 
     // Initialize engine
-    Carbon_Config config = CARBON_DEFAULT_CONFIG;
-    config.window_title = "Strategy Sim - Carbon Engine Demo";
-    Carbon_Engine *engine = carbon_init(&config);
+    Agentite_Config config = AGENTITE_DEFAULT_CONFIG;
+    config.window_title = "Strategy Sim - Agentite Engine Demo";
+    Agentite_Engine *engine = agentite_init(&config);
     if (!engine) {
         fprintf(stderr, "Failed to initialize engine\n");
         return 1;
     }
 
     // Initialize text rendering
-    Carbon_TextRenderer *text = carbon_text_init(
-        carbon_get_gpu_device(engine),
-        carbon_get_window(engine)
+    Agentite_TextRenderer *text = agentite_text_init(
+        agentite_get_gpu_device(engine),
+        agentite_get_window(engine)
     );
-    Carbon_Font *font = carbon_font_load(text, "assets/fonts/Roboto-Regular.ttf", 18.0f);
+    Agentite_Font *font = agentite_font_load(text, "assets/fonts/Roboto-Regular.ttf", 18.0f);
     if (!font) {
         fprintf(stderr, "Failed to load font\n");
-        carbon_shutdown(engine);
+        agentite_shutdown(engine);
         return 1;
     }
 
     // Initialize input
-    Carbon_Input *input = carbon_input_init();
+    Agentite_Input *input = agentite_input_init();
 
     // Initialize game
     game_init();
@@ -371,45 +371,45 @@ int main(int argc, char *argv[]) {
     printf("1-9: Event choices | R: Start research\n\n");
 
     // Main loop
-    while (carbon_is_running(engine)) {
-        carbon_begin_frame(engine);
+    while (agentite_is_running(engine)) {
+        agentite_begin_frame(engine);
 
         // Input handling
-        carbon_input_begin_frame(input);
-        carbon_poll_events(engine);
+        agentite_input_begin_frame(input);
+        agentite_poll_events(engine);
 
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            carbon_input_process_event(input, &event);
+            agentite_input_process_event(input, &event);
             if (event.type == SDL_EVENT_QUIT) {
-                carbon_quit(engine);
+                agentite_quit(engine);
             }
         }
-        carbon_input_update(input);
+        agentite_input_update(input);
 
         // Handle key presses
-        if (carbon_input_key_just_pressed(input, SDL_SCANCODE_ESCAPE)) {
-            carbon_quit(engine);
+        if (agentite_input_key_just_pressed(input, SDL_SCANCODE_ESCAPE)) {
+            agentite_quit(engine);
         }
 
         if (!game.game_won && !game.game_lost) {
             if (game.awaiting_choice) {
                 // Handle event choices 1-9
                 for (int i = 0; i < 9; i++) {
-                    if (carbon_input_key_just_pressed(input, SDL_SCANCODE_1 + i)) {
+                    if (agentite_input_key_just_pressed(input, SDL_SCANCODE_1 + i)) {
                         handle_event_choice(i);
                     }
                 }
             } else {
                 // Normal game controls
-                if (carbon_input_key_just_pressed(input, SDL_SCANCODE_SPACE)) {
+                if (agentite_input_key_just_pressed(input, SDL_SCANCODE_SPACE)) {
                     process_turn();
                 }
 
-                if (carbon_input_key_just_pressed(input, SDL_SCANCODE_R)) {
+                if (agentite_input_key_just_pressed(input, SDL_SCANCODE_R)) {
                     // Find first available tech
-                    const Carbon_UnlockDef *available[10];
-                    int count = carbon_unlock_get_available(game.tech_tree, available, 10);
+                    const Agentite_UnlockDef *available[10];
+                    int count = agentite_unlock_get_available(game.tech_tree, available, 10);
                     if (count > 0) {
                         start_research(available[0]->id);
                     }
@@ -418,8 +418,8 @@ int main(int argc, char *argv[]) {
         }
 
         // Save/Load
-        if (carbon_input_key_just_pressed(input, SDL_SCANCODE_S)) {
-            Carbon_SaveResult result = carbon_save_quick(game.saves, serialize_game, &game);
+        if (agentite_input_key_just_pressed(input, SDL_SCANCODE_S)) {
+            Agentite_SaveResult result = agentite_save_quick(game.saves, serialize_game, &game);
             if (result.success) {
                 printf("Game saved: %s\n", result.filepath);
             } else {
@@ -427,8 +427,8 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        if (carbon_input_key_just_pressed(input, SDL_SCANCODE_L)) {
-            Carbon_SaveResult result = carbon_load_quick(game.saves, deserialize_game, &game);
+        if (agentite_input_key_just_pressed(input, SDL_SCANCODE_L)) {
+            Agentite_SaveResult result = agentite_load_quick(game.saves, deserialize_game, &game);
             if (result.success) {
                 printf("Game loaded from: %s\n", result.filepath);
             } else {
@@ -437,55 +437,55 @@ int main(int argc, char *argv[]) {
         }
 
         // Rendering
-        SDL_GPUCommandBuffer *cmd = carbon_acquire_command_buffer(engine);
+        SDL_GPUCommandBuffer *cmd = agentite_acquire_command_buffer(engine);
 
         // Begin text batch
-        carbon_text_begin(text);
+        agentite_text_begin(text);
 
         // Draw game state
         float y = 20.0f;
 
         if (game.game_won) {
-            carbon_text_draw_colored(text, font, "VICTORY! Emissions eliminated!",
+            agentite_text_draw_colored(text, font, "VICTORY! Emissions eliminated!",
                                       20.0f, y, 0.2f, 1.0f, 0.2f, 1.0f);
         } else if (game.game_lost) {
-            carbon_text_draw_colored(text, font, "DEFEAT! Lost public support.",
+            agentite_text_draw_colored(text, font, "DEFEAT! Lost public support.",
                                       20.0f, y, 1.0f, 0.2f, 0.2f, 1.0f);
         } else {
-            carbon_text_printf(text, font, 20.0f, y, "Turn: %d", game.turns.turn_number);
+            agentite_text_printf(text, font, 20.0f, y, "Turn: %d", game.turns.turn_number);
         }
         y += 25.0f;
 
-        carbon_text_printf(text, font, 20.0f, y, "Money: $%d (+%d/turn)",
-                           game.money.current, carbon_resource_preview_tick(&game.money));
+        agentite_text_printf(text, font, 20.0f, y, "Money: $%d (+%d/turn)",
+                           game.money.current, agentite_resource_preview_tick(&game.money));
         y += 25.0f;
 
-        carbon_text_printf(text, font, 20.0f, y, "Research: %d (+%d/turn)",
+        agentite_text_printf(text, font, 20.0f, y, "Research: %d (+%d/turn)",
                            game.research_points.current,
-                           carbon_resource_preview_tick(&game.research_points));
+                           agentite_resource_preview_tick(&game.research_points));
         y += 25.0f;
 
         // Color-coded emissions
         float er = game.emissions;
         float eg = 1.0f - game.emissions;
-        carbon_text_printf_colored(text, font, 20.0f, y, er, eg, 0.0f, 1.0f,
+        agentite_text_printf_colored(text, font, 20.0f, y, er, eg, 0.0f, 1.0f,
                                     "Emissions: %.0f%%", game.emissions * 100.0f);
         y += 25.0f;
 
         // Color-coded approval
         float ar = 1.0f - game.approval;
         float ag = game.approval;
-        carbon_text_printf_colored(text, font, 20.0f, y, ar, ag, 0.2f, 1.0f,
+        agentite_text_printf_colored(text, font, 20.0f, y, ar, ag, 0.2f, 1.0f,
                                     "Approval: %.0f%%", game.approval * 100.0f);
         y += 35.0f;
 
         // Show active research
-        if (carbon_unlock_is_researching(&game.research)) {
-            const Carbon_UnlockDef *tech = carbon_unlock_find(game.tech_tree,
+        if (agentite_unlock_is_researching(&game.research)) {
+            const Agentite_UnlockDef *tech = agentite_unlock_find(game.tech_tree,
                                                                game.research.current_id);
             if (tech) {
-                float progress = carbon_unlock_get_progress_percent(&game.research);
-                carbon_text_printf(text, font, 20.0f, y, "Researching: %s (%.0f%%)",
+                float progress = agentite_unlock_get_progress_percent(&game.research);
+                agentite_text_printf(text, font, 20.0f, y, "Researching: %s (%.0f%%)",
                                    tech->name, progress * 100.0f);
                 y += 25.0f;
             }
@@ -493,17 +493,17 @@ int main(int argc, char *argv[]) {
 
         // Show pending event
         if (game.awaiting_choice) {
-            const Carbon_ActiveEvent *evt = carbon_event_get_pending(game.events);
+            const Agentite_ActiveEvent *evt = agentite_event_get_pending(game.events);
             if (evt && evt->def) {
                 y += 10.0f;
-                carbon_text_draw_colored(text, font, "=== EVENT ===",
+                agentite_text_draw_colored(text, font, "=== EVENT ===",
                                           20.0f, y, 1.0f, 1.0f, 0.0f, 1.0f);
                 y += 25.0f;
-                carbon_text_draw(text, font, evt->def->name, 20.0f, y);
+                agentite_text_draw(text, font, evt->def->name, 20.0f, y);
                 y += 25.0f;
 
                 for (int i = 0; i < evt->def->choice_count; i++) {
-                    carbon_text_printf(text, font, 30.0f, y, "[%d] %s",
+                    agentite_text_printf(text, font, 30.0f, y, "[%d] %s",
                                        i + 1, evt->def->choices[i].label);
                     y += 22.0f;
                 }
@@ -512,33 +512,33 @@ int main(int argc, char *argv[]) {
 
         // Controls help
         y = 650.0f;
-        carbon_text_draw_colored(text, font,
+        agentite_text_draw_colored(text, font,
                                   "SPACE: Next Turn | S: Save | L: Load | R: Research | ESC: Quit",
                                   20.0f, y, 0.6f, 0.6f, 0.6f, 1.0f);
 
-        carbon_text_end(text);
-        carbon_text_upload(text, cmd);
+        agentite_text_end(text);
+        agentite_text_upload(text, cmd);
 
         // Render
-        if (carbon_begin_render_pass(engine, 0.1f, 0.1f, 0.15f, 1.0f)) {
-            SDL_GPURenderPass *pass = carbon_get_render_pass(engine);
-            carbon_text_render(text, cmd, pass);
-            carbon_end_render_pass(engine);
+        if (agentite_begin_render_pass(engine, 0.1f, 0.1f, 0.15f, 1.0f)) {
+            SDL_GPURenderPass *pass = agentite_get_render_pass(engine);
+            agentite_text_render(text, cmd, pass);
+            agentite_end_render_pass(engine);
         }
 
-        carbon_end_frame(engine);
+        agentite_end_frame(engine);
     }
 
     // Cleanup
-    carbon_history_destroy(game.history);
-    carbon_save_destroy(game.saves);
-    carbon_unlock_destroy(game.tech_tree);
-    carbon_event_destroy(game.events);
+    agentite_history_destroy(game.history);
+    agentite_save_destroy(game.saves);
+    agentite_unlock_destroy(game.tech_tree);
+    agentite_event_destroy(game.events);
 
-    carbon_font_destroy(text, font);
-    carbon_text_shutdown(text);
-    carbon_input_shutdown(input);
-    carbon_shutdown(engine);
+    agentite_font_destroy(text, font);
+    agentite_text_shutdown(text);
+    agentite_input_shutdown(input);
+    agentite_shutdown(engine);
 
     return 0;
 }

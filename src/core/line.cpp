@@ -1,4 +1,4 @@
-#include "carbon/line.h"
+#include "agentite/line.h"
 #include <stdlib.h>
 
 /* Absolute value helper */
@@ -11,17 +11,17 @@ static inline int32_t sign(int32_t x) {
     return (x > 0) - (x < 0);
 }
 
-bool carbon_iterate_line_cells(int32_t from_x, int32_t from_y,
+bool agentite_iterate_line_cells(int32_t from_x, int32_t from_y,
                                 int32_t to_x, int32_t to_y,
-                                Carbon_LineCellCallback callback,
+                                Agentite_LineCellCallback callback,
                                 void *userdata) {
-    return carbon_iterate_line_cells_ex(from_x, from_y, to_x, to_y,
+    return agentite_iterate_line_cells_ex(from_x, from_y, to_x, to_y,
                                         callback, userdata, false, false);
 }
 
-bool carbon_iterate_line_cells_ex(int32_t from_x, int32_t from_y,
+bool agentite_iterate_line_cells_ex(int32_t from_x, int32_t from_y,
                                    int32_t to_x, int32_t to_y,
-                                   Carbon_LineCellCallback callback,
+                                   Agentite_LineCellCallback callback,
                                    void *userdata,
                                    bool skip_start,
                                    bool skip_end) {
@@ -75,17 +75,17 @@ static bool count_callback(int32_t x, int32_t y, void *userdata) {
     return true;
 }
 
-int carbon_count_line_cells(int32_t from_x, int32_t from_y,
+int agentite_count_line_cells(int32_t from_x, int32_t from_y,
                             int32_t to_x, int32_t to_y) {
     int count = 0;
-    carbon_iterate_line_cells(from_x, from_y, to_x, to_y, count_callback, &count);
+    agentite_iterate_line_cells(from_x, from_y, to_x, to_y, count_callback, &count);
     return count;
 }
 
-int carbon_count_line_cells_between(int32_t from_x, int32_t from_y,
+int agentite_count_line_cells_between(int32_t from_x, int32_t from_y,
                                      int32_t to_x, int32_t to_y) {
     int count = 0;
-    carbon_iterate_line_cells_ex(from_x, from_y, to_x, to_y,
+    agentite_iterate_line_cells_ex(from_x, from_y, to_x, to_y,
                                  count_callback, &count, true, true);
     return count;
 }
@@ -109,7 +109,7 @@ static bool buffer_callback(int32_t x, int32_t y, void *userdata) {
     return true;
 }
 
-int carbon_get_line_cells(int32_t from_x, int32_t from_y,
+int agentite_get_line_cells(int32_t from_x, int32_t from_y,
                           int32_t to_x, int32_t to_y,
                           int32_t *out_x, int32_t *out_y,
                           int max_cells) {
@@ -122,7 +122,7 @@ int carbon_get_line_cells(int32_t from_x, int32_t from_y,
         .max_cells = max_cells
     };
 
-    carbon_iterate_line_cells(from_x, from_y, to_x, to_y, buffer_callback, &ctx);
+    agentite_iterate_line_cells(from_x, from_y, to_x, to_y, buffer_callback, &ctx);
     return ctx.count;
 }
 
@@ -142,7 +142,7 @@ static bool find_callback(int32_t x, int32_t y, void *userdata) {
     return true;
 }
 
-bool carbon_line_passes_through(int32_t from_x, int32_t from_y,
+bool agentite_line_passes_through(int32_t from_x, int32_t from_y,
                                  int32_t to_x, int32_t to_y,
                                  int32_t cell_x, int32_t cell_y) {
     FindContext ctx = {
@@ -151,6 +151,6 @@ bool carbon_line_passes_through(int32_t from_x, int32_t from_y,
         .found = false
     };
 
-    carbon_iterate_line_cells(from_x, from_y, to_x, to_y, find_callback, &ctx);
+    agentite_iterate_line_cells(from_x, from_y, to_x, to_y, find_callback, &ctx);
     return ctx.found;
 }

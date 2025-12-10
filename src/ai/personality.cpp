@@ -5,9 +5,9 @@
  * threat assessment, goal management, and extensible action evaluation.
  */
 
-#include "carbon/carbon.h"
-#include "carbon/ai.h"
-#include "carbon/error.h"
+#include "agentite/agentite.h"
+#include "agentite/ai.h"
+#include "agentite/error.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -21,21 +21,21 @@
  * Registered evaluator entry
  */
 typedef struct {
-    Carbon_AIActionType type;
-    Carbon_AIEvaluator evaluator;
+    Agentite_AIActionType type;
+    Agentite_AIEvaluator evaluator;
 } EvaluatorEntry;
 
 /**
  * AI system internal structure
  */
-struct Carbon_AISystem {
+struct Agentite_AISystem {
     /* Registered evaluators */
-    EvaluatorEntry evaluators[CARBON_AI_MAX_EVALUATORS];
+    EvaluatorEntry evaluators[AGENTITE_AI_MAX_EVALUATORS];
     int evaluator_count;
 
     /* Callbacks */
-    Carbon_AIThreatAssessor threat_assessor;
-    Carbon_AISituationAnalyzer situation_analyzer;
+    Agentite_AIThreatAssessor threat_assessor;
+    Agentite_AISituationAnalyzer situation_analyzer;
 };
 
 /*============================================================================
@@ -45,7 +45,7 @@ struct Carbon_AISystem {
 /**
  * Predefined weight configurations for each personality type
  */
-static const Carbon_AIWeights DEFAULT_WEIGHTS[] = {
+static const Agentite_AIWeights DEFAULT_WEIGHTS[] = {
     /* BALANCED */
     { .aggression = 0.5f, .defense = 0.5f, .expansion = 0.5f,
       .economy = 0.5f, .technology = 0.5f, .diplomacy = 0.5f,
@@ -108,8 +108,8 @@ static uint32_t xorshift32(uint32_t *state) {
  * Compare actions by priority (for qsort, descending order)
  */
 static int compare_actions(const void *a, const void *b) {
-    const Carbon_AIAction *action_a = (const Carbon_AIAction*)a;
-    const Carbon_AIAction *action_b = (const Carbon_AIAction*)b;
+    const Agentite_AIAction *action_a = (const Agentite_AIAction*)a;
+    const Agentite_AIAction *action_b = (const Agentite_AIAction*)b;
 
     /* Sort by priority descending, then by urgency descending */
     if (action_b->priority != action_a->priority) {
@@ -121,27 +121,27 @@ static int compare_actions(const void *a, const void *b) {
 /**
  * Get weight for an action type
  */
-static float get_weight_for_action(const Carbon_AIWeights *weights,
-                                    Carbon_AIActionType type) {
+static float get_weight_for_action(const Agentite_AIWeights *weights,
+                                    Agentite_AIActionType type) {
     switch (type) {
-        case CARBON_AI_ACTION_ATTACK:
+        case AGENTITE_AI_ACTION_ATTACK:
             return weights->aggression;
-        case CARBON_AI_ACTION_DEFEND:
+        case AGENTITE_AI_ACTION_DEFEND:
             return weights->defense;
-        case CARBON_AI_ACTION_EXPAND:
-        case CARBON_AI_ACTION_SCOUT:
+        case AGENTITE_AI_ACTION_EXPAND:
+        case AGENTITE_AI_ACTION_SCOUT:
             return weights->expansion;
-        case CARBON_AI_ACTION_BUILD:
-        case CARBON_AI_ACTION_TRADE:
+        case AGENTITE_AI_ACTION_BUILD:
+        case AGENTITE_AI_ACTION_TRADE:
             return weights->economy;
-        case CARBON_AI_ACTION_RESEARCH:
-        case CARBON_AI_ACTION_UPGRADE:
+        case AGENTITE_AI_ACTION_RESEARCH:
+        case AGENTITE_AI_ACTION_UPGRADE:
             return weights->technology;
-        case CARBON_AI_ACTION_DIPLOMACY:
+        case AGENTITE_AI_ACTION_DIPLOMACY:
             return weights->diplomacy;
-        case CARBON_AI_ACTION_RETREAT:
+        case AGENTITE_AI_ACTION_RETREAT:
             return weights->caution;
-        case CARBON_AI_ACTION_RECRUIT:
+        case AGENTITE_AI_ACTION_RECRUIT:
             return (weights->aggression + weights->defense) * 0.5f;
         default:
             return 0.5f;  /* Neutral weight for unknown types */
@@ -152,16 +152,16 @@ static float get_weight_for_action(const Carbon_AIWeights *weights,
  * Creation and Destruction
  *============================================================================*/
 
-Carbon_AISystem *carbon_ai_create(void) {
-    Carbon_AISystem *ai = CARBON_ALLOC(Carbon_AISystem);
+Agentite_AISystem *agentite_ai_create(void) {
+    Agentite_AISystem *ai = AGENTITE_ALLOC(Agentite_AISystem);
     if (!ai) {
-        carbon_set_error("carbon_ai_create: allocation failed");
+        agentite_set_error("agentite_ai_create: allocation failed");
         return NULL;
     }
     return ai;
 }
 
-void carbon_ai_destroy(Carbon_AISystem *ai) {
+void agentite_ai_destroy(Agentite_AISystem *ai) {
     if (ai) {
         free(ai);
     }
@@ -171,10 +171,10 @@ void carbon_ai_destroy(Carbon_AISystem *ai) {
  * State Management
  *============================================================================*/
 
-void carbon_ai_state_init(Carbon_AIState *state, Carbon_AIPersonality personality) {
+void agentite_ai_state_init(Agentite_AIState *state, Agentite_AIPersonality personality) {
     if (!state) return;
 
-    memset(state, 0, sizeof(Carbon_AIState));
+    memset(state, 0, sizeof(Agentite_AIState));
 
     state->personality = personality;
     state->primary_target = -1;
@@ -183,42 +183,42 @@ void carbon_ai_state_init(Carbon_AIState *state, Carbon_AIPersonality personalit
     state->resources_ratio = 1.0f;
     state->military_ratio = 1.0f;
     state->tech_ratio = 1.0f;
-    state->last_action_type = CARBON_AI_ACTION_NONE;
+    state->last_action_type = AGENTITE_AI_ACTION_NONE;
     state->last_target = -1;
 
     /* Set weights based on personality */
-    carbon_ai_get_default_weights(personality, &state->weights);
+    agentite_ai_get_default_weights(personality, &state->weights);
     state->base_weights = state->weights;
 
     /* Initialize random state */
-    carbon_ai_seed_random(state, 0);
+    agentite_ai_seed_random(state, 0);
 }
 
-void carbon_ai_state_reset(Carbon_AIState *state) {
+void agentite_ai_state_reset(Agentite_AIState *state) {
     if (!state) return;
 
-    Carbon_AIPersonality personality = state->personality;
-    carbon_ai_state_init(state, personality);
+    Agentite_AIPersonality personality = state->personality;
+    agentite_ai_state_init(state, personality);
 }
 
-void carbon_ai_get_default_weights(Carbon_AIPersonality personality,
-                                    Carbon_AIWeights *out) {
+void agentite_ai_get_default_weights(Agentite_AIPersonality personality,
+                                    Agentite_AIWeights *out) {
     if (!out) return;
 
-    if (personality >= 0 && personality < CARBON_AI_PERSONALITY_COUNT) {
+    if (personality >= 0 && personality < AGENTITE_AI_PERSONALITY_COUNT) {
         *out = DEFAULT_WEIGHTS[personality];
     } else {
         /* User-defined personality - use balanced as fallback */
-        *out = DEFAULT_WEIGHTS[CARBON_AI_BALANCED];
+        *out = DEFAULT_WEIGHTS[AGENTITE_AI_BALANCED];
     }
 }
 
-void carbon_ai_set_weights(Carbon_AIState *state, const Carbon_AIWeights *weights) {
+void agentite_ai_set_weights(Agentite_AIState *state, const Agentite_AIWeights *weights) {
     if (!state || !weights) return;
     state->weights = *weights;
 }
 
-void carbon_ai_modify_weights(Carbon_AIState *state, const Carbon_AIWeights *modifiers) {
+void agentite_ai_modify_weights(Agentite_AIState *state, const Agentite_AIWeights *modifiers) {
     if (!state || !modifiers) return;
 
     state->weights.aggression *= modifiers->aggression;
@@ -231,7 +231,7 @@ void carbon_ai_modify_weights(Carbon_AIState *state, const Carbon_AIWeights *mod
     state->weights.opportunism *= modifiers->opportunism;
 }
 
-void carbon_ai_reset_weights(Carbon_AIState *state) {
+void agentite_ai_reset_weights(Agentite_AIState *state) {
     if (!state) return;
     state->weights = state->base_weights;
 }
@@ -240,13 +240,13 @@ void carbon_ai_reset_weights(Carbon_AIState *state) {
  * Evaluator Registration
  *============================================================================*/
 
-void carbon_ai_register_evaluator(Carbon_AISystem *ai,
-                                   Carbon_AIActionType type,
-                                   Carbon_AIEvaluator evaluator) {
+void agentite_ai_register_evaluator(Agentite_AISystem *ai,
+                                   Agentite_AIActionType type,
+                                   Agentite_AIEvaluator evaluator) {
     if (!ai || !evaluator) return;
 
-    if (ai->evaluator_count >= CARBON_AI_MAX_EVALUATORS) {
-        carbon_set_error("carbon_ai_register_evaluator: max evaluators reached");
+    if (ai->evaluator_count >= AGENTITE_AI_MAX_EVALUATORS) {
+        agentite_set_error("agentite_ai_register_evaluator: max evaluators reached");
         return;
     }
 
@@ -263,15 +263,15 @@ void carbon_ai_register_evaluator(Carbon_AISystem *ai,
     ai->evaluator_count++;
 }
 
-void carbon_ai_set_threat_assessor(Carbon_AISystem *ai,
-                                    Carbon_AIThreatAssessor assessor) {
+void agentite_ai_set_threat_assessor(Agentite_AISystem *ai,
+                                    Agentite_AIThreatAssessor assessor) {
     if (ai) {
         ai->threat_assessor = assessor;
     }
 }
 
-void carbon_ai_set_situation_analyzer(Carbon_AISystem *ai,
-                                       Carbon_AISituationAnalyzer analyzer) {
+void agentite_ai_set_situation_analyzer(Agentite_AISystem *ai,
+                                       Agentite_AISituationAnalyzer analyzer) {
     if (ai) {
         ai->situation_analyzer = analyzer;
     }
@@ -281,52 +281,52 @@ void carbon_ai_set_situation_analyzer(Carbon_AISystem *ai,
  * Decision Making
  *============================================================================*/
 
-void carbon_ai_process_turn(Carbon_AISystem *ai,
-                             Carbon_AIState *state,
+void agentite_ai_process_turn(Agentite_AISystem *ai,
+                             Agentite_AIState *state,
                              void *game_ctx,
-                             Carbon_AIDecision *out) {
+                             Agentite_AIDecision *out) {
     if (!ai || !state || !out) return;
 
-    memset(out, 0, sizeof(Carbon_AIDecision));
+    memset(out, 0, sizeof(Agentite_AIDecision));
 
     /* Update situation and threats first */
-    carbon_ai_update_situation(ai, state, game_ctx);
-    carbon_ai_update_threats(ai, state, game_ctx);
+    agentite_ai_update_situation(ai, state, game_ctx);
+    agentite_ai_update_threats(ai, state, game_ctx);
 
     /* Collect actions from all evaluators */
-    Carbon_AIAction temp_actions[CARBON_AI_MAX_ACTIONS * 2];
+    Agentite_AIAction temp_actions[AGENTITE_AI_MAX_ACTIONS * 2];
     int temp_count = 0;
 
-    for (int i = 0; i < ai->evaluator_count && temp_count < CARBON_AI_MAX_ACTIONS * 2; i++) {
-        Carbon_AIAction eval_actions[CARBON_AI_MAX_ACTIONS];
+    for (int i = 0; i < ai->evaluator_count && temp_count < AGENTITE_AI_MAX_ACTIONS * 2; i++) {
+        Agentite_AIAction eval_actions[AGENTITE_AI_MAX_ACTIONS];
         int eval_count = 0;
 
         /* Skip if action type is on cooldown */
-        if (carbon_ai_is_on_cooldown(state, ai->evaluators[i].type)) {
+        if (agentite_ai_is_on_cooldown(state, ai->evaluators[i].type)) {
             continue;
         }
 
         /* Call evaluator */
         ai->evaluators[i].evaluator(state, game_ctx, eval_actions, &eval_count,
-                                     CARBON_AI_MAX_ACTIONS);
+                                     AGENTITE_AI_MAX_ACTIONS);
 
         /* Score and add actions */
-        for (int j = 0; j < eval_count && temp_count < CARBON_AI_MAX_ACTIONS * 2; j++) {
-            Carbon_AIAction *action = &eval_actions[j];
+        for (int j = 0; j < eval_count && temp_count < AGENTITE_AI_MAX_ACTIONS * 2; j++) {
+            Agentite_AIAction *action = &eval_actions[j];
 
             /* Apply personality weights */
-            action->priority = carbon_ai_score_action(state, action->type,
+            action->priority = agentite_ai_score_action(state, action->type,
                                                        action->priority);
 
             /* Boost urgency for high-threat situations */
             if (state->overall_threat > 0.7f &&
-                (action->type == CARBON_AI_ACTION_DEFEND ||
-                 action->type == CARBON_AI_ACTION_RETREAT)) {
+                (action->type == AGENTITE_AI_ACTION_DEFEND ||
+                 action->type == AGENTITE_AI_ACTION_RETREAT)) {
                 action->urgency *= 1.5f;
             }
 
             /* Add small random factor for variety */
-            action->priority += carbon_ai_random(state) * 0.1f - 0.05f;
+            action->priority += agentite_ai_random(state) * 0.1f - 0.05f;
 
             temp_actions[temp_count++] = *action;
         }
@@ -334,12 +334,12 @@ void carbon_ai_process_turn(Carbon_AISystem *ai,
 
     /* Sort all actions by priority */
     if (temp_count > 0) {
-        qsort(temp_actions, temp_count, sizeof(Carbon_AIAction), compare_actions);
+        qsort(temp_actions, temp_count, sizeof(Agentite_AIAction), compare_actions);
     }
 
     /* Copy top actions to output */
-    out->action_count = (temp_count < CARBON_AI_MAX_ACTIONS) ?
-                         temp_count : CARBON_AI_MAX_ACTIONS;
+    out->action_count = (temp_count < AGENTITE_AI_MAX_ACTIONS) ?
+                         temp_count : AGENTITE_AI_MAX_ACTIONS;
     out->total_score = 0.0f;
 
     for (int i = 0; i < out->action_count; i++) {
@@ -348,7 +348,7 @@ void carbon_ai_process_turn(Carbon_AISystem *ai,
     }
 
     /* Update cooldowns */
-    carbon_ai_update_cooldowns(state);
+    agentite_ai_update_cooldowns(state);
 
     /* Update memory */
     if (out->action_count > 0) {
@@ -357,8 +357,8 @@ void carbon_ai_process_turn(Carbon_AISystem *ai,
     }
 }
 
-float carbon_ai_score_action(const Carbon_AIState *state,
-                              Carbon_AIActionType type,
+float agentite_ai_score_action(const Agentite_AIState *state,
+                              Agentite_AIActionType type,
                               float base_score) {
     if (!state) return base_score;
 
@@ -367,7 +367,7 @@ float carbon_ai_score_action(const Carbon_AIState *state,
 
     /* Apply situational modifiers */
     switch (type) {
-        case CARBON_AI_ACTION_ATTACK:
+        case AGENTITE_AI_ACTION_ATTACK:
             /* Boost attack if we're strong */
             if (state->military_ratio > 1.2f) {
                 score *= 1.2f;
@@ -378,37 +378,37 @@ float carbon_ai_score_action(const Carbon_AIState *state,
             }
             break;
 
-        case CARBON_AI_ACTION_DEFEND:
+        case AGENTITE_AI_ACTION_DEFEND:
             /* Boost defense under threat */
             if (state->overall_threat > 0.5f) {
                 score *= 1.0f + state->overall_threat;
             }
             break;
 
-        case CARBON_AI_ACTION_EXPAND:
+        case AGENTITE_AI_ACTION_EXPAND:
             /* Reduce expansion under threat */
             if (state->overall_threat > 0.4f) {
                 score *= 0.6f;
             }
             break;
 
-        case CARBON_AI_ACTION_BUILD:
-        case CARBON_AI_ACTION_TRADE:
+        case AGENTITE_AI_ACTION_BUILD:
+        case AGENTITE_AI_ACTION_TRADE:
             /* Boost economy if we're resource-poor */
             if (state->resources_ratio < 0.8f) {
                 score *= 1.3f;
             }
             break;
 
-        case CARBON_AI_ACTION_RESEARCH:
-        case CARBON_AI_ACTION_UPGRADE:
+        case AGENTITE_AI_ACTION_RESEARCH:
+        case AGENTITE_AI_ACTION_UPGRADE:
             /* Boost tech if we're behind */
             if (state->tech_ratio < 0.9f) {
                 score *= 1.2f;
             }
             break;
 
-        case CARBON_AI_ACTION_RETREAT:
+        case AGENTITE_AI_ACTION_RETREAT:
             /* Strongly boost retreat if low morale and under threat */
             if (state->morale < 0.3f && state->overall_threat > 0.6f) {
                 score *= 2.0f;
@@ -422,12 +422,12 @@ float carbon_ai_score_action(const Carbon_AIState *state,
     /* Apply morale modifier */
     if (state->morale > 0.7f) {
         /* High morale = more aggressive */
-        if (type == CARBON_AI_ACTION_ATTACK || type == CARBON_AI_ACTION_EXPAND) {
+        if (type == AGENTITE_AI_ACTION_ATTACK || type == AGENTITE_AI_ACTION_EXPAND) {
             score *= 1.1f;
         }
     } else if (state->morale < 0.3f) {
         /* Low morale = more cautious */
-        if (type == CARBON_AI_ACTION_DEFEND || type == CARBON_AI_ACTION_RETREAT) {
+        if (type == AGENTITE_AI_ACTION_DEFEND || type == AGENTITE_AI_ACTION_RETREAT) {
             score *= 1.2f;
         }
     }
@@ -435,20 +435,20 @@ float carbon_ai_score_action(const Carbon_AIState *state,
     return score;
 }
 
-void carbon_ai_sort_actions(Carbon_AIDecision *decision) {
+void agentite_ai_sort_actions(Agentite_AIDecision *decision) {
     if (!decision || decision->action_count < 2) return;
 
     qsort(decision->actions, decision->action_count,
-          sizeof(Carbon_AIAction), compare_actions);
+          sizeof(Agentite_AIAction), compare_actions);
 }
 
-int carbon_ai_get_top_actions(const Carbon_AIDecision *decision,
-                               Carbon_AIAction *out,
+int agentite_ai_get_top_actions(const Agentite_AIDecision *decision,
+                               Agentite_AIAction *out,
                                int max) {
     if (!decision || !out || max <= 0) return 0;
 
     int count = (decision->action_count < max) ? decision->action_count : max;
-    memcpy(out, decision->actions, count * sizeof(Carbon_AIAction));
+    memcpy(out, decision->actions, count * sizeof(Agentite_AIAction));
     return count;
 }
 
@@ -456,8 +456,8 @@ int carbon_ai_get_top_actions(const Carbon_AIDecision *decision,
  * Threat Management
  *============================================================================*/
 
-void carbon_ai_update_threats(Carbon_AISystem *ai,
-                               Carbon_AIState *state,
+void agentite_ai_update_threats(Agentite_AISystem *ai,
+                               Agentite_AIState *state,
                                void *game_ctx) {
     if (!ai || !state) return;
 
@@ -468,22 +468,22 @@ void carbon_ai_update_threats(Carbon_AISystem *ai,
 
     /* Use custom assessor if available */
     if (ai->threat_assessor) {
-        Carbon_AIThreat new_threats[CARBON_AI_MAX_THREATS];
+        Agentite_AIThreat new_threats[AGENTITE_AI_MAX_THREATS];
         int new_count = 0;
 
         ai->threat_assessor(state, game_ctx, new_threats, &new_count,
-                            CARBON_AI_MAX_THREATS);
+                            AGENTITE_AI_MAX_THREATS);
 
         /* Replace threat list */
         state->threat_count = new_count;
-        memcpy(state->threats, new_threats, new_count * sizeof(Carbon_AIThreat));
+        memcpy(state->threats, new_threats, new_count * sizeof(Agentite_AIThreat));
     }
 
     /* Recalculate overall threat */
-    state->overall_threat = carbon_ai_calculate_threat_level(state);
+    state->overall_threat = agentite_ai_calculate_threat_level(state);
 }
 
-void carbon_ai_add_threat(Carbon_AIState *state,
+void agentite_ai_add_threat(Agentite_AIState *state,
                            int32_t source_id,
                            float level,
                            int32_t target_id,
@@ -503,8 +503,8 @@ void carbon_ai_add_threat(Carbon_AIState *state,
     }
 
     /* Add new threat */
-    if (state->threat_count < CARBON_AI_MAX_THREATS) {
-        Carbon_AIThreat *threat = &state->threats[state->threat_count++];
+    if (state->threat_count < AGENTITE_AI_MAX_THREATS) {
+        Agentite_AIThreat *threat = &state->threats[state->threat_count++];
         threat->source_id = source_id;
         threat->level = level;
         threat->target_id = target_id;
@@ -513,7 +513,7 @@ void carbon_ai_add_threat(Carbon_AIState *state,
     }
 }
 
-void carbon_ai_remove_threat(Carbon_AIState *state, int32_t source_id) {
+void agentite_ai_remove_threat(Agentite_AIState *state, int32_t source_id) {
     if (!state) return;
 
     for (int i = 0; i < state->threat_count; i++) {
@@ -525,10 +525,10 @@ void carbon_ai_remove_threat(Carbon_AIState *state, int32_t source_id) {
     }
 }
 
-const Carbon_AIThreat *carbon_ai_get_highest_threat(const Carbon_AIState *state) {
+const Agentite_AIThreat *agentite_ai_get_highest_threat(const Agentite_AIState *state) {
     if (!state || state->threat_count == 0) return NULL;
 
-    const Carbon_AIThreat *highest = &state->threats[0];
+    const Agentite_AIThreat *highest = &state->threats[0];
     for (int i = 1; i < state->threat_count; i++) {
         if (state->threats[i].level > highest->level) {
             highest = &state->threats[i];
@@ -537,7 +537,7 @@ const Carbon_AIThreat *carbon_ai_get_highest_threat(const Carbon_AIState *state)
     return highest;
 }
 
-float carbon_ai_calculate_threat_level(Carbon_AIState *state) {
+float agentite_ai_calculate_threat_level(Agentite_AIState *state) {
     if (!state || state->threat_count == 0) return 0.0f;
 
     float total = 0.0f;
@@ -571,16 +571,16 @@ float carbon_ai_calculate_threat_level(Carbon_AIState *state) {
  * Goal Management
  *============================================================================*/
 
-int carbon_ai_add_goal(Carbon_AIState *state,
+int agentite_ai_add_goal(Agentite_AIState *state,
                         int32_t type,
                         int32_t target_id,
                         float priority) {
-    if (!state || state->goal_count >= CARBON_AI_MAX_GOALS) {
+    if (!state || state->goal_count >= AGENTITE_AI_MAX_GOALS) {
         return -1;
     }
 
     int index = state->goal_count++;
-    Carbon_AIGoal *goal = &state->goals[index];
+    Agentite_AIGoal *goal = &state->goals[index];
 
     goal->type = type;
     goal->target_id = target_id;
@@ -592,7 +592,7 @@ int carbon_ai_add_goal(Carbon_AIState *state,
     return index;
 }
 
-void carbon_ai_update_goal_progress(Carbon_AIState *state,
+void agentite_ai_update_goal_progress(Agentite_AIState *state,
                                      int index,
                                      float progress) {
     if (!state || index < 0 || index >= state->goal_count) return;
@@ -603,24 +603,24 @@ void carbon_ai_update_goal_progress(Carbon_AIState *state,
     }
 }
 
-void carbon_ai_complete_goal(Carbon_AIState *state, int index) {
+void agentite_ai_complete_goal(Agentite_AIState *state, int index) {
     if (!state || index < 0 || index >= state->goal_count) return;
 
     state->goals[index].completed = true;
     state->goals[index].progress = 1.0f;
 }
 
-void carbon_ai_remove_goal(Carbon_AIState *state, int index) {
+void agentite_ai_remove_goal(Agentite_AIState *state, int index) {
     if (!state || index < 0 || index >= state->goal_count) return;
 
     /* Swap with last and decrement */
     state->goals[index] = state->goals[--state->goal_count];
 }
 
-const Carbon_AIGoal *carbon_ai_get_primary_goal(const Carbon_AIState *state) {
+const Agentite_AIGoal *agentite_ai_get_primary_goal(const Agentite_AIState *state) {
     if (!state || state->goal_count == 0) return NULL;
 
-    const Carbon_AIGoal *primary = NULL;
+    const Agentite_AIGoal *primary = NULL;
     float highest_priority = -1.0f;
 
     for (int i = 0; i < state->goal_count; i++) {
@@ -634,15 +634,15 @@ const Carbon_AIGoal *carbon_ai_get_primary_goal(const Carbon_AIState *state) {
     return primary;
 }
 
-void carbon_ai_cleanup_goals(Carbon_AIState *state, int max_stale_turns) {
+void agentite_ai_cleanup_goals(Agentite_AIState *state, int max_stale_turns) {
     if (!state) return;
 
     for (int i = state->goal_count - 1; i >= 0; i--) {
-        Carbon_AIGoal *goal = &state->goals[i];
+        Agentite_AIGoal *goal = &state->goals[i];
 
         /* Remove completed or stale goals */
         if (goal->completed || goal->turns_active > max_stale_turns) {
-            carbon_ai_remove_goal(state, i);
+            agentite_ai_remove_goal(state, i);
         } else {
             goal->turns_active++;
         }
@@ -653,27 +653,27 @@ void carbon_ai_cleanup_goals(Carbon_AIState *state, int max_stale_turns) {
  * Cooldowns
  *============================================================================*/
 
-void carbon_ai_set_cooldown(Carbon_AIState *state,
-                             Carbon_AIActionType type,
+void agentite_ai_set_cooldown(Agentite_AIState *state,
+                             Agentite_AIActionType type,
                              int turns) {
-    if (!state || type < 0 || type >= CARBON_AI_MAX_COOLDOWNS) return;
+    if (!state || type < 0 || type >= AGENTITE_AI_MAX_COOLDOWNS) return;
     state->cooldowns[type] = turns;
 }
 
-bool carbon_ai_is_on_cooldown(const Carbon_AIState *state, Carbon_AIActionType type) {
-    if (!state || type < 0 || type >= CARBON_AI_MAX_COOLDOWNS) return false;
+bool agentite_ai_is_on_cooldown(const Agentite_AIState *state, Agentite_AIActionType type) {
+    if (!state || type < 0 || type >= AGENTITE_AI_MAX_COOLDOWNS) return false;
     return state->cooldowns[type] > 0;
 }
 
-int carbon_ai_get_cooldown(const Carbon_AIState *state, Carbon_AIActionType type) {
-    if (!state || type < 0 || type >= CARBON_AI_MAX_COOLDOWNS) return 0;
+int agentite_ai_get_cooldown(const Agentite_AIState *state, Agentite_AIActionType type) {
+    if (!state || type < 0 || type >= AGENTITE_AI_MAX_COOLDOWNS) return 0;
     return state->cooldowns[type];
 }
 
-void carbon_ai_update_cooldowns(Carbon_AIState *state) {
+void agentite_ai_update_cooldowns(Agentite_AIState *state) {
     if (!state) return;
 
-    for (int i = 0; i < CARBON_AI_MAX_COOLDOWNS; i++) {
+    for (int i = 0; i < AGENTITE_AI_MAX_COOLDOWNS; i++) {
         if (state->cooldowns[i] > 0) {
             state->cooldowns[i]--;
         }
@@ -684,9 +684,9 @@ void carbon_ai_update_cooldowns(Carbon_AIState *state) {
     state->turns_since_expansion++;
 
     /* Reset counters based on last action */
-    if (state->last_action_type == CARBON_AI_ACTION_ATTACK) {
+    if (state->last_action_type == AGENTITE_AI_ACTION_ATTACK) {
         state->turns_since_combat = 0;
-    } else if (state->last_action_type == CARBON_AI_ACTION_EXPAND) {
+    } else if (state->last_action_type == AGENTITE_AI_ACTION_EXPAND) {
         state->turns_since_expansion = 0;
     }
 }
@@ -695,8 +695,8 @@ void carbon_ai_update_cooldowns(Carbon_AIState *state) {
  * Situation Analysis
  *============================================================================*/
 
-void carbon_ai_update_situation(Carbon_AISystem *ai,
-                                 Carbon_AIState *state,
+void agentite_ai_update_situation(Agentite_AISystem *ai,
+                                 Agentite_AIState *state,
                                  void *game_ctx) {
     if (!ai || !state) return;
 
@@ -705,7 +705,7 @@ void carbon_ai_update_situation(Carbon_AISystem *ai,
     }
 }
 
-void carbon_ai_set_ratios(Carbon_AIState *state,
+void agentite_ai_set_ratios(Agentite_AIState *state,
                            float resources,
                            float military,
                            float tech) {
@@ -716,7 +716,7 @@ void carbon_ai_set_ratios(Carbon_AIState *state,
     state->tech_ratio = tech;
 }
 
-void carbon_ai_set_morale(Carbon_AIState *state, float morale) {
+void agentite_ai_set_morale(Agentite_AIState *state, float morale) {
     if (!state) return;
 
     if (morale < 0.0f) morale = 0.0f;
@@ -728,13 +728,13 @@ void carbon_ai_set_morale(Carbon_AIState *state, float morale) {
  * Targeting
  *============================================================================*/
 
-void carbon_ai_set_primary_target(Carbon_AIState *state, int32_t target_id) {
+void agentite_ai_set_primary_target(Agentite_AIState *state, int32_t target_id) {
     if (state) {
         state->primary_target = target_id;
     }
 }
 
-void carbon_ai_set_ally_target(Carbon_AIState *state, int32_t ally_id) {
+void agentite_ai_set_ally_target(Agentite_AIState *state, int32_t ally_id) {
     if (state) {
         state->ally_target = ally_id;
     }
@@ -744,62 +744,62 @@ void carbon_ai_set_ally_target(Carbon_AIState *state, int32_t ally_id) {
  * Utility Functions
  *============================================================================*/
 
-const char *carbon_ai_personality_name(Carbon_AIPersonality personality) {
+const char *agentite_ai_personality_name(Agentite_AIPersonality personality) {
     switch (personality) {
-        case CARBON_AI_BALANCED:     return "Balanced";
-        case CARBON_AI_AGGRESSIVE:   return "Aggressive";
-        case CARBON_AI_DEFENSIVE:    return "Defensive";
-        case CARBON_AI_ECONOMIC:     return "Economic";
-        case CARBON_AI_EXPANSIONIST: return "Expansionist";
-        case CARBON_AI_TECHNOLOGIST: return "Technologist";
-        case CARBON_AI_DIPLOMATIC:   return "Diplomatic";
-        case CARBON_AI_OPPORTUNIST:  return "Opportunist";
+        case AGENTITE_AI_BALANCED:     return "Balanced";
+        case AGENTITE_AI_AGGRESSIVE:   return "Aggressive";
+        case AGENTITE_AI_DEFENSIVE:    return "Defensive";
+        case AGENTITE_AI_ECONOMIC:     return "Economic";
+        case AGENTITE_AI_EXPANSIONIST: return "Expansionist";
+        case AGENTITE_AI_TECHNOLOGIST: return "Technologist";
+        case AGENTITE_AI_DIPLOMATIC:   return "Diplomatic";
+        case AGENTITE_AI_OPPORTUNIST:  return "Opportunist";
         default:
-            if (personality >= CARBON_AI_PERSONALITY_USER) {
+            if (personality >= AGENTITE_AI_PERSONALITY_USER) {
                 return "Custom";
             }
             return "Unknown";
     }
 }
 
-const char *carbon_ai_action_name(Carbon_AIActionType type) {
+const char *agentite_ai_action_name(Agentite_AIActionType type) {
     switch (type) {
-        case CARBON_AI_ACTION_NONE:      return "None";
-        case CARBON_AI_ACTION_BUILD:     return "Build";
-        case CARBON_AI_ACTION_ATTACK:    return "Attack";
-        case CARBON_AI_ACTION_DEFEND:    return "Defend";
-        case CARBON_AI_ACTION_EXPAND:    return "Expand";
-        case CARBON_AI_ACTION_RESEARCH:  return "Research";
-        case CARBON_AI_ACTION_DIPLOMACY: return "Diplomacy";
-        case CARBON_AI_ACTION_RECRUIT:   return "Recruit";
-        case CARBON_AI_ACTION_RETREAT:   return "Retreat";
-        case CARBON_AI_ACTION_SCOUT:     return "Scout";
-        case CARBON_AI_ACTION_TRADE:     return "Trade";
-        case CARBON_AI_ACTION_UPGRADE:   return "Upgrade";
-        case CARBON_AI_ACTION_SPECIAL:   return "Special";
+        case AGENTITE_AI_ACTION_NONE:      return "None";
+        case AGENTITE_AI_ACTION_BUILD:     return "Build";
+        case AGENTITE_AI_ACTION_ATTACK:    return "Attack";
+        case AGENTITE_AI_ACTION_DEFEND:    return "Defend";
+        case AGENTITE_AI_ACTION_EXPAND:    return "Expand";
+        case AGENTITE_AI_ACTION_RESEARCH:  return "Research";
+        case AGENTITE_AI_ACTION_DIPLOMACY: return "Diplomacy";
+        case AGENTITE_AI_ACTION_RECRUIT:   return "Recruit";
+        case AGENTITE_AI_ACTION_RETREAT:   return "Retreat";
+        case AGENTITE_AI_ACTION_SCOUT:     return "Scout";
+        case AGENTITE_AI_ACTION_TRADE:     return "Trade";
+        case AGENTITE_AI_ACTION_UPGRADE:   return "Upgrade";
+        case AGENTITE_AI_ACTION_SPECIAL:   return "Special";
         default:
-            if (type >= CARBON_AI_ACTION_USER) {
+            if (type >= AGENTITE_AI_ACTION_USER) {
                 return "Custom";
             }
             return "Unknown";
     }
 }
 
-float carbon_ai_random(Carbon_AIState *state) {
+float agentite_ai_random(Agentite_AIState *state) {
     if (!state) return 0.0f;
 
     uint32_t r = xorshift32(&state->random_state);
     return (float)r / (float)UINT32_MAX;
 }
 
-int carbon_ai_random_int(Carbon_AIState *state, int min, int max) {
+int agentite_ai_random_int(Agentite_AIState *state, int min, int max) {
     if (!state || min > max) return min;
 
-    float r = carbon_ai_random(state);
+    float r = agentite_ai_random(state);
     return min + (int)(r * (max - min + 1));
 }
 
-void carbon_ai_seed_random(Carbon_AIState *state, uint32_t seed) {
+void agentite_ai_seed_random(Agentite_AIState *state, uint32_t seed) {
     if (!state) return;
 
     if (seed == 0) {

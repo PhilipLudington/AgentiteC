@@ -1,4 +1,4 @@
-#include "carbon/containers.h"
+#include "agentite/containers.h"
 #include <SDL3/SDL.h>
 #include <time.h>
 
@@ -12,7 +12,7 @@ static bool s_random_initialized = false;
  * Random Number Utilities
  *============================================================================*/
 
-void carbon_random_seed(uint64_t seed) {
+void agentite_random_seed(uint64_t seed) {
     if (seed == 0) {
         seed = (uint64_t)time(NULL) ^ (uint64_t)SDL_GetPerformanceCounter();
     }
@@ -22,11 +22,11 @@ void carbon_random_seed(uint64_t seed) {
 
 static void ensure_random_init(void) {
     if (!s_random_initialized) {
-        carbon_random_seed(0);
+        agentite_random_seed(0);
     }
 }
 
-int carbon_rand_int(int min, int max) {
+int agentite_rand_int(int min, int max) {
     ensure_random_init();
 
     if (min > max) {
@@ -45,7 +45,7 @@ int carbon_rand_int(int min, int max) {
     return min + (int)(r % range);
 }
 
-float carbon_rand_float(float min, float max) {
+float agentite_rand_float(float min, float max) {
     ensure_random_init();
 
     if (min > max) {
@@ -58,12 +58,12 @@ float carbon_rand_float(float min, float max) {
     return min + normalized * (max - min);
 }
 
-bool carbon_rand_bool(void) {
+bool agentite_rand_bool(void) {
     ensure_random_init();
     return (rand() & 1) != 0;
 }
 
-size_t carbon_rand_index(size_t count) {
+size_t agentite_rand_index(size_t count) {
     ensure_random_init();
 
     if (count == 0) {
@@ -73,7 +73,7 @@ size_t carbon_rand_index(size_t count) {
     return (size_t)rand() % count;
 }
 
-float carbon_rand_normalized(void) {
+float agentite_rand_normalized(void) {
     ensure_random_init();
     return (float)rand() / (float)RAND_MAX;
 }
@@ -82,7 +82,7 @@ float carbon_rand_normalized(void) {
  * Weighted Random Selection
  *============================================================================*/
 
-size_t carbon_weighted_random(const Carbon_WeightedItem *items, size_t count) {
+size_t agentite_weighted_random(const Agentite_WeightedItem *items, size_t count) {
     if (!items || count == 0) {
         return 0;
     }
@@ -97,11 +97,11 @@ size_t carbon_weighted_random(const Carbon_WeightedItem *items, size_t count) {
 
     if (total <= 0.0f) {
         /* All weights are zero or negative, fall back to uniform random */
-        return items[carbon_rand_index(count)].index;
+        return items[agentite_rand_index(count)].index;
     }
 
     /* Select random value in [0, total) */
-    float target = carbon_rand_float(0.0f, total);
+    float target = agentite_rand_float(0.0f, total);
 
     /* Find which item the target falls into */
     float cumulative = 0.0f;
@@ -118,7 +118,7 @@ size_t carbon_weighted_random(const Carbon_WeightedItem *items, size_t count) {
     return items[count - 1].index;
 }
 
-size_t carbon_weighted_random_simple(const float *weights, size_t count) {
+size_t agentite_weighted_random_simple(const float *weights, size_t count) {
     if (!weights || count == 0) {
         return 0;
     }
@@ -133,11 +133,11 @@ size_t carbon_weighted_random_simple(const float *weights, size_t count) {
 
     if (total <= 0.0f) {
         /* All weights are zero or negative, fall back to uniform random */
-        return carbon_rand_index(count);
+        return agentite_rand_index(count);
     }
 
     /* Select random value in [0, total) */
-    float target = carbon_rand_float(0.0f, total);
+    float target = agentite_rand_float(0.0f, total);
 
     /* Find which index the target falls into */
     float cumulative = 0.0f;
@@ -158,7 +158,7 @@ size_t carbon_weighted_random_simple(const float *weights, size_t count) {
  * Shuffle
  *============================================================================*/
 
-void carbon_shuffle(void *array, size_t count, size_t element_size) {
+void agentite_shuffle(void *array, size_t count, size_t element_size) {
     if (!array || count <= 1 || element_size == 0) {
         return;
     }
@@ -175,7 +175,7 @@ void carbon_shuffle(void *array, size_t count, size_t element_size) {
 
     /* Fisher-Yates shuffle */
     for (size_t i = count - 1; i > 0; i--) {
-        size_t j = carbon_rand_index(i + 1);
+        size_t j = agentite_rand_index(i + 1);
 
         if (i != j) {
             /* Swap elements at i and j */

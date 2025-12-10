@@ -5,12 +5,12 @@
  * This header is NOT part of the public API.
  */
 
-#ifndef CARBON_TEXT_INTERNAL_H
-#define CARBON_TEXT_INTERNAL_H
+#ifndef AGENTITE_TEXT_INTERNAL_H
+#define AGENTITE_TEXT_INTERNAL_H
 
-#include "carbon/carbon.h"
-#include "carbon/text.h"
-#include "carbon/error.h"
+#include "agentite/agentite.h"
+#include "agentite/text.h"
+#include "agentite/error.h"
 #include <cglm/cglm.h>
 #include <stdlib.h>
 #include <string.h>
@@ -65,7 +65,7 @@ typedef struct GlyphInfo {
     float advance_x;            /* Horizontal advance */
 } GlyphInfo;
 
-struct Carbon_Font {
+struct Agentite_Font {
     stbtt_fontinfo stb_font;
     unsigned char *font_data;    /* TTF file data (must keep alive) */
     GlyphInfo glyphs[NUM_CHARS];
@@ -88,8 +88,8 @@ typedef struct SDFGlyphInfo {
 } SDFGlyphInfo;
 
 /* SDF Font structure */
-struct Carbon_SDFFont {
-    Carbon_SDFFontType type;
+struct Agentite_SDFFont {
+    Agentite_SDFFontType type;
     SDFGlyphInfo *glyphs;
     int glyph_count;
 
@@ -137,12 +137,12 @@ typedef struct QueuedTextBatch {
     SDL_GPUTexture *atlas_texture;
 
     /* For SDF/MSDF batches */
-    Carbon_SDFFont *sdf_font;
+    Agentite_SDFFont *sdf_font;
     float sdf_scale;
-    Carbon_TextEffects effects;
+    Agentite_TextEffects effects;
 } QueuedTextBatch;
 
-struct Carbon_TextRenderer {
+struct Agentite_TextRenderer {
     SDL_GPUDevice *gpu;
     SDL_Window *window;
     int screen_width;
@@ -168,16 +168,16 @@ struct Carbon_TextRenderer {
     uint32_t queued_batch_count;
 
     /* Current batch state (while building) */
-    Carbon_Font *current_font;
+    Agentite_Font *current_font;
     bool batch_started;
     uint32_t current_batch_vertex_start;
     uint32_t current_batch_index_start;
 
     /* SDF batch state */
-    Carbon_SDFFont *current_sdf_font;
+    Agentite_SDFFont *current_sdf_font;
     bool is_sdf_batch;
     float current_sdf_scale;
-    Carbon_TextEffects current_effects;
+    Agentite_TextEffects current_effects;
 };
 
 /* ============================================================================
@@ -185,23 +185,23 @@ struct Carbon_TextRenderer {
  * ============================================================================ */
 
 /* Create font atlas GPU texture from bitmap data */
-SDL_GPUTexture *text_create_font_atlas(Carbon_TextRenderer *tr,
+SDL_GPUTexture *text_create_font_atlas(Agentite_TextRenderer *tr,
                                         unsigned char *atlas_bitmap);
 
 /* Add a glyph quad to the current batch */
-void text_add_glyph(Carbon_TextRenderer *tr,
+void text_add_glyph(Agentite_TextRenderer *tr,
                     float x0, float y0, float x1, float y1,
                     float u0, float v0, float u1, float v1,
                     float r, float g, float b, float a);
 
 /* Parse SDF font JSON (msdf-atlas-gen format) */
-bool text_parse_sdf_json(const char *json, Carbon_SDFFont *font);
+bool text_parse_sdf_json(const char *json, Agentite_SDFFont *font);
 
 /* Find glyph by codepoint in SDF font */
-SDFGlyphInfo *text_sdf_find_glyph(Carbon_SDFFont *font, uint32_t codepoint);
+SDFGlyphInfo *text_sdf_find_glyph(Agentite_SDFFont *font, uint32_t codepoint);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* CARBON_TEXT_INTERNAL_H */
+#endif /* AGENTITE_TEXT_INTERNAL_H */

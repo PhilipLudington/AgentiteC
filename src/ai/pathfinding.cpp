@@ -4,9 +4,9 @@
  * A* algorithm with binary heap priority queue for efficient pathfinding.
  */
 
-#include "carbon/carbon.h"
-#include "carbon/pathfinding.h"
-#include "carbon/tilemap.h"
+#include "agentite/agentite.h"
+#include "agentite/pathfinding.h"
+#include "agentite/tilemap.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -49,7 +49,7 @@ typedef struct BinaryHeap {
 } BinaryHeap;
 
 /* Pathfinder state */
-struct Carbon_Pathfinder {
+struct Agentite_Pathfinder {
     GridCell *grid;         /* Grid of walkability and costs */
     PathNode *nodes;        /* A* node state (reused between searches) */
     BinaryHeap open_list;   /* Priority queue for A* */
@@ -165,12 +165,12 @@ static bool heap_is_empty(BinaryHeap *heap)
  * Internal Helpers
  * ============================================================================ */
 
-static inline int grid_index(Carbon_Pathfinder *pf, int x, int y)
+static inline int grid_index(Agentite_Pathfinder *pf, int x, int y)
 {
     return y * pf->width + x;
 }
 
-static inline bool in_bounds(Carbon_Pathfinder *pf, int x, int y)
+static inline bool in_bounds(Agentite_Pathfinder *pf, int x, int y)
 {
     return x >= 0 && x < pf->width && y >= 0 && y < pf->height;
 }
@@ -191,7 +191,7 @@ static float heuristic(int x1, int y1, int x2, int y2, bool allow_diagonal)
     }
 }
 
-static Carbon_Path *reconstruct_path(Carbon_Pathfinder *pf,
+static Agentite_Path *reconstruct_path(Agentite_Pathfinder *pf,
                                       int start_x, int start_y,
                                       int end_x, int end_y)
 {
@@ -211,10 +211,10 @@ static Carbon_Path *reconstruct_path(Carbon_Pathfinder *pf,
     length++;  /* Include start */
 
     /* Allocate path */
-    Carbon_Path *path = (Carbon_Path*)malloc(sizeof(Carbon_Path));
+    Agentite_Path *path = (Agentite_Path*)malloc(sizeof(Agentite_Path));
     if (!path) return NULL;
 
-    path->points = (Carbon_PathPoint*)malloc(length * sizeof(Carbon_PathPoint));
+    path->points = (Agentite_PathPoint*)malloc(length * sizeof(Agentite_PathPoint));
     if (!path->points) {
         free(path);
         return NULL;
@@ -244,11 +244,11 @@ static Carbon_Path *reconstruct_path(Carbon_Pathfinder *pf,
  * Pathfinder Lifecycle
  * ============================================================================ */
 
-Carbon_Pathfinder *carbon_pathfinder_create(int width, int height)
+Agentite_Pathfinder *agentite_pathfinder_create(int width, int height)
 {
     if (width <= 0 || height <= 0) return NULL;
 
-    Carbon_Pathfinder *pf = CARBON_ALLOC(Carbon_Pathfinder);
+    Agentite_Pathfinder *pf = AGENTITE_ALLOC(Agentite_Pathfinder);
     if (!pf) return NULL;
 
     pf->width = width;
@@ -288,7 +288,7 @@ Carbon_Pathfinder *carbon_pathfinder_create(int width, int height)
     return pf;
 }
 
-void carbon_pathfinder_destroy(Carbon_Pathfinder *pf)
+void agentite_pathfinder_destroy(Agentite_Pathfinder *pf)
 {
     if (!pf) return;
     heap_destroy(&pf->open_list);
@@ -297,7 +297,7 @@ void carbon_pathfinder_destroy(Carbon_Pathfinder *pf)
     free(pf);
 }
 
-void carbon_pathfinder_get_size(Carbon_Pathfinder *pf, int *width, int *height)
+void agentite_pathfinder_get_size(Agentite_Pathfinder *pf, int *width, int *height)
 {
     if (!pf) return;
     if (width) *width = pf->width;
@@ -308,32 +308,32 @@ void carbon_pathfinder_get_size(Carbon_Pathfinder *pf, int *width, int *height)
  * Grid Configuration
  * ============================================================================ */
 
-void carbon_pathfinder_set_walkable(Carbon_Pathfinder *pf, int x, int y, bool walkable)
+void agentite_pathfinder_set_walkable(Agentite_Pathfinder *pf, int x, int y, bool walkable)
 {
     if (!pf || !in_bounds(pf, x, y)) return;
     pf->grid[grid_index(pf, x, y)].walkable = walkable;
 }
 
-bool carbon_pathfinder_is_walkable(Carbon_Pathfinder *pf, int x, int y)
+bool agentite_pathfinder_is_walkable(Agentite_Pathfinder *pf, int x, int y)
 {
     if (!pf || !in_bounds(pf, x, y)) return false;
     return pf->grid[grid_index(pf, x, y)].walkable;
 }
 
-void carbon_pathfinder_set_cost(Carbon_Pathfinder *pf, int x, int y, float cost)
+void agentite_pathfinder_set_cost(Agentite_Pathfinder *pf, int x, int y, float cost)
 {
     if (!pf || !in_bounds(pf, x, y)) return;
     if (cost < 0.0f) cost = 0.0f;
     pf->grid[grid_index(pf, x, y)].cost = cost;
 }
 
-float carbon_pathfinder_get_cost(Carbon_Pathfinder *pf, int x, int y)
+float agentite_pathfinder_get_cost(Agentite_Pathfinder *pf, int x, int y)
 {
     if (!pf || !in_bounds(pf, x, y)) return FLT_MAX;
     return pf->grid[grid_index(pf, x, y)].cost;
 }
 
-void carbon_pathfinder_fill_walkable(Carbon_Pathfinder *pf,
+void agentite_pathfinder_fill_walkable(Agentite_Pathfinder *pf,
                                       int x, int y, int width, int height,
                                       bool walkable)
 {
@@ -354,7 +354,7 @@ void carbon_pathfinder_fill_walkable(Carbon_Pathfinder *pf,
     }
 }
 
-void carbon_pathfinder_fill_cost(Carbon_Pathfinder *pf,
+void agentite_pathfinder_fill_cost(Agentite_Pathfinder *pf,
                                   int x, int y, int width, int height,
                                   float cost)
 {
@@ -376,7 +376,7 @@ void carbon_pathfinder_fill_cost(Carbon_Pathfinder *pf,
     }
 }
 
-void carbon_pathfinder_clear(Carbon_Pathfinder *pf)
+void agentite_pathfinder_clear(Agentite_Pathfinder *pf)
 {
     if (!pf) return;
 
@@ -391,8 +391,8 @@ void carbon_pathfinder_clear(Carbon_Pathfinder *pf)
  * Tilemap Integration
  * ============================================================================ */
 
-void carbon_pathfinder_sync_tilemap(Carbon_Pathfinder *pf,
-                                     Carbon_Tilemap *tilemap,
+void agentite_pathfinder_sync_tilemap(Agentite_Pathfinder *pf,
+                                     Agentite_Tilemap *tilemap,
                                      int layer,
                                      const uint16_t *blocked_tiles,
                                      int count)
@@ -400,7 +400,7 @@ void carbon_pathfinder_sync_tilemap(Carbon_Pathfinder *pf,
     if (!pf || !tilemap) return;
 
     int map_w, map_h;
-    carbon_tilemap_get_size(tilemap, &map_w, &map_h);
+    agentite_tilemap_get_size(tilemap, &map_w, &map_h);
 
     /* Process each tile in the overlapping region */
     int max_x = pf->width < map_w ? pf->width : map_w;
@@ -408,7 +408,7 @@ void carbon_pathfinder_sync_tilemap(Carbon_Pathfinder *pf,
 
     for (int y = 0; y < max_y; y++) {
         for (int x = 0; x < max_x; x++) {
-            uint16_t tile_id = carbon_tilemap_get_tile(tilemap, layer, x, y);
+            uint16_t tile_id = agentite_tilemap_get_tile(tilemap, layer, x, y);
 
             /* Check if this tile ID is in the blocked list */
             bool blocked = false;
@@ -424,23 +424,23 @@ void carbon_pathfinder_sync_tilemap(Carbon_Pathfinder *pf,
     }
 }
 
-void carbon_pathfinder_sync_tilemap_ex(Carbon_Pathfinder *pf,
-                                        Carbon_Tilemap *tilemap,
+void agentite_pathfinder_sync_tilemap_ex(Agentite_Pathfinder *pf,
+                                        Agentite_Tilemap *tilemap,
                                         int layer,
-                                        Carbon_TileCostFunc cost_func,
+                                        Agentite_TileCostFunc cost_func,
                                         void *userdata)
 {
     if (!pf || !tilemap || !cost_func) return;
 
     int map_w, map_h;
-    carbon_tilemap_get_size(tilemap, &map_w, &map_h);
+    agentite_tilemap_get_size(tilemap, &map_w, &map_h);
 
     int max_x = pf->width < map_w ? pf->width : map_w;
     int max_y = pf->height < map_h ? pf->height : map_h;
 
     for (int y = 0; y < max_y; y++) {
         for (int x = 0; x < max_x; x++) {
-            uint16_t tile_id = carbon_tilemap_get_tile(tilemap, layer, x, y);
+            uint16_t tile_id = agentite_tilemap_get_tile(tilemap, layer, x, y);
             float cost = cost_func(tile_id, userdata);
 
             int idx = grid_index(pf, x, y);
@@ -459,10 +459,10 @@ void carbon_pathfinder_sync_tilemap_ex(Carbon_Pathfinder *pf,
  * Pathfinding
  * ============================================================================ */
 
-Carbon_Path *carbon_pathfinder_find_ex(Carbon_Pathfinder *pf,
+Agentite_Path *agentite_pathfinder_find_ex(Agentite_Pathfinder *pf,
                                         int start_x, int start_y,
                                         int end_x, int end_y,
-                                        const Carbon_PathOptions *options)
+                                        const Agentite_PathOptions *options)
 {
     if (!pf) return NULL;
 
@@ -479,9 +479,9 @@ Carbon_Path *carbon_pathfinder_find_ex(Carbon_Pathfinder *pf,
 
     /* Same tile - trivial path */
     if (start_x == end_x && start_y == end_y) {
-        Carbon_Path *path = (Carbon_Path*)malloc(sizeof(Carbon_Path));
+        Agentite_Path *path = (Agentite_Path*)malloc(sizeof(Agentite_Path));
         if (!path) return NULL;
-        path->points = (Carbon_PathPoint*)malloc(sizeof(Carbon_PathPoint));
+        path->points = (Agentite_PathPoint*)malloc(sizeof(Agentite_PathPoint));
         if (!path->points) {
             free(path);
             return NULL;
@@ -494,7 +494,7 @@ Carbon_Path *carbon_pathfinder_find_ex(Carbon_Pathfinder *pf,
     }
 
     /* Use default options if none provided */
-    Carbon_PathOptions opts = CARBON_PATH_OPTIONS_DEFAULT;
+    Agentite_PathOptions opts = AGENTITE_PATH_OPTIONS_DEFAULT;
     if (options) opts = *options;
 
     /* Reset node state */
@@ -603,26 +603,26 @@ Carbon_Path *carbon_pathfinder_find_ex(Carbon_Pathfinder *pf,
     return NULL;
 }
 
-Carbon_Path *carbon_pathfinder_find(Carbon_Pathfinder *pf,
+Agentite_Path *agentite_pathfinder_find(Agentite_Pathfinder *pf,
                                      int start_x, int start_y,
                                      int end_x, int end_y)
 {
-    return carbon_pathfinder_find_ex(pf, start_x, start_y, end_x, end_y, NULL);
+    return agentite_pathfinder_find_ex(pf, start_x, start_y, end_x, end_y, NULL);
 }
 
-bool carbon_pathfinder_has_path(Carbon_Pathfinder *pf,
+bool agentite_pathfinder_has_path(Agentite_Pathfinder *pf,
                                  int start_x, int start_y,
                                  int end_x, int end_y)
 {
-    Carbon_Path *path = carbon_pathfinder_find(pf, start_x, start_y, end_x, end_y);
+    Agentite_Path *path = agentite_pathfinder_find(pf, start_x, start_y, end_x, end_y);
     if (path) {
-        carbon_path_destroy(path);
+        agentite_path_destroy(path);
         return true;
     }
     return false;
 }
 
-bool carbon_pathfinder_line_clear(Carbon_Pathfinder *pf,
+bool agentite_pathfinder_line_clear(Agentite_Pathfinder *pf,
                                    int x1, int y1,
                                    int x2, int y2)
 {
@@ -663,20 +663,20 @@ bool carbon_pathfinder_line_clear(Carbon_Pathfinder *pf,
  * Path Operations
  * ============================================================================ */
 
-void carbon_path_destroy(Carbon_Path *path)
+void agentite_path_destroy(Agentite_Path *path)
 {
     if (!path) return;
     free(path->points);
     free(path);
 }
 
-const Carbon_PathPoint *carbon_path_get_point(Carbon_Path *path, int index)
+const Agentite_PathPoint *agentite_path_get_point(Agentite_Path *path, int index)
 {
     if (!path || index < 0 || index >= path->length) return NULL;
     return &path->points[index];
 }
 
-Carbon_Path *carbon_path_simplify(Carbon_Path *path)
+Agentite_Path *agentite_path_simplify(Agentite_Path *path)
 {
     if (!path || path->length <= 2) return path;
 
@@ -697,10 +697,10 @@ Carbon_Path *carbon_path_simplify(Carbon_Path *path)
     }
 
     /* Allocate simplified path */
-    Carbon_Path *simplified = (Carbon_Path*)malloc(sizeof(Carbon_Path));
+    Agentite_Path *simplified = (Agentite_Path*)malloc(sizeof(Agentite_Path));
     if (!simplified) return path;
 
-    simplified->points = (Carbon_PathPoint*)malloc(count * sizeof(Carbon_PathPoint));
+    simplified->points = (Agentite_PathPoint*)malloc(count * sizeof(Agentite_PathPoint));
     if (!simplified->points) {
         free(simplified);
         return path;
@@ -732,7 +732,7 @@ Carbon_Path *carbon_path_simplify(Carbon_Path *path)
     simplified->total_cost = path->total_cost;
 
     /* Free original and return simplified */
-    carbon_path_destroy(path);
+    agentite_path_destroy(path);
     return simplified;
 }
 
@@ -740,19 +740,19 @@ Carbon_Path *carbon_path_simplify(Carbon_Path *path)
  * Utility Functions
  * ============================================================================ */
 
-int carbon_pathfinder_distance_manhattan(int x1, int y1, int x2, int y2)
+int agentite_pathfinder_distance_manhattan(int x1, int y1, int x2, int y2)
 {
     return abs(x2 - x1) + abs(y2 - y1);
 }
 
-float carbon_pathfinder_distance_euclidean(int x1, int y1, int x2, int y2)
+float agentite_pathfinder_distance_euclidean(int x1, int y1, int x2, int y2)
 {
     float dx = (float)(x2 - x1);
     float dy = (float)(y2 - y1);
     return sqrtf(dx * dx + dy * dy);
 }
 
-int carbon_pathfinder_distance_chebyshev(int x1, int y1, int x2, int y2)
+int agentite_pathfinder_distance_chebyshev(int x1, int y1, int x2, int y2)
 {
     int dx = abs(x2 - x1);
     int dy = abs(y2 - y1);

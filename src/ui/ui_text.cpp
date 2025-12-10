@@ -1,13 +1,13 @@
 /*
- * Carbon UI - Text Rendering and Font Management
+ * Agentite UI - Text Rendering and Font Management
  *
  * Multi-font support with bitmap and SDF/MSDF fonts.
  * Uses the graphics text system for font loading and glyph data.
  */
 
-#include "carbon/ui.h"
-#include "carbon/text.h"
-#include "carbon/error.h"
+#include "agentite/ui.h"
+#include "agentite/text.h"
+#include "agentite/error.h"
 
 /* Include internal graphics text header for direct font access */
 #include "../graphics/text_internal.h"
@@ -20,14 +20,14 @@
  * Internal Font Structure
  * ============================================================================ */
 
-struct CUI_Font {
-    CUI_FontType type;
+struct AUI_Font {
+    AUI_FontType type;
 
     /* For bitmap fonts */
-    Carbon_Font *bitmap_font;
+    Agentite_Font *bitmap_font;
 
     /* For SDF/MSDF fonts */
-    Carbon_SDFFont *sdf_font;
+    Agentite_SDFFont *sdf_font;
 
     /* Cached metrics (common to all types) */
     float size;
@@ -40,14 +40,14 @@ struct CUI_Font {
 };
 
 /* Forward declaration from ui_draw.cpp */
-extern void cui_draw_textured_quad_ex(CUI_Context *ctx,
+extern void aui_draw_textured_quad_ex(AUI_Context *ctx,
                                        SDL_GPUTexture *texture,
                                        float x0, float y0, float x1, float y1,
                                        float u0, float v0, float u1, float v1,
                                        uint32_t color);
 
 /* Forward declaration for SDF text drawing */
-extern void cui_draw_sdf_quad(CUI_Context *ctx, CUI_Font *font,
+extern void aui_draw_sdf_quad(AUI_Context *ctx, AUI_Font *font,
                                float x0, float y0, float x1, float y1,
                                float u0, float v0, float u1, float v1,
                                uint32_t color, float scale);
@@ -56,33 +56,33 @@ extern void cui_draw_sdf_quad(CUI_Context *ctx, CUI_Font *font,
  * Font Loading - Bitmap
  * ============================================================================ */
 
-/* Use carbon_font_load_memory from the graphics layer.
+/* Use agentite_font_load_memory from the graphics layer.
  * We need a temporary TextRenderer - create a minimal one for font loading. */
-static Carbon_TextRenderer *g_cui_text_renderer = NULL;
+static Agentite_TextRenderer *g_aui_text_renderer = NULL;
 
-static Carbon_TextRenderer *cui_get_text_renderer(SDL_GPUDevice *gpu, SDL_Window *window)
+static Agentite_TextRenderer *aui_get_text_renderer(SDL_GPUDevice *gpu, SDL_Window *window)
 {
-    if (!g_cui_text_renderer && gpu && window) {
-        g_cui_text_renderer = carbon_text_init(gpu, window);
+    if (!g_aui_text_renderer && gpu && window) {
+        g_aui_text_renderer = agentite_text_init(gpu, window);
     }
-    return g_cui_text_renderer;
+    return g_aui_text_renderer;
 }
 
-static void cui_release_text_renderer(void)
+static void aui_release_text_renderer(void)
 {
-    if (g_cui_text_renderer) {
-        carbon_text_shutdown(g_cui_text_renderer);
-        g_cui_text_renderer = NULL;
+    if (g_aui_text_renderer) {
+        agentite_text_shutdown(g_aui_text_renderer);
+        g_aui_text_renderer = NULL;
     }
 }
 
-CUI_Font *cui_font_load(CUI_Context *ctx, const char *path, float size)
+AUI_Font *aui_font_load(AUI_Context *ctx, const char *path, float size)
 {
     if (!ctx || !ctx->gpu || !path) return NULL;
 
     /* Find empty slot in font registry */
     int slot = -1;
-    for (int i = 0; i < CUI_MAX_FONTS; i++) {
+    for (int i = 0; i < AUI_MAX_FONTS; i++) {
         if (ctx->fonts[i] == NULL) {
             slot = i;
             break;
@@ -90,31 +90,31 @@ CUI_Font *cui_font_load(CUI_Context *ctx, const char *path, float size)
     }
 
     if (slot < 0) {
-        carbon_set_error("CUI: Font registry full (max %d fonts)", CUI_MAX_FONTS);
+        agentite_set_error("CUI: Font registry full (max %d fonts)", AUI_MAX_FONTS);
         return NULL;
     }
 
     /* Get or create the shared text renderer for font loading */
-    Carbon_TextRenderer *tr = cui_get_text_renderer(ctx->gpu, ctx->window);
+    Agentite_TextRenderer *tr = aui_get_text_renderer(ctx->gpu, ctx->window);
     if (!tr) {
-        carbon_set_error("CUI: Failed to create text renderer for font loading");
+        agentite_set_error("CUI: Failed to create text renderer for font loading");
         return NULL;
     }
 
     /* Load bitmap font via the graphics layer */
-    Carbon_Font *bitmap_font = carbon_font_load(tr, path, size);
+    Agentite_Font *bitmap_font = agentite_font_load(tr, path, size);
     if (!bitmap_font) {
         return NULL;
     }
 
-    /* Allocate CUI_Font wrapper */
-    CUI_Font *font = (CUI_Font *)calloc(1, sizeof(CUI_Font));
+    /* Allocate AUI_Font wrapper */
+    AUI_Font *font = (AUI_Font *)calloc(1, sizeof(AUI_Font));
     if (!font) {
-        carbon_font_destroy(tr, bitmap_font);
+        agentite_font_destroy(tr, bitmap_font);
         return NULL;
     }
 
-    font->type = CUI_FONT_BITMAP;
+    font->type = AUI_FONT_BITMAP;
     font->bitmap_font = bitmap_font;
     font->sdf_font = NULL;
     font->size = size;
@@ -150,14 +150,14 @@ CUI_Font *cui_font_load(CUI_Context *ctx, const char *path, float size)
  * Font Loading - SDF/MSDF
  * ============================================================================ */
 
-CUI_Font *cui_font_load_sdf(CUI_Context *ctx, const char *atlas_path,
+AUI_Font *aui_font_load_sdf(AUI_Context *ctx, const char *atlas_path,
                             const char *metrics_path)
 {
     if (!ctx || !ctx->gpu || !atlas_path || !metrics_path) return NULL;
 
     /* Find empty slot in font registry */
     int slot = -1;
-    for (int i = 0; i < CUI_MAX_FONTS; i++) {
+    for (int i = 0; i < AUI_MAX_FONTS; i++) {
         if (ctx->fonts[i] == NULL) {
             slot = i;
             break;
@@ -165,31 +165,31 @@ CUI_Font *cui_font_load_sdf(CUI_Context *ctx, const char *atlas_path,
     }
 
     if (slot < 0) {
-        carbon_set_error("CUI: Font registry full (max %d fonts)", CUI_MAX_FONTS);
+        agentite_set_error("CUI: Font registry full (max %d fonts)", AUI_MAX_FONTS);
         return NULL;
     }
 
     /* Get or create the shared text renderer for font loading */
-    Carbon_TextRenderer *tr = cui_get_text_renderer(ctx->gpu, ctx->window);
+    Agentite_TextRenderer *tr = aui_get_text_renderer(ctx->gpu, ctx->window);
     if (!tr) {
-        carbon_set_error("CUI: Failed to create text renderer for SDF font loading");
+        agentite_set_error("CUI: Failed to create text renderer for SDF font loading");
         return NULL;
     }
 
     /* Load SDF font via the graphics layer */
-    Carbon_SDFFont *sdf_font = carbon_sdf_font_load(tr, atlas_path, metrics_path);
+    Agentite_SDFFont *sdf_font = agentite_sdf_font_load(tr, atlas_path, metrics_path);
     if (!sdf_font) {
         return NULL;
     }
 
-    /* Allocate CUI_Font wrapper */
-    CUI_Font *font = (CUI_Font *)calloc(1, sizeof(CUI_Font));
+    /* Allocate AUI_Font wrapper */
+    AUI_Font *font = (AUI_Font *)calloc(1, sizeof(AUI_Font));
     if (!font) {
-        carbon_sdf_font_destroy(tr, sdf_font);
+        agentite_sdf_font_destroy(tr, sdf_font);
         return NULL;
     }
 
-    font->type = (sdf_font->type == CARBON_SDF_TYPE_MSDF) ? CUI_FONT_MSDF : CUI_FONT_SDF;
+    font->type = (sdf_font->type == AGENTITE_SDF_TYPE_MSDF) ? AUI_FONT_MSDF : AUI_FONT_SDF;
     font->bitmap_font = NULL;
     font->sdf_font = sdf_font;
     font->size = sdf_font->font_size;
@@ -209,7 +209,7 @@ CUI_Font *cui_font_load_sdf(CUI_Context *ctx, const char *atlas_path,
     }
 
     SDL_Log("CUI: Loaded %s font '%s' (slot %d)",
-            font->type == CUI_FONT_MSDF ? "MSDF" : "SDF",
+            font->type == AUI_FONT_MSDF ? "MSDF" : "SDF",
             atlas_path, slot);
     return font;
 }
@@ -218,12 +218,12 @@ CUI_Font *cui_font_load_sdf(CUI_Context *ctx, const char *atlas_path,
  * Font Unloading
  * ============================================================================ */
 
-void cui_font_unload(CUI_Context *ctx, CUI_Font *font)
+void aui_font_unload(AUI_Context *ctx, AUI_Font *font)
 {
     if (!ctx || !font) return;
 
     /* Find and remove from registry */
-    for (int i = 0; i < CUI_MAX_FONTS; i++) {
+    for (int i = 0; i < AUI_MAX_FONTS; i++) {
         if (ctx->fonts[i] == font) {
             ctx->fonts[i] = NULL;
             ctx->font_count--;
@@ -238,10 +238,10 @@ void cui_font_unload(CUI_Context *ctx, CUI_Font *font)
         ctx->font_atlas = NULL;
 
         /* Find another font to be default */
-        for (int i = 0; i < CUI_MAX_FONTS; i++) {
+        for (int i = 0; i < AUI_MAX_FONTS; i++) {
             if (ctx->fonts[i]) {
                 ctx->default_font = ctx->fonts[i];
-                if (ctx->fonts[i]->type == CUI_FONT_BITMAP && ctx->fonts[i]->bitmap_font) {
+                if (ctx->fonts[i]->type == AUI_FONT_BITMAP && ctx->fonts[i]->bitmap_font) {
                     ctx->glyphs = ctx->fonts[i]->bitmap_font->glyphs;
                     ctx->font_atlas = ctx->fonts[i]->bitmap_font->atlas_texture;
                 }
@@ -257,53 +257,53 @@ void cui_font_unload(CUI_Context *ctx, CUI_Font *font)
     }
 
     /* Release GPU resources */
-    Carbon_TextRenderer *tr = cui_get_text_renderer(ctx->gpu, ctx->window);
+    Agentite_TextRenderer *tr = aui_get_text_renderer(ctx->gpu, ctx->window);
     if (font->bitmap_font && tr) {
-        carbon_font_destroy(tr, font->bitmap_font);
+        agentite_font_destroy(tr, font->bitmap_font);
     }
     if (font->sdf_font && tr) {
-        carbon_sdf_font_destroy(tr, font->sdf_font);
+        agentite_sdf_font_destroy(tr, font->sdf_font);
     }
 
     free(font);
 }
 
 /* Legacy API */
-bool cui_load_font(CUI_Context *ctx, const char *path, float size)
+bool aui_load_font(AUI_Context *ctx, const char *path, float size)
 {
-    return cui_font_load(ctx, path, size) != NULL;
+    return aui_font_load(ctx, path, size) != NULL;
 }
 
-void cui_free_font(CUI_Context *ctx)
+void aui_free_font(AUI_Context *ctx)
 {
     if (!ctx) return;
 
-    for (int i = 0; i < CUI_MAX_FONTS; i++) {
+    for (int i = 0; i < AUI_MAX_FONTS; i++) {
         if (ctx->fonts[i]) {
-            cui_font_unload(ctx, ctx->fonts[i]);
+            aui_font_unload(ctx, ctx->fonts[i]);
         }
     }
 
     /* Release the shared text renderer */
-    cui_release_text_renderer();
+    aui_release_text_renderer();
 }
 
 /* ============================================================================
  * Font Management
  * ============================================================================ */
 
-CUI_FontType cui_font_get_type(CUI_Font *font)
+AUI_FontType aui_font_get_type(AUI_Font *font)
 {
-    return font ? font->type : CUI_FONT_BITMAP;
+    return font ? font->type : AUI_FONT_BITMAP;
 }
 
-void cui_set_default_font(CUI_Context *ctx, CUI_Font *font)
+void aui_set_default_font(AUI_Context *ctx, AUI_Font *font)
 {
     if (!ctx || !font) return;
     ctx->default_font = font;
 
     /* Update legacy fields for bitmap fonts */
-    if (font->type == CUI_FONT_BITMAP && font->bitmap_font) {
+    if (font->type == AUI_FONT_BITMAP && font->bitmap_font) {
         ctx->glyphs = font->bitmap_font->glyphs;
         ctx->font_atlas = font->bitmap_font->atlas_texture;
         ctx->atlas_width = ATLAS_SIZE;
@@ -314,34 +314,34 @@ void cui_set_default_font(CUI_Context *ctx, CUI_Font *font)
     ctx->ascent = font->ascent;
 }
 
-CUI_Font *cui_get_default_font(CUI_Context *ctx)
+AUI_Font *aui_get_default_font(AUI_Context *ctx)
 {
     return ctx ? ctx->default_font : NULL;
 }
 
-void cui_set_font(CUI_Context *ctx, CUI_Font *font)
+void aui_set_font(AUI_Context *ctx, AUI_Font *font)
 {
     if (!ctx) return;
     ctx->current_font = font ? font : ctx->default_font;
 }
 
-CUI_Font *cui_get_font(CUI_Context *ctx)
+AUI_Font *aui_get_font(AUI_Context *ctx)
 {
     if (!ctx) return NULL;
     return ctx->current_font ? ctx->current_font : ctx->default_font;
 }
 
-float cui_font_size(CUI_Font *font)
+float aui_font_size(AUI_Font *font)
 {
     return font ? font->size : 0;
 }
 
-float cui_font_line_height(CUI_Font *font)
+float aui_font_line_height(AUI_Font *font)
 {
     return font ? font->line_height : 0;
 }
 
-float cui_font_ascent(CUI_Font *font)
+float aui_font_ascent(AUI_Font *font)
 {
     return font ? font->ascent : 0;
 }
@@ -350,11 +350,11 @@ float cui_font_ascent(CUI_Font *font)
  * Text Measurement
  * ============================================================================ */
 
-float cui_text_width_font(CUI_Font *font, const char *text)
+float aui_text_width_font(AUI_Font *font, const char *text)
 {
     if (!font || !text) return 0;
 
-    if (font->type == CUI_FONT_BITMAP && font->bitmap_font) {
+    if (font->type == AUI_FONT_BITMAP && font->bitmap_font) {
         float width = 0;
         while (*text) {
             unsigned char c = (unsigned char)*text;
@@ -382,59 +382,59 @@ float cui_text_width_font(CUI_Font *font, const char *text)
     return 0;
 }
 
-float cui_text_height_font(CUI_Font *font)
+float aui_text_height_font(AUI_Font *font)
 {
     return font ? font->line_height : 0;
 }
 
-void cui_text_size_font(CUI_Font *font, const char *text, float *out_w, float *out_h)
+void aui_text_size_font(AUI_Font *font, const char *text, float *out_w, float *out_h)
 {
-    if (out_w) *out_w = cui_text_width_font(font, text);
-    if (out_h) *out_h = cui_text_height_font(font);
+    if (out_w) *out_w = aui_text_width_font(font, text);
+    if (out_h) *out_h = aui_text_height_font(font);
 }
 
-float cui_text_width_font_scaled(CUI_Font *font, const char *text, float scale)
+float aui_text_width_font_scaled(AUI_Font *font, const char *text, float scale)
 {
-    return cui_text_width_font(font, text) * scale;
+    return aui_text_width_font(font, text) * scale;
 }
 
-float cui_text_height_font_scaled(CUI_Font *font, float scale)
+float aui_text_height_font_scaled(AUI_Font *font, float scale)
 {
-    return cui_text_height_font(font) * scale;
+    return aui_text_height_font(font) * scale;
 }
 
-void cui_text_size_font_scaled(CUI_Font *font, const char *text, float scale,
+void aui_text_size_font_scaled(AUI_Font *font, const char *text, float scale,
                                float *out_w, float *out_h)
 {
-    if (out_w) *out_w = cui_text_width_font(font, text) * scale;
-    if (out_h) *out_h = cui_text_height_font(font) * scale;
+    if (out_w) *out_w = aui_text_width_font(font, text) * scale;
+    if (out_h) *out_h = aui_text_height_font(font) * scale;
 }
 
-float cui_text_width(CUI_Context *ctx, const char *text)
+float aui_text_width(AUI_Context *ctx, const char *text)
 {
-    return cui_text_width_font(cui_get_font(ctx), text);
+    return aui_text_width_font(aui_get_font(ctx), text);
 }
 
-float cui_text_height(CUI_Context *ctx)
+float aui_text_height(AUI_Context *ctx)
 {
-    return cui_text_height_font(cui_get_font(ctx));
+    return aui_text_height_font(aui_get_font(ctx));
 }
 
-void cui_text_size(CUI_Context *ctx, const char *text, float *out_w, float *out_h)
+void aui_text_size(AUI_Context *ctx, const char *text, float *out_w, float *out_h)
 {
-    cui_text_size_font(cui_get_font(ctx), text, out_w, out_h);
+    aui_text_size_font(aui_get_font(ctx), text, out_w, out_h);
 }
 
 /* ============================================================================
  * Text Rendering - Bitmap
  * ============================================================================ */
 
-static float cui_draw_bitmap_text(CUI_Context *ctx, CUI_Font *font, const char *text,
+static float aui_draw_bitmap_text(AUI_Context *ctx, AUI_Font *font, const char *text,
                                    float x, float y, float scale, uint32_t color)
 {
     if (!ctx || !font || !font->bitmap_font || !text) return 0;
 
-    Carbon_Font *bf = font->bitmap_font;
+    Agentite_Font *bf = font->bitmap_font;
     float start_x = x;
 
     /* y is the top of the line box. Glyphs are positioned using their yoff
@@ -454,7 +454,7 @@ static float cui_draw_bitmap_text(CUI_Context *ctx, CUI_Font *font, const char *
             float x1 = x + g->x1 * scale;
             float y1 = y + (bf->ascent + g->y1) * scale;
 
-            cui_draw_textured_quad_ex(ctx, bf->atlas_texture,
+            aui_draw_textured_quad_ex(ctx, bf->atlas_texture,
                                        x0, y0, x1, y1,
                                        g->u0, g->v0, g->u1, g->v1, color);
 
@@ -470,12 +470,12 @@ static float cui_draw_bitmap_text(CUI_Context *ctx, CUI_Font *font, const char *
  * Text Rendering - SDF/MSDF
  * ============================================================================ */
 
-static float cui_draw_sdf_text_internal(CUI_Context *ctx, CUI_Font *font, const char *text,
+static float aui_draw_sdf_text_internal(AUI_Context *ctx, AUI_Font *font, const char *text,
                                          float x, float y, float scale, uint32_t color)
 {
     if (!ctx || !font || !font->sdf_font || !text) return 0;
 
-    Carbon_SDFFont *sf = font->sdf_font;
+    Agentite_SDFFont *sf = font->sdf_font;
     float start_x = x;
     float font_scale = sf->font_size * scale;
     float inv_atlas_w = 1.0f / sf->atlas_width;
@@ -501,7 +501,7 @@ static float cui_draw_sdf_text_internal(CUI_Context *ctx, CUI_Font *font, const 
             float u1 = g->atlas_right * inv_atlas_w;
             float v1 = g->atlas_bottom * inv_atlas_h;
 
-            cui_draw_sdf_quad(ctx, font, x0, y0, x1, y1, u0, v0, u1, v1, color, scale);
+            aui_draw_sdf_quad(ctx, font, x0, y0, x1, y1, u0, v0, u1, v1, color, scale);
 
             x += g->advance * font_scale;
         }
@@ -515,48 +515,48 @@ static float cui_draw_sdf_text_internal(CUI_Context *ctx, CUI_Font *font, const 
  * Text Rendering - Public API
  * ============================================================================ */
 
-float cui_draw_text_font_scaled(CUI_Context *ctx, CUI_Font *font, const char *text,
+float aui_draw_text_font_scaled(AUI_Context *ctx, AUI_Font *font, const char *text,
                                 float x, float y, float scale, uint32_t color)
 {
     if (!ctx || !font || !text) return 0;
 
-    if (font->type == CUI_FONT_BITMAP) {
-        return cui_draw_bitmap_text(ctx, font, text, x, y, scale, color);
+    if (font->type == AUI_FONT_BITMAP) {
+        return aui_draw_bitmap_text(ctx, font, text, x, y, scale, color);
     } else {
-        return cui_draw_sdf_text_internal(ctx, font, text, x, y, scale, color);
+        return aui_draw_sdf_text_internal(ctx, font, text, x, y, scale, color);
     }
 }
 
-float cui_draw_text_font(CUI_Context *ctx, CUI_Font *font, const char *text,
+float aui_draw_text_font(AUI_Context *ctx, AUI_Font *font, const char *text,
                          float x, float y, uint32_t color)
 {
-    return cui_draw_text_font_scaled(ctx, font, text, x, y, 1.0f, color);
+    return aui_draw_text_font_scaled(ctx, font, text, x, y, 1.0f, color);
 }
 
-void cui_draw_text_font_clipped(CUI_Context *ctx, CUI_Font *font, const char *text,
-                                CUI_Rect bounds, uint32_t color)
+void aui_draw_text_font_clipped(AUI_Context *ctx, AUI_Font *font, const char *text,
+                                AUI_Rect bounds, uint32_t color)
 {
     if (!ctx || !font || !text) return;
 
-    cui_push_scissor(ctx, bounds.x, bounds.y, bounds.w, bounds.h);
-    cui_draw_text_font(ctx, font, text, bounds.x, bounds.y, color);
-    cui_pop_scissor(ctx);
+    aui_push_scissor(ctx, bounds.x, bounds.y, bounds.w, bounds.h);
+    aui_draw_text_font(ctx, font, text, bounds.x, bounds.y, color);
+    aui_pop_scissor(ctx);
 }
 
-float cui_draw_text_scaled(CUI_Context *ctx, const char *text, float x, float y,
+float aui_draw_text_scaled(AUI_Context *ctx, const char *text, float x, float y,
                            float scale, uint32_t color)
 {
-    return cui_draw_text_font_scaled(ctx, cui_get_font(ctx), text, x, y, scale, color);
+    return aui_draw_text_font_scaled(ctx, aui_get_font(ctx), text, x, y, scale, color);
 }
 
-float cui_draw_text(CUI_Context *ctx, const char *text, float x, float y,
+float aui_draw_text(AUI_Context *ctx, const char *text, float x, float y,
                     uint32_t color)
 {
-    return cui_draw_text_font_scaled(ctx, cui_get_font(ctx), text, x, y, 1.0f, color);
+    return aui_draw_text_font_scaled(ctx, aui_get_font(ctx), text, x, y, 1.0f, color);
 }
 
-void cui_draw_text_clipped(CUI_Context *ctx, const char *text,
-                           CUI_Rect bounds, uint32_t color)
+void aui_draw_text_clipped(AUI_Context *ctx, const char *text,
+                           AUI_Rect bounds, uint32_t color)
 {
-    cui_draw_text_font_clipped(ctx, cui_get_font(ctx), text, bounds, color);
+    aui_draw_text_font_clipped(ctx, aui_get_font(ctx), text, bounds, color);
 }

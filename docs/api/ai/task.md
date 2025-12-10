@@ -5,16 +5,16 @@ Sequential task execution for autonomous AI agents.
 ## Quick Start
 
 ```c
-#include "carbon/task.h"
+#include "agentite/task.h"
 
 // Create task queue (capacity = max pending tasks)
-Carbon_TaskQueue *queue = carbon_task_queue_create(16);
-carbon_task_queue_set_assigned_entity(queue, worker_entity);
+Agentite_TaskQueue *queue = agentite_task_queue_create(16);
+agentite_task_queue_set_assigned_entity(queue, worker_entity);
 
 // Queue tasks
-carbon_task_queue_add_move(queue, target_x, target_y);
-carbon_task_queue_add_collect(queue, resource_x, resource_y, RESOURCE_WOOD);
-carbon_task_queue_add_deposit(queue, storage_x, storage_y, -1);
+agentite_task_queue_add_move(queue, target_x, target_y);
+agentite_task_queue_add_collect(queue, resource_x, resource_y, RESOURCE_WOOD);
+agentite_task_queue_add_deposit(queue, storage_x, storage_y, -1);
 ```
 
 ## Task Types
@@ -41,21 +41,21 @@ carbon_task_queue_add_deposit(queue, storage_x, storage_y, -1);
 ## Processing Tasks
 
 ```c
-Carbon_Task *current = carbon_task_queue_current(queue);
+Agentite_Task *current = agentite_task_queue_current(queue);
 if (current) {
-    if (current->status == CARBON_TASK_PENDING) {
-        carbon_task_queue_start(queue);
+    if (current->status == AGENTITE_TASK_PENDING) {
+        agentite_task_queue_start(queue);
     }
 
-    if (current->status == CARBON_TASK_IN_PROGRESS) {
+    if (current->status == AGENTITE_TASK_IN_PROGRESS) {
         switch (current->type) {
-            case CARBON_TASK_MOVE:
+            case AGENTITE_TASK_MOVE:
                 if (reached_destination()) {
-                    carbon_task_queue_complete(queue);
+                    agentite_task_queue_complete(queue);
                 }
                 break;
-            case CARBON_TASK_WAIT:
-                carbon_task_queue_update_wait(queue, delta_time);
+            case AGENTITE_TASK_WAIT:
+                agentite_task_queue_update_wait(queue, delta_time);
                 break;
         }
     }
@@ -65,29 +65,29 @@ if (current) {
 ## Completion Callback
 
 ```c
-void on_task_done(Carbon_TaskQueue *queue, const Carbon_Task *task, void *userdata) {
-    if (task->status == CARBON_TASK_COMPLETED) {
-        printf("Completed %s\n", carbon_task_type_name(task->type));
-    } else if (task->status == CARBON_TASK_FAILED) {
+void on_task_done(Agentite_TaskQueue *queue, const Agentite_Task *task, void *userdata) {
+    if (task->status == AGENTITE_TASK_COMPLETED) {
+        printf("Completed %s\n", agentite_task_type_name(task->type));
+    } else if (task->status == AGENTITE_TASK_FAILED) {
         printf("Failed: %s\n", task->fail_reason);
     }
 }
-carbon_task_queue_set_callback(queue, on_task_done, agent);
+agentite_task_queue_set_callback(queue, on_task_done, agent);
 ```
 
 ## Queue Management
 
 ```c
 // Insert urgent task at front
-carbon_task_queue_insert_front(queue, CARBON_TASK_MOVE, &move_data, sizeof(move_data));
+agentite_task_queue_insert_front(queue, AGENTITE_TASK_MOVE, &move_data, sizeof(move_data));
 
 // Cancel and clear
-carbon_task_queue_cancel(queue);  // Cancel current
-carbon_task_queue_clear(queue);   // Clear all
+agentite_task_queue_cancel(queue);  // Cancel current
+agentite_task_queue_clear(queue);   // Clear all
 
 // Query state
-int count = carbon_task_queue_count(queue);
-bool idle = carbon_task_queue_is_idle(queue);
+int count = agentite_task_queue_count(queue);
+bool idle = agentite_task_queue_is_idle(queue);
 ```
 
 ## Task Statuses
@@ -98,13 +98,13 @@ bool idle = carbon_task_queue_is_idle(queue);
 
 ```c
 // Worker gathering loop
-carbon_task_queue_add_move(queue, resource_x, resource_y);
-carbon_task_queue_add_collect(queue, resource_x, resource_y, RESOURCE_WOOD);
-carbon_task_queue_add_move(queue, storage_x, storage_y);
-carbon_task_queue_add_deposit(queue, storage_x, storage_y, -1);
+agentite_task_queue_add_move(queue, resource_x, resource_y);
+agentite_task_queue_add_collect(queue, resource_x, resource_y, RESOURCE_WOOD);
+agentite_task_queue_add_move(queue, storage_x, storage_y);
+agentite_task_queue_add_deposit(queue, storage_x, storage_y, -1);
 // Re-queue on completion callback to loop
 
 // Guard patrol
 int waypoints[][2] = {{10, 10}, {30, 10}, {30, 30}, {10, 30}};
-carbon_task_queue_add_patrol(queue, waypoints, 4, true);
+agentite_task_queue_add_patrol(queue, waypoints, 4, true);
 ```

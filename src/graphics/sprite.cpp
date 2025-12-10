@@ -1,11 +1,11 @@
-#include "carbon/carbon.h"
+#include "agentite/agentite.h"
 /*
  * Carbon Sprite/Texture System Implementation
  */
 
-#include "carbon/sprite.h"
-#include "carbon/camera.h"
-#include "carbon/error.h"
+#include "agentite/sprite.h"
+#include "agentite/camera.h"
+#include "agentite/error.h"
 #include <cglm/cglm.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,7 +32,7 @@
 
 /* Sub-batch for tracking texture switches within a single batch */
 typedef struct SpriteBatchSegment {
-    Carbon_Texture *texture;
+    Agentite_Texture *texture;
     uint32_t start_index;   /* Starting index in index buffer */
     uint32_t index_count;   /* Number of indices in this segment */
 } SpriteBatchSegment;
@@ -143,13 +143,13 @@ static const char vignette_shader_msl[] =
  * Internal Types
  * ============================================================================ */
 
-struct Carbon_Texture {
+struct Agentite_Texture {
     SDL_GPUTexture *gpu_texture;
     int width;
     int height;
 };
 
-struct Carbon_SpriteRenderer {
+struct Agentite_SpriteRenderer {
     SDL_GPUDevice *gpu;
     SDL_Window *window;
     int screen_width;
@@ -164,14 +164,14 @@ struct Carbon_SpriteRenderer {
     SDL_GPUSampler *linear_sampler;  /* For post-process texture sampling */
 
     /* CPU-side batch buffers */
-    Carbon_SpriteVertex *vertices;
+    Agentite_SpriteVertex *vertices;
     uint16_t *indices;
     uint32_t vertex_count;
     uint32_t index_count;
     uint32_t sprite_count;
 
     /* Current batch state */
-    Carbon_Texture *current_texture;
+    Agentite_Texture *current_texture;
     bool batch_started;
     SDL_GPUCommandBuffer *current_cmd;  /* Command buffer for auto-flush */
 
@@ -181,14 +181,14 @@ struct Carbon_SpriteRenderer {
     uint32_t current_segment_start;  /* Starting index for current segment */
 
     /* Camera (optional - NULL = screen-space mode) */
-    Carbon_Camera *camera;
+    Agentite_Camera *camera;
 };
 
 /* ============================================================================
  * Internal: Pipeline Creation
  * ============================================================================ */
 
-static bool sprite_create_pipeline(Carbon_SpriteRenderer *sr)
+static bool sprite_create_pipeline(Agentite_SpriteRenderer *sr)
 {
     if (!sr || !sr->gpu) return false;
 
@@ -212,7 +212,7 @@ static bool sprite_create_pipeline(Carbon_SpriteRenderer *sr)
         };
         vertex_shader = SDL_CreateGPUShader(sr->gpu, &vs_info);
         if (!vertex_shader) {
-            carbon_set_error_from_sdl("Sprite: Failed to create vertex shader");
+            agentite_set_error_from_sdl("Sprite: Failed to create vertex shader");
             return false;
         }
 
@@ -230,12 +230,12 @@ static bool sprite_create_pipeline(Carbon_SpriteRenderer *sr)
         };
         fragment_shader = SDL_CreateGPUShader(sr->gpu, &fs_info);
         if (!fragment_shader) {
-            carbon_set_error_from_sdl("Sprite: Failed to create fragment shader");
+            agentite_set_error_from_sdl("Sprite: Failed to create fragment shader");
             SDL_ReleaseGPUShader(sr->gpu, vertex_shader);
             return false;
         }
     } else {
-        carbon_set_error("Sprite: No supported shader format (need MSL for Metal)");
+        agentite_set_error("Sprite: No supported shader format (need MSL for Metal)");
         return false;
     }
 
@@ -245,25 +245,25 @@ static bool sprite_create_pipeline(Carbon_SpriteRenderer *sr)
             .location = 0,
             .buffer_slot = 0,
             .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
-            .offset = offsetof(Carbon_SpriteVertex, pos)
+            .offset = offsetof(Agentite_SpriteVertex, pos)
         },
         { /* texcoord */
             .location = 1,
             .buffer_slot = 0,
             .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
-            .offset = offsetof(Carbon_SpriteVertex, uv)
+            .offset = offsetof(Agentite_SpriteVertex, uv)
         },
         { /* color */
             .location = 2,
             .buffer_slot = 0,
             .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
-            .offset = offsetof(Carbon_SpriteVertex, color)
+            .offset = offsetof(Agentite_SpriteVertex, color)
         }
     };
 
     SDL_GPUVertexBufferDescription vb_desc = {
         .slot = 0,
-        .pitch = sizeof(Carbon_SpriteVertex),
+        .pitch = sizeof(Agentite_SpriteVertex),
         .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
         .instance_step_rate = 0
     };
@@ -327,7 +327,7 @@ static bool sprite_create_pipeline(Carbon_SpriteRenderer *sr)
     SDL_ReleaseGPUShader(sr->gpu, fragment_shader);
 
     if (!sr->pipeline) {
-        carbon_set_error_from_sdl("Sprite: Failed to create graphics pipeline");
+        agentite_set_error_from_sdl("Sprite: Failed to create graphics pipeline");
         return false;
     }
 
@@ -336,7 +336,7 @@ static bool sprite_create_pipeline(Carbon_SpriteRenderer *sr)
 }
 
 /* Create vignette post-process pipeline */
-static bool sprite_create_vignette_pipeline(Carbon_SpriteRenderer *sr)
+static bool sprite_create_vignette_pipeline(Agentite_SpriteRenderer *sr)
 {
     if (!sr || !sr->gpu) return false;
 
@@ -386,16 +386,16 @@ static bool sprite_create_vignette_pipeline(Carbon_SpriteRenderer *sr)
 
     SDL_GPUVertexAttribute attributes[] = {
         { .location = 0, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
-          .offset = offsetof(Carbon_SpriteVertex, pos) },
+          .offset = offsetof(Agentite_SpriteVertex, pos) },
         { .location = 1, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
-          .offset = offsetof(Carbon_SpriteVertex, uv) },
+          .offset = offsetof(Agentite_SpriteVertex, uv) },
         { .location = 2, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
-          .offset = offsetof(Carbon_SpriteVertex, color) }
+          .offset = offsetof(Agentite_SpriteVertex, color) }
     };
 
     SDL_GPUVertexBufferDescription vb_desc = {
         .slot = 0,
-        .pitch = sizeof(Carbon_SpriteVertex),
+        .pitch = sizeof(Agentite_SpriteVertex),
         .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
         .instance_step_rate = 0
     };
@@ -464,13 +464,13 @@ static bool sprite_create_vignette_pipeline(Carbon_SpriteRenderer *sr)
  * Lifecycle Functions
  * ============================================================================ */
 
-Carbon_SpriteRenderer *carbon_sprite_init(SDL_GPUDevice *gpu, SDL_Window *window)
+Agentite_SpriteRenderer *agentite_sprite_init(SDL_GPUDevice *gpu, SDL_Window *window)
 {
     if (!gpu || !window) return NULL;
 
-    Carbon_SpriteRenderer *sr = (Carbon_SpriteRenderer*)calloc(1, sizeof(Carbon_SpriteRenderer));
+    Agentite_SpriteRenderer *sr = (Agentite_SpriteRenderer*)calloc(1, sizeof(Agentite_SpriteRenderer));
     if (!sr) {
-        carbon_set_error("Sprite: Failed to allocate renderer");
+        agentite_set_error("Sprite: Failed to allocate renderer");
         return NULL;
     }
 
@@ -481,11 +481,11 @@ Carbon_SpriteRenderer *carbon_sprite_init(SDL_GPUDevice *gpu, SDL_Window *window
     SDL_GetWindowSize(window, &sr->screen_width, &sr->screen_height);
 
     /* Allocate CPU-side buffers */
-    sr->vertices = (Carbon_SpriteVertex*)malloc(SPRITE_VERTEX_CAPACITY * sizeof(Carbon_SpriteVertex));
+    sr->vertices = (Agentite_SpriteVertex*)malloc(SPRITE_VERTEX_CAPACITY * sizeof(Agentite_SpriteVertex));
     sr->indices = (uint16_t*)malloc(SPRITE_INDEX_CAPACITY * sizeof(uint16_t));
     if (!sr->vertices || !sr->indices) {
-        carbon_set_error("Sprite: Failed to allocate batch buffers");
-        carbon_sprite_shutdown(sr);
+        agentite_set_error("Sprite: Failed to allocate batch buffers");
+        agentite_sprite_shutdown(sr);
         return NULL;
     }
 
@@ -504,13 +504,13 @@ Carbon_SpriteRenderer *carbon_sprite_init(SDL_GPUDevice *gpu, SDL_Window *window
     /* Create GPU buffers */
     SDL_GPUBufferCreateInfo vb_info = {
         .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
-        .size = (Uint32)(SPRITE_VERTEX_CAPACITY * sizeof(Carbon_SpriteVertex)),
+        .size = (Uint32)(SPRITE_VERTEX_CAPACITY * sizeof(Agentite_SpriteVertex)),
         .props = 0
     };
     sr->vertex_buffer = SDL_CreateGPUBuffer(gpu, &vb_info);
     if (!sr->vertex_buffer) {
-        carbon_set_error_from_sdl("Sprite: Failed to create vertex buffer");
-        carbon_sprite_shutdown(sr);
+        agentite_set_error_from_sdl("Sprite: Failed to create vertex buffer");
+        agentite_sprite_shutdown(sr);
         return NULL;
     }
 
@@ -521,8 +521,8 @@ Carbon_SpriteRenderer *carbon_sprite_init(SDL_GPUDevice *gpu, SDL_Window *window
     };
     sr->index_buffer = SDL_CreateGPUBuffer(gpu, &ib_info);
     if (!sr->index_buffer) {
-        carbon_set_error_from_sdl("Sprite: Failed to create index buffer");
-        carbon_sprite_shutdown(sr);
+        agentite_set_error_from_sdl("Sprite: Failed to create index buffer");
+        agentite_sprite_shutdown(sr);
         return NULL;
     }
 
@@ -537,8 +537,8 @@ Carbon_SpriteRenderer *carbon_sprite_init(SDL_GPUDevice *gpu, SDL_Window *window
     };
     sr->sampler = SDL_CreateGPUSampler(gpu, &sampler_info);
     if (!sr->sampler) {
-        carbon_set_error_from_sdl("Sprite: Failed to create sampler");
-        carbon_sprite_shutdown(sr);
+        agentite_set_error_from_sdl("Sprite: Failed to create sampler");
+        agentite_sprite_shutdown(sr);
         return NULL;
     }
 
@@ -553,14 +553,14 @@ Carbon_SpriteRenderer *carbon_sprite_init(SDL_GPUDevice *gpu, SDL_Window *window
     };
     sr->linear_sampler = SDL_CreateGPUSampler(gpu, &linear_sampler_info);
     if (!sr->linear_sampler) {
-        carbon_set_error_from_sdl("Sprite: Failed to create linear sampler");
-        carbon_sprite_shutdown(sr);
+        agentite_set_error_from_sdl("Sprite: Failed to create linear sampler");
+        agentite_sprite_shutdown(sr);
         return NULL;
     }
 
     /* Create pipeline */
     if (!sprite_create_pipeline(sr)) {
-        carbon_sprite_shutdown(sr);
+        agentite_sprite_shutdown(sr);
         return NULL;
     }
 
@@ -574,7 +574,7 @@ Carbon_SpriteRenderer *carbon_sprite_init(SDL_GPUDevice *gpu, SDL_Window *window
     return sr;
 }
 
-void carbon_sprite_shutdown(Carbon_SpriteRenderer *sr)
+void agentite_sprite_shutdown(Agentite_SpriteRenderer *sr)
 {
     if (!sr) return;
 
@@ -604,7 +604,7 @@ void carbon_sprite_shutdown(Carbon_SpriteRenderer *sr)
     SDL_Log("Sprite: Renderer shutdown complete");
 }
 
-void carbon_sprite_set_screen_size(Carbon_SpriteRenderer *sr, int width, int height)
+void agentite_sprite_set_screen_size(Agentite_SpriteRenderer *sr, int width, int height)
 {
     if (!sr) return;
     sr->screen_width = width;
@@ -615,7 +615,7 @@ void carbon_sprite_set_screen_size(Carbon_SpriteRenderer *sr, int width, int hei
  * Texture Functions
  * ============================================================================ */
 
-Carbon_Texture *carbon_texture_load(Carbon_SpriteRenderer *sr, const char *path)
+Agentite_Texture *agentite_texture_load(Agentite_SpriteRenderer *sr, const char *path)
 {
     if (!sr || !path) return NULL;
 
@@ -623,11 +623,11 @@ Carbon_Texture *carbon_texture_load(Carbon_SpriteRenderer *sr, const char *path)
     int width, height, channels;
     unsigned char *pixels = stbi_load(path, &width, &height, &channels, 4);  /* Force RGBA */
     if (!pixels) {
-        carbon_set_error("Sprite: Failed to load image '%s': %s", path, stbi_failure_reason());
+        agentite_set_error("Sprite: Failed to load image '%s': %s", path, stbi_failure_reason());
         return NULL;
     }
 
-    Carbon_Texture *texture = carbon_texture_create(sr, width, height, pixels);
+    Agentite_Texture *texture = agentite_texture_create(sr, width, height, pixels);
     stbi_image_free(pixels);
 
     if (texture) {
@@ -637,7 +637,7 @@ Carbon_Texture *carbon_texture_load(Carbon_SpriteRenderer *sr, const char *path)
     return texture;
 }
 
-Carbon_Texture *carbon_texture_load_memory(Carbon_SpriteRenderer *sr,
+Agentite_Texture *agentite_texture_load_memory(Agentite_SpriteRenderer *sr,
                                            const void *data, int size)
 {
     if (!sr || !data || size <= 0) return NULL;
@@ -645,23 +645,23 @@ Carbon_Texture *carbon_texture_load_memory(Carbon_SpriteRenderer *sr,
     int width, height, channels;
     unsigned char *pixels = stbi_load_from_memory((const unsigned char*)data, size, &width, &height, &channels, 4);
     if (!pixels) {
-        carbon_set_error("Sprite: Failed to load image from memory: %s", stbi_failure_reason());
+        agentite_set_error("Sprite: Failed to load image from memory: %s", stbi_failure_reason());
         return NULL;
     }
 
-    Carbon_Texture *texture = carbon_texture_create(sr, width, height, pixels);
+    Agentite_Texture *texture = agentite_texture_create(sr, width, height, pixels);
     stbi_image_free(pixels);
 
     return texture;
 }
 
-Carbon_Texture *carbon_texture_create(Carbon_SpriteRenderer *sr,
+Agentite_Texture *agentite_texture_create(Agentite_SpriteRenderer *sr,
                                       int width, int height,
                                       const void *pixels)
 {
     if (!sr || width <= 0 || height <= 0 || !pixels) return NULL;
 
-    Carbon_Texture *texture = (Carbon_Texture*)calloc(1, sizeof(Carbon_Texture));
+    Agentite_Texture *texture = (Agentite_Texture*)calloc(1, sizeof(Agentite_Texture));
     if (!texture) return NULL;
 
     texture->width = width;
@@ -681,7 +681,7 @@ Carbon_Texture *carbon_texture_create(Carbon_SpriteRenderer *sr,
     };
     texture->gpu_texture = SDL_CreateGPUTexture(sr->gpu, &tex_info);
     if (!texture->gpu_texture) {
-        carbon_set_error_from_sdl("Sprite: Failed to create GPU texture");
+        agentite_set_error_from_sdl("Sprite: Failed to create GPU texture");
         free(texture);
         return NULL;
     }
@@ -694,7 +694,7 @@ Carbon_Texture *carbon_texture_create(Carbon_SpriteRenderer *sr,
     };
     SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(sr->gpu, &transfer_info);
     if (!transfer) {
-        carbon_set_error_from_sdl("Sprite: Failed to create transfer buffer");
+        agentite_set_error_from_sdl("Sprite: Failed to create transfer buffer");
         SDL_ReleaseGPUTexture(sr->gpu, texture->gpu_texture);
         free(texture);
         return NULL;
@@ -739,7 +739,7 @@ Carbon_Texture *carbon_texture_create(Carbon_SpriteRenderer *sr,
     return texture;
 }
 
-void carbon_texture_destroy(Carbon_SpriteRenderer *sr, Carbon_Texture *texture)
+void agentite_texture_destroy(Agentite_SpriteRenderer *sr, Agentite_Texture *texture)
 {
     if (!sr || !texture) return;
 
@@ -749,7 +749,7 @@ void carbon_texture_destroy(Carbon_SpriteRenderer *sr, Carbon_Texture *texture)
     free(texture);
 }
 
-void carbon_texture_get_size(Carbon_Texture *texture, int *width, int *height)
+void agentite_texture_get_size(Agentite_Texture *texture, int *width, int *height)
 {
     if (!texture) {
         if (width) *width = 0;
@@ -764,9 +764,9 @@ void carbon_texture_get_size(Carbon_Texture *texture, int *width, int *height)
  * Sprite Functions
  * ============================================================================ */
 
-Carbon_Sprite carbon_sprite_from_texture(Carbon_Texture *texture)
+Agentite_Sprite agentite_sprite_from_texture(Agentite_Texture *texture)
 {
-    Carbon_Sprite sprite = {0};
+    Agentite_Sprite sprite = {0};
     if (texture) {
         sprite.texture = texture;
         sprite.src_x = 0;
@@ -779,11 +779,11 @@ Carbon_Sprite carbon_sprite_from_texture(Carbon_Texture *texture)
     return sprite;
 }
 
-Carbon_Sprite carbon_sprite_create(Carbon_Texture *texture,
+Agentite_Sprite agentite_sprite_create(Agentite_Texture *texture,
                                    float src_x, float src_y,
                                    float src_w, float src_h)
 {
-    Carbon_Sprite sprite = {0};
+    Agentite_Sprite sprite = {0};
     if (texture) {
         sprite.texture = texture;
         sprite.src_x = src_x;
@@ -796,7 +796,7 @@ Carbon_Sprite carbon_sprite_create(Carbon_Texture *texture,
     return sprite;
 }
 
-void carbon_sprite_set_origin(Carbon_Sprite *sprite, float ox, float oy)
+void agentite_sprite_set_origin(Agentite_Sprite *sprite, float ox, float oy)
 {
     if (!sprite) return;
     sprite->origin_x = ox;
@@ -807,7 +807,7 @@ void carbon_sprite_set_origin(Carbon_Sprite *sprite, float ox, float oy)
  * Rendering Functions
  * ============================================================================ */
 
-void carbon_sprite_begin(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd)
+void agentite_sprite_begin(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd)
 {
     if (!sr) return;
 
@@ -822,7 +822,7 @@ void carbon_sprite_begin(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd)
 }
 
 /* Internal: Add a sprite quad to the batch */
-static void sprite_add_quad(Carbon_SpriteRenderer *sr,
+static void sprite_add_quad(Agentite_SpriteRenderer *sr,
                             float x0, float y0, float x1, float y1,
                             float x2, float y2, float x3, float y3,
                             float u0, float v0, float u1, float v1,
@@ -834,7 +834,7 @@ static void sprite_add_quad(Carbon_SpriteRenderer *sr,
     }
 
     uint32_t base = sr->sprite_count * 4;
-    Carbon_SpriteVertex *v = &sr->vertices[base];
+    Agentite_SpriteVertex *v = &sr->vertices[base];
 
     /* Top-left */
     v[0].pos[0] = x0; v[0].pos[1] = y0;
@@ -861,45 +861,45 @@ static void sprite_add_quad(Carbon_SpriteRenderer *sr,
     sr->index_count = sr->sprite_count * 6;
 }
 
-void carbon_sprite_draw(Carbon_SpriteRenderer *sr, const Carbon_Sprite *sprite,
+void agentite_sprite_draw(Agentite_SpriteRenderer *sr, const Agentite_Sprite *sprite,
                         float x, float y)
 {
-    carbon_sprite_draw_full(sr, sprite, x, y, 1.0f, 1.0f, 0.0f,
+    agentite_sprite_draw_full(sr, sprite, x, y, 1.0f, 1.0f, 0.0f,
                             sprite ? sprite->origin_x : 0.5f,
                             sprite ? sprite->origin_y : 0.5f,
                             1.0f, 1.0f, 1.0f, 1.0f);
 }
 
-void carbon_sprite_draw_scaled(Carbon_SpriteRenderer *sr, const Carbon_Sprite *sprite,
+void agentite_sprite_draw_scaled(Agentite_SpriteRenderer *sr, const Agentite_Sprite *sprite,
                                float x, float y, float scale_x, float scale_y)
 {
-    carbon_sprite_draw_full(sr, sprite, x, y, scale_x, scale_y, 0.0f,
+    agentite_sprite_draw_full(sr, sprite, x, y, scale_x, scale_y, 0.0f,
                             sprite ? sprite->origin_x : 0.5f,
                             sprite ? sprite->origin_y : 0.5f,
                             1.0f, 1.0f, 1.0f, 1.0f);
 }
 
-void carbon_sprite_draw_ex(Carbon_SpriteRenderer *sr, const Carbon_Sprite *sprite,
+void agentite_sprite_draw_ex(Agentite_SpriteRenderer *sr, const Agentite_Sprite *sprite,
                            float x, float y,
                            float scale_x, float scale_y,
                            float rotation_deg,
                            float origin_x, float origin_y)
 {
-    carbon_sprite_draw_full(sr, sprite, x, y, scale_x, scale_y, rotation_deg,
+    agentite_sprite_draw_full(sr, sprite, x, y, scale_x, scale_y, rotation_deg,
                             origin_x, origin_y, 1.0f, 1.0f, 1.0f, 1.0f);
 }
 
-void carbon_sprite_draw_tinted(Carbon_SpriteRenderer *sr, const Carbon_Sprite *sprite,
+void agentite_sprite_draw_tinted(Agentite_SpriteRenderer *sr, const Agentite_Sprite *sprite,
                                float x, float y,
                                float r, float g, float b, float a)
 {
-    carbon_sprite_draw_full(sr, sprite, x, y, 1.0f, 1.0f, 0.0f,
+    agentite_sprite_draw_full(sr, sprite, x, y, 1.0f, 1.0f, 0.0f,
                             sprite ? sprite->origin_x : 0.5f,
                             sprite ? sprite->origin_y : 0.5f,
                             r, g, b, a);
 }
 
-void carbon_sprite_draw_full(Carbon_SpriteRenderer *sr, const Carbon_Sprite *sprite,
+void agentite_sprite_draw_full(Agentite_SpriteRenderer *sr, const Agentite_Sprite *sprite,
                              float x, float y,
                              float scale_x, float scale_y,
                              float rotation_deg,
@@ -924,7 +924,7 @@ void carbon_sprite_draw_full(Carbon_SpriteRenderer *sr, const Carbon_Sprite *spr
     }
     sr->current_texture = sprite->texture;
 
-    Carbon_Texture *tex = sprite->texture;
+    Agentite_Texture *tex = sprite->texture;
     float tex_w = (float)tex->width;
     float tex_h = (float)tex->height;
 
@@ -980,7 +980,7 @@ void carbon_sprite_draw_full(Carbon_SpriteRenderer *sr, const Carbon_Sprite *spr
                     u0, v0, u1, v1, r, g, b, a);
 }
 
-void carbon_sprite_flush(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
+void agentite_sprite_flush(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
                          SDL_GPURenderPass *pass)
 {
     if (!sr || !cmd || !pass || sr->sprite_count == 0) return;
@@ -989,7 +989,7 @@ void carbon_sprite_flush(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
     /* Upload vertex data */
     SDL_GPUTransferBufferCreateInfo transfer_info = {
         .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        .size = (Uint32)(sr->vertex_count * sizeof(Carbon_SpriteVertex)),
+        .size = (Uint32)(sr->vertex_count * sizeof(Agentite_SpriteVertex)),
         .props = 0
     };
     SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(sr->gpu, &transfer_info);
@@ -997,12 +997,12 @@ void carbon_sprite_flush(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
 
     void *mapped = SDL_MapGPUTransferBuffer(sr->gpu, transfer, false);
     if (mapped) {
-        memcpy(mapped, sr->vertices, sr->vertex_count * sizeof(Carbon_SpriteVertex));
+        memcpy(mapped, sr->vertices, sr->vertex_count * sizeof(Agentite_SpriteVertex));
         SDL_UnmapGPUTransferBuffer(sr->gpu, transfer);
     }
 
     /* We need to end the render pass, do the copy, then restart
-       Actually, for simplicity we'll upload before the render pass in carbon_sprite_end */
+       Actually, for simplicity we'll upload before the render pass in agentite_sprite_end */
 
     SDL_ReleaseGPUTransferBuffer(sr->gpu, transfer);
 
@@ -1043,7 +1043,7 @@ void carbon_sprite_flush(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
     sr->index_count = 0;
 }
 
-void carbon_sprite_end(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
+void agentite_sprite_end(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
                        SDL_GPURenderPass *pass)
 {
     if (!sr || !sr->batch_started) return;
@@ -1052,7 +1052,7 @@ void carbon_sprite_end(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
         /* Upload vertex data before drawing */
         SDL_GPUTransferBufferCreateInfo transfer_info = {
             .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-            .size = (Uint32)(sr->vertex_count * sizeof(Carbon_SpriteVertex) +
+            .size = (Uint32)(sr->vertex_count * sizeof(Agentite_SpriteVertex) +
                     sr->index_count * sizeof(uint16_t)),
             .props = 0
         };
@@ -1062,16 +1062,16 @@ void carbon_sprite_end(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
             void *mapped = SDL_MapGPUTransferBuffer(sr->gpu, transfer, false);
             if (mapped) {
                 memcpy(mapped, sr->vertices,
-                       sr->vertex_count * sizeof(Carbon_SpriteVertex));
-                memcpy((uint8_t *)mapped + sr->vertex_count * sizeof(Carbon_SpriteVertex),
+                       sr->vertex_count * sizeof(Agentite_SpriteVertex));
+                memcpy((uint8_t *)mapped + sr->vertex_count * sizeof(Agentite_SpriteVertex),
                        sr->indices, sr->index_count * sizeof(uint16_t));
                 SDL_UnmapGPUTransferBuffer(sr->gpu, transfer);
             }
 
             /* Copy to GPU buffers - this must happen outside render pass */
             /* NOTE: For proper usage, upload should happen before render pass begins.
-               The caller should call carbon_sprite_upload() before beginning render pass,
-               then carbon_sprite_render() during render pass. For convenience, we combine here
+               The caller should call agentite_sprite_upload() before beginning render pass,
+               then agentite_sprite_render() during render pass. For convenience, we combine here
                but this requires ending/restarting the render pass which is inefficient. */
 
             /* For now, assume the data is already uploaded or we're doing a simple flow */
@@ -1107,7 +1107,7 @@ void carbon_sprite_end(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
             } uniforms;
 
             if (sr->camera) {
-                const float *vp = carbon_camera_get_vp_matrix(sr->camera);
+                const float *vp = agentite_camera_get_vp_matrix(sr->camera);
                 memcpy(uniforms.view_projection, vp, sizeof(float) * 16);
             } else {
                 mat4 ortho;
@@ -1140,14 +1140,14 @@ void carbon_sprite_end(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
 }
 
 /* Separate upload function for proper render pass management */
-void carbon_sprite_upload(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd)
+void agentite_sprite_upload(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd)
 {
     if (!sr || !cmd || sr->sprite_count == 0) return;
 
     /* Upload vertex and index data */
     SDL_GPUTransferBufferCreateInfo transfer_info = {
         .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        .size = (Uint32)(sr->vertex_count * sizeof(Carbon_SpriteVertex) +
+        .size = (Uint32)(sr->vertex_count * sizeof(Agentite_SpriteVertex) +
                 sr->index_count * sizeof(uint16_t)),
         .props = 0
     };
@@ -1157,8 +1157,8 @@ void carbon_sprite_upload(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd)
     void *mapped = SDL_MapGPUTransferBuffer(sr->gpu, transfer, false);
     if (mapped) {
         memcpy(mapped, sr->vertices,
-               sr->vertex_count * sizeof(Carbon_SpriteVertex));
-        memcpy((uint8_t *)mapped + sr->vertex_count * sizeof(Carbon_SpriteVertex),
+               sr->vertex_count * sizeof(Agentite_SpriteVertex));
+        memcpy((uint8_t *)mapped + sr->vertex_count * sizeof(Agentite_SpriteVertex),
                sr->indices, sr->index_count * sizeof(uint16_t));
         SDL_UnmapGPUTransferBuffer(sr->gpu, transfer);
     }
@@ -1173,14 +1173,14 @@ void carbon_sprite_upload(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd)
         SDL_GPUBufferRegion dst_vert = {
             .buffer = sr->vertex_buffer,
             .offset = 0,
-            .size = (Uint32)(sr->vertex_count * sizeof(Carbon_SpriteVertex))
+            .size = (Uint32)(sr->vertex_count * sizeof(Agentite_SpriteVertex))
         };
         SDL_UploadToGPUBuffer(copy_pass, &src_vert, &dst_vert, false);
 
         /* Upload indices */
         SDL_GPUTransferBufferLocation src_idx = {
             .transfer_buffer = transfer,
-            .offset = (Uint32)(sr->vertex_count * sizeof(Carbon_SpriteVertex))
+            .offset = (Uint32)(sr->vertex_count * sizeof(Agentite_SpriteVertex))
         };
         SDL_GPUBufferRegion dst_idx = {
             .buffer = sr->index_buffer,
@@ -1196,8 +1196,8 @@ void carbon_sprite_upload(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd)
 }
 
 /* Internal: Render a single batch segment with specific texture and index range */
-static void sprite_render_segment(Carbon_SpriteRenderer *sr,
-                                   SDL_GPURenderPass *pass, Carbon_Texture *texture,
+static void sprite_render_segment(Agentite_SpriteRenderer *sr,
+                                   SDL_GPURenderPass *pass, Agentite_Texture *texture,
                                    uint32_t start_index, uint32_t index_count)
 {
     /* Bind texture */
@@ -1212,7 +1212,7 @@ static void sprite_render_segment(Carbon_SpriteRenderer *sr,
 }
 
 /* Separate render function for proper render pass management */
-void carbon_sprite_render(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
+void agentite_sprite_render(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
                           SDL_GPURenderPass *pass)
 {
     if (!sr || !cmd || !pass || sr->sprite_count == 0) return;
@@ -1243,7 +1243,7 @@ void carbon_sprite_render(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
 
     if (sr->camera) {
         /* Use camera's view-projection matrix */
-        const float *vp = carbon_camera_get_vp_matrix(sr->camera);
+        const float *vp = agentite_camera_get_vp_matrix(sr->camera);
         memcpy(uniforms.view_projection, vp, sizeof(float) * 16);
     } else {
         /* Fallback: identity ortho projection for screen-space rendering */
@@ -1282,7 +1282,7 @@ void carbon_sprite_render(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
 }
 
 /* Set camera for sprite rendering (NULL for screen-space mode) */
-void carbon_sprite_set_camera(Carbon_SpriteRenderer *sr, Carbon_Camera *camera)
+void agentite_sprite_set_camera(Agentite_SpriteRenderer *sr, Agentite_Camera *camera)
 {
     if (sr) {
         sr->camera = camera;
@@ -1290,7 +1290,7 @@ void carbon_sprite_set_camera(Carbon_SpriteRenderer *sr, Carbon_Camera *camera)
 }
 
 /* Get current camera */
-Carbon_Camera *carbon_sprite_get_camera(Carbon_SpriteRenderer *sr)
+Agentite_Camera *agentite_sprite_get_camera(Agentite_SpriteRenderer *sr)
 {
     return sr ? sr->camera : NULL;
 }
@@ -1299,12 +1299,12 @@ Carbon_Camera *carbon_sprite_get_camera(Carbon_SpriteRenderer *sr)
  * Render-to-Texture Functions
  * ============================================================================ */
 
-Carbon_Texture *carbon_texture_create_render_target(Carbon_SpriteRenderer *sr,
+Agentite_Texture *agentite_texture_create_render_target(Agentite_SpriteRenderer *sr,
                                                      int width, int height)
 {
     if (!sr || width <= 0 || height <= 0) return NULL;
 
-    Carbon_Texture *texture = (Carbon_Texture *)calloc(1, sizeof(Carbon_Texture));
+    Agentite_Texture *texture = (Agentite_Texture *)calloc(1, sizeof(Agentite_Texture));
     if (!texture) return NULL;
 
     texture->width = width;
@@ -1333,8 +1333,8 @@ Carbon_Texture *carbon_texture_create_render_target(Carbon_SpriteRenderer *sr,
     return texture;
 }
 
-SDL_GPURenderPass *carbon_sprite_begin_render_to_texture(Carbon_SpriteRenderer *sr,
-                                                          Carbon_Texture *target,
+SDL_GPURenderPass *agentite_sprite_begin_render_to_texture(Agentite_SpriteRenderer *sr,
+                                                          Agentite_Texture *target,
                                                           SDL_GPUCommandBuffer *cmd,
                                                           float clear_r, float clear_g,
                                                           float clear_b, float clear_a)
@@ -1375,15 +1375,15 @@ SDL_GPURenderPass *carbon_sprite_begin_render_to_texture(Carbon_SpriteRenderer *
     return pass;
 }
 
-void carbon_sprite_render_to_texture(Carbon_SpriteRenderer *sr,
+void agentite_sprite_render_to_texture(Agentite_SpriteRenderer *sr,
                                       SDL_GPUCommandBuffer *cmd,
                                       SDL_GPURenderPass *pass)
 {
-    /* Same as carbon_sprite_render */
-    carbon_sprite_render(sr, cmd, pass);
+    /* Same as agentite_sprite_render */
+    agentite_sprite_render(sr, cmd, pass);
 }
 
-void carbon_sprite_end_render_to_texture(SDL_GPURenderPass *pass)
+void agentite_sprite_end_render_to_texture(SDL_GPURenderPass *pass)
 {
     if (pass) {
         SDL_EndGPURenderPass(pass);
@@ -1394,15 +1394,15 @@ void carbon_sprite_end_render_to_texture(SDL_GPURenderPass *pass)
  * Vignette Post-Process Functions
  * ============================================================================ */
 
-bool carbon_sprite_has_vignette(Carbon_SpriteRenderer *sr)
+bool agentite_sprite_has_vignette(Agentite_SpriteRenderer *sr)
 {
     return sr && sr->vignette_pipeline != NULL;
 }
 
-void carbon_sprite_render_vignette(Carbon_SpriteRenderer *sr,
+void agentite_sprite_render_vignette(Agentite_SpriteRenderer *sr,
                                     SDL_GPUCommandBuffer *cmd,
                                     SDL_GPURenderPass *pass,
-                                    Carbon_Texture *scene_texture)
+                                    Agentite_Texture *scene_texture)
 {
     if (!sr || !cmd || !pass || !scene_texture || !sr->vignette_pipeline) return;
 
@@ -1451,7 +1451,7 @@ void carbon_sprite_render_vignette(Carbon_SpriteRenderer *sr,
     SDL_DrawGPUIndexedPrimitives(pass, 6, 1, 0, 0, 0);
 }
 
-void carbon_sprite_prepare_fullscreen_quad(Carbon_SpriteRenderer *sr)
+void agentite_sprite_prepare_fullscreen_quad(Agentite_SpriteRenderer *sr)
 {
     if (!sr) return;
 
@@ -1464,7 +1464,7 @@ void carbon_sprite_prepare_fullscreen_quad(Carbon_SpriteRenderer *sr)
     float h = (float)sr->screen_height;
 
     /* Fullscreen quad vertices (position, UV, color) */
-    Carbon_SpriteVertex *v = sr->vertices;
+    Agentite_SpriteVertex *v = sr->vertices;
 
     /* Top-left */
     v[0].pos[0] = 0.0f; v[0].pos[1] = 0.0f;
@@ -1487,14 +1487,14 @@ void carbon_sprite_prepare_fullscreen_quad(Carbon_SpriteRenderer *sr)
     v[3].color[0] = 1.0f; v[3].color[1] = 1.0f; v[3].color[2] = 1.0f; v[3].color[3] = 1.0f;
 }
 
-void carbon_sprite_upload_fullscreen_quad(Carbon_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd)
+void agentite_sprite_upload_fullscreen_quad(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd)
 {
     if (!sr || !cmd) return;
 
     /* Upload vertex data for fullscreen quad */
     SDL_GPUTransferBufferCreateInfo transfer_info = {
         .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        .size = (Uint32)(4 * sizeof(Carbon_SpriteVertex) + 6 * sizeof(uint16_t)),
+        .size = (Uint32)(4 * sizeof(Agentite_SpriteVertex) + 6 * sizeof(uint16_t)),
         .props = 0
     };
     SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(sr->gpu, &transfer_info);
@@ -1502,8 +1502,8 @@ void carbon_sprite_upload_fullscreen_quad(Carbon_SpriteRenderer *sr, SDL_GPUComm
 
     void *mapped = SDL_MapGPUTransferBuffer(sr->gpu, transfer, false);
     if (mapped) {
-        memcpy(mapped, sr->vertices, 4 * sizeof(Carbon_SpriteVertex));
-        memcpy((uint8_t *)mapped + 4 * sizeof(Carbon_SpriteVertex),
+        memcpy(mapped, sr->vertices, 4 * sizeof(Agentite_SpriteVertex));
+        memcpy((uint8_t *)mapped + 4 * sizeof(Agentite_SpriteVertex),
                sr->indices, 6 * sizeof(uint16_t));
         SDL_UnmapGPUTransferBuffer(sr->gpu, transfer);
     }
@@ -1515,14 +1515,14 @@ void carbon_sprite_upload_fullscreen_quad(Carbon_SpriteRenderer *sr, SDL_GPUComm
         SDL_GPUBufferRegion dst_vert = {
             .buffer = sr->vertex_buffer,
             .offset = 0,
-            .size = (Uint32)(4 * sizeof(Carbon_SpriteVertex))
+            .size = (Uint32)(4 * sizeof(Agentite_SpriteVertex))
         };
         SDL_UploadToGPUBuffer(copy_pass, &src_vert, &dst_vert, false);
 
         /* Upload indices */
         SDL_GPUTransferBufferLocation src_idx = {
             .transfer_buffer = transfer,
-            .offset = (Uint32)(4 * sizeof(Carbon_SpriteVertex))
+            .offset = (Uint32)(4 * sizeof(Agentite_SpriteVertex))
         };
         SDL_GPUBufferRegion dst_idx = {
             .buffer = sr->index_buffer,

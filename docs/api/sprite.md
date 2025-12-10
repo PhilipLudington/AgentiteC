@@ -5,73 +5,73 @@ Batched sprite rendering with transform support.
 ## Quick Start
 
 ```c
-#include "carbon/sprite.h"
+#include "agentite/sprite.h"
 
 // Initialize
-Carbon_SpriteRenderer *sr = carbon_sprite_init(gpu, window);
+Agentite_SpriteRenderer *sr = agentite_sprite_init(gpu, window);
 
 // Load texture
-Carbon_Texture *tex = carbon_texture_load(sr, "assets/player.png");
-Carbon_Sprite sprite = carbon_sprite_from_texture(tex);
+Agentite_Texture *tex = agentite_texture_load(sr, "assets/player.png");
+Agentite_Sprite sprite = agentite_sprite_from_texture(tex);
 
 // In render loop (before render pass):
-carbon_sprite_begin(sr, NULL);
-carbon_sprite_draw(sr, &sprite, 100.0f, 200.0f);
-carbon_sprite_upload(sr, cmd);
+agentite_sprite_begin(sr, NULL);
+agentite_sprite_draw(sr, &sprite, 100.0f, 200.0f);
+agentite_sprite_upload(sr, cmd);
 
 // During render pass
-carbon_sprite_render(sr, cmd, pass);
+agentite_sprite_render(sr, cmd, pass);
 
 // Cleanup
-carbon_texture_destroy(sr, tex);
-carbon_sprite_shutdown(sr);
+agentite_texture_destroy(sr, tex);
+agentite_sprite_shutdown(sr);
 ```
 
 ## Key Functions
 
 | Function | Description |
 |----------|-------------|
-| `carbon_sprite_init` | Create sprite renderer |
-| `carbon_texture_load` | Load texture from file |
-| `carbon_sprite_from_texture` | Create sprite from texture |
-| `carbon_sprite_begin` | Begin sprite batch |
-| `carbon_sprite_draw` | Draw sprite at position |
-| `carbon_sprite_draw_scaled` | Draw with scale |
-| `carbon_sprite_draw_ex` | Draw with full transform (scale, rotation, origin) |
-| `carbon_sprite_draw_tinted` | Draw with color tint |
-| `carbon_sprite_upload` | Upload batch to GPU (before render pass) |
-| `carbon_sprite_render` | Render batch (during render pass) |
-| `carbon_sprite_set_camera` | Connect camera for world-space rendering |
-| `carbon_texture_destroy` | Free texture |
-| `carbon_sprite_shutdown` | Cleanup renderer |
+| `agentite_sprite_init` | Create sprite renderer |
+| `agentite_texture_load` | Load texture from file |
+| `agentite_sprite_from_texture` | Create sprite from texture |
+| `agentite_sprite_begin` | Begin sprite batch |
+| `agentite_sprite_draw` | Draw sprite at position |
+| `agentite_sprite_draw_scaled` | Draw with scale |
+| `agentite_sprite_draw_ex` | Draw with full transform (scale, rotation, origin) |
+| `agentite_sprite_draw_tinted` | Draw with color tint |
+| `agentite_sprite_upload` | Upload batch to GPU (before render pass) |
+| `agentite_sprite_render` | Render batch (during render pass) |
+| `agentite_sprite_set_camera` | Connect camera for world-space rendering |
+| `agentite_texture_destroy` | Free texture |
+| `agentite_sprite_shutdown` | Cleanup renderer |
 
 ## Draw Variants
 
 ```c
 // Simple position
-carbon_sprite_draw(sr, &sprite, x, y);
+agentite_sprite_draw(sr, &sprite, x, y);
 
 // With scale
-carbon_sprite_draw_scaled(sr, &sprite, x, y, scale_x, scale_y);
+agentite_sprite_draw_scaled(sr, &sprite, x, y, scale_x, scale_y);
 
 // Full transform: position, scale, rotation (degrees), origin
-carbon_sprite_draw_ex(sr, &sprite, x, y, sx, sy, rotation, origin_x, origin_y);
+agentite_sprite_draw_ex(sr, &sprite, x, y, sx, sy, rotation, origin_x, origin_y);
 
 // With color tint (RGBA 0.0-1.0)
-carbon_sprite_draw_tinted(sr, &sprite, x, y, r, g, b, a);
+agentite_sprite_draw_tinted(sr, &sprite, x, y, r, g, b, a);
 ```
 
 ## Camera Integration
 
 ```c
 // World-space rendering (affected by camera)
-carbon_sprite_set_camera(sr, camera);
-carbon_sprite_begin(sr, NULL);
+agentite_sprite_set_camera(sr, camera);
+agentite_sprite_begin(sr, NULL);
 // ... draw world sprites ...
 
 // Screen-space rendering (UI, not affected by camera)
-carbon_sprite_set_camera(sr, NULL);
-carbon_sprite_begin(sr, NULL);
+agentite_sprite_set_camera(sr, NULL);
+agentite_sprite_begin(sr, NULL);
 // ... draw UI sprites ...
 ```
 

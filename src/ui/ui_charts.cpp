@@ -1,10 +1,10 @@
 /*
- * Carbon UI - Chart Widgets Implementation
+ * Agentite UI - Chart Widgets Implementation
  */
 
-#include "carbon/ui_charts.h"
-#include "carbon/ui.h"
-#include "carbon/ui_node.h"
+#include "agentite/ui_charts.h"
+#include "agentite/ui.h"
+#include "agentite/ui_node.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -18,7 +18,7 @@
  * Default Color Palette
  * ============================================================================ */
 
-const uint32_t CUI_CHART_PALETTE[12] = {
+const uint32_t AUI_CHART_PALETTE[12] = {
     0xFF4285F4,  /* Blue */
     0xFF34A853,  /* Green */
     0xFFFBBC04,  /* Yellow */
@@ -33,16 +33,16 @@ const uint32_t CUI_CHART_PALETTE[12] = {
     0xFF689F38,  /* Light Green */
 };
 
-uint32_t cui_chart_series_color(int index)
+uint32_t aui_chart_series_color(int index)
 {
-    return CUI_CHART_PALETTE[index % 12];
+    return AUI_CHART_PALETTE[index % 12];
 }
 
 /* ============================================================================
  * Axis Calculation
  * ============================================================================ */
 
-void cui_chart_nice_axis(float data_min, float data_max,
+void aui_chart_nice_axis(float data_min, float data_max,
                           float *axis_min, float *axis_max,
                           float *tick_step, int *tick_count)
 {
@@ -72,7 +72,7 @@ void cui_chart_nice_axis(float data_min, float data_max,
     *tick_count = (int)((*axis_max - *axis_min) / *tick_step) + 1;
 }
 
-const char *cui_chart_format_value(float value, const char *format)
+const char *aui_chart_format_value(float value, const char *format)
 {
     static char buffer[32];
 
@@ -95,9 +95,9 @@ const char *cui_chart_format_value(float value, const char *format)
  * Internal Helpers
  * ============================================================================ */
 
-static void cui_chart_compute_bounds(CUI_Context *ctx, CUI_Rect bounds,
-                                      const CUI_ChartConfig *config,
-                                      CUI_ChartState *state)
+static void aui_chart_compute_bounds(AUI_Context *ctx, AUI_Rect bounds,
+                                      const AUI_ChartConfig *config,
+                                      AUI_ChartState *state)
 {
     float padding = 10;
     float title_height = config->title ? 24 : 0;
@@ -105,7 +105,7 @@ static void cui_chart_compute_bounds(CUI_Context *ctx, CUI_Rect bounds,
     float y_label_width = config->y_axis_label ? 20 : 0;
     float legend_size = 0;
 
-    if (config->show_legend && config->legend_position != CUI_LEGEND_NONE) {
+    if (config->show_legend && config->legend_position != AUI_LEGEND_NONE) {
         legend_size = 80;  /* Approximate */
     }
 
@@ -115,13 +115,13 @@ static void cui_chart_compute_bounds(CUI_Context *ctx, CUI_Rect bounds,
     state->plot_area.w = bounds.w - 2 * padding - y_label_width - 40;
     state->plot_area.h = bounds.h - 2 * padding - title_height - x_label_height - 20;
 
-    if (config->legend_position == CUI_LEGEND_RIGHT) {
+    if (config->legend_position == AUI_LEGEND_RIGHT) {
         state->plot_area.w -= legend_size;
         state->legend_area.x = state->plot_area.x + state->plot_area.w + 10;
         state->legend_area.y = state->plot_area.y;
         state->legend_area.w = legend_size - 10;
         state->legend_area.h = state->plot_area.h;
-    } else if (config->legend_position == CUI_LEGEND_BOTTOM) {
+    } else if (config->legend_position == AUI_LEGEND_BOTTOM) {
         state->plot_area.h -= legend_size;
         state->legend_area.x = state->plot_area.x;
         state->legend_area.y = state->plot_area.y + state->plot_area.h + 10;
@@ -131,7 +131,7 @@ static void cui_chart_compute_bounds(CUI_Context *ctx, CUI_Rect bounds,
     (void)ctx;
 }
 
-static void cui_chart_find_data_range(const CUI_ChartConfig *config,
+static void aui_chart_find_data_range(const AUI_ChartConfig *config,
                                        float *data_min, float *data_max)
 {
     *data_min = 0;
@@ -145,7 +145,7 @@ static void cui_chart_find_data_range(const CUI_ChartConfig *config,
 
     bool first = true;
     for (int s = 0; s < config->series_count; s++) {
-        const CUI_ChartSeries *series = &config->series[s];
+        const AUI_ChartSeries *series = &config->series[s];
         for (int i = 0; i < series->value_count; i++) {
             float v = series->values[i];
             if (first) {
@@ -163,19 +163,19 @@ static void cui_chart_find_data_range(const CUI_ChartConfig *config,
     if (*data_min > 0) *data_min = 0;
 }
 
-static void cui_chart_draw_grid(CUI_Context *ctx, CUI_ChartState *state,
-                                 const CUI_ChartConfig *config,
+static void aui_chart_draw_grid(AUI_Context *ctx, AUI_ChartState *state,
+                                 const AUI_ChartConfig *config,
                                  float axis_min, float axis_max, float tick_step)
 {
     uint32_t grid_color = config->grid_color ? config->grid_color : 0x20FFFFFF;
     uint32_t axis_color = config->axis_color ? config->axis_color : 0xFFFFFFFF;
     uint32_t text_color = config->text_color ? config->text_color : 0xFFFFFFFF;
 
-    CUI_Rect plot = state->plot_area;
+    AUI_Rect plot = state->plot_area;
 
     /* Draw axes */
-    cui_draw_rect(ctx, plot.x, plot.y, 1, plot.h, axis_color);  /* Y axis */
-    cui_draw_rect(ctx, plot.x, plot.y + plot.h, plot.w, 1, axis_color);  /* X axis */
+    aui_draw_rect(ctx, plot.x, plot.y, 1, plot.h, axis_color);  /* Y axis */
+    aui_draw_rect(ctx, plot.x, plot.y + plot.h, plot.w, 1, axis_color);  /* X axis */
 
     /* Draw Y-axis grid lines and labels */
     float y_range = axis_max - axis_min;
@@ -185,16 +185,16 @@ static void cui_chart_draw_grid(CUI_Context *ctx, CUI_ChartState *state,
         float y = plot.y + plot.h - ((v - axis_min) / y_range) * plot.h;
 
         if (config->show_grid && v > axis_min) {
-            cui_draw_rect(ctx, plot.x, y, plot.w, 1, grid_color);
+            aui_draw_rect(ctx, plot.x, y, plot.w, 1, grid_color);
         }
 
         /* Draw tick */
-        cui_draw_rect(ctx, plot.x - 4, y, 4, 1, axis_color);
+        aui_draw_rect(ctx, plot.x - 4, y, 4, 1, axis_color);
 
         /* Draw label */
-        const char *label = cui_chart_format_value(v, NULL);
-        float tw = cui_text_width(ctx, label);
-        cui_draw_text(ctx, label, plot.x - tw - 8, y - 6, text_color);
+        const char *label = aui_chart_format_value(v, NULL);
+        float tw = aui_text_width(ctx, label);
+        aui_draw_text(ctx, label, plot.x - tw - 8, y - 6, text_color);
     }
 
     /* Draw X-axis labels */
@@ -204,16 +204,16 @@ static void cui_chart_draw_grid(CUI_Context *ctx, CUI_ChartState *state,
 
         for (int i = 0; i < label_count; i++) {
             float x = plot.x + slot_w * i + slot_w / 2;
-            float tw = cui_text_width(ctx, config->x_labels[i]);
-            cui_draw_text(ctx, config->x_labels[i],
+            float tw = aui_text_width(ctx, config->x_labels[i]);
+            aui_draw_text(ctx, config->x_labels[i],
                           x - tw / 2, plot.y + plot.h + 8, text_color);
         }
     }
 
     /* Draw title */
     if (config->title) {
-        float tw = cui_text_width(ctx, config->title);
-        cui_draw_text(ctx, config->title,
+        float tw = aui_text_width(ctx, config->title);
+        aui_draw_text(ctx, config->title,
                       plot.x + (plot.w - tw) / 2, plot.y - 20, text_color);
     }
 
@@ -222,26 +222,26 @@ static void cui_chart_draw_grid(CUI_Context *ctx, CUI_ChartState *state,
     state->y_offset = axis_min;
 }
 
-static void cui_chart_draw_legend(CUI_Context *ctx, CUI_ChartState *state,
-                                   const CUI_ChartConfig *config)
+static void aui_chart_draw_legend(AUI_Context *ctx, AUI_ChartState *state,
+                                   const AUI_ChartConfig *config)
 {
-    if (!config->show_legend || config->legend_position == CUI_LEGEND_NONE) return;
+    if (!config->show_legend || config->legend_position == AUI_LEGEND_NONE) return;
 
-    CUI_Rect legend = state->legend_area;
+    AUI_Rect legend = state->legend_area;
     uint32_t text_color = config->text_color ? config->text_color : 0xFFFFFFFF;
     float line_h = 20;
     float y = legend.y;
 
     for (int s = 0; s < config->series_count; s++) {
-        const CUI_ChartSeries *series = &config->series[s];
-        uint32_t color = series->color ? series->color : cui_chart_series_color(s);
+        const AUI_ChartSeries *series = &config->series[s];
+        uint32_t color = series->color ? series->color : aui_chart_series_color(s);
 
         /* Color box */
-        cui_draw_rect(ctx, legend.x, y + 4, 12, 12, color);
+        aui_draw_rect(ctx, legend.x, y + 4, 12, 12, color);
 
         /* Label */
         if (series->label) {
-            cui_draw_text(ctx, series->label, legend.x + 18, y + 2, text_color);
+            aui_draw_text(ctx, series->label, legend.x + 18, y + 2, text_color);
         }
 
         y += line_h;
@@ -249,13 +249,13 @@ static void cui_chart_draw_legend(CUI_Context *ctx, CUI_ChartState *state,
 
     /* Pie chart legend */
     for (int i = 0; i < config->slice_count; i++) {
-        const CUI_PieSlice *slice = &config->slices[i];
-        uint32_t color = slice->color ? slice->color : cui_chart_series_color(i);
+        const AUI_PieSlice *slice = &config->slices[i];
+        uint32_t color = slice->color ? slice->color : aui_chart_series_color(i);
 
-        cui_draw_rect(ctx, legend.x, y + 4, 12, 12, color);
+        aui_draw_rect(ctx, legend.x, y + 4, 12, 12, color);
 
         if (slice->label) {
-            cui_draw_text(ctx, slice->label, legend.x + 18, y + 2, text_color);
+            aui_draw_text(ctx, slice->label, legend.x + 18, y + 2, text_color);
         }
 
         y += line_h;
@@ -266,24 +266,24 @@ static void cui_chart_draw_legend(CUI_Context *ctx, CUI_ChartState *state,
  * Line Chart
  * ============================================================================ */
 
-void cui_draw_line_chart(CUI_Context *ctx, CUI_Rect bounds,
-                          const CUI_ChartConfig *config)
+void aui_draw_line_chart(AUI_Context *ctx, AUI_Rect bounds,
+                          const AUI_ChartConfig *config)
 {
-    CUI_ChartState state = {0};
+    AUI_ChartState state = {0};
     state.anim_progress = 1.0f;
-    cui_draw_chart_ex(ctx, bounds, config, &state);
+    aui_draw_chart_ex(ctx, bounds, config, &state);
 }
 
-static void cui_chart_draw_line_internal(CUI_Context *ctx, CUI_ChartState *state,
-                                          const CUI_ChartConfig *config)
+static void aui_chart_draw_line_internal(AUI_Context *ctx, AUI_ChartState *state,
+                                          const AUI_ChartConfig *config)
 {
-    CUI_Rect plot = state->plot_area;
+    AUI_Rect plot = state->plot_area;
 
     for (int s = 0; s < config->series_count; s++) {
-        const CUI_ChartSeries *series = &config->series[s];
+        const AUI_ChartSeries *series = &config->series[s];
         if (series->value_count < 1) continue;
 
-        uint32_t color = series->color ? series->color : cui_chart_series_color(s);
+        uint32_t color = series->color ? series->color : aui_chart_series_color(s);
         float line_w = series->line_width > 0 ? series->line_width : 2;
         float point_r = series->point_size > 0 ? series->point_size : 4;
 
@@ -308,7 +308,7 @@ static void cui_chart_draw_line_internal(CUI_Context *ctx, CUI_ChartState *state
                 float base_y = plot.y + plot.h;
 
                 /* Draw as two triangles (simplified quad) */
-                cui_draw_rect(ctx, x1, fminf(y1, y2), x2 - x1, base_y - fminf(y1, y2), fill_color);
+                aui_draw_rect(ctx, x1, fminf(y1, y2), x2 - x1, base_y - fminf(y1, y2), fill_color);
             }
         }
 
@@ -319,7 +319,7 @@ static void cui_chart_draw_line_internal(CUI_Context *ctx, CUI_ChartState *state
             float y1 = plot.y + plot.h - (series->values[i] - state->y_offset) * state->y_scale;
             float y2 = plot.y + plot.h - (series->values[i + 1] - state->y_offset) * state->y_scale;
 
-            cui_draw_line(ctx, x1, y1, x2, y2, color, line_w);
+            aui_draw_line(ctx, x1, y1, x2, y2, color, line_w);
         }
 
         /* Draw points */
@@ -333,7 +333,7 @@ static void cui_chart_draw_line_internal(CUI_Context *ctx, CUI_ChartState *state
                 float r = hovered ? point_r * 1.5f : point_r;
                 uint32_t c = hovered ? 0xFFFFFFFF : color;
 
-                cui_draw_rect(ctx, x - r / 2, y - r / 2, r, r, c);
+                aui_draw_rect(ctx, x - r / 2, y - r / 2, r, r, c);
             }
         }
     }
@@ -343,18 +343,18 @@ static void cui_chart_draw_line_internal(CUI_Context *ctx, CUI_ChartState *state
  * Bar Chart
  * ============================================================================ */
 
-void cui_draw_bar_chart(CUI_Context *ctx, CUI_Rect bounds,
-                         const CUI_ChartConfig *config)
+void aui_draw_bar_chart(AUI_Context *ctx, AUI_Rect bounds,
+                         const AUI_ChartConfig *config)
 {
-    CUI_ChartState state = {0};
+    AUI_ChartState state = {0};
     state.anim_progress = 1.0f;
-    cui_draw_chart_ex(ctx, bounds, config, &state);
+    aui_draw_chart_ex(ctx, bounds, config, &state);
 }
 
-static void cui_chart_draw_bar_internal(CUI_Context *ctx, CUI_ChartState *state,
-                                         const CUI_ChartConfig *config)
+static void aui_chart_draw_bar_internal(AUI_Context *ctx, AUI_ChartState *state,
+                                         const AUI_ChartConfig *config)
 {
-    CUI_Rect plot = state->plot_area;
+    AUI_Rect plot = state->plot_area;
 
     /* Find max value count across series */
     int max_count = 0;
@@ -375,10 +375,10 @@ static void cui_chart_draw_bar_internal(CUI_Context *ctx, CUI_ChartState *state,
         float group_x = plot.x + slot_w * i + (slot_w - group_w) / 2;
 
         for (int s = 0; s < config->series_count; s++) {
-            const CUI_ChartSeries *series = &config->series[s];
+            const AUI_ChartSeries *series = &config->series[s];
             if (i >= series->value_count) continue;
 
-            uint32_t color = series->color ? series->color : cui_chart_series_color(s);
+            uint32_t color = series->color ? series->color : aui_chart_series_color(s);
             float value = series->values[i];
 
             /* Animation */
@@ -395,17 +395,17 @@ static void cui_chart_draw_bar_internal(CUI_Context *ctx, CUI_ChartState *state,
             /* Highlight hovered bar */
             bool hovered = (state->hovered_series == s && state->hovered_index == i);
             if (hovered) {
-                color = cui_color_brighten(color, 0.2f);
+                color = aui_color_brighten(color, 0.2f);
             }
 
-            cui_draw_rect(ctx, x, y, w, bar_h, color);
+            aui_draw_rect(ctx, x, y, w, bar_h, color);
 
             /* Value label */
             if (config->show_values) {
-                const char *label = cui_chart_format_value(value, NULL);
-                float tw = cui_text_width(ctx, label);
+                const char *label = aui_chart_format_value(value, NULL);
+                float tw = aui_text_width(ctx, label);
                 uint32_t text_color = config->text_color ? config->text_color : 0xFFFFFFFF;
-                cui_draw_text(ctx, label, x + w / 2 - tw / 2, y - 14, text_color);
+                aui_draw_text(ctx, label, x + w / 2 - tw / 2, y - 14, text_color);
             }
         }
     }
@@ -415,18 +415,18 @@ static void cui_chart_draw_bar_internal(CUI_Context *ctx, CUI_ChartState *state,
  * Pie Chart
  * ============================================================================ */
 
-void cui_draw_pie_chart(CUI_Context *ctx, CUI_Rect bounds,
-                         const CUI_ChartConfig *config)
+void aui_draw_pie_chart(AUI_Context *ctx, AUI_Rect bounds,
+                         const AUI_ChartConfig *config)
 {
-    CUI_ChartState state = {0};
+    AUI_ChartState state = {0};
     state.anim_progress = 1.0f;
-    cui_draw_chart_ex(ctx, bounds, config, &state);
+    aui_draw_chart_ex(ctx, bounds, config, &state);
 }
 
-static void cui_chart_draw_pie_internal(CUI_Context *ctx, CUI_ChartState *state,
-                                         const CUI_ChartConfig *config)
+static void aui_chart_draw_pie_internal(AUI_Context *ctx, AUI_ChartState *state,
+                                         const AUI_ChartConfig *config)
 {
-    CUI_Rect plot = state->plot_area;
+    AUI_Rect plot = state->plot_area;
     float cx = plot.x + plot.w / 2;
     float cy = plot.y + plot.h / 2;
     float radius = fminf(plot.w, plot.h) / 2 - 10;
@@ -444,13 +444,13 @@ static void cui_chart_draw_pie_internal(CUI_Context *ctx, CUI_ChartState *state,
     float angle = start_angle;
 
     for (int i = 0; i < config->slice_count; i++) {
-        const CUI_PieSlice *slice = &config->slices[i];
+        const AUI_PieSlice *slice = &config->slices[i];
         float sweep = (slice->value / total) * 2 * (float)M_PI;
 
         /* Animation */
         sweep *= state->anim_progress;
 
-        uint32_t color = slice->color ? slice->color : cui_chart_series_color(i);
+        uint32_t color = slice->color ? slice->color : aui_chart_series_color(i);
 
         /* Explode offset */
         float offset = 0;
@@ -483,12 +483,12 @@ static void cui_chart_draw_pie_internal(CUI_Context *ctx, CUI_ChartState *state,
                 float ix2 = cx + offset_x + cosf(a2) * inner_radius;
                 float iy2 = cy + offset_y + sinf(a2) * inner_radius;
 
-                cui_draw_line(ctx, x1, y1, x2, y2, color, 1);
-                cui_draw_line(ctx, ix1, iy1, ix2, iy2, color, 1);
+                aui_draw_line(ctx, x1, y1, x2, y2, color, 1);
+                aui_draw_line(ctx, ix1, iy1, ix2, iy2, color, 1);
             } else {
                 /* Pie - fill from center */
-                cui_draw_line(ctx, cx + offset_x, cy + offset_y, x1, y1, color, 1);
-                cui_draw_line(ctx, x1, y1, x2, y2, color, 1);
+                aui_draw_line(ctx, cx + offset_x, cy + offset_y, x1, y1, color, 1);
+                aui_draw_line(ctx, x1, y1, x2, y2, color, 1);
             }
         }
 
@@ -501,9 +501,9 @@ static void cui_chart_draw_pie_internal(CUI_Context *ctx, CUI_ChartState *state,
             char percent[16];
             snprintf(percent, sizeof(percent), "%.0f%%", slice->value / total * 100);
 
-            float tw = cui_text_width(ctx, percent);
+            float tw = aui_text_width(ctx, percent);
             uint32_t text_color = config->text_color ? config->text_color : 0xFFFFFFFF;
-            cui_draw_text(ctx, percent, lx - tw / 2, ly - 6, text_color);
+            aui_draw_text(ctx, percent, lx - tw / 2, ly - 6, text_color);
         }
 
         angle += sweep / state->anim_progress;  /* Unadjusted for next slice */
@@ -514,64 +514,64 @@ static void cui_chart_draw_pie_internal(CUI_Context *ctx, CUI_ChartState *state,
  * Main Chart Drawing
  * ============================================================================ */
 
-void cui_draw_chart(CUI_Context *ctx, CUI_Rect bounds,
-                     const CUI_ChartConfig *config)
+void aui_draw_chart(AUI_Context *ctx, AUI_Rect bounds,
+                     const AUI_ChartConfig *config)
 {
-    CUI_ChartState state = {0};
+    AUI_ChartState state = {0};
     state.anim_progress = 1.0f;
-    cui_draw_chart_ex(ctx, bounds, config, &state);
+    aui_draw_chart_ex(ctx, bounds, config, &state);
 }
 
-void cui_draw_chart_ex(CUI_Context *ctx, CUI_Rect bounds,
-                        const CUI_ChartConfig *config,
-                        CUI_ChartState *state)
+void aui_draw_chart_ex(AUI_Context *ctx, AUI_Rect bounds,
+                        const AUI_ChartConfig *config,
+                        AUI_ChartState *state)
 {
     if (!ctx || !config) return;
 
     /* Draw background */
     if (config->background_color) {
-        cui_draw_rect(ctx, bounds.x, bounds.y, bounds.w, bounds.h,
+        aui_draw_rect(ctx, bounds.x, bounds.y, bounds.w, bounds.h,
                       config->background_color);
     }
 
     /* Compute layout */
-    cui_chart_compute_bounds(ctx, bounds, config, state);
+    aui_chart_compute_bounds(ctx, bounds, config, state);
 
     /* Draw based on type */
     switch (config->type) {
-        case CUI_CHART_LINE:
-        case CUI_CHART_AREA: {
+        case AUI_CHART_LINE:
+        case AUI_CHART_AREA: {
             float data_min, data_max;
-            cui_chart_find_data_range(config, &data_min, &data_max);
+            aui_chart_find_data_range(config, &data_min, &data_max);
 
             float axis_min, axis_max, tick_step;
             int tick_count;
-            cui_chart_nice_axis(data_min, data_max, &axis_min, &axis_max,
+            aui_chart_nice_axis(data_min, data_max, &axis_min, &axis_max,
                                  &tick_step, &tick_count);
 
-            cui_chart_draw_grid(ctx, state, config, axis_min, axis_max, tick_step);
-            cui_chart_draw_line_internal(ctx, state, config);
+            aui_chart_draw_grid(ctx, state, config, axis_min, axis_max, tick_step);
+            aui_chart_draw_line_internal(ctx, state, config);
             break;
         }
 
-        case CUI_CHART_BAR:
-        case CUI_CHART_STACKED_BAR: {
+        case AUI_CHART_BAR:
+        case AUI_CHART_STACKED_BAR: {
             float data_min, data_max;
-            cui_chart_find_data_range(config, &data_min, &data_max);
+            aui_chart_find_data_range(config, &data_min, &data_max);
 
             float axis_min, axis_max, tick_step;
             int tick_count;
-            cui_chart_nice_axis(data_min, data_max, &axis_min, &axis_max,
+            aui_chart_nice_axis(data_min, data_max, &axis_min, &axis_max,
                                  &tick_step, &tick_count);
 
-            cui_chart_draw_grid(ctx, state, config, axis_min, axis_max, tick_step);
-            cui_chart_draw_bar_internal(ctx, state, config);
+            aui_chart_draw_grid(ctx, state, config, axis_min, axis_max, tick_step);
+            aui_chart_draw_bar_internal(ctx, state, config);
             break;
         }
 
-        case CUI_CHART_PIE:
-        case CUI_CHART_DONUT:
-            cui_chart_draw_pie_internal(ctx, state, config);
+        case AUI_CHART_PIE:
+        case AUI_CHART_DONUT:
+            aui_chart_draw_pie_internal(ctx, state, config);
             break;
 
         default:
@@ -579,7 +579,7 @@ void cui_draw_chart_ex(CUI_Context *ctx, CUI_Rect bounds,
     }
 
     /* Draw legend */
-    cui_chart_draw_legend(ctx, state, config);
+    aui_chart_draw_legend(ctx, state, config);
 
     /* Draw tooltip */
     if (state->tooltip_visible && state->hovered_series >= 0) {
@@ -591,26 +591,26 @@ void cui_draw_chart_ex(CUI_Context *ctx, CUI_Rect bounds,
  * Chart Node Widget
  * ============================================================================ */
 
-typedef struct CUI_ChartNodeData {
-    CUI_ChartConfig config;
-    CUI_ChartState state;
-    CUI_ChartSeries *series_storage;
+typedef struct AUI_ChartNodeData {
+    AUI_ChartConfig config;
+    AUI_ChartState state;
+    AUI_ChartSeries *series_storage;
     int series_capacity;
-    CUI_PieSlice *slice_storage;
+    AUI_PieSlice *slice_storage;
     int slice_capacity;
     float *value_storage;
     int value_capacity;
-} CUI_ChartNodeData;
+} AUI_ChartNodeData;
 
-CUI_Node *cui_chart_create(CUI_Context *ctx, const char *name,
-                            const CUI_ChartConfig *config)
+AUI_Node *aui_chart_create(AUI_Context *ctx, const char *name,
+                            const AUI_ChartConfig *config)
 {
-    CUI_Node *node = cui_node_create(ctx, CUI_NODE_CHART, name);
+    AUI_Node *node = aui_node_create(ctx, AUI_NODE_CHART, name);
     if (!node) return NULL;
 
-    CUI_ChartNodeData *data = (CUI_ChartNodeData *)calloc(1, sizeof(CUI_ChartNodeData));
+    AUI_ChartNodeData *data = (AUI_ChartNodeData *)calloc(1, sizeof(AUI_ChartNodeData));
     if (!data) {
-        cui_node_destroy(node);
+        aui_node_destroy(node);
         return NULL;
     }
 
@@ -628,10 +628,10 @@ CUI_Node *cui_chart_create(CUI_Context *ctx, const char *name,
     return node;
 }
 
-void cui_chart_set_config(CUI_Node *chart, const CUI_ChartConfig *config)
+void aui_chart_set_config(AUI_Node *chart, const AUI_ChartConfig *config)
 {
-    if (!chart || chart->type != CUI_NODE_CHART || !config) return;
-    CUI_ChartNodeData *data = (CUI_ChartNodeData *)chart->custom_data;
+    if (!chart || chart->type != AUI_NODE_CHART || !config) return;
+    AUI_ChartNodeData *data = (AUI_ChartNodeData *)chart->custom_data;
     if (!data) return;
 
     data->config = *config;
@@ -640,11 +640,11 @@ void cui_chart_set_config(CUI_Node *chart, const CUI_ChartConfig *config)
     }
 }
 
-void cui_chart_set_data(CUI_Node *chart, const CUI_ChartSeries *series,
+void aui_chart_set_data(AUI_Node *chart, const AUI_ChartSeries *series,
                          int series_count)
 {
-    if (!chart || chart->type != CUI_NODE_CHART) return;
-    CUI_ChartNodeData *data = (CUI_ChartNodeData *)chart->custom_data;
+    if (!chart || chart->type != AUI_NODE_CHART) return;
+    AUI_ChartNodeData *data = (AUI_ChartNodeData *)chart->custom_data;
     if (!data) return;
 
     data->config.series = series;
@@ -655,11 +655,11 @@ void cui_chart_set_data(CUI_Node *chart, const CUI_ChartSeries *series,
     }
 }
 
-void cui_chart_set_pie_data(CUI_Node *chart, const CUI_PieSlice *slices,
+void aui_chart_set_pie_data(AUI_Node *chart, const AUI_PieSlice *slices,
                              int slice_count)
 {
-    if (!chart || chart->type != CUI_NODE_CHART) return;
-    CUI_ChartNodeData *data = (CUI_ChartNodeData *)chart->custom_data;
+    if (!chart || chart->type != AUI_NODE_CHART) return;
+    AUI_ChartNodeData *data = (AUI_ChartNodeData *)chart->custom_data;
     if (!data) return;
 
     data->config.slices = slices;
@@ -670,17 +670,17 @@ void cui_chart_set_pie_data(CUI_Node *chart, const CUI_PieSlice *slices,
     }
 }
 
-void cui_chart_add_series(CUI_Node *chart, const CUI_ChartSeries *series)
+void aui_chart_add_series(AUI_Node *chart, const AUI_ChartSeries *series)
 {
-    if (!chart || chart->type != CUI_NODE_CHART || !series) return;
-    CUI_ChartNodeData *data = (CUI_ChartNodeData *)chart->custom_data;
+    if (!chart || chart->type != AUI_NODE_CHART || !series) return;
+    AUI_ChartNodeData *data = (AUI_ChartNodeData *)chart->custom_data;
     if (!data) return;
 
     /* Grow storage if needed */
     if (data->config.series_count >= data->series_capacity) {
         int new_cap = data->series_capacity == 0 ? 4 : data->series_capacity * 2;
-        CUI_ChartSeries *new_storage = (CUI_ChartSeries *)realloc(
-            data->series_storage, new_cap * sizeof(CUI_ChartSeries));
+        AUI_ChartSeries *new_storage = (AUI_ChartSeries *)realloc(
+            data->series_storage, new_cap * sizeof(AUI_ChartSeries));
         if (!new_storage) return;
         data->series_storage = new_storage;
         data->series_capacity = new_cap;
@@ -690,11 +690,11 @@ void cui_chart_add_series(CUI_Node *chart, const CUI_ChartSeries *series)
     data->config.series = data->series_storage;
 }
 
-void cui_chart_update_series(CUI_Node *chart, int series_index,
+void aui_chart_update_series(AUI_Node *chart, int series_index,
                               const float *values, int count)
 {
-    if (!chart || chart->type != CUI_NODE_CHART) return;
-    CUI_ChartNodeData *data = (CUI_ChartNodeData *)chart->custom_data;
+    if (!chart || chart->type != AUI_NODE_CHART) return;
+    AUI_ChartNodeData *data = (AUI_ChartNodeData *)chart->custom_data;
     if (!data || series_index < 0 || series_index >= data->config.series_count) return;
 
     /* This requires mutable series data - only works with storage */
@@ -704,10 +704,10 @@ void cui_chart_update_series(CUI_Node *chart, int series_index,
     data->series_storage[series_index].value_count = count;
 }
 
-void cui_chart_clear(CUI_Node *chart)
+void aui_chart_clear(AUI_Node *chart)
 {
-    if (!chart || chart->type != CUI_NODE_CHART) return;
-    CUI_ChartNodeData *data = (CUI_ChartNodeData *)chart->custom_data;
+    if (!chart || chart->type != AUI_NODE_CHART) return;
+    AUI_ChartNodeData *data = (AUI_ChartNodeData *)chart->custom_data;
     if (!data) return;
 
     data->config.series = NULL;
@@ -716,10 +716,10 @@ void cui_chart_clear(CUI_Node *chart)
     data->config.slice_count = 0;
 }
 
-void cui_chart_set_animated(CUI_Node *chart, bool animated)
+void aui_chart_set_animated(AUI_Node *chart, bool animated)
 {
-    if (!chart || chart->type != CUI_NODE_CHART) return;
-    CUI_ChartNodeData *data = (CUI_ChartNodeData *)chart->custom_data;
+    if (!chart || chart->type != AUI_NODE_CHART) return;
+    AUI_ChartNodeData *data = (AUI_ChartNodeData *)chart->custom_data;
     if (!data) return;
 
     data->config.animated = animated;
@@ -730,19 +730,19 @@ void cui_chart_set_animated(CUI_Node *chart, bool animated)
     }
 }
 
-void cui_chart_restart_animation(CUI_Node *chart)
+void aui_chart_restart_animation(AUI_Node *chart)
 {
-    if (!chart || chart->type != CUI_NODE_CHART) return;
-    CUI_ChartNodeData *data = (CUI_ChartNodeData *)chart->custom_data;
+    if (!chart || chart->type != AUI_NODE_CHART) return;
+    AUI_ChartNodeData *data = (AUI_ChartNodeData *)chart->custom_data;
     if (!data) return;
 
     data->state.anim_progress = 0;
 }
 
-bool cui_chart_get_hover(CUI_Node *chart, int *series, int *index, float *value)
+bool aui_chart_get_hover(AUI_Node *chart, int *series, int *index, float *value)
 {
-    if (!chart || chart->type != CUI_NODE_CHART) return false;
-    CUI_ChartNodeData *data = (CUI_ChartNodeData *)chart->custom_data;
+    if (!chart || chart->type != AUI_NODE_CHART) return false;
+    AUI_ChartNodeData *data = (AUI_ChartNodeData *)chart->custom_data;
     if (!data) return false;
 
     if (data->state.hovered_series < 0) return false;
@@ -750,7 +750,7 @@ bool cui_chart_get_hover(CUI_Node *chart, int *series, int *index, float *value)
     if (series) *series = data->state.hovered_series;
     if (index) *index = data->state.hovered_index;
     if (value && data->state.hovered_series < data->config.series_count) {
-        const CUI_ChartSeries *s = &data->config.series[data->state.hovered_series];
+        const AUI_ChartSeries *s = &data->config.series[data->state.hovered_series];
         if (data->state.hovered_index < s->value_count) {
             *value = s->values[data->state.hovered_index];
         }

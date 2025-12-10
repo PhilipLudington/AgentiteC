@@ -1,9 +1,9 @@
-#include "carbon/carbon.h"
-#include "carbon/error.h"
+#include "agentite/agentite.h"
+#include "agentite/error.h"
 #include <stdlib.h>
 #include <stdio.h>
 
-struct Carbon_Engine {
+struct Agentite_Engine {
     SDL_Window *window;
     SDL_GPUDevice *gpu_device;
 
@@ -18,23 +18,23 @@ struct Carbon_Engine {
     SDL_GPUTexture *swapchain_texture;  // Cached for multiple render passes
 };
 
-Carbon_Engine *carbon_init(const Carbon_Config *config) {
+Agentite_Engine *agentite_init(const Agentite_Config *config) {
     // Use default config if none provided
-    Carbon_Config default_config = CARBON_DEFAULT_CONFIG;
+    Agentite_Config default_config = AGENTITE_DEFAULT_CONFIG;
     if (!config) {
         config = &default_config;
     }
 
     // Initialize SDL
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) {
-        carbon_set_error_from_sdl("Failed to initialize SDL");
+        agentite_set_error_from_sdl("Failed to initialize SDL");
         return NULL;
     }
 
     // Allocate engine
-    Carbon_Engine *engine = CARBON_ALLOC(Carbon_Engine);
+    Agentite_Engine *engine = AGENTITE_ALLOC(Agentite_Engine);
     if (!engine) {
-        carbon_set_error("Failed to allocate engine");
+        agentite_set_error("Failed to allocate engine");
         SDL_Quit();
         return NULL;
     }
@@ -53,7 +53,7 @@ Carbon_Engine *carbon_init(const Carbon_Config *config) {
     );
 
     if (!engine->window) {
-        carbon_set_error_from_sdl("Failed to create window");
+        agentite_set_error_from_sdl("Failed to create window");
         free(engine);
         SDL_Quit();
         return NULL;
@@ -67,7 +67,7 @@ Carbon_Engine *carbon_init(const Carbon_Config *config) {
     );
 
     if (!engine->gpu_device) {
-        carbon_set_error_from_sdl("Failed to create GPU device");
+        agentite_set_error_from_sdl("Failed to create GPU device");
         SDL_DestroyWindow(engine->window);
         free(engine);
         SDL_Quit();
@@ -76,7 +76,7 @@ Carbon_Engine *carbon_init(const Carbon_Config *config) {
 
     // Claim window for GPU rendering
     if (!SDL_ClaimWindowForGPUDevice(engine->gpu_device, engine->window)) {
-        carbon_set_error_from_sdl("Failed to claim window for GPU");
+        agentite_set_error_from_sdl("Failed to claim window for GPU");
         SDL_DestroyGPUDevice(engine->gpu_device);
         SDL_DestroyWindow(engine->window);
         free(engine);
@@ -94,7 +94,7 @@ Carbon_Engine *carbon_init(const Carbon_Config *config) {
 
     // Log GPU backend info
     const char *driver_name = SDL_GetGPUDeviceDriver(engine->gpu_device);
-    SDL_Log("Carbon Engine initialized with GPU driver: %s", driver_name);
+    SDL_Log("Agentite Engine initialized with GPU driver: %s", driver_name);
 
     engine->running = true;
     engine->frame_count = 0;
@@ -104,7 +104,7 @@ Carbon_Engine *carbon_init(const Carbon_Config *config) {
     return engine;
 }
 
-void carbon_shutdown(Carbon_Engine *engine) {
+void agentite_shutdown(Agentite_Engine *engine) {
     if (!engine) return;
 
     if (engine->gpu_device) {
@@ -119,20 +119,20 @@ void carbon_shutdown(Carbon_Engine *engine) {
     free(engine);
     SDL_Quit();
 
-    SDL_Log("Carbon Engine shutdown complete");
+    SDL_Log("Agentite Engine shutdown complete");
 }
 
-bool carbon_is_running(Carbon_Engine *engine) {
+bool agentite_is_running(Agentite_Engine *engine) {
     return engine && engine->running;
 }
 
-void carbon_quit(Carbon_Engine *engine) {
+void agentite_quit(Agentite_Engine *engine) {
     if (engine) {
         engine->running = false;
     }
 }
 
-void carbon_poll_events(Carbon_Engine *engine) {
+void agentite_poll_events(Agentite_Engine *engine) {
     if (!engine) return;
 
     SDL_Event event;
@@ -152,7 +152,7 @@ void carbon_poll_events(Carbon_Engine *engine) {
     }
 }
 
-void carbon_begin_frame(Carbon_Engine *engine) {
+void agentite_begin_frame(Agentite_Engine *engine) {
     if (!engine) return;
 
     // Calculate delta time
@@ -162,49 +162,49 @@ void carbon_begin_frame(Carbon_Engine *engine) {
     engine->last_frame_time = current_time;
 }
 
-void carbon_end_frame(Carbon_Engine *engine) {
+void agentite_end_frame(Agentite_Engine *engine) {
     if (!engine) return;
     engine->frame_count++;
 }
 
-float carbon_get_delta_time(Carbon_Engine *engine) {
+float agentite_get_delta_time(Agentite_Engine *engine) {
     return engine ? engine->delta_time : 0.0f;
 }
 
-uint64_t carbon_get_frame_count(Carbon_Engine *engine) {
+uint64_t agentite_get_frame_count(Agentite_Engine *engine) {
     return engine ? engine->frame_count : 0;
 }
 
-SDL_GPUDevice *carbon_get_gpu_device(Carbon_Engine *engine) {
+SDL_GPUDevice *agentite_get_gpu_device(Agentite_Engine *engine) {
     return engine ? engine->gpu_device : NULL;
 }
 
-SDL_Window *carbon_get_window(Carbon_Engine *engine) {
+SDL_Window *agentite_get_window(Agentite_Engine *engine) {
     return engine ? engine->window : NULL;
 }
 
-SDL_GPUCommandBuffer *carbon_acquire_command_buffer(Carbon_Engine *engine) {
+SDL_GPUCommandBuffer *agentite_acquire_command_buffer(Agentite_Engine *engine) {
     if (!engine || !engine->gpu_device) return NULL;
 
     // Only acquire if we don't already have one
     if (!engine->cmd_buffer) {
         engine->cmd_buffer = SDL_AcquireGPUCommandBuffer(engine->gpu_device);
         if (!engine->cmd_buffer) {
-            carbon_set_error_from_sdl("Failed to acquire command buffer");
+            agentite_set_error_from_sdl("Failed to acquire command buffer");
             return NULL;
         }
     }
     return engine->cmd_buffer;
 }
 
-bool carbon_begin_render_pass(Carbon_Engine *engine, float r, float g, float b, float a) {
+bool agentite_begin_render_pass(Agentite_Engine *engine, float r, float g, float b, float a) {
     if (!engine || !engine->gpu_device) return false;
 
     // Acquire command buffer if not already acquired
     if (!engine->cmd_buffer) {
         engine->cmd_buffer = SDL_AcquireGPUCommandBuffer(engine->gpu_device);
         if (!engine->cmd_buffer) {
-            carbon_set_error_from_sdl("Failed to acquire command buffer");
+            agentite_set_error_from_sdl("Failed to acquire command buffer");
             return false;
         }
     }
@@ -217,7 +217,7 @@ bool carbon_begin_render_pass(Carbon_Engine *engine, float r, float g, float b, 
             &swapchain_texture,
             NULL,
             NULL)) {
-        carbon_set_error_from_sdl("Failed to acquire swapchain texture");
+        agentite_set_error_from_sdl("Failed to acquire swapchain texture");
         SDL_CancelGPUCommandBuffer(engine->cmd_buffer);
         engine->cmd_buffer = NULL;
         return false;
@@ -250,7 +250,7 @@ bool carbon_begin_render_pass(Carbon_Engine *engine, float r, float g, float b, 
     );
 
     if (!engine->render_pass) {
-        carbon_set_error_from_sdl("Failed to begin render pass");
+        agentite_set_error_from_sdl("Failed to begin render pass");
         SDL_CancelGPUCommandBuffer(engine->cmd_buffer);
         engine->cmd_buffer = NULL;
         engine->swapchain_texture = NULL;
@@ -260,12 +260,12 @@ bool carbon_begin_render_pass(Carbon_Engine *engine, float r, float g, float b, 
     return true;
 }
 
-bool carbon_begin_render_pass_no_clear(Carbon_Engine *engine) {
+bool agentite_begin_render_pass_no_clear(Agentite_Engine *engine) {
     if (!engine || !engine->gpu_device) return false;
 
     // Must have command buffer and swapchain texture from previous render pass
     if (!engine->cmd_buffer || !engine->swapchain_texture) {
-        carbon_set_error("No command buffer or swapchain texture - call carbon_begin_render_pass first");
+        agentite_set_error("No command buffer or swapchain texture - call agentite_begin_render_pass first");
         return false;
     }
 
@@ -286,14 +286,14 @@ bool carbon_begin_render_pass_no_clear(Carbon_Engine *engine) {
     );
 
     if (!engine->render_pass) {
-        carbon_set_error_from_sdl("Failed to begin render pass (no clear)");
+        agentite_set_error_from_sdl("Failed to begin render pass (no clear)");
         return false;
     }
 
     return true;
 }
 
-void carbon_end_render_pass_no_submit(Carbon_Engine *engine) {
+void agentite_end_render_pass_no_submit(Agentite_Engine *engine) {
     if (!engine) return;
 
     if (engine->render_pass) {
@@ -303,7 +303,7 @@ void carbon_end_render_pass_no_submit(Carbon_Engine *engine) {
     // Keep cmd_buffer and swapchain_texture for next render pass
 }
 
-void carbon_end_render_pass(Carbon_Engine *engine) {
+void agentite_end_render_pass(Agentite_Engine *engine) {
     if (!engine) return;
 
     if (engine->render_pass) {
@@ -318,10 +318,10 @@ void carbon_end_render_pass(Carbon_Engine *engine) {
     engine->swapchain_texture = NULL;
 }
 
-SDL_GPURenderPass *carbon_get_render_pass(Carbon_Engine *engine) {
+SDL_GPURenderPass *agentite_get_render_pass(Agentite_Engine *engine) {
     return engine ? engine->render_pass : NULL;
 }
 
-SDL_GPUCommandBuffer *carbon_get_command_buffer(Carbon_Engine *engine) {
+SDL_GPUCommandBuffer *agentite_get_command_buffer(Agentite_Engine *engine) {
     return engine ? engine->cmd_buffer : NULL;
 }

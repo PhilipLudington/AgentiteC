@@ -1,7 +1,7 @@
-#include "carbon/turn.h"
+#include "agentite/turn.h"
 #include <string.h>
 
-static const char *phase_names[CARBON_PHASE_COUNT] = {
+static const char *phase_names[AGENTITE_PHASE_COUNT] = {
     "World Update",
     "Events",
     "Player Input",
@@ -9,24 +9,24 @@ static const char *phase_names[CARBON_PHASE_COUNT] = {
     "End Check"
 };
 
-void carbon_turn_init(Carbon_TurnManager *tm) {
+void agentite_turn_init(Agentite_TurnManager *tm) {
     if (!tm) return;
 
-    memset(tm, 0, sizeof(Carbon_TurnManager));
+    memset(tm, 0, sizeof(Agentite_TurnManager));
     tm->turn_number = 1;
-    tm->current_phase = CARBON_PHASE_WORLD_UPDATE;
+    tm->current_phase = AGENTITE_PHASE_WORLD_UPDATE;
     tm->turn_in_progress = false;
 }
 
-void carbon_turn_set_callback(Carbon_TurnManager *tm, Carbon_TurnPhase phase,
-                               Carbon_PhaseCallback callback, void *userdata) {
-    if (!tm || phase < 0 || phase >= CARBON_PHASE_COUNT) return;
+void agentite_turn_set_callback(Agentite_TurnManager *tm, Agentite_TurnPhase phase,
+                               Agentite_PhaseCallback callback, void *userdata) {
+    if (!tm || phase < 0 || phase >= AGENTITE_PHASE_COUNT) return;
 
     tm->phase_callbacks[phase] = callback;
     tm->phase_userdata[phase] = userdata;
 }
 
-bool carbon_turn_advance(Carbon_TurnManager *tm) {
+bool agentite_turn_advance(Agentite_TurnManager *tm) {
     if (!tm) return false;
 
     tm->turn_in_progress = true;
@@ -40,11 +40,11 @@ bool carbon_turn_advance(Carbon_TurnManager *tm) {
     }
 
     // Advance to next phase
-    tm->current_phase = (Carbon_TurnPhase)(tm->current_phase + 1);
+    tm->current_phase = (Agentite_TurnPhase)(tm->current_phase + 1);
 
     // Check if turn completed
-    if (tm->current_phase >= CARBON_PHASE_COUNT) {
-        tm->current_phase = CARBON_PHASE_WORLD_UPDATE;
+    if (tm->current_phase >= AGENTITE_PHASE_COUNT) {
+        tm->current_phase = AGENTITE_PHASE_WORLD_UPDATE;
         tm->turn_number++;
         tm->turn_in_progress = false;
         return true;  // Turn completed
@@ -53,22 +53,22 @@ bool carbon_turn_advance(Carbon_TurnManager *tm) {
     return false;  // Turn still in progress
 }
 
-void carbon_turn_skip_to(Carbon_TurnManager *tm, Carbon_TurnPhase phase) {
-    if (!tm || phase < 0 || phase >= CARBON_PHASE_COUNT) return;
+void agentite_turn_skip_to(Agentite_TurnManager *tm, Agentite_TurnPhase phase) {
+    if (!tm || phase < 0 || phase >= AGENTITE_PHASE_COUNT) return;
     tm->current_phase = phase;
 }
 
-Carbon_TurnPhase carbon_turn_current_phase(const Carbon_TurnManager *tm) {
-    if (!tm) return CARBON_PHASE_WORLD_UPDATE;
+Agentite_TurnPhase agentite_turn_current_phase(const Agentite_TurnManager *tm) {
+    if (!tm) return AGENTITE_PHASE_WORLD_UPDATE;
     return tm->current_phase;
 }
 
-int carbon_turn_number(const Carbon_TurnManager *tm) {
+int agentite_turn_number(const Agentite_TurnManager *tm) {
     if (!tm) return 0;
     return tm->turn_number;
 }
 
-const char *carbon_turn_phase_name(Carbon_TurnPhase phase) {
-    if (phase < 0 || phase >= CARBON_PHASE_COUNT) return "Unknown";
+const char *agentite_turn_phase_name(Agentite_TurnPhase phase) {
+    if (phase < 0 || phase >= AGENTITE_PHASE_COUNT) return "Unknown";
     return phase_names[phase];
 }

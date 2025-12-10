@@ -1,10 +1,10 @@
-#include "carbon/carbon.h"
+#include "agentite/agentite.h"
 #include "state.h"
 #include <stdlib.h>
 #include <string.h>
 
 GameStateMachine *game_state_machine_create(void) {
-    GameStateMachine *sm = CARBON_ALLOC(GameStateMachine);
+    GameStateMachine *sm = AGENTITE_ALLOC(GameStateMachine);
     if (!sm) return NULL;
 
     sm->current = GAME_STATE_NONE;
@@ -27,7 +27,7 @@ void game_state_machine_register(GameStateMachine *sm, GameStateID id,
 }
 
 void game_state_machine_change(GameStateMachine *sm, GameStateID id,
-                                Carbon_GameContext *ctx) {
+                                Agentite_GameContext *ctx) {
     if (!sm || id < 0 || id >= GAME_MAX_STATES) return;
 
     /* Exit current state */
@@ -45,7 +45,7 @@ void game_state_machine_change(GameStateMachine *sm, GameStateID id,
     }
 }
 
-void game_state_machine_update(GameStateMachine *sm, Carbon_GameContext *ctx,
+void game_state_machine_update(GameStateMachine *sm, Agentite_GameContext *ctx,
                                 float dt) {
     if (!sm || sm->current == GAME_STATE_NONE) return;
 
@@ -62,7 +62,7 @@ void game_state_machine_update(GameStateMachine *sm, Carbon_GameContext *ctx,
     }
 }
 
-void game_state_machine_render(GameStateMachine *sm, Carbon_GameContext *ctx,
+void game_state_machine_render(GameStateMachine *sm, Agentite_GameContext *ctx,
                                 SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass) {
     if (!sm || sm->current == GAME_STATE_NONE) return;
 
@@ -79,7 +79,7 @@ GameStateID game_state_machine_previous(GameStateMachine *sm) {
     return sm ? sm->previous : GAME_STATE_NONE;
 }
 
-void game_state_machine_back(GameStateMachine *sm, Carbon_GameContext *ctx) {
+void game_state_machine_back(GameStateMachine *sm, Agentite_GameContext *ctx) {
     if (!sm || sm->previous == GAME_STATE_NONE) return;
     game_state_machine_change(sm, sm->previous, ctx);
 }

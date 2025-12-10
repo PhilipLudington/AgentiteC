@@ -5,30 +5,30 @@ Parallel decision-making tracks that prevent resource competition between differ
 ## Quick Start
 
 ```c
-#include "carbon/ai_tracks.h"
+#include "agentite/ai_tracks.h"
 
-Carbon_AITrackSystem *tracks = carbon_ai_tracks_create();
-carbon_ai_tracks_set_blackboard(tracks, blackboard);
+Agentite_AITrackSystem *tracks = agentite_ai_tracks_create();
+agentite_ai_tracks_set_blackboard(tracks, blackboard);
 
 // Register tracks with evaluators
-int econ_track = carbon_ai_tracks_register(tracks, "economy", evaluate_economy);
-int mil_track = carbon_ai_tracks_register(tracks, "military", evaluate_military);
+int econ_track = agentite_ai_tracks_register(tracks, "economy", evaluate_economy);
+int mil_track = agentite_ai_tracks_register(tracks, "military", evaluate_military);
 
 // Set budgets
-carbon_ai_tracks_set_budget(tracks, econ_track, RESOURCE_GOLD, 1000);
-carbon_ai_tracks_set_budget(tracks, mil_track, RESOURCE_GOLD, 500);
+agentite_ai_tracks_set_budget(tracks, econ_track, RESOURCE_GOLD, 1000);
+agentite_ai_tracks_set_budget(tracks, mil_track, RESOURCE_GOLD, 500);
 ```
 
 ## Evaluator Function
 
 ```c
 void evaluate_economy(int track_id, void *game_state,
-                      const Carbon_AITrackBudget *budgets, int budget_count,
-                      Carbon_AITrackDecision *out, int *count, int max,
+                      const Agentite_AITrackBudget *budgets, int budget_count,
+                      Agentite_AITrackDecision *out, int *count, int max,
                       void *userdata) {
     *count = 0;
-    Carbon_AITrackDecision *d = &out[(*count)++];
-    carbon_ai_track_decision_init(d);
+    Agentite_AITrackDecision *d = &out[(*count)++];
+    agentite_ai_track_decision_init(d);
     d->action_type = ACTION_BUILD_MINE;
     d->target_id = best_location;
     d->score = 0.8f;
@@ -41,20 +41,20 @@ void evaluate_economy(int track_id, void *game_state,
 
 ```c
 // Evaluate all tracks
-Carbon_AITrackResult results;
-carbon_ai_tracks_evaluate_all(tracks, game_state, &results);
+Agentite_AITrackResult results;
+agentite_ai_tracks_evaluate_all(tracks, game_state, &results);
 
 // Process each track's decisions
 for (int t = 0; t < results.track_count; t++) {
-    Carbon_AITrackDecisionSet *set = &results.decisions[t];
-    carbon_ai_tracks_sort_by_priority(set);
+    Agentite_AITrackDecisionSet *set = &results.decisions[t];
+    agentite_ai_tracks_sort_by_priority(set);
 
     for (int i = 0; i < set->count; i++) {
-        Carbon_AITrackDecision *d = &set->items[i];
+        Agentite_AITrackDecision *d = &set->items[i];
 
         // Check budget
         if (d->resource_cost > 0) {
-            if (!carbon_ai_tracks_spend_budget(tracks, set->track_id,
+            if (!agentite_ai_tracks_spend_budget(tracks, set->track_id,
                                                 d->resource_type, d->resource_cost)) {
                 continue;
             }
@@ -75,16 +75,16 @@ int32_t provide_budget(int track_id, int32_t resource_type,
     return total_resources * 0.3f;
 }
 
-carbon_ai_tracks_set_budget_provider(tracks, provide_budget, NULL);
-carbon_ai_tracks_allocate_budgets(tracks, game_state);
+agentite_ai_tracks_set_budget_provider(tracks, provide_budget, NULL);
+agentite_ai_tracks_allocate_budgets(tracks, game_state);
 ```
 
 ## Query Helpers
 
 ```c
-const Carbon_AITrackDecision *best = carbon_ai_tracks_get_best(tracks, mil_track, &results);
-const Carbon_AITrackDecision *good[32];
-int count = carbon_ai_tracks_get_above_score(&results, 0.7f, good, 32);
+const Agentite_AITrackDecision *best = agentite_ai_tracks_get_best(tracks, mil_track, &results);
+const Agentite_AITrackDecision *good[32];
+int count = agentite_ai_tracks_get_above_score(&results, 0.7f, good, 32);
 ```
 
 ## Track Types
@@ -98,6 +98,6 @@ int count = carbon_ai_tracks_get_above_score(&results, 0.7f, good, 32);
 ## Per-Turn Reset
 
 ```c
-carbon_ai_tracks_reset_spent(tracks);
-carbon_ai_tracks_clear_reasons(tracks);
+agentite_ai_tracks_reset_spent(tracks);
+agentite_ai_tracks_clear_reasons(tracks);
 ```

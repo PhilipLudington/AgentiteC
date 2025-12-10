@@ -32,71 +32,71 @@ make example-ui
 ### UI Frame Structure
 ```c
 // Begin UI frame
-cui_begin_frame(ui, delta_time);
+aui_begin_frame(ui, delta_time);
 
 // Draw widgets inside panels
-if (cui_begin_panel(ui, "Panel Name", x, y, width, height, flags)) {
-    cui_label(ui, "Hello!");
-    if (cui_button(ui, "Click Me")) {
+if (aui_begin_panel(ui, "Panel Name", x, y, width, height, flags)) {
+    aui_label(ui, "Hello!");
+    if (aui_button(ui, "Click Me")) {
         // Button was clicked
     }
-    cui_end_panel(ui);
+    aui_end_panel(ui);
 }
 
 // End UI frame
-cui_end_frame(ui);
+aui_end_frame(ui);
 
 // Upload and render (during GPU operations)
-cui_upload(ui, cmd);
+aui_upload(ui, cmd);
 // ... during render pass ...
-cui_render(ui, cmd, pass);
+aui_render(ui, cmd, pass);
 ```
 
 ### Panel Flags
 ```c
-CUI_PANEL_NONE        // No decorations
-CUI_PANEL_TITLE_BAR   // Show title bar
-CUI_PANEL_BORDER      // Show border
-CUI_PANEL_TITLE_BAR | CUI_PANEL_BORDER  // Both
+AUI_PANEL_NONE        // No decorations
+AUI_PANEL_TITLE_BAR   // Show title bar
+AUI_PANEL_BORDER      // Show border
+AUI_PANEL_TITLE_BAR | AUI_PANEL_BORDER  // Both
 ```
 
 ### Widgets
 
 ```c
 // Labels and text
-cui_label(ui, "Static text");
-cui_spacing(ui, 10);  // Vertical space
-cui_separator(ui);    // Horizontal line
+aui_label(ui, "Static text");
+aui_spacing(ui, 10);  // Vertical space
+aui_separator(ui);    // Horizontal line
 
 // Buttons
-if (cui_button(ui, "Click Me")) {
+if (aui_button(ui, "Click Me")) {
     // Handle click
 }
 
 // Checkboxes
 bool enabled = true;
-cui_checkbox(ui, "Enable Feature", &enabled);
+aui_checkbox(ui, "Enable Feature", &enabled);
 
 // Sliders
 float volume = 0.5f;
-cui_slider_float(ui, "Volume", &volume, 0.0f, 1.0f);
+aui_slider_float(ui, "Volume", &volume, 0.0f, 1.0f);
 
 // Dropdowns
 int selection = 0;
 const char *options[] = {"Low", "Medium", "High"};
-cui_dropdown(ui, "Quality", &selection, options, 3);
+aui_dropdown(ui, "Quality", &selection, options, 3);
 
 // Text input
 char buffer[64] = "Default";
-cui_textbox(ui, "Name", buffer, sizeof(buffer));
+aui_textbox(ui, "Name", buffer, sizeof(buffer));
 
 // Listbox
 int selected = 0;
 const char *items[] = {"Item 1", "Item 2", "Item 3"};
-cui_listbox(ui, "##id", &selected, items, 3, 100);  // height=100
+aui_listbox(ui, "##id", &selected, items, 3, 100);  // height=100
 
 // Progress bar (standalone, not in panel)
-cui_progress_bar(ui, value, min, max);
+aui_progress_bar(ui, value, min, max);
 ```
 
 ### Event Handling
@@ -104,7 +104,7 @@ cui_progress_bar(ui, value, min, max);
 // UI processes events first
 SDL_Event event;
 while (SDL_PollEvent(&event)) {
-    if (cui_process_event(ui, &event)) {
+    if (aui_process_event(ui, &event)) {
         continue;  // UI consumed the event
     }
     // Handle remaining events for game

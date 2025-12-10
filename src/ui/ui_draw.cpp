@@ -1,11 +1,11 @@
 /*
- * Carbon UI - Drawing and GPU Pipeline
+ * Agentite UI - Drawing and GPU Pipeline
  *
  * Implements a draw command queue with layer sorting and multi-texture batching.
  */
 
-#include "carbon/ui.h"
-#include "carbon/error.h"
+#include "agentite/ui.h"
+#include "agentite/error.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stddef.h>
@@ -175,7 +175,7 @@ static const char ui_msdf_shader_msl[] =
  * ============================================================================ */
 
 /* Create the graphics pipeline for UI rendering */
-static bool cui_create_graphics_pipeline(CUI_Context *ctx)
+static bool aui_create_graphics_pipeline(AUI_Context *ctx)
 {
     if (!ctx || !ctx->gpu) return false;
 
@@ -200,7 +200,7 @@ static bool cui_create_graphics_pipeline(CUI_Context *ctx)
         };
         vertex_shader = SDL_CreateGPUShader(ctx->gpu, &vs_info);
         if (!vertex_shader) {
-            carbon_set_error_from_sdl("CUI: Failed to create vertex shader");
+            agentite_set_error_from_sdl("CUI: Failed to create vertex shader");
             return false;
         }
 
@@ -218,12 +218,12 @@ static bool cui_create_graphics_pipeline(CUI_Context *ctx)
         };
         fragment_shader = SDL_CreateGPUShader(ctx->gpu, &fs_info);
         if (!fragment_shader) {
-            carbon_set_error_from_sdl("CUI: Failed to create fragment shader");
+            agentite_set_error_from_sdl("CUI: Failed to create fragment shader");
             SDL_ReleaseGPUShader(ctx->gpu, vertex_shader);
             return false;
         }
     } else {
-        carbon_set_error("CUI: No supported shader format (need MSL for Metal)");
+        agentite_set_error("CUI: No supported shader format (need MSL for Metal)");
         return false;
     }
 
@@ -233,26 +233,26 @@ static bool cui_create_graphics_pipeline(CUI_Context *ctx)
             .location = 0,
             .buffer_slot = 0,
             .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
-            .offset = offsetof(CUI_Vertex, pos)
+            .offset = offsetof(AUI_Vertex, pos)
         },
         { /* texcoord */
             .location = 1,
             .buffer_slot = 0,
             .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
-            .offset = offsetof(CUI_Vertex, uv)
+            .offset = offsetof(AUI_Vertex, uv)
         },
         { /* color */
             .location = 2,
             .buffer_slot = 0,
             .format = SDL_GPU_VERTEXELEMENTFORMAT_UINT,
-            .offset = offsetof(CUI_Vertex, color)
+            .offset = offsetof(AUI_Vertex, color)
         }
     };
 
     /* Define vertex buffer layout */
     SDL_GPUVertexBufferDescription vb_desc = {
         .slot = 0,
-        .pitch = sizeof(CUI_Vertex),
+        .pitch = sizeof(AUI_Vertex),
         .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
         .instance_step_rate = 0
     };
@@ -320,7 +320,7 @@ static bool cui_create_graphics_pipeline(CUI_Context *ctx)
     SDL_ReleaseGPUShader(ctx->gpu, fragment_shader);
 
     if (!ctx->pipeline) {
-        carbon_set_error_from_sdl("CUI: Failed to create graphics pipeline");
+        agentite_set_error_from_sdl("CUI: Failed to create graphics pipeline");
         return false;
     }
 
@@ -329,7 +329,7 @@ static bool cui_create_graphics_pipeline(CUI_Context *ctx)
 }
 
 /* Create an SDF or MSDF pipeline */
-static SDL_GPUGraphicsPipeline *cui_create_sdf_pipeline(CUI_Context *ctx, bool is_msdf)
+static SDL_GPUGraphicsPipeline *aui_create_sdf_pipeline(AUI_Context *ctx, bool is_msdf)
 {
     if (!ctx || !ctx->gpu) return NULL;
 
@@ -380,14 +380,14 @@ static SDL_GPUGraphicsPipeline *cui_create_sdf_pipeline(CUI_Context *ctx, bool i
 
     /* Define vertex attributes (same as bitmap pipeline) */
     SDL_GPUVertexAttribute attributes[] = {
-        { .location = 0, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = offsetof(CUI_Vertex, pos) },
-        { .location = 1, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = offsetof(CUI_Vertex, uv) },
-        { .location = 2, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_UINT, .offset = offsetof(CUI_Vertex, color) }
+        { .location = 0, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = offsetof(AUI_Vertex, pos) },
+        { .location = 1, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = offsetof(AUI_Vertex, uv) },
+        { .location = 2, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_UINT, .offset = offsetof(AUI_Vertex, color) }
     };
 
     SDL_GPUVertexBufferDescription vb_desc = {
         .slot = 0,
-        .pitch = sizeof(CUI_Vertex),
+        .pitch = sizeof(AUI_Vertex),
         .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
         .instance_step_rate = 0
     };
@@ -453,7 +453,7 @@ static SDL_GPUGraphicsPipeline *cui_create_sdf_pipeline(CUI_Context *ctx, bool i
 }
 
 /* Create 1x1 white texture for solid color primitives */
-static bool cui_create_white_texture(CUI_Context *ctx)
+static bool aui_create_white_texture(AUI_Context *ctx)
 {
     SDL_GPUTextureCreateInfo tex_info = {
         .type = SDL_GPU_TEXTURETYPE_2D,
@@ -466,7 +466,7 @@ static bool cui_create_white_texture(CUI_Context *ctx)
     };
     ctx->white_texture = SDL_CreateGPUTexture(ctx->gpu, &tex_info);
     if (!ctx->white_texture) {
-        carbon_set_error_from_sdl("CUI: Failed to create white texture");
+        agentite_set_error_from_sdl("CUI: Failed to create white texture");
         return false;
     }
 
@@ -511,19 +511,19 @@ static bool cui_create_white_texture(CUI_Context *ctx)
     return true;
 }
 
-bool cui_create_pipeline(CUI_Context *ctx)
+bool aui_create_pipeline(AUI_Context *ctx)
 {
     if (!ctx || !ctx->gpu) return false;
 
     /* Create vertex buffer (GPU side) */
     SDL_GPUBufferCreateInfo vb_info = {
         .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
-        .size = (Uint32)(ctx->vertex_capacity * sizeof(CUI_Vertex)),
+        .size = (Uint32)(ctx->vertex_capacity * sizeof(AUI_Vertex)),
         .props = 0
     };
     ctx->vertex_buffer = SDL_CreateGPUBuffer(ctx->gpu, &vb_info);
     if (!ctx->vertex_buffer) {
-        carbon_set_error_from_sdl("CUI: Failed to create vertex buffer");
+        agentite_set_error_from_sdl("CUI: Failed to create vertex buffer");
         return false;
     }
 
@@ -535,7 +535,7 @@ bool cui_create_pipeline(CUI_Context *ctx)
     };
     ctx->index_buffer = SDL_CreateGPUBuffer(ctx->gpu, &ib_info);
     if (!ctx->index_buffer) {
-        carbon_set_error_from_sdl("CUI: Failed to create index buffer");
+        agentite_set_error_from_sdl("CUI: Failed to create index buffer");
         return false;
     }
 
@@ -550,32 +550,32 @@ bool cui_create_pipeline(CUI_Context *ctx)
     };
     ctx->sampler = SDL_CreateGPUSampler(ctx->gpu, &sampler_info);
     if (!ctx->sampler) {
-        carbon_set_error_from_sdl("CUI: Failed to create sampler");
+        agentite_set_error_from_sdl("CUI: Failed to create sampler");
         return false;
     }
 
     /* Create white texture for solid primitives */
-    if (!cui_create_white_texture(ctx)) {
+    if (!aui_create_white_texture(ctx)) {
         return false;
     }
 
     /* Allocate draw command queue */
-    ctx->draw_cmd_capacity = CUI_MAX_DRAW_CMDS;
-    ctx->draw_cmds = (CUI_DrawCmd *)calloc(ctx->draw_cmd_capacity, sizeof(CUI_DrawCmd));
+    ctx->draw_cmd_capacity = AUI_MAX_DRAW_CMDS;
+    ctx->draw_cmds = (AUI_DrawCmd *)calloc(ctx->draw_cmd_capacity, sizeof(AUI_DrawCmd));
     if (!ctx->draw_cmds) {
-        carbon_set_error("CUI: Failed to allocate draw command queue");
+        agentite_set_error("CUI: Failed to allocate draw command queue");
         return false;
     }
 
     /* Create graphics pipeline with shaders */
-    if (!cui_create_graphics_pipeline(ctx)) {
-        carbon_set_error("CUI: Failed to create graphics pipeline");
+    if (!aui_create_graphics_pipeline(ctx)) {
+        agentite_set_error("CUI: Failed to create graphics pipeline");
         return false;
     }
 
     /* Create SDF and MSDF pipelines (optional - created lazily if needed) */
-    ctx->sdf_pipeline = cui_create_sdf_pipeline(ctx, false);
-    ctx->msdf_pipeline = cui_create_sdf_pipeline(ctx, true);
+    ctx->sdf_pipeline = aui_create_sdf_pipeline(ctx, false);
+    ctx->msdf_pipeline = aui_create_sdf_pipeline(ctx, true);
 
     if (ctx->sdf_pipeline) {
         SDL_Log("CUI: SDF pipeline created successfully");
@@ -588,7 +588,7 @@ bool cui_create_pipeline(CUI_Context *ctx)
     return true;
 }
 
-void cui_destroy_pipeline(CUI_Context *ctx)
+void aui_destroy_pipeline(AUI_Context *ctx)
 {
     if (!ctx) return;
 
@@ -629,7 +629,7 @@ void cui_destroy_pipeline(CUI_Context *ctx)
  * ============================================================================ */
 
 /* Flush current batch to draw command queue */
-static void cui_flush_draw_cmd(CUI_Context *ctx)
+static void aui_flush_draw_cmd(AUI_Context *ctx)
 {
     if (!ctx) return;
 
@@ -646,10 +646,10 @@ static void cui_flush_draw_cmd(CUI_Context *ctx)
     }
 
     /* Create draw command */
-    CUI_DrawCmd *cmd = &ctx->draw_cmds[ctx->draw_cmd_count++];
+    AUI_DrawCmd *cmd = &ctx->draw_cmds[ctx->draw_cmd_count++];
     /* Detect solid primitives: white_texture or no texture means solid color */
     bool is_solid = !ctx->current_texture || (ctx->current_texture == ctx->white_texture);
-    cmd->type = is_solid ? CUI_DRAW_CMD_SOLID : CUI_DRAW_CMD_BITMAP_TEXT;
+    cmd->type = is_solid ? AUI_DRAW_CMD_SOLID : AUI_DRAW_CMD_BITMAP_TEXT;
     cmd->texture = ctx->current_texture ? ctx->current_texture : ctx->white_texture;
     cmd->layer = ctx->current_layer;
     cmd->vertex_offset = ctx->cmd_vertex_start;
@@ -665,19 +665,19 @@ static void cui_flush_draw_cmd(CUI_Context *ctx)
 }
 
 /* Ensure we're batching with the correct texture */
-static void cui_ensure_texture(CUI_Context *ctx, SDL_GPUTexture *texture)
+static void aui_ensure_texture(AUI_Context *ctx, SDL_GPUTexture *texture)
 {
     if (!ctx) return;
 
     /* If texture or layer changes, flush current batch */
     if (ctx->current_texture != texture) {
-        cui_flush_draw_cmd(ctx);
+        aui_flush_draw_cmd(ctx);
         ctx->current_texture = texture;
     }
 }
 
 /* Reset draw state for new frame */
-void cui_reset_draw_state(CUI_Context *ctx)
+void aui_reset_draw_state(AUI_Context *ctx)
 {
     if (!ctx) return;
 
@@ -685,7 +685,7 @@ void cui_reset_draw_state(CUI_Context *ctx)
     ctx->index_count = 0;
     ctx->draw_cmd_count = 0;
     ctx->current_texture = NULL;
-    ctx->current_layer = CUI_DEFAULT_LAYER;
+    ctx->current_layer = AUI_DEFAULT_LAYER;
     ctx->cmd_vertex_start = 0;
     ctx->cmd_index_start = 0;
     ctx->layer_stack_depth = 0;
@@ -695,51 +695,51 @@ void cui_reset_draw_state(CUI_Context *ctx)
  * Layer System
  * ============================================================================ */
 
-void cui_set_layer(CUI_Context *ctx, int layer)
+void aui_set_layer(AUI_Context *ctx, int layer)
 {
     if (!ctx) return;
 
     if (ctx->current_layer != layer) {
-        cui_flush_draw_cmd(ctx);
+        aui_flush_draw_cmd(ctx);
         ctx->current_layer = layer;
     }
 }
 
-int cui_get_layer(CUI_Context *ctx)
+int aui_get_layer(AUI_Context *ctx)
 {
     return ctx ? ctx->current_layer : 0;
 }
 
-void cui_push_layer(CUI_Context *ctx, int layer)
+void aui_push_layer(AUI_Context *ctx, int layer)
 {
     if (!ctx || ctx->layer_stack_depth >= 16) return;
 
     ctx->layer_stack[ctx->layer_stack_depth++] = ctx->current_layer;
-    cui_set_layer(ctx, layer);
+    aui_set_layer(ctx, layer);
 }
 
-void cui_pop_layer(CUI_Context *ctx)
+void aui_pop_layer(AUI_Context *ctx)
 {
     if (!ctx || ctx->layer_stack_depth <= 0) return;
 
     int layer = ctx->layer_stack[--ctx->layer_stack_depth];
-    cui_set_layer(ctx, layer);
+    aui_set_layer(ctx, layer);
 }
 
 /* Legacy channel API - maps to layer system */
-void cui_draw_split_begin(CUI_Context *ctx, int channel_count)
+void aui_draw_split_begin(AUI_Context *ctx, int channel_count)
 {
     (void)ctx;
     (void)channel_count;
     /* No-op - layers are automatic now */
 }
 
-void cui_draw_set_channel(CUI_Context *ctx, int channel)
+void aui_draw_set_channel(AUI_Context *ctx, int channel)
 {
-    cui_set_layer(ctx, channel);
+    aui_set_layer(ctx, channel);
 }
 
-void cui_draw_split_merge(CUI_Context *ctx)
+void aui_draw_split_merge(AUI_Context *ctx)
 {
     (void)ctx;
     /* No-op - sorting happens at render time */
@@ -750,7 +750,7 @@ void cui_draw_split_merge(CUI_Context *ctx)
  * ============================================================================ */
 
 /* Reserve space for vertices and indices, returns base vertex index */
-static bool cui_reserve(CUI_Context *ctx, uint32_t vert_count, uint32_t idx_count,
+static bool aui_reserve(AUI_Context *ctx, uint32_t vert_count, uint32_t idx_count,
                         uint32_t *out_vert_base)
 {
     if (ctx->vertex_count + vert_count > ctx->vertex_capacity ||
@@ -766,17 +766,17 @@ static bool cui_reserve(CUI_Context *ctx, uint32_t vert_count, uint32_t idx_coun
 }
 
 /* Add a quad with specified texture */
-static void cui_add_quad_textured(CUI_Context *ctx, SDL_GPUTexture *texture,
+static void aui_add_quad_textured(AUI_Context *ctx, SDL_GPUTexture *texture,
                                    float x0, float y0, float x1, float y1,
                                    float u0, float v0, float u1, float v1,
                                    uint32_t color)
 {
     /* Ensure we're batching with this texture */
-    cui_ensure_texture(ctx, texture);
+    aui_ensure_texture(ctx, texture);
 
     /* Apply scissor clipping if active */
     if (ctx->scissor_depth > 0) {
-        CUI_Rect scissor = ctx->scissor_stack[ctx->scissor_depth - 1];
+        AUI_Rect scissor = ctx->scissor_stack[ctx->scissor_depth - 1];
         float sx0 = scissor.x;
         float sy0 = scissor.y;
         float sx1 = scissor.x + scissor.w;
@@ -821,9 +821,9 @@ static void cui_add_quad_textured(CUI_Context *ctx, SDL_GPUTexture *texture,
     }
 
     uint32_t base;
-    if (!cui_reserve(ctx, 4, 6, &base)) return;
+    if (!aui_reserve(ctx, 4, 6, &base)) return;
 
-    CUI_Vertex *v = &ctx->vertices[base];
+    AUI_Vertex *v = &ctx->vertices[base];
     uint16_t *i = &ctx->indices[ctx->index_count - 6];
 
     /* Vertices: top-left, top-right, bottom-right, bottom-left */
@@ -842,63 +842,63 @@ static void cui_add_quad_textured(CUI_Context *ctx, SDL_GPUTexture *texture,
 }
 
 /* Add a quad using the white texture (for solid colors) */
-static void cui_add_quad(CUI_Context *ctx,
+static void aui_add_quad(AUI_Context *ctx,
                          float x0, float y0, float x1, float y1,
                          float u0, float v0, float u1, float v1,
                          uint32_t color)
 {
     /* Use white texture for solid primitives, or font atlas if legacy mode */
     SDL_GPUTexture *tex = ctx->white_texture ? ctx->white_texture : ctx->font_atlas;
-    cui_add_quad_textured(ctx, tex, x0, y0, x1, y1, u0, v0, u1, v1, color);
+    aui_add_quad_textured(ctx, tex, x0, y0, x1, y1, u0, v0, u1, v1, color);
 }
 
 /* ============================================================================
  * Drawing Primitives
  * ============================================================================ */
 
-void cui_draw_rect(CUI_Context *ctx, float x, float y, float w, float h,
+void aui_draw_rect(AUI_Context *ctx, float x, float y, float w, float h,
                    uint32_t color)
 {
     if (!ctx || w <= 0 || h <= 0) return;
 
     /* UV at (0,0) for white texture gives solid white */
-    cui_add_quad(ctx, x, y, x + w, y + h, 0.0f, 0.0f, 0.0f, 0.0f, color);
+    aui_add_quad(ctx, x, y, x + w, y + h, 0.0f, 0.0f, 0.0f, 0.0f, color);
 }
 
-void cui_draw_rect_outline(CUI_Context *ctx, float x, float y, float w, float h,
+void aui_draw_rect_outline(AUI_Context *ctx, float x, float y, float w, float h,
                            uint32_t color, float thickness)
 {
     if (!ctx || w <= 0 || h <= 0) return;
 
     float t = thickness;
     /* Top */
-    cui_draw_rect(ctx, x, y, w, t, color);
+    aui_draw_rect(ctx, x, y, w, t, color);
     /* Bottom */
-    cui_draw_rect(ctx, x, y + h - t, w, t, color);
+    aui_draw_rect(ctx, x, y + h - t, w, t, color);
     /* Left */
-    cui_draw_rect(ctx, x, y + t, t, h - 2 * t, color);
+    aui_draw_rect(ctx, x, y + t, t, h - 2 * t, color);
     /* Right */
-    cui_draw_rect(ctx, x + w - t, y + t, t, h - 2 * t, color);
+    aui_draw_rect(ctx, x + w - t, y + t, t, h - 2 * t, color);
 }
 
-void cui_draw_rect_rounded(CUI_Context *ctx, float x, float y, float w, float h,
+void aui_draw_rect_rounded(AUI_Context *ctx, float x, float y, float w, float h,
                            uint32_t color, float radius)
 {
     if (!ctx || w <= 0 || h <= 0) return;
 
     /* For now, just draw a regular rect (rounded corners need more vertices) */
     (void)radius;
-    cui_draw_rect(ctx, x, y, w, h, color);
+    aui_draw_rect(ctx, x, y, w, h, color);
 }
 
-void cui_draw_line(CUI_Context *ctx, float x1, float y1, float x2, float y2,
+void aui_draw_line(AUI_Context *ctx, float x1, float y1, float x2, float y2,
                    uint32_t color, float thickness)
 {
     if (!ctx) return;
 
     /* Ensure solid texture */
     SDL_GPUTexture *tex = ctx->white_texture ? ctx->white_texture : ctx->font_atlas;
-    cui_ensure_texture(ctx, tex);
+    aui_ensure_texture(ctx, tex);
 
     /* Calculate perpendicular offset for line thickness */
     float dx = x2 - x1;
@@ -910,9 +910,9 @@ void cui_draw_line(CUI_Context *ctx, float x1, float y1, float x2, float y2,
     float ny = dx / len * thickness * 0.5f;
 
     uint32_t base;
-    if (!cui_reserve(ctx, 4, 6, &base)) return;
+    if (!aui_reserve(ctx, 4, 6, &base)) return;
 
-    CUI_Vertex *v = &ctx->vertices[base];
+    AUI_Vertex *v = &ctx->vertices[base];
     uint16_t *i = &ctx->indices[ctx->index_count - 6];
 
     v[0].pos[0] = x1 + nx; v[0].pos[1] = y1 + ny; v[0].uv[0] = 0; v[0].uv[1] = 0; v[0].color = color;
@@ -928,7 +928,7 @@ void cui_draw_line(CUI_Context *ctx, float x1, float y1, float x2, float y2,
     i[5] = (uint16_t)(base + 3);
 }
 
-void cui_draw_triangle(CUI_Context *ctx,
+void aui_draw_triangle(AUI_Context *ctx,
                        float x0, float y0, float x1, float y1, float x2, float y2,
                        uint32_t color)
 {
@@ -936,12 +936,12 @@ void cui_draw_triangle(CUI_Context *ctx,
 
     /* Ensure solid texture */
     SDL_GPUTexture *tex = ctx->white_texture ? ctx->white_texture : ctx->font_atlas;
-    cui_ensure_texture(ctx, tex);
+    aui_ensure_texture(ctx, tex);
 
     uint32_t base;
-    if (!cui_reserve(ctx, 3, 3, &base)) return;
+    if (!aui_reserve(ctx, 3, 3, &base)) return;
 
-    CUI_Vertex *v = &ctx->vertices[base];
+    AUI_Vertex *v = &ctx->vertices[base];
     uint16_t *idx = &ctx->indices[ctx->index_count - 3];
 
     v[0].pos[0] = x0; v[0].pos[1] = y0; v[0].uv[0] = 0; v[0].uv[1] = 0; v[0].color = color;
@@ -957,25 +957,25 @@ void cui_draw_triangle(CUI_Context *ctx,
  * Textured Quad (for text rendering with explicit texture)
  * ============================================================================ */
 
-void cui_draw_textured_quad_ex(CUI_Context *ctx,
+void aui_draw_textured_quad_ex(AUI_Context *ctx,
                                 SDL_GPUTexture *texture,
                                 float x0, float y0, float x1, float y1,
                                 float u0, float v0, float u1, float v1,
                                 uint32_t color)
 {
     if (!ctx || !texture) return;
-    cui_add_quad_textured(ctx, texture, x0, y0, x1, y1, u0, v0, u1, v1, color);
+    aui_add_quad_textured(ctx, texture, x0, y0, x1, y1, u0, v0, u1, v1, color);
 }
 
 /* Legacy function - uses font_atlas */
-void cui_draw_textured_quad(CUI_Context *ctx,
+void aui_draw_textured_quad(AUI_Context *ctx,
                             float x0, float y0, float x1, float y1,
                             float u0, float v0, float u1, float v1,
                             uint32_t color)
 {
     if (!ctx) return;
     SDL_GPUTexture *tex = ctx->font_atlas ? ctx->font_atlas : ctx->white_texture;
-    cui_add_quad_textured(ctx, tex, x0, y0, x1, y1, u0, v0, u1, v1, color);
+    aui_add_quad_textured(ctx, tex, x0, y0, x1, y1, u0, v0, u1, v1, color);
 }
 
 /* ============================================================================
@@ -983,28 +983,28 @@ void cui_draw_textured_quad(CUI_Context *ctx,
  * ============================================================================ */
 
 /* Forward declarations of static functions used here */
-static void cui_flush_draw_cmd(CUI_Context *ctx);
-static bool cui_reserve(CUI_Context *ctx, uint32_t vert_count, uint32_t idx_count,
+static void aui_flush_draw_cmd(AUI_Context *ctx);
+static bool aui_reserve(AUI_Context *ctx, uint32_t vert_count, uint32_t idx_count,
                         uint32_t *out_vert_base);
 
-/* We need access to CUI_Font internals for SDF rendering */
-struct CUI_Font;  /* Forward declaration */
+/* We need access to AUI_Font internals for SDF rendering */
+struct AUI_Font;  /* Forward declaration */
 
 /* Get font type - defined in ui_text.cpp */
-extern CUI_FontType cui_font_get_type(CUI_Font *font);
+extern AUI_FontType aui_font_get_type(AUI_Font *font);
 
 /* Internal structure access - we need the sdf_font pointer */
-/* This is a bit of a hack but avoids exposing Carbon_SDFFont in the public header */
-typedef struct CUI_FontInternal {
-    CUI_FontType type;
+/* This is a bit of a hack but avoids exposing Agentite_SDFFont in the public header */
+typedef struct AUI_FontInternal {
+    AUI_FontType type;
     void *bitmap_font;
-    void *sdf_font;  /* Actually Carbon_SDFFont* */
-} CUI_FontInternal;
+    void *sdf_font;  /* Actually Agentite_SDFFont* */
+} AUI_FontInternal;
 
-/* Include internal header for Carbon_SDFFont access */
+/* Include internal header for Agentite_SDFFont access */
 #include "../graphics/text_internal.h"
 
-void cui_draw_sdf_quad(CUI_Context *ctx, CUI_Font *font,
+void aui_draw_sdf_quad(AUI_Context *ctx, AUI_Font *font,
                         float x0, float y0, float x1, float y1,
                         float u0, float v0, float u1, float v1,
                         uint32_t color, float scale)
@@ -1012,28 +1012,28 @@ void cui_draw_sdf_quad(CUI_Context *ctx, CUI_Font *font,
     if (!ctx || !font) return;
 
     /* Get font internals */
-    CUI_FontInternal *fi = (CUI_FontInternal *)font;
-    if (fi->type != CUI_FONT_SDF && fi->type != CUI_FONT_MSDF) return;
+    AUI_FontInternal *fi = (AUI_FontInternal *)font;
+    if (fi->type != AUI_FONT_SDF && fi->type != AUI_FONT_MSDF) return;
 
-    Carbon_SDFFont *sdf_font = (Carbon_SDFFont *)fi->sdf_font;
+    Agentite_SDFFont *sdf_font = (Agentite_SDFFont *)fi->sdf_font;
     if (!sdf_font || !sdf_font->atlas_texture) return;
 
     /* Flush current batch if texture or type changes */
-    bool is_msdf = (fi->type == CUI_FONT_MSDF);
-    CUI_DrawCmdType needed_type = is_msdf ? CUI_DRAW_CMD_MSDF_TEXT : CUI_DRAW_CMD_SDF_TEXT;
+    bool is_msdf = (fi->type == AUI_FONT_MSDF);
+    AUI_DrawCmdType needed_type = is_msdf ? AUI_DRAW_CMD_MSDF_TEXT : AUI_DRAW_CMD_SDF_TEXT;
 
     /* Check if we need to start a new batch */
     if (ctx->current_texture != sdf_font->atlas_texture ||
         (ctx->draw_cmd_count > 0 &&
          ctx->draw_cmds[ctx->draw_cmd_count - 1].type != needed_type)) {
         /* Flush current batch */
-        cui_flush_draw_cmd(ctx);
+        aui_flush_draw_cmd(ctx);
         ctx->current_texture = sdf_font->atlas_texture;
     }
 
     /* Apply scissor clipping if active */
     if (ctx->scissor_depth > 0) {
-        CUI_Rect scissor = ctx->scissor_stack[ctx->scissor_depth - 1];
+        AUI_Rect scissor = ctx->scissor_stack[ctx->scissor_depth - 1];
         float sx0 = scissor.x;
         float sy0 = scissor.y;
         float sx1 = scissor.x + scissor.w;
@@ -1059,9 +1059,9 @@ void cui_draw_sdf_quad(CUI_Context *ctx, CUI_Font *font,
 
     /* Reserve vertices and indices */
     uint32_t base;
-    if (!cui_reserve(ctx, 4, 6, &base)) return;
+    if (!aui_reserve(ctx, 4, 6, &base)) return;
 
-    CUI_Vertex *v = &ctx->vertices[base];
+    AUI_Vertex *v = &ctx->vertices[base];
     uint16_t *i = &ctx->indices[ctx->index_count - 6];
 
     v[0].pos[0] = x0; v[0].pos[1] = y0; v[0].uv[0] = u0; v[0].uv[1] = v0; v[0].color = color;
@@ -1088,21 +1088,21 @@ void cui_draw_sdf_quad(CUI_Context *ctx, CUI_Font *font,
  * Scissor Stack
  * ============================================================================ */
 
-void cui_push_scissor(CUI_Context *ctx, float x, float y, float w, float h)
+void aui_push_scissor(AUI_Context *ctx, float x, float y, float w, float h)
 {
     if (!ctx || ctx->scissor_depth >= 16) return;
 
-    CUI_Rect rect = {x, y, w, h};
+    AUI_Rect rect = {x, y, w, h};
 
     /* Intersect with current scissor if any */
     if (ctx->scissor_depth > 0) {
-        rect = cui_rect_intersect(rect, ctx->scissor_stack[ctx->scissor_depth - 1]);
+        rect = aui_rect_intersect(rect, ctx->scissor_stack[ctx->scissor_depth - 1]);
     }
 
     ctx->scissor_stack[ctx->scissor_depth++] = rect;
 }
 
-void cui_pop_scissor(CUI_Context *ctx)
+void aui_pop_scissor(AUI_Context *ctx)
 {
     if (!ctx || ctx->scissor_depth <= 0) return;
     ctx->scissor_depth--;
@@ -1112,10 +1112,10 @@ void cui_pop_scissor(CUI_Context *ctx)
  * Draw Command Sorting (for layer ordering)
  * ============================================================================ */
 
-static int cui_draw_cmd_compare(const void *a, const void *b)
+static int aui_draw_cmd_compare(const void *a, const void *b)
 {
-    const CUI_DrawCmd *cmd_a = (const CUI_DrawCmd *)a;
-    const CUI_DrawCmd *cmd_b = (const CUI_DrawCmd *)b;
+    const AUI_DrawCmd *cmd_a = (const AUI_DrawCmd *)a;
+    const AUI_DrawCmd *cmd_b = (const AUI_DrawCmd *)b;
 
     /* Sort by layer first (lower layers render first) */
     if (cmd_a->layer != cmd_b->layer) {
@@ -1135,33 +1135,33 @@ static int cui_draw_cmd_compare(const void *a, const void *b)
  * ============================================================================ */
 
 /* Upload UI vertex/index data to GPU - call BEFORE render pass */
-void cui_upload(CUI_Context *ctx, SDL_GPUCommandBuffer *cmd)
+void aui_upload(AUI_Context *ctx, SDL_GPUCommandBuffer *cmd)
 {
     if (!ctx || !cmd) return;
 
     /* Flush any pending draw command */
-    cui_flush_draw_cmd(ctx);
+    aui_flush_draw_cmd(ctx);
 
     if (ctx->vertex_count == 0 || ctx->index_count == 0) return;
 
     /* Upload vertex data to GPU */
     SDL_GPUTransferBufferCreateInfo transfer_info = {
         .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        .size = (Uint32)(ctx->vertex_count * sizeof(CUI_Vertex) +
+        .size = (Uint32)(ctx->vertex_count * sizeof(AUI_Vertex) +
                 ctx->index_count * sizeof(uint16_t)),
         .props = 0
     };
     SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(ctx->gpu, &transfer_info);
     if (!transfer) {
-        carbon_set_error_from_sdl("CUI: Failed to create transfer buffer");
+        agentite_set_error_from_sdl("CUI: Failed to create transfer buffer");
         return;
     }
 
     /* Map and copy data */
     void *mapped = SDL_MapGPUTransferBuffer(ctx->gpu, transfer, false);
     if (mapped) {
-        memcpy(mapped, ctx->vertices, ctx->vertex_count * sizeof(CUI_Vertex));
-        memcpy((uint8_t *)mapped + ctx->vertex_count * sizeof(CUI_Vertex),
+        memcpy(mapped, ctx->vertices, ctx->vertex_count * sizeof(AUI_Vertex));
+        memcpy((uint8_t *)mapped + ctx->vertex_count * sizeof(AUI_Vertex),
                ctx->indices, ctx->index_count * sizeof(uint16_t));
         SDL_UnmapGPUTransferBuffer(ctx->gpu, transfer);
     }
@@ -1176,13 +1176,13 @@ void cui_upload(CUI_Context *ctx, SDL_GPUCommandBuffer *cmd)
         SDL_GPUBufferRegion dst_vert = {
             .buffer = ctx->vertex_buffer,
             .offset = 0,
-            .size = (Uint32)(ctx->vertex_count * sizeof(CUI_Vertex))
+            .size = (Uint32)(ctx->vertex_count * sizeof(AUI_Vertex))
         };
         SDL_UploadToGPUBuffer(copy_pass, &src_vert, &dst_vert, false);
 
         SDL_GPUTransferBufferLocation src_idx = {
             .transfer_buffer = transfer,
-            .offset = (Uint32)(ctx->vertex_count * sizeof(CUI_Vertex))
+            .offset = (Uint32)(ctx->vertex_count * sizeof(AUI_Vertex))
         };
         SDL_GPUBufferRegion dst_idx = {
             .buffer = ctx->index_buffer,
@@ -1197,7 +1197,7 @@ void cui_upload(CUI_Context *ctx, SDL_GPUCommandBuffer *cmd)
     SDL_ReleaseGPUTransferBuffer(ctx->gpu, transfer);
 }
 
-void cui_render(CUI_Context *ctx, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass)
+void aui_render(AUI_Context *ctx, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass)
 {
     if (!ctx || !cmd || !pass) return;
     if (ctx->draw_cmd_count == 0) return;
@@ -1206,7 +1206,7 @@ void cui_render(CUI_Context *ctx, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *
     }
 
     /* Sort draw commands by layer, then by type, then by texture */
-    qsort(ctx->draw_cmds, ctx->draw_cmd_count, sizeof(CUI_DrawCmd), cui_draw_cmd_compare);
+    qsort(ctx->draw_cmds, ctx->draw_cmd_count, sizeof(AUI_DrawCmd), aui_draw_cmd_compare);
 
     /* Bind vertex buffer (shared by all pipelines) */
     SDL_GPUBufferBinding vb_binding = {
@@ -1225,23 +1225,23 @@ void cui_render(CUI_Context *ctx, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *
     /* Track current state */
     SDL_GPUGraphicsPipeline *current_pipeline = NULL;
     SDL_GPUTexture *current_texture = NULL;
-    CUI_DrawCmdType current_type = CUI_DRAW_CMD_SOLID;
+    AUI_DrawCmdType current_type = AUI_DRAW_CMD_SOLID;
 
     /* Render each draw command */
     for (uint32_t i = 0; i < ctx->draw_cmd_count; i++) {
-        CUI_DrawCmd *draw_cmd = &ctx->draw_cmds[i];
+        AUI_DrawCmd *draw_cmd = &ctx->draw_cmds[i];
 
         /* Select pipeline based on command type */
         SDL_GPUGraphicsPipeline *pipeline;
         switch (draw_cmd->type) {
-            case CUI_DRAW_CMD_SDF_TEXT:
+            case AUI_DRAW_CMD_SDF_TEXT:
                 pipeline = ctx->sdf_pipeline;
                 break;
-            case CUI_DRAW_CMD_MSDF_TEXT:
+            case AUI_DRAW_CMD_MSDF_TEXT:
                 pipeline = ctx->msdf_pipeline;
                 break;
-            case CUI_DRAW_CMD_SOLID:
-            case CUI_DRAW_CMD_BITMAP_TEXT:
+            case AUI_DRAW_CMD_SOLID:
+            case AUI_DRAW_CMD_BITMAP_TEXT:
             default:
                 pipeline = ctx->pipeline;
                 break;
@@ -1291,7 +1291,7 @@ void cui_render(CUI_Context *ctx, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *
  * ============================================================================ */
 
 /* De Casteljau's algorithm to evaluate a cubic bezier at parameter t */
-static void cui_bezier_cubic_point(float x1, float y1,
+static void aui_bezier_cubic_point(float x1, float y1,
                                     float cx1, float cy1,
                                     float cx2, float cy2,
                                     float x2, float y2,
@@ -1308,7 +1308,7 @@ static void cui_bezier_cubic_point(float x1, float y1,
 }
 
 /* De Casteljau's algorithm to evaluate a quadratic bezier at parameter t */
-static void cui_bezier_quadratic_point(float x1, float y1,
+static void aui_bezier_quadratic_point(float x1, float y1,
                                         float cx, float cy,
                                         float x2, float y2,
                                         float t, float *out_x, float *out_y)
@@ -1322,7 +1322,7 @@ static void cui_bezier_quadratic_point(float x1, float y1,
 }
 
 /* Calculate the number of segments needed based on curve length/curvature */
-static int cui_bezier_segment_count(float x1, float y1, float x2, float y2,
+static int aui_bezier_segment_count(float x1, float y1, float x2, float y2,
                                      float cx1, float cy1, float cx2, float cy2)
 {
     /* Estimate curve length using control polygon */
@@ -1338,7 +1338,7 @@ static int cui_bezier_segment_count(float x1, float y1, float x2, float y2,
     return segments;
 }
 
-void cui_draw_bezier_cubic(CUI_Context *ctx,
+void aui_draw_bezier_cubic(AUI_Context *ctx,
                            float x1, float y1,
                            float cx1, float cy1,
                            float cx2, float cy2,
@@ -1347,7 +1347,7 @@ void cui_draw_bezier_cubic(CUI_Context *ctx,
 {
     if (!ctx) return;
 
-    int segments = cui_bezier_segment_count(x1, y1, x2, y2, cx1, cy1, cx2, cy2);
+    int segments = aui_bezier_segment_count(x1, y1, x2, y2, cx1, cy1, cx2, cy2);
     float step = 1.0f / (float)segments;
 
     float prev_x = x1;
@@ -1356,16 +1356,16 @@ void cui_draw_bezier_cubic(CUI_Context *ctx,
     for (int i = 1; i <= segments; i++) {
         float t = step * (float)i;
         float curr_x, curr_y;
-        cui_bezier_cubic_point(x1, y1, cx1, cy1, cx2, cy2, x2, y2, t, &curr_x, &curr_y);
+        aui_bezier_cubic_point(x1, y1, cx1, cy1, cx2, cy2, x2, y2, t, &curr_x, &curr_y);
 
-        cui_draw_line(ctx, prev_x, prev_y, curr_x, curr_y, color, thickness);
+        aui_draw_line(ctx, prev_x, prev_y, curr_x, curr_y, color, thickness);
 
         prev_x = curr_x;
         prev_y = curr_y;
     }
 }
 
-void cui_draw_bezier_quadratic(CUI_Context *ctx,
+void aui_draw_bezier_quadratic(AUI_Context *ctx,
                                float x1, float y1,
                                float cx, float cy,
                                float x2, float y2,
@@ -1390,9 +1390,9 @@ void cui_draw_bezier_quadratic(CUI_Context *ctx,
     for (int i = 1; i <= segments; i++) {
         float t = step * (float)i;
         float curr_x, curr_y;
-        cui_bezier_quadratic_point(x1, y1, cx, cy, x2, y2, t, &curr_x, &curr_y);
+        aui_bezier_quadratic_point(x1, y1, cx, cy, x2, y2, t, &curr_x, &curr_y);
 
-        cui_draw_line(ctx, prev_x, prev_y, curr_x, curr_y, color, thickness);
+        aui_draw_line(ctx, prev_x, prev_y, curr_x, curr_y, color, thickness);
 
         prev_x = curr_x;
         prev_y = curr_y;
@@ -1403,13 +1403,13 @@ void cui_draw_bezier_quadratic(CUI_Context *ctx,
  * Path API
  * ============================================================================ */
 
-#define CUI_PATH_INITIAL_CAPACITY 64
+#define AUI_PATH_INITIAL_CAPACITY 64
 
-static void cui_path_ensure_capacity(CUI_Context *ctx, uint32_t needed)
+static void aui_path_ensure_capacity(AUI_Context *ctx, uint32_t needed)
 {
     if (ctx->path_capacity >= needed) return;
 
-    uint32_t new_capacity = ctx->path_capacity ? ctx->path_capacity * 2 : CUI_PATH_INITIAL_CAPACITY;
+    uint32_t new_capacity = ctx->path_capacity ? ctx->path_capacity * 2 : AUI_PATH_INITIAL_CAPACITY;
     while (new_capacity < needed) new_capacity *= 2;
 
     float *new_points = (float *)realloc(ctx->path_points, new_capacity * 2 * sizeof(float));
@@ -1419,15 +1419,15 @@ static void cui_path_ensure_capacity(CUI_Context *ctx, uint32_t needed)
     }
 }
 
-void cui_path_begin(CUI_Context *ctx)
+void aui_path_begin(AUI_Context *ctx)
 {
     if (!ctx) return;
     ctx->path_count = 0;
 }
 
-static void cui_path_add_point(CUI_Context *ctx, float x, float y)
+static void aui_path_add_point(AUI_Context *ctx, float x, float y)
 {
-    cui_path_ensure_capacity(ctx, ctx->path_count + 1);
+    aui_path_ensure_capacity(ctx, ctx->path_count + 1);
     if (ctx->path_count < ctx->path_capacity) {
         ctx->path_points[ctx->path_count * 2] = x;
         ctx->path_points[ctx->path_count * 2 + 1] = y;
@@ -1435,13 +1435,13 @@ static void cui_path_add_point(CUI_Context *ctx, float x, float y)
     }
 }
 
-void cui_path_line_to(CUI_Context *ctx, float x, float y)
+void aui_path_line_to(AUI_Context *ctx, float x, float y)
 {
     if (!ctx) return;
-    cui_path_add_point(ctx, x, y);
+    aui_path_add_point(ctx, x, y);
 }
 
-void cui_path_bezier_cubic_to(CUI_Context *ctx, float cx1, float cy1,
+void aui_path_bezier_cubic_to(AUI_Context *ctx, float cx1, float cy1,
                                float cx2, float cy2, float x, float y)
 {
     if (!ctx || ctx->path_count == 0) return;
@@ -1451,18 +1451,18 @@ void cui_path_bezier_cubic_to(CUI_Context *ctx, float cx1, float cy1,
     float y1 = ctx->path_points[(ctx->path_count - 1) * 2 + 1];
 
     /* Tessellate the bezier curve */
-    int segments = cui_bezier_segment_count(x1, y1, x, y, cx1, cy1, cx2, cy2);
+    int segments = aui_bezier_segment_count(x1, y1, x, y, cx1, cy1, cx2, cy2);
     float step = 1.0f / (float)segments;
 
     for (int i = 1; i <= segments; i++) {
         float t = step * (float)i;
         float px, py;
-        cui_bezier_cubic_point(x1, y1, cx1, cy1, cx2, cy2, x, y, t, &px, &py);
-        cui_path_add_point(ctx, px, py);
+        aui_bezier_cubic_point(x1, y1, cx1, cy1, cx2, cy2, x, y, t, &px, &py);
+        aui_path_add_point(ctx, px, py);
     }
 }
 
-void cui_path_bezier_quadratic_to(CUI_Context *ctx, float cx, float cy,
+void aui_path_bezier_quadratic_to(AUI_Context *ctx, float cx, float cy,
                                    float x, float y)
 {
     if (!ctx || ctx->path_count == 0) return;
@@ -1485,12 +1485,12 @@ void cui_path_bezier_quadratic_to(CUI_Context *ctx, float cx, float cy,
     for (int i = 1; i <= segments; i++) {
         float t = step * (float)i;
         float px, py;
-        cui_bezier_quadratic_point(x1, y1, cx, cy, x, y, t, &px, &py);
-        cui_path_add_point(ctx, px, py);
+        aui_bezier_quadratic_point(x1, y1, cx, cy, x, y, t, &px, &py);
+        aui_path_add_point(ctx, px, py);
     }
 }
 
-void cui_path_stroke(CUI_Context *ctx, uint32_t color, float thickness)
+void aui_path_stroke(AUI_Context *ctx, uint32_t color, float thickness)
 {
     if (!ctx || ctx->path_count < 2) return;
 
@@ -1500,13 +1500,13 @@ void cui_path_stroke(CUI_Context *ctx, uint32_t color, float thickness)
         float x2 = ctx->path_points[(i + 1) * 2];
         float y2 = ctx->path_points[(i + 1) * 2 + 1];
 
-        cui_draw_line(ctx, x1, y1, x2, y2, color, thickness);
+        aui_draw_line(ctx, x1, y1, x2, y2, color, thickness);
     }
 
     ctx->path_count = 0;
 }
 
-void cui_path_fill(CUI_Context *ctx, uint32_t color)
+void aui_path_fill(AUI_Context *ctx, uint32_t color)
 {
     if (!ctx || ctx->path_count < 3) return;
 
@@ -1520,7 +1520,7 @@ void cui_path_fill(CUI_Context *ctx, uint32_t color)
         float x2 = ctx->path_points[(i + 1) * 2];
         float y2 = ctx->path_points[(i + 1) * 2 + 1];
 
-        cui_draw_triangle(ctx, x0, y0, x1, y1, x2, y2, color);
+        aui_draw_triangle(ctx, x0, y0, x1, y1, x2, y2, color);
     }
 
     ctx->path_count = 0;

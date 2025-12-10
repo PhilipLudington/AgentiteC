@@ -5,8 +5,8 @@
  * Uses stb_rect_pack for efficient glyph packing.
  */
 
-#include "carbon/msdf.h"
-#include "carbon/error.h"
+#include "agentite/msdf.h"
+#include "agentite/error.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -84,13 +84,13 @@ struct MSDF_Atlas {
 MSDF_Atlas *msdf_atlas_create(const MSDF_AtlasConfig *config)
 {
     if (!config || !config->font_data || config->font_data_size <= 0) {
-        carbon_set_error("Invalid atlas configuration");
+        agentite_set_error("Invalid atlas configuration");
         return NULL;
     }
 
     MSDF_Atlas *atlas = (MSDF_Atlas *)calloc(1, sizeof(MSDF_Atlas));
     if (!atlas) {
-        carbon_set_error("Failed to allocate atlas");
+        agentite_set_error("Failed to allocate atlas");
         return NULL;
     }
 
@@ -99,7 +99,7 @@ MSDF_Atlas *msdf_atlas_create(const MSDF_AtlasConfig *config)
         atlas->font_data = (unsigned char *)malloc(config->font_data_size);
         if (!atlas->font_data) {
             free(atlas);
-            carbon_set_error("Failed to allocate font data");
+            agentite_set_error("Failed to allocate font data");
             return NULL;
         }
         memcpy(atlas->font_data, config->font_data, config->font_data_size);
@@ -114,7 +114,7 @@ MSDF_Atlas *msdf_atlas_create(const MSDF_AtlasConfig *config)
                         stbtt_GetFontOffsetForIndex(atlas->font_data, 0))) {
         if (atlas->owns_font_data) free(atlas->font_data);
         free(atlas);
-        carbon_set_error("Failed to initialize font");
+        agentite_set_error("Failed to initialize font");
         return NULL;
     }
 
@@ -181,7 +181,7 @@ static bool atlas_grow_glyphs(MSDF_Atlas *atlas)
         atlas->glyphs, new_capacity * sizeof(MSDF_AtlasGlyph));
 
     if (!new_glyphs) {
-        carbon_set_error("Failed to grow glyph array");
+        agentite_set_error("Failed to grow glyph array");
         return false;
     }
 
@@ -321,7 +321,7 @@ static bool generate_glyph_msdf(MSDF_Atlas *atlas, MSDF_AtlasGlyph *glyph)
     /* Extract shape from glyph */
     MSDF_Shape *shape = msdf_shape_from_glyph(&atlas->font, glyph->glyph_index, scale);
     if (!shape) {
-        carbon_set_error("Failed to extract glyph shape");
+        agentite_set_error("Failed to extract glyph shape");
         return false;
     }
 
@@ -368,7 +368,7 @@ bool msdf_atlas_generate(MSDF_Atlas *atlas)
 {
     if (!atlas) return false;
     if (atlas->glyph_count == 0) {
-        carbon_set_error("No glyphs to pack");
+        agentite_set_error("No glyphs to pack");
         return false;
     }
 
@@ -382,7 +382,7 @@ bool msdf_atlas_generate(MSDF_Atlas *atlas)
     /* Prepare rectangles for packing */
     stbrp_rect *rects = (stbrp_rect *)malloc(atlas->glyph_count * sizeof(stbrp_rect));
     if (!rects) {
-        carbon_set_error("Failed to allocate packing rects");
+        agentite_set_error("Failed to allocate packing rects");
         return false;
     }
 
@@ -398,7 +398,7 @@ bool msdf_atlas_generate(MSDF_Atlas *atlas)
     stbrp_node *nodes = (stbrp_node *)malloc(num_nodes * sizeof(stbrp_node));
     if (!nodes) {
         free(rects);
-        carbon_set_error("Failed to allocate packing nodes");
+        agentite_set_error("Failed to allocate packing nodes");
         return false;
     }
 
@@ -414,7 +414,7 @@ bool msdf_atlas_generate(MSDF_Atlas *atlas)
         }
         free(nodes);
         free(rects);
-        carbon_set_error("Atlas too small: %d glyphs did not fit", failed_count);
+        agentite_set_error("Atlas too small: %d glyphs did not fit", failed_count);
         return false;
     }
 

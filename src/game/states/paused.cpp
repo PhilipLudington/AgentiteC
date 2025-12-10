@@ -1,5 +1,5 @@
 #include "state.h"
-#include "carbon/ui.h"
+#include "agentite/ui.h"
 
 /* Paused state userdata */
 typedef struct {
@@ -9,33 +9,33 @@ typedef struct {
 
 static PausedStateData paused_data = {0};
 
-static void paused_enter(Carbon_GameContext *ctx, void *userdata) {
+static void paused_enter(Agentite_GameContext *ctx, void *userdata) {
     (void)ctx;
     PausedStateData *data = (PausedStateData *)userdata;
     data->resume_clicked = false;
     data->quit_clicked = false;
 }
 
-static void paused_exit(Carbon_GameContext *ctx, void *userdata) {
+static void paused_exit(Agentite_GameContext *ctx, void *userdata) {
     (void)ctx;
     (void)userdata;
 }
 
-static void paused_update(Carbon_GameContext *ctx, float dt, void *userdata) {
+static void paused_update(Agentite_GameContext *ctx, float dt, void *userdata) {
     (void)dt;
     PausedStateData *data = (PausedStateData *)userdata;
 
     /* Check for unpause via escape key */
-    if (carbon_input_key_just_pressed(ctx->input, SDL_SCANCODE_ESCAPE)) {
+    if (agentite_input_key_just_pressed(ctx->input, SDL_SCANCODE_ESCAPE)) {
         data->resume_clicked = true;
     }
 
     if (data->quit_clicked) {
-        carbon_game_context_quit(ctx);
+        agentite_game_context_quit(ctx);
     }
 }
 
-static void paused_render(Carbon_GameContext *ctx,
+static void paused_render(Agentite_GameContext *ctx,
                           SDL_GPUCommandBuffer *cmd,
                           SDL_GPURenderPass *pass,
                           void *userdata) {
@@ -53,29 +53,29 @@ static void paused_render(Carbon_GameContext *ctx,
     float panel_x = (ctx->window_width - panel_width) / 2;
     float panel_y = (ctx->window_height - panel_height) / 2;
 
-    if (cui_begin_panel(ctx->ui, "Paused", panel_x, panel_y,
+    if (aui_begin_panel(ctx->ui, "Paused", panel_x, panel_y,
                         panel_width, panel_height,
-                        CUI_PANEL_TITLE_BAR | CUI_PANEL_BORDER)) {
+                        AUI_PANEL_TITLE_BAR | AUI_PANEL_BORDER)) {
 
-        cui_spacing(ctx->ui, 15);
+        aui_spacing(ctx->ui, 15);
 
-        if (cui_button(ctx->ui, "Resume")) {
+        if (aui_button(ctx->ui, "Resume")) {
             data->resume_clicked = true;
         }
 
-        cui_spacing(ctx->ui, 10);
+        aui_spacing(ctx->ui, 10);
 
-        if (cui_button(ctx->ui, "Options")) {
+        if (aui_button(ctx->ui, "Options")) {
             /* TODO: Show options */
         }
 
-        cui_spacing(ctx->ui, 10);
+        aui_spacing(ctx->ui, 10);
 
-        if (cui_button(ctx->ui, "Quit to Menu")) {
+        if (aui_button(ctx->ui, "Quit to Menu")) {
             data->quit_clicked = true;
         }
 
-        cui_end_panel(ctx->ui);
+        aui_end_panel(ctx->ui);
     }
 }
 

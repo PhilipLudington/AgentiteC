@@ -1,17 +1,17 @@
 /**
- * Carbon Engine - Strategy Game Example
+ * Agentite Engine - Strategy Game Example
  *
  * Demonstrates RTS-style patterns: unit selection, pathfinding, tilemap.
  */
 
-#include "carbon/carbon.h"
-#include "carbon/sprite.h"
-#include "carbon/tilemap.h"
-#include "carbon/camera.h"
-#include "carbon/input.h"
-#include "carbon/pathfinding.h"
-#include "carbon/ui.h"
-#include "carbon/ecs.h"
+#include "agentite/agentite.h"
+#include "agentite/sprite.h"
+#include "agentite/tilemap.h"
+#include "agentite/camera.h"
+#include "agentite/input.h"
+#include "agentite/pathfinding.h"
+#include "agentite/ui.h"
+#include "agentite/ecs.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -27,12 +27,12 @@ typedef struct {
     float target_x, target_y;
     bool selected;
     bool moving;
-    Carbon_Path *path;
+    Agentite_Path *path;
     int path_index;
 } Unit;
 
 /* Create simple unit texture */
-static Carbon_Texture *create_unit_texture(Carbon_SpriteRenderer *sr) {
+static Agentite_Texture *create_unit_texture(Agentite_SpriteRenderer *sr) {
     int size = 24;
     unsigned char *pixels = malloc(size * size * 4);
 
@@ -62,13 +62,13 @@ static Carbon_Texture *create_unit_texture(Carbon_SpriteRenderer *sr) {
         }
     }
 
-    Carbon_Texture *tex = carbon_texture_create(sr, size, size, pixels);
+    Agentite_Texture *tex = agentite_texture_create(sr, size, size, pixels);
     free(pixels);
     return tex;
 }
 
 /* Create tileset */
-static Carbon_Texture *create_tileset(Carbon_SpriteRenderer *sr) {
+static Agentite_Texture *create_tileset(Agentite_SpriteRenderer *sr) {
     int tile_size = TILE_SIZE;
     int size = tile_size * 4;
     unsigned char *pixels = malloc(size * size * 4);
@@ -104,7 +104,7 @@ static Carbon_Texture *create_tileset(Carbon_SpriteRenderer *sr) {
         }
     }
 
-    Carbon_Texture *tex = carbon_texture_create(sr, size, size, pixels);
+    Agentite_Texture *tex = agentite_texture_create(sr, size, size, pixels);
     free(pixels);
     return tex;
 }
@@ -118,56 +118,56 @@ int main(int argc, char *argv[]) {
     (void)argc;
     (void)argv;
 
-    Carbon_Config config = {
+    Agentite_Config config = {
         .window_title = "Carbon - Strategy Example",
         .window_width = 1280,
         .window_height = 720,
         .vsync = true
     };
 
-    Carbon_Engine *engine = carbon_init(&config);
+    Agentite_Engine *engine = agentite_init(&config);
     if (!engine) return 1;
 
-    Carbon_SpriteRenderer *sprites = carbon_sprite_init(
-        carbon_get_gpu_device(engine), carbon_get_window(engine));
-    Carbon_Camera *camera = carbon_camera_create(1280.0f, 720.0f);
-    carbon_sprite_set_camera(sprites, camera);
-    Carbon_Input *input = carbon_input_init();
+    Agentite_SpriteRenderer *sprites = agentite_sprite_init(
+        agentite_get_gpu_device(engine), agentite_get_window(engine));
+    Agentite_Camera *camera = agentite_camera_create(1280.0f, 720.0f);
+    agentite_sprite_set_camera(sprites, camera);
+    Agentite_Input *input = agentite_input_init();
 
-    CUI_Context *ui = cui_init(
-        carbon_get_gpu_device(engine), carbon_get_window(engine),
+    AUI_Context *ui = aui_init(
+        agentite_get_gpu_device(engine), agentite_get_window(engine),
         1280, 720, "assets/fonts/Roboto-Regular.ttf", 14.0f);
 
     /* Create textures */
-    Carbon_Texture *unit_tex = create_unit_texture(sprites);
-    Carbon_Sprite unit_sprite = carbon_sprite_from_texture(unit_tex);
+    Agentite_Texture *unit_tex = create_unit_texture(sprites);
+    Agentite_Sprite unit_sprite = agentite_sprite_from_texture(unit_tex);
 
-    Carbon_Texture *tileset_tex = create_tileset(sprites);
-    Carbon_Tileset *tileset = carbon_tileset_create(tileset_tex, TILE_SIZE, TILE_SIZE);
-    Carbon_Tilemap *tilemap = carbon_tilemap_create(tileset, MAP_WIDTH, MAP_HEIGHT);
+    Agentite_Texture *tileset_tex = create_tileset(sprites);
+    Agentite_Tileset *tileset = agentite_tileset_create(tileset_tex, TILE_SIZE, TILE_SIZE);
+    Agentite_Tilemap *tilemap = agentite_tilemap_create(tileset, MAP_WIDTH, MAP_HEIGHT);
 
-    int ground_layer = carbon_tilemap_add_layer(tilemap, "ground");
+    int ground_layer = agentite_tilemap_add_layer(tilemap, "ground");
 
     /* Fill with grass */
-    carbon_tilemap_fill(tilemap, ground_layer, 0, 0, MAP_WIDTH, MAP_HEIGHT, 1);
+    agentite_tilemap_fill(tilemap, ground_layer, 0, 0, MAP_WIDTH, MAP_HEIGHT, 1);
 
     /* Add obstacles */
-    carbon_tilemap_fill(tilemap, ground_layer, 10, 5, 5, 10, 3);   /* Stone wall */
-    carbon_tilemap_fill(tilemap, ground_layer, 25, 10, 8, 8, 6);   /* Water */
-    carbon_tilemap_fill(tilemap, ground_layer, 5, 20, 10, 3, 3);   /* Another wall */
+    agentite_tilemap_fill(tilemap, ground_layer, 10, 5, 5, 10, 3);   /* Stone wall */
+    agentite_tilemap_fill(tilemap, ground_layer, 25, 10, 8, 8, 6);   /* Water */
+    agentite_tilemap_fill(tilemap, ground_layer, 5, 20, 10, 3, 3);   /* Another wall */
 
     /* Road */
-    carbon_tilemap_fill(tilemap, ground_layer, 0, 14, 40, 2, 4);
+    agentite_tilemap_fill(tilemap, ground_layer, 0, 14, 40, 2, 4);
 
     /* Create pathfinder */
-    Carbon_Pathfinder *pathfinder = carbon_pathfinder_create(MAP_WIDTH, MAP_HEIGHT);
+    Agentite_Pathfinder *pathfinder = agentite_pathfinder_create(MAP_WIDTH, MAP_HEIGHT);
 
     /* Set blocked tiles (stone = 3, water = 6) */
     for (int y = 0; y < MAP_HEIGHT; y++) {
         for (int x = 0; x < MAP_WIDTH; x++) {
-            Carbon_TileID tile = carbon_tilemap_get_tile(tilemap, ground_layer, x, y);
+            Agentite_TileID tile = agentite_tilemap_get_tile(tilemap, ground_layer, x, y);
             if (tile == 3 || tile == 6) {
-                carbon_pathfinder_set_walkable(pathfinder, x, y, false);
+                agentite_pathfinder_set_walkable(pathfinder, x, y, false);
             }
         }
     }
@@ -185,61 +185,61 @@ int main(int argc, char *argv[]) {
     /* Center camera */
     float world_w = MAP_WIDTH * TILE_SIZE;
     float world_h = MAP_HEIGHT * TILE_SIZE;
-    carbon_camera_set_position(camera, world_w / 2, world_h / 2);
+    agentite_camera_set_position(camera, world_w / 2, world_h / 2);
 
     /* Selection box */
     bool selecting = false;
     float sel_start_x, sel_start_y;
     float sel_end_x, sel_end_y;
 
-    while (carbon_is_running(engine)) {
-        carbon_begin_frame(engine);
-        float dt = carbon_get_delta_time(engine);
+    while (agentite_is_running(engine)) {
+        agentite_begin_frame(engine);
+        float dt = agentite_get_delta_time(engine);
 
-        carbon_input_begin_frame(input);
+        agentite_input_begin_frame(input);
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            if (ui && cui_process_event(ui, &event)) continue;
-            carbon_input_process_event(input, &event);
-            if (event.type == SDL_EVENT_QUIT) carbon_quit(engine);
+            if (ui && aui_process_event(ui, &event)) continue;
+            agentite_input_process_event(input, &event);
+            if (event.type == SDL_EVENT_QUIT) agentite_quit(engine);
         }
-        carbon_input_update(input);
+        agentite_input_update(input);
 
         /* Camera controls */
         float cam_speed = 300.0f * dt;
-        if (carbon_input_key_pressed(input, SDL_SCANCODE_W))
-            carbon_camera_move(camera, 0, -cam_speed);
-        if (carbon_input_key_pressed(input, SDL_SCANCODE_S))
-            carbon_camera_move(camera, 0, cam_speed);
-        if (carbon_input_key_pressed(input, SDL_SCANCODE_A))
-            carbon_camera_move(camera, -cam_speed, 0);
-        if (carbon_input_key_pressed(input, SDL_SCANCODE_D))
-            carbon_camera_move(camera, cam_speed, 0);
+        if (agentite_input_key_pressed(input, SDL_SCANCODE_W))
+            agentite_camera_move(camera, 0, -cam_speed);
+        if (agentite_input_key_pressed(input, SDL_SCANCODE_S))
+            agentite_camera_move(camera, 0, cam_speed);
+        if (agentite_input_key_pressed(input, SDL_SCANCODE_A))
+            agentite_camera_move(camera, -cam_speed, 0);
+        if (agentite_input_key_pressed(input, SDL_SCANCODE_D))
+            agentite_camera_move(camera, cam_speed, 0);
 
-        if (carbon_input_key_just_pressed(input, SDL_SCANCODE_ESCAPE))
-            carbon_quit(engine);
+        if (agentite_input_key_just_pressed(input, SDL_SCANCODE_ESCAPE))
+            agentite_quit(engine);
 
-        carbon_camera_update(camera);
+        agentite_camera_update(camera);
 
         /* Get mouse world position */
         float mouse_x, mouse_y;
-        carbon_input_get_mouse_position(input, &mouse_x, &mouse_y);
+        agentite_input_get_mouse_position(input, &mouse_x, &mouse_y);
         float world_x, world_y;
-        carbon_camera_screen_to_world(camera, mouse_x, mouse_y, &world_x, &world_y);
+        agentite_camera_screen_to_world(camera, mouse_x, mouse_y, &world_x, &world_y);
 
         /* Selection box (left click + drag) */
-        if (carbon_input_mouse_button_just_pressed(input, 0)) {
+        if (agentite_input_mouse_button_just_pressed(input, 0)) {
             selecting = true;
             sel_start_x = world_x;
             sel_start_y = world_y;
             sel_end_x = world_x;
             sel_end_y = world_y;
         }
-        if (selecting && carbon_input_mouse_button(input, 0)) {
+        if (selecting && agentite_input_mouse_button(input, 0)) {
             sel_end_x = world_x;
             sel_end_y = world_y;
         }
-        if (selecting && carbon_input_mouse_button_just_released(input, 0)) {
+        if (selecting && agentite_input_mouse_button_just_released(input, 0)) {
             selecting = false;
 
             /* Select units in box */
@@ -255,7 +255,7 @@ int main(int argc, char *argv[]) {
         }
 
         /* Right click: move selected units */
-        if (carbon_input_mouse_button_just_pressed(input, 2)) {
+        if (agentite_input_mouse_button_just_pressed(input, 2)) {
             int tile_x = (int)(world_x / TILE_SIZE);
             int tile_y = (int)(world_y / TILE_SIZE);
 
@@ -267,11 +267,11 @@ int main(int argc, char *argv[]) {
 
                 /* Find path */
                 if (units[i].path) {
-                    carbon_path_destroy(units[i].path);
+                    agentite_path_destroy(units[i].path);
                     units[i].path = NULL;
                 }
 
-                units[i].path = carbon_pathfinder_find(pathfinder,
+                units[i].path = agentite_pathfinder_find(pathfinder,
                     unit_tile_x, unit_tile_y, tile_x, tile_y);
 
                 if (units[i].path && units[i].path->length > 0) {
@@ -309,77 +309,77 @@ int main(int argc, char *argv[]) {
         }
 
         /* Render */
-        carbon_sprite_begin(sprites, NULL);
+        agentite_sprite_begin(sprites, NULL);
 
         /* Draw tilemap */
-        carbon_tilemap_render(tilemap, sprites, camera);
+        agentite_tilemap_render(tilemap, sprites, camera);
 
         /* Draw units */
         for (int i = 0; i < num_units; i++) {
             if (units[i].selected) {
-                carbon_sprite_draw_tinted(sprites, &unit_sprite,
+                agentite_sprite_draw_tinted(sprites, &unit_sprite,
                     units[i].x - 12, units[i].y - 12,
                     0.5f, 1.0f, 0.5f, 1.0f);
             } else {
-                carbon_sprite_draw(sprites, &unit_sprite,
+                agentite_sprite_draw(sprites, &unit_sprite,
                     units[i].x - 12, units[i].y - 12);
             }
         }
 
-        SDL_GPUCommandBuffer *cmd = carbon_acquire_command_buffer(engine);
+        SDL_GPUCommandBuffer *cmd = agentite_acquire_command_buffer(engine);
         if (cmd) {
-            carbon_sprite_upload(sprites, cmd);
+            agentite_sprite_upload(sprites, cmd);
 
             if (ui) {
-                cui_begin_frame(ui, dt);
+                aui_begin_frame(ui, dt);
 
                 /* Info panel */
-                if (cui_begin_panel(ui, "Info", 10, 10, 200, 100, CUI_PANEL_BORDER)) {
+                if (aui_begin_panel(ui, "Info", 10, 10, 200, 100, AUI_PANEL_BORDER)) {
                     char buf[64];
                     int selected_count = 0;
                     for (int i = 0; i < num_units; i++)
                         if (units[i].selected) selected_count++;
 
                     snprintf(buf, sizeof(buf), "Units: %d", num_units);
-                    cui_label(ui, buf);
+                    aui_label(ui, buf);
                     snprintf(buf, sizeof(buf), "Selected: %d", selected_count);
-                    cui_label(ui, buf);
+                    aui_label(ui, buf);
                     snprintf(buf, sizeof(buf), "Tile: %d, %d",
                         (int)(world_x / TILE_SIZE), (int)(world_y / TILE_SIZE));
-                    cui_label(ui, buf);
-                    cui_end_panel(ui);
+                    aui_label(ui, buf);
+                    aui_end_panel(ui);
                 }
 
-                cui_end_frame(ui);
-                cui_upload(ui, cmd);
+                aui_end_frame(ui);
+                aui_upload(ui, cmd);
             }
 
-            if (carbon_begin_render_pass(engine, 0.1f, 0.1f, 0.15f, 1.0f)) {
-                SDL_GPURenderPass *pass = carbon_get_render_pass(engine);
-                carbon_sprite_render(sprites, cmd, pass);
-                if (ui) cui_render(ui, cmd, pass);
-                carbon_end_render_pass(engine);
+            if (agentite_begin_render_pass(engine, 0.1f, 0.1f, 0.15f, 1.0f)) {
+                SDL_GPURenderPass *pass = agentite_get_render_pass(engine);
+                agentite_sprite_render(sprites, cmd, pass);
+                if (ui) aui_render(ui, cmd, pass);
+                agentite_end_render_pass(engine);
             }
         }
 
-        carbon_sprite_end(sprites, NULL, NULL);
-        carbon_end_frame(engine);
+        agentite_sprite_end(sprites, NULL, NULL);
+        agentite_end_frame(engine);
     }
 
     /* Cleanup */
     for (int i = 0; i < num_units; i++) {
-        if (units[i].path) carbon_path_destroy(units[i].path);
+        if (units[i].path) agentite_path_destroy(units[i].path);
     }
-    carbon_pathfinder_destroy(pathfinder);
-    carbon_tilemap_destroy(tilemap);
-    carbon_tileset_destroy(tileset);
-    carbon_texture_destroy(sprites, tileset_tex);
-    carbon_texture_destroy(sprites, unit_tex);
-    carbon_input_shutdown(input);
-    if (ui) cui_shutdown(ui);
-    carbon_camera_destroy(camera);
-    carbon_sprite_shutdown(sprites);
-    carbon_shutdown(engine);
+    agentite_pathfinder_destroy(pathfinder);
+    agentite_tilemap_destroy(tilemap);
+    agentite_tileset_destroy(tileset);
+    agentite_texture_destroy(sprites, tileset_tex);
+    agentite_texture_destroy(sprites, unit_tex);
+    agentite_input_shutdown(input);
+    if (ui) aui_shutdown(ui);
+    agentite_camera_destroy(camera);
+    agentite_sprite_shutdown(sprites);
+    agentite_shutdown(engine);
 
     return 0;
 }

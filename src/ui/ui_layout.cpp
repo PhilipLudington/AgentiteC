@@ -1,24 +1,24 @@
 /*
- * Carbon UI - Layout System
+ * Agentite UI - Layout System
  */
 
-#include "carbon/ui.h"
+#include "agentite/ui.h"
 #include <string.h>
 
 /* Forward declarations */
-extern CUI_Id cui_make_id(CUI_Context *ctx, const char *str);
+extern AUI_Id aui_make_id(AUI_Context *ctx, const char *str);
 
 /* ============================================================================
  * Layout Stack Management
  * ============================================================================ */
 
-static CUI_LayoutFrame *cui_current_layout(CUI_Context *ctx)
+static AUI_LayoutFrame *aui_current_layout(AUI_Context *ctx)
 {
     if (ctx->layout_depth <= 0) return NULL;
     return &ctx->layout_stack[ctx->layout_depth - 1];
 }
 
-static CUI_LayoutFrame *cui_push_layout(CUI_Context *ctx)
+static AUI_LayoutFrame *aui_push_layout(AUI_Context *ctx)
 {
     if (ctx->layout_depth >= 32) {
         SDL_Log("CUI: Layout stack overflow");
@@ -27,7 +27,7 @@ static CUI_LayoutFrame *cui_push_layout(CUI_Context *ctx)
     return &ctx->layout_stack[ctx->layout_depth++];
 }
 
-static void cui_pop_layout(CUI_Context *ctx)
+static void aui_pop_layout(AUI_Context *ctx)
 {
     if (ctx->layout_depth > 1) {
         ctx->layout_depth--;
@@ -38,19 +38,19 @@ static void cui_pop_layout(CUI_Context *ctx)
  * Row/Column Layout
  * ============================================================================ */
 
-void cui_begin_row(CUI_Context *ctx)
+void aui_begin_row(AUI_Context *ctx)
 {
-    cui_begin_row_ex(ctx, ctx->theme.widget_height, ctx->theme.spacing);
+    aui_begin_row_ex(ctx, ctx->theme.widget_height, ctx->theme.spacing);
 }
 
-void cui_begin_row_ex(CUI_Context *ctx, float height, float spacing)
+void aui_begin_row_ex(AUI_Context *ctx, float height, float spacing)
 {
     if (!ctx) return;
 
-    CUI_LayoutFrame *parent = cui_current_layout(ctx);
+    AUI_LayoutFrame *parent = aui_current_layout(ctx);
     if (!parent) return;
 
-    CUI_LayoutFrame *frame = cui_push_layout(ctx);
+    AUI_LayoutFrame *frame = aui_push_layout(ctx);
     if (!frame) return;
 
     frame->bounds.x = parent->cursor_x;
@@ -66,32 +66,32 @@ void cui_begin_row_ex(CUI_Context *ctx, float height, float spacing)
     frame->has_clip = false;
 }
 
-void cui_end_row(CUI_Context *ctx)
+void aui_end_row(AUI_Context *ctx)
 {
     if (!ctx || ctx->layout_depth <= 1) return;
 
-    CUI_LayoutFrame *frame = cui_current_layout(ctx);
-    cui_pop_layout(ctx);
+    AUI_LayoutFrame *frame = aui_current_layout(ctx);
+    aui_pop_layout(ctx);
 
-    CUI_LayoutFrame *parent = cui_current_layout(ctx);
+    AUI_LayoutFrame *parent = aui_current_layout(ctx);
     if (parent && !parent->horizontal) {
         parent->cursor_y += frame->row_height + parent->spacing;
     }
 }
 
-void cui_begin_column(CUI_Context *ctx)
+void aui_begin_column(AUI_Context *ctx)
 {
-    cui_begin_column_ex(ctx, 0, ctx->theme.spacing);
+    aui_begin_column_ex(ctx, 0, ctx->theme.spacing);
 }
 
-void cui_begin_column_ex(CUI_Context *ctx, float width, float spacing)
+void aui_begin_column_ex(AUI_Context *ctx, float width, float spacing)
 {
     if (!ctx) return;
 
-    CUI_LayoutFrame *parent = cui_current_layout(ctx);
+    AUI_LayoutFrame *parent = aui_current_layout(ctx);
     if (!parent) return;
 
-    CUI_LayoutFrame *frame = cui_push_layout(ctx);
+    AUI_LayoutFrame *frame = aui_push_layout(ctx);
     if (!frame) return;
 
     float actual_width = width > 0 ? width :
@@ -110,15 +110,15 @@ void cui_begin_column_ex(CUI_Context *ctx, float width, float spacing)
     frame->has_clip = false;
 }
 
-void cui_end_column(CUI_Context *ctx)
+void aui_end_column(AUI_Context *ctx)
 {
     if (!ctx || ctx->layout_depth <= 1) return;
 
-    CUI_LayoutFrame *frame = cui_current_layout(ctx);
+    AUI_LayoutFrame *frame = aui_current_layout(ctx);
     float used_width = frame->bounds.w;
-    cui_pop_layout(ctx);
+    aui_pop_layout(ctx);
 
-    CUI_LayoutFrame *parent = cui_current_layout(ctx);
+    AUI_LayoutFrame *parent = aui_current_layout(ctx);
     if (parent && parent->horizontal) {
         parent->cursor_x += used_width + parent->spacing;
     }
@@ -128,11 +128,11 @@ void cui_end_column(CUI_Context *ctx)
  * Spacing
  * ============================================================================ */
 
-void cui_spacing(CUI_Context *ctx, float amount)
+void aui_spacing(AUI_Context *ctx, float amount)
 {
     if (!ctx) return;
 
-    CUI_LayoutFrame *frame = cui_current_layout(ctx);
+    AUI_LayoutFrame *frame = aui_current_layout(ctx);
     if (!frame) return;
 
     if (frame->horizontal) {
@@ -142,27 +142,27 @@ void cui_spacing(CUI_Context *ctx, float amount)
     }
 }
 
-void cui_separator(CUI_Context *ctx)
+void aui_separator(AUI_Context *ctx)
 {
     if (!ctx) return;
 
-    CUI_LayoutFrame *frame = cui_current_layout(ctx);
+    AUI_LayoutFrame *frame = aui_current_layout(ctx);
     if (!frame) return;
 
     float y = frame->cursor_y + ctx->theme.spacing;
     float x1 = frame->bounds.x;
     float x2 = frame->bounds.x + frame->bounds.w;
 
-    cui_draw_line(ctx, x1, y, x2, y, ctx->theme.border, 1.0f);
+    aui_draw_line(ctx, x1, y, x2, y, ctx->theme.border, 1.0f);
 
     frame->cursor_y = y + ctx->theme.spacing;
 }
 
-void cui_same_line(CUI_Context *ctx)
+void aui_same_line(AUI_Context *ctx)
 {
     if (!ctx) return;
 
-    CUI_LayoutFrame *frame = cui_current_layout(ctx);
+    AUI_LayoutFrame *frame = aui_current_layout(ctx);
     if (!frame) return;
 
     /* Mark that next widget should stay on same line */
@@ -175,12 +175,12 @@ void cui_same_line(CUI_Context *ctx)
  * Rect Allocation
  * ============================================================================ */
 
-CUI_Rect cui_get_available_rect(CUI_Context *ctx)
+AUI_Rect aui_get_available_rect(AUI_Context *ctx)
 {
-    CUI_Rect rect = {0, 0, 0, 0};
+    AUI_Rect rect = {0, 0, 0, 0};
     if (!ctx) return rect;
 
-    CUI_LayoutFrame *frame = cui_current_layout(ctx);
+    AUI_LayoutFrame *frame = aui_current_layout(ctx);
     if (!frame) return rect;
 
     rect.x = frame->cursor_x;
@@ -192,12 +192,12 @@ CUI_Rect cui_get_available_rect(CUI_Context *ctx)
 }
 
 /* Allocate a rect for a widget */
-CUI_Rect cui_allocate_rect(CUI_Context *ctx, float width, float height)
+AUI_Rect aui_allocate_rect(AUI_Context *ctx, float width, float height)
 {
-    CUI_Rect rect = {0, 0, 0, 0};
+    AUI_Rect rect = {0, 0, 0, 0};
     if (!ctx) return rect;
 
-    CUI_LayoutFrame *frame = cui_current_layout(ctx);
+    AUI_LayoutFrame *frame = aui_current_layout(ctx);
     if (!frame) return rect;
 
     /* Calculate actual dimensions */
@@ -234,27 +234,27 @@ CUI_Rect cui_allocate_rect(CUI_Context *ctx, float width, float height)
  * Scrollable Regions
  * ============================================================================ */
 
-void cui_begin_scroll(CUI_Context *ctx, const char *id, float width, float height)
+void aui_begin_scroll(AUI_Context *ctx, const char *id, float width, float height)
 {
     if (!ctx) return;
 
-    CUI_Id scroll_id = cui_make_id(ctx, id);
-    CUI_WidgetState *state = cui_get_state(ctx, scroll_id);
+    AUI_Id scroll_id = aui_make_id(ctx, id);
+    AUI_WidgetState *state = aui_get_state(ctx, scroll_id);
 
-    CUI_LayoutFrame *parent = cui_current_layout(ctx);
+    AUI_LayoutFrame *parent = aui_current_layout(ctx);
     if (!parent) return;
 
     /* Allocate the scroll region rect */
-    CUI_Rect outer = cui_allocate_rect(ctx, width, height);
+    AUI_Rect outer = aui_allocate_rect(ctx, width, height);
 
     /* Draw background */
-    cui_draw_rect(ctx, outer.x, outer.y, outer.w, outer.h, ctx->theme.bg_panel);
+    aui_draw_rect(ctx, outer.x, outer.y, outer.w, outer.h, ctx->theme.bg_panel);
 
     /* Push clipping */
-    cui_push_scissor(ctx, outer.x, outer.y, outer.w - ctx->theme.scrollbar_width, outer.h);
+    aui_push_scissor(ctx, outer.x, outer.y, outer.w - ctx->theme.scrollbar_width, outer.h);
 
     /* Push layout for content */
-    CUI_LayoutFrame *frame = cui_push_layout(ctx);
+    AUI_LayoutFrame *frame = aui_push_layout(ctx);
     if (!frame) return;
 
     frame->bounds = outer;
@@ -268,24 +268,24 @@ void cui_begin_scroll(CUI_Context *ctx, const char *id, float width, float heigh
     frame->has_clip = true;
 
     /* Store scroll info for end_scroll */
-    cui_push_id(ctx, id);
+    aui_push_id(ctx, id);
 }
 
-void cui_end_scroll(CUI_Context *ctx)
+void aui_end_scroll(AUI_Context *ctx)
 {
     if (!ctx || ctx->layout_depth <= 1) return;
 
-    CUI_LayoutFrame *frame = cui_current_layout(ctx);
-    cui_pop_scissor(ctx);
+    AUI_LayoutFrame *frame = aui_current_layout(ctx);
+    aui_pop_scissor(ctx);
 
     /* Calculate content height */
     float content_start = frame->bounds.y + frame->padding;
     float content_height = frame->cursor_y - content_start +
-                           (frame->has_clip ? cui_get_state(ctx, 0)->scroll_y : 0);
+                           (frame->has_clip ? aui_get_state(ctx, 0)->scroll_y : 0);
     float visible_height = frame->bounds.h - frame->padding * 2;
 
     /* Get scroll state - we need to recover the ID */
-    cui_pop_id(ctx);
+    aui_pop_id(ctx);
 
     /* Draw scrollbar if needed */
     if (content_height > visible_height) {
@@ -300,15 +300,15 @@ void cui_end_scroll(CUI_Context *ctx)
         float thumb_y = frame->bounds.y + scroll_ratio * (scrollbar_h - thumb_h);
 
         /* Draw track */
-        cui_draw_rect(ctx, scrollbar_x, frame->bounds.y,
+        aui_draw_rect(ctx, scrollbar_x, frame->bounds.y,
                       ctx->theme.scrollbar_width, scrollbar_h,
                       ctx->theme.scrollbar);
 
         /* Draw thumb */
-        cui_draw_rect(ctx, scrollbar_x + 2, thumb_y,
+        aui_draw_rect(ctx, scrollbar_x + 2, thumb_y,
                       ctx->theme.scrollbar_width - 4, thumb_h,
                       ctx->theme.scrollbar_grab);
     }
 
-    cui_pop_layout(ctx);
+    aui_pop_layout(ctx);
 }

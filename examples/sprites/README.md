@@ -4,7 +4,7 @@ Demonstrates sprite rendering with the Carbon engine.
 
 ## What This Demonstrates
 
-- Creating textures procedurally with `carbon_texture_create()`
+- Creating textures procedurally with `agentite_texture_create()`
 - Creating sprites from textures
 - Batched sprite rendering
 - Sprite transforms: position, scale, rotation, origin
@@ -31,39 +31,39 @@ make example-sprites
 ### Sprite Rendering Flow
 ```c
 // 1. Begin batch
-carbon_sprite_begin(sprites, NULL);
+agentite_sprite_begin(sprites, NULL);
 
 // 2. Queue draw calls
-carbon_sprite_draw(sprites, &sprite, x, y);
-carbon_sprite_draw_scaled(sprites, &sprite, x, y, sx, sy);
-carbon_sprite_draw_ex(sprites, &sprite, x, y, sx, sy, rot, ox, oy);
-carbon_sprite_draw_tinted(sprites, &sprite, x, y, r, g, b, a);
+agentite_sprite_draw(sprites, &sprite, x, y);
+agentite_sprite_draw_scaled(sprites, &sprite, x, y, sx, sy);
+agentite_sprite_draw_ex(sprites, &sprite, x, y, sx, sy, rot, ox, oy);
+agentite_sprite_draw_tinted(sprites, &sprite, x, y, r, g, b, a);
 
 // 3. Upload to GPU (before render pass)
-SDL_GPUCommandBuffer *cmd = carbon_acquire_command_buffer(engine);
-carbon_sprite_upload(sprites, cmd);
+SDL_GPUCommandBuffer *cmd = agentite_acquire_command_buffer(engine);
+agentite_sprite_upload(sprites, cmd);
 
 // 4. Render during pass
-if (carbon_begin_render_pass(engine, ...)) {
-    carbon_sprite_render(sprites, cmd, pass);
-    carbon_end_render_pass(engine);
+if (agentite_begin_render_pass(engine, ...)) {
+    agentite_sprite_render(sprites, cmd, pass);
+    agentite_end_render_pass(engine);
 }
 
 // 5. End batch
-carbon_sprite_end(sprites, NULL, NULL);
+agentite_sprite_end(sprites, NULL, NULL);
 ```
 
 ### Loading Textures
 ```c
 // From file
-Carbon_Texture *tex = carbon_texture_load(sprites, "path/to/image.png");
+Agentite_Texture *tex = agentite_texture_load(sprites, "path/to/image.png");
 
 // From memory (RGBA pixels)
-Carbon_Texture *tex = carbon_texture_create(sprites, width, height, pixels);
+Agentite_Texture *tex = agentite_texture_create(sprites, width, height, pixels);
 
 // Create sprite
-Carbon_Sprite sprite = carbon_sprite_from_texture(tex);
+Agentite_Sprite sprite = agentite_sprite_from_texture(tex);
 
 // Cleanup
-carbon_texture_destroy(sprites, tex);
+agentite_texture_destroy(sprites, tex);
 ```

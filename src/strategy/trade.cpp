@@ -5,9 +5,9 @@
  * protection mechanics, and specialized route types.
  */
 
-#include "carbon/carbon.h"
-#include "carbon/trade.h"
-#include "carbon/error.h"
+#include "agentite/agentite.h"
+#include "agentite/trade.h"
+#include "agentite/error.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -17,7 +17,7 @@
  * Internal Constants
  *============================================================================*/
 
-#define CARBON_TRADE_MAX_FACTIONS 16   /* Maximum tracked factions */
+#define AGENTITE_TRADE_MAX_FACTIONS 16   /* Maximum tracked factions */
 
 /*============================================================================
  * Internal Data Structures
@@ -35,24 +35,24 @@ typedef struct {
 /**
  * Trade system internal structure
  */
-struct Carbon_TradeSystem {
+struct Agentite_TradeSystem {
     /* Routes */
-    Carbon_TradeRoute routes[CARBON_TRADE_MAX_ROUTES];
+    Agentite_TradeRoute routes[AGENTITE_TRADE_MAX_ROUTES];
     uint32_t next_route_id;
 
     /* Supply hubs */
-    Carbon_SupplyHub hubs[CARBON_TRADE_MAX_HUBS];
+    Agentite_SupplyHub hubs[AGENTITE_TRADE_MAX_HUBS];
     int hub_count;
 
     /* Faction tax rates */
-    FactionTax taxes[CARBON_TRADE_MAX_FACTIONS];
+    FactionTax taxes[AGENTITE_TRADE_MAX_FACTIONS];
 
     /* Callbacks */
-    Carbon_DistanceFunc distance_fn;
+    Agentite_DistanceFunc distance_fn;
     void *distance_userdata;
-    Carbon_RouteValueFunc value_fn;
+    Agentite_RouteValueFunc value_fn;
     void *value_userdata;
-    Carbon_RouteEventFunc event_fn;
+    Agentite_RouteEventFunc event_fn;
     void *event_userdata;
 };
 
@@ -63,8 +63,8 @@ struct Carbon_TradeSystem {
 /**
  * Find route by ID
  */
-static Carbon_TradeRoute *find_route(Carbon_TradeSystem *trade, uint32_t route_id) {
-    for (int i = 0; i < CARBON_TRADE_MAX_ROUTES; i++) {
+static Agentite_TradeRoute *find_route(Agentite_TradeSystem *trade, uint32_t route_id) {
+    for (int i = 0; i < AGENTITE_TRADE_MAX_ROUTES; i++) {
         if (trade->routes[i].active && trade->routes[i].id == route_id) {
             return &trade->routes[i];
         }
@@ -75,8 +75,8 @@ static Carbon_TradeRoute *find_route(Carbon_TradeSystem *trade, uint32_t route_i
 /**
  * Find free route slot
  */
-static Carbon_TradeRoute *alloc_route(Carbon_TradeSystem *trade) {
-    for (int i = 0; i < CARBON_TRADE_MAX_ROUTES; i++) {
+static Agentite_TradeRoute *alloc_route(Agentite_TradeSystem *trade) {
+    for (int i = 0; i < AGENTITE_TRADE_MAX_ROUTES; i++) {
         if (!trade->routes[i].active) {
             return &trade->routes[i];
         }
@@ -87,8 +87,8 @@ static Carbon_TradeRoute *alloc_route(Carbon_TradeSystem *trade) {
 /**
  * Find hub by location
  */
-static Carbon_SupplyHub *find_hub(Carbon_TradeSystem *trade, uint32_t location) {
-    for (int i = 0; i < CARBON_TRADE_MAX_HUBS; i++) {
+static Agentite_SupplyHub *find_hub(Agentite_TradeSystem *trade, uint32_t location) {
+    for (int i = 0; i < AGENTITE_TRADE_MAX_HUBS; i++) {
         if (trade->hubs[i].active && trade->hubs[i].location == location) {
             return &trade->hubs[i];
         }
@@ -99,8 +99,8 @@ static Carbon_SupplyHub *find_hub(Carbon_TradeSystem *trade, uint32_t location) 
 /**
  * Find free hub slot
  */
-static Carbon_SupplyHub *alloc_hub(Carbon_TradeSystem *trade) {
-    for (int i = 0; i < CARBON_TRADE_MAX_HUBS; i++) {
+static Agentite_SupplyHub *alloc_hub(Agentite_TradeSystem *trade) {
+    for (int i = 0; i < AGENTITE_TRADE_MAX_HUBS; i++) {
         if (!trade->hubs[i].active) {
             return &trade->hubs[i];
         }
@@ -111,16 +111,16 @@ static Carbon_SupplyHub *alloc_hub(Carbon_TradeSystem *trade) {
 /**
  * Get or create faction tax entry
  */
-static FactionTax *get_faction_tax(Carbon_TradeSystem *trade, int32_t faction_id) {
+static FactionTax *get_faction_tax(Agentite_TradeSystem *trade, int32_t faction_id) {
     /* Find existing */
-    for (int i = 0; i < CARBON_TRADE_MAX_FACTIONS; i++) {
+    for (int i = 0; i < AGENTITE_TRADE_MAX_FACTIONS; i++) {
         if (trade->taxes[i].used && trade->taxes[i].faction_id == faction_id) {
             return &trade->taxes[i];
         }
     }
 
     /* Find free slot */
-    for (int i = 0; i < CARBON_TRADE_MAX_FACTIONS; i++) {
+    for (int i = 0; i < AGENTITE_TRADE_MAX_FACTIONS; i++) {
         if (!trade->taxes[i].used) {
             trade->taxes[i].used = true;
             trade->taxes[i].faction_id = faction_id;
@@ -135,7 +135,7 @@ static FactionTax *get_faction_tax(Carbon_TradeSystem *trade, int32_t faction_id
 /**
  * Calculate distance between locations
  */
-static float calc_distance(Carbon_TradeSystem *trade, uint32_t source, uint32_t dest) {
+static float calc_distance(Agentite_TradeSystem *trade, uint32_t source, uint32_t dest) {
     if (trade->distance_fn) {
         return trade->distance_fn(source, dest, trade->distance_userdata);
     }
@@ -146,7 +146,7 @@ static float calc_distance(Carbon_TradeSystem *trade, uint32_t source, uint32_t 
 /**
  * Calculate route efficiency based on distance and protection
  */
-static float calc_efficiency(const Carbon_TradeRoute *route) {
+static float calc_efficiency(const Agentite_TradeRoute *route) {
     float eff = 1.0f;
 
     /* Distance penalty: efficiency decreases with distance */
@@ -162,14 +162,14 @@ static float calc_efficiency(const Carbon_TradeRoute *route) {
 
     /* Status penalty */
     switch (route->status) {
-        case CARBON_ROUTE_ACTIVE:
+        case AGENTITE_ROUTE_ACTIVE:
             /* No penalty */
             break;
-        case CARBON_ROUTE_DISRUPTED:
+        case AGENTITE_ROUTE_DISRUPTED:
             eff *= 0.5f;
             break;
-        case CARBON_ROUTE_BLOCKED:
-        case CARBON_ROUTE_ESTABLISHING:
+        case AGENTITE_ROUTE_BLOCKED:
+        case AGENTITE_ROUTE_ESTABLISHING:
             eff = 0.0f;
             break;
     }
@@ -184,7 +184,7 @@ static float calc_efficiency(const Carbon_TradeRoute *route) {
 /**
  * Emit route event
  */
-static void emit_event(Carbon_TradeSystem *trade, uint32_t route_id, int event) {
+static void emit_event(Agentite_TradeSystem *trade, uint32_t route_id, int event) {
     if (trade->event_fn) {
         trade->event_fn(trade, route_id, event, trade->event_userdata);
     }
@@ -194,17 +194,17 @@ static void emit_event(Carbon_TradeSystem *trade, uint32_t route_id, int event) 
  * Creation and Destruction
  *============================================================================*/
 
-Carbon_TradeSystem *carbon_trade_create(void) {
-    Carbon_TradeSystem *trade = CARBON_ALLOC(Carbon_TradeSystem);
+Agentite_TradeSystem *agentite_trade_create(void) {
+    Agentite_TradeSystem *trade = AGENTITE_ALLOC(Agentite_TradeSystem);
     if (!trade) {
-        carbon_set_error("carbon_trade_create: allocation failed");
+        agentite_set_error("agentite_trade_create: allocation failed");
         return NULL;
     }
     trade->next_route_id = 1;
     return trade;
 }
 
-void carbon_trade_destroy(Carbon_TradeSystem *trade) {
+void agentite_trade_destroy(Agentite_TradeSystem *trade) {
     if (trade) {
         free(trade);
     }
@@ -214,30 +214,30 @@ void carbon_trade_destroy(Carbon_TradeSystem *trade) {
  * Route Management
  *============================================================================*/
 
-uint32_t carbon_trade_create_route(Carbon_TradeSystem *trade,
+uint32_t agentite_trade_create_route(Agentite_TradeSystem *trade,
                                     uint32_t source, uint32_t dest,
-                                    Carbon_RouteType type) {
-    return carbon_trade_create_route_ex(trade, source, dest, type, -1, 100);
+                                    Agentite_RouteType type) {
+    return agentite_trade_create_route_ex(trade, source, dest, type, -1, 100);
 }
 
-uint32_t carbon_trade_create_route_ex(Carbon_TradeSystem *trade,
+uint32_t agentite_trade_create_route_ex(Agentite_TradeSystem *trade,
                                        uint32_t source, uint32_t dest,
-                                       Carbon_RouteType type,
+                                       Agentite_RouteType type,
                                        int32_t faction, int32_t base_value) {
-    if (!trade) return CARBON_TRADE_INVALID;
+    if (!trade) return AGENTITE_TRADE_INVALID;
 
-    Carbon_TradeRoute *route = alloc_route(trade);
+    Agentite_TradeRoute *route = alloc_route(trade);
     if (!route) {
-        carbon_set_error("carbon_trade_create_route: max routes reached");
-        return CARBON_TRADE_INVALID;
+        agentite_set_error("agentite_trade_create_route: max routes reached");
+        return AGENTITE_TRADE_INVALID;
     }
 
-    memset(route, 0, sizeof(Carbon_TradeRoute));
+    memset(route, 0, sizeof(Agentite_TradeRoute));
     route->id = trade->next_route_id++;
     route->source = source;
     route->dest = dest;
     route->type = type;
-    route->status = CARBON_ROUTE_ACTIVE;
+    route->status = AGENTITE_ROUTE_ACTIVE;
     route->base_value = base_value;
     route->protection = 0.5f;  /* Default 50% protection */
     route->owner_faction = faction;
@@ -253,23 +253,23 @@ uint32_t carbon_trade_create_route_ex(Carbon_TradeSystem *trade,
     return route->id;
 }
 
-void carbon_trade_remove_route(Carbon_TradeSystem *trade, uint32_t route_id) {
+void agentite_trade_remove_route(Agentite_TradeSystem *trade, uint32_t route_id) {
     if (!trade) return;
 
-    Carbon_TradeRoute *route = find_route(trade, route_id);
+    Agentite_TradeRoute *route = find_route(trade, route_id);
     if (route) {
         emit_event(trade, route_id, 1);  /* Destroyed */
         route->active = false;
     }
 }
 
-const Carbon_TradeRoute *carbon_trade_get_route(const Carbon_TradeSystem *trade,
+const Agentite_TradeRoute *agentite_trade_get_route(const Agentite_TradeSystem *trade,
                                                  uint32_t route_id) {
     if (!trade) return NULL;
-    return find_route((Carbon_TradeSystem *)trade, route_id);
+    return find_route((Agentite_TradeSystem *)trade, route_id);
 }
 
-Carbon_TradeRoute *carbon_trade_get_route_mut(Carbon_TradeSystem *trade,
+Agentite_TradeRoute *agentite_trade_get_route_mut(Agentite_TradeSystem *trade,
                                                uint32_t route_id) {
     if (!trade) return NULL;
     return find_route(trade, route_id);
@@ -279,11 +279,11 @@ Carbon_TradeRoute *carbon_trade_get_route_mut(Carbon_TradeSystem *trade,
  * Route Properties
  *============================================================================*/
 
-void carbon_trade_set_route_protection(Carbon_TradeSystem *trade,
+void agentite_trade_set_route_protection(Agentite_TradeSystem *trade,
                                         uint32_t route_id, float protection) {
     if (!trade) return;
 
-    Carbon_TradeRoute *route = find_route(trade, route_id);
+    Agentite_TradeRoute *route = find_route(trade, route_id);
     if (route) {
         if (protection < 0.0f) protection = 0.0f;
         if (protection > 1.0f) protection = 1.0f;
@@ -292,19 +292,19 @@ void carbon_trade_set_route_protection(Carbon_TradeSystem *trade,
     }
 }
 
-float carbon_trade_get_route_protection(const Carbon_TradeSystem *trade,
+float agentite_trade_get_route_protection(const Agentite_TradeSystem *trade,
                                          uint32_t route_id) {
     if (!trade) return 0.0f;
 
-    const Carbon_TradeRoute *route = carbon_trade_get_route(trade, route_id);
+    const Agentite_TradeRoute *route = agentite_trade_get_route(trade, route_id);
     return route ? route->protection : 0.0f;
 }
 
-void carbon_trade_set_route_status(Carbon_TradeSystem *trade,
-                                    uint32_t route_id, Carbon_RouteStatus status) {
+void agentite_trade_set_route_status(Agentite_TradeSystem *trade,
+                                    uint32_t route_id, Agentite_RouteStatus status) {
     if (!trade) return;
 
-    Carbon_TradeRoute *route = find_route(trade, route_id);
+    Agentite_TradeRoute *route = find_route(trade, route_id);
     if (route && route->status != status) {
         route->status = status;
         route->efficiency = calc_efficiency(route);
@@ -312,39 +312,39 @@ void carbon_trade_set_route_status(Carbon_TradeSystem *trade,
     }
 }
 
-Carbon_RouteStatus carbon_trade_get_route_status(const Carbon_TradeSystem *trade,
+Agentite_RouteStatus agentite_trade_get_route_status(const Agentite_TradeSystem *trade,
                                                   uint32_t route_id) {
-    if (!trade) return CARBON_ROUTE_BLOCKED;
+    if (!trade) return AGENTITE_ROUTE_BLOCKED;
 
-    const Carbon_TradeRoute *route = carbon_trade_get_route(trade, route_id);
-    return route ? route->status : CARBON_ROUTE_BLOCKED;
+    const Agentite_TradeRoute *route = agentite_trade_get_route(trade, route_id);
+    return route ? route->status : AGENTITE_ROUTE_BLOCKED;
 }
 
-void carbon_trade_set_route_owner(Carbon_TradeSystem *trade,
+void agentite_trade_set_route_owner(Agentite_TradeSystem *trade,
                                    uint32_t route_id, int32_t faction) {
     if (!trade) return;
 
-    Carbon_TradeRoute *route = find_route(trade, route_id);
+    Agentite_TradeRoute *route = find_route(trade, route_id);
     if (route) {
         route->owner_faction = faction;
     }
 }
 
-void carbon_trade_set_route_value(Carbon_TradeSystem *trade,
+void agentite_trade_set_route_value(Agentite_TradeSystem *trade,
                                    uint32_t route_id, int32_t value) {
     if (!trade) return;
 
-    Carbon_TradeRoute *route = find_route(trade, route_id);
+    Agentite_TradeRoute *route = find_route(trade, route_id);
     if (route) {
         route->base_value = value;
     }
 }
 
-void carbon_trade_set_route_metadata(Carbon_TradeSystem *trade,
+void agentite_trade_set_route_metadata(Agentite_TradeSystem *trade,
                                       uint32_t route_id, uint32_t metadata) {
     if (!trade) return;
 
-    Carbon_TradeRoute *route = find_route(trade, route_id);
+    Agentite_TradeRoute *route = find_route(trade, route_id);
     if (route) {
         route->metadata = metadata;
     }
@@ -354,16 +354,16 @@ void carbon_trade_set_route_metadata(Carbon_TradeSystem *trade,
  * Efficiency Calculation
  *============================================================================*/
 
-float carbon_trade_get_efficiency(const Carbon_TradeSystem *trade,
+float agentite_trade_get_efficiency(const Agentite_TradeSystem *trade,
                                    uint32_t route_id) {
     if (!trade) return 0.0f;
 
-    const Carbon_TradeRoute *route = carbon_trade_get_route(trade, route_id);
+    const Agentite_TradeRoute *route = agentite_trade_get_route(trade, route_id);
     return route ? route->efficiency : 0.0f;
 }
 
-void carbon_trade_set_distance_callback(Carbon_TradeSystem *trade,
-                                         Carbon_DistanceFunc distance_fn,
+void agentite_trade_set_distance_callback(Agentite_TradeSystem *trade,
+                                         Agentite_DistanceFunc distance_fn,
                                          void *userdata) {
     if (trade) {
         trade->distance_fn = distance_fn;
@@ -371,8 +371,8 @@ void carbon_trade_set_distance_callback(Carbon_TradeSystem *trade,
     }
 }
 
-void carbon_trade_set_value_callback(Carbon_TradeSystem *trade,
-                                      Carbon_RouteValueFunc value_fn,
+void agentite_trade_set_value_callback(Agentite_TradeSystem *trade,
+                                      Agentite_RouteValueFunc value_fn,
                                       void *userdata) {
     if (trade) {
         trade->value_fn = value_fn;
@@ -380,11 +380,11 @@ void carbon_trade_set_value_callback(Carbon_TradeSystem *trade,
     }
 }
 
-void carbon_trade_recalculate_efficiency(Carbon_TradeSystem *trade) {
+void agentite_trade_recalculate_efficiency(Agentite_TradeSystem *trade) {
     if (!trade) return;
 
-    for (int i = 0; i < CARBON_TRADE_MAX_ROUTES; i++) {
-        Carbon_TradeRoute *route = &trade->routes[i];
+    for (int i = 0; i < AGENTITE_TRADE_MAX_ROUTES; i++) {
+        Agentite_TradeRoute *route = &trade->routes[i];
         if (route->active) {
             route->distance = calc_distance(trade, route->source, route->dest);
             route->efficiency = calc_efficiency(route);
@@ -396,17 +396,17 @@ void carbon_trade_recalculate_efficiency(Carbon_TradeSystem *trade) {
  * Income Calculation
  *============================================================================*/
 
-int32_t carbon_trade_calculate_route_income(const Carbon_TradeSystem *trade,
+int32_t agentite_trade_calculate_route_income(const Agentite_TradeSystem *trade,
                                              uint32_t route_id) {
     if (!trade) return 0;
 
-    const Carbon_TradeRoute *route = carbon_trade_get_route(trade, route_id);
+    const Agentite_TradeRoute *route = agentite_trade_get_route(trade, route_id);
     if (!route) return 0;
 
     /* Use custom value function if provided */
     int32_t base_value = route->base_value;
     if (trade->value_fn) {
-        base_value = trade->value_fn(route, ((Carbon_TradeSystem *)trade)->value_userdata);
+        base_value = trade->value_fn(route, ((Agentite_TradeSystem *)trade)->value_userdata);
     }
 
     /* Apply efficiency */
@@ -415,22 +415,22 @@ int32_t carbon_trade_calculate_route_income(const Carbon_TradeSystem *trade,
     return (int32_t)value;
 }
 
-int32_t carbon_trade_calculate_income(const Carbon_TradeSystem *trade,
+int32_t agentite_trade_calculate_income(const Agentite_TradeSystem *trade,
                                        int32_t faction_id) {
     if (!trade) return 0;
 
     int32_t total = 0;
 
-    for (int i = 0; i < CARBON_TRADE_MAX_ROUTES; i++) {
-        const Carbon_TradeRoute *route = &trade->routes[i];
+    for (int i = 0; i < AGENTITE_TRADE_MAX_ROUTES; i++) {
+        const Agentite_TradeRoute *route = &trade->routes[i];
         if (route->active && route->owner_faction == faction_id &&
-            route->type == CARBON_ROUTE_TRADE) {
-            total += carbon_trade_calculate_route_income(trade, route->id);
+            route->type == AGENTITE_ROUTE_TRADE) {
+            total += agentite_trade_calculate_route_income(trade, route->id);
         }
     }
 
     /* Apply tax rate */
-    float tax_rate = carbon_trade_get_tax_rate(trade, faction_id);
+    float tax_rate = agentite_trade_get_tax_rate(trade, faction_id);
     if (tax_rate > 0.0f) {
         total = (int32_t)((float)total * (1.0f + tax_rate));
     }
@@ -438,7 +438,7 @@ int32_t carbon_trade_calculate_income(const Carbon_TradeSystem *trade,
     return total;
 }
 
-void carbon_trade_set_tax_rate(Carbon_TradeSystem *trade,
+void agentite_trade_set_tax_rate(Agentite_TradeSystem *trade,
                                 int32_t faction_id, float rate) {
     if (!trade) return;
 
@@ -450,11 +450,11 @@ void carbon_trade_set_tax_rate(Carbon_TradeSystem *trade,
     }
 }
 
-float carbon_trade_get_tax_rate(const Carbon_TradeSystem *trade,
+float agentite_trade_get_tax_rate(const Agentite_TradeSystem *trade,
                                  int32_t faction_id) {
     if (!trade) return 0.0f;
 
-    for (int i = 0; i < CARBON_TRADE_MAX_FACTIONS; i++) {
+    for (int i = 0; i < AGENTITE_TRADE_MAX_FACTIONS; i++) {
         if (trade->taxes[i].used && trade->taxes[i].faction_id == faction_id) {
             return trade->taxes[i].tax_rate;
         }
@@ -466,16 +466,16 @@ float carbon_trade_get_tax_rate(const Carbon_TradeSystem *trade,
  * Supply Hubs
  *============================================================================*/
 
-void carbon_trade_set_hub(Carbon_TradeSystem *trade, uint32_t location, bool is_hub) {
+void agentite_trade_set_hub(Agentite_TradeSystem *trade, uint32_t location, bool is_hub) {
     if (!trade) return;
 
-    Carbon_SupplyHub *hub = find_hub(trade, location);
+    Agentite_SupplyHub *hub = find_hub(trade, location);
 
     if (is_hub) {
         if (!hub) {
             hub = alloc_hub(trade);
             if (!hub) {
-                carbon_set_error("carbon_trade_set_hub: max hubs reached");
+                agentite_set_error("agentite_trade_set_hub: max hubs reached");
                 return;
             }
             trade->hub_count++;
@@ -491,15 +491,15 @@ void carbon_trade_set_hub(Carbon_TradeSystem *trade, uint32_t location, bool is_
     }
 }
 
-void carbon_trade_set_hub_ex(Carbon_TradeSystem *trade, uint32_t location,
+void agentite_trade_set_hub_ex(Agentite_TradeSystem *trade, uint32_t location,
                               int32_t faction, float radius, float strength) {
     if (!trade) return;
 
-    Carbon_SupplyHub *hub = find_hub(trade, location);
+    Agentite_SupplyHub *hub = find_hub(trade, location);
     if (!hub) {
         hub = alloc_hub(trade);
         if (!hub) {
-            carbon_set_error("carbon_trade_set_hub_ex: max hubs reached");
+            agentite_set_error("agentite_trade_set_hub_ex: max hubs reached");
             return;
         }
         trade->hub_count++;
@@ -512,26 +512,26 @@ void carbon_trade_set_hub_ex(Carbon_TradeSystem *trade, uint32_t location,
     hub->active = true;
 }
 
-bool carbon_trade_is_hub(const Carbon_TradeSystem *trade, uint32_t location) {
+bool agentite_trade_is_hub(const Agentite_TradeSystem *trade, uint32_t location) {
     if (!trade) return false;
-    return find_hub((Carbon_TradeSystem *)trade, location) != NULL;
+    return find_hub((Agentite_TradeSystem *)trade, location) != NULL;
 }
 
-const Carbon_SupplyHub *carbon_trade_get_hub(const Carbon_TradeSystem *trade,
+const Agentite_SupplyHub *agentite_trade_get_hub(const Agentite_TradeSystem *trade,
                                               uint32_t location) {
     if (!trade) return NULL;
-    return find_hub((Carbon_TradeSystem *)trade, location);
+    return find_hub((Agentite_TradeSystem *)trade, location);
 }
 
-int carbon_trade_get_hub_connections(const Carbon_TradeSystem *trade,
+int agentite_trade_get_hub_connections(const Agentite_TradeSystem *trade,
                                       uint32_t hub_location,
                                       uint32_t *out_connections, int max) {
     if (!trade || !out_connections || max <= 0) return 0;
 
     int count = 0;
 
-    for (int i = 0; i < CARBON_TRADE_MAX_ROUTES && count < max; i++) {
-        const Carbon_TradeRoute *route = &trade->routes[i];
+    for (int i = 0; i < AGENTITE_TRADE_MAX_ROUTES && count < max; i++) {
+        const Agentite_TradeRoute *route = &trade->routes[i];
         if (!route->active) continue;
 
         if (route->source == hub_location) {
@@ -544,9 +544,9 @@ int carbon_trade_get_hub_connections(const Carbon_TradeSystem *trade,
     return count;
 }
 
-Carbon_SupplyBonus carbon_trade_get_supply_bonus(const Carbon_TradeSystem *trade,
+Agentite_SupplyBonus agentite_trade_get_supply_bonus(const Agentite_TradeSystem *trade,
                                                   uint32_t location) {
-    Carbon_SupplyBonus bonus = {
+    Agentite_SupplyBonus bonus = {
         .repair_rate = 1.0f,
         .reinforce_rate = 1.0f,
         .growth_rate = 1.0f,
@@ -559,7 +559,7 @@ Carbon_SupplyBonus carbon_trade_get_supply_bonus(const Carbon_TradeSystem *trade
     if (!trade) return bonus;
 
     /* Check if location is a hub */
-    const Carbon_SupplyHub *hub = carbon_trade_get_hub(trade, location);
+    const Agentite_SupplyHub *hub = agentite_trade_get_hub(trade, location);
     if (hub) {
         bonus.has_hub = true;
         /* Hub provides base bonus */
@@ -572,8 +572,8 @@ Carbon_SupplyBonus carbon_trade_get_supply_bonus(const Carbon_TradeSystem *trade
     }
 
     /* Count and aggregate route bonuses */
-    for (int i = 0; i < CARBON_TRADE_MAX_ROUTES; i++) {
-        const Carbon_TradeRoute *route = &trade->routes[i];
+    for (int i = 0; i < AGENTITE_TRADE_MAX_ROUTES; i++) {
+        const Agentite_TradeRoute *route = &trade->routes[i];
         if (!route->active) continue;
 
         /* Check if route connects to this location */
@@ -584,17 +584,17 @@ Carbon_SupplyBonus carbon_trade_get_supply_bonus(const Carbon_TradeSystem *trade
 
         /* Apply route type bonuses */
         switch (route->type) {
-            case CARBON_ROUTE_TRADE:
+            case AGENTITE_ROUTE_TRADE:
                 bonus.income_rate += 0.1f * eff;
                 break;
-            case CARBON_ROUTE_MILITARY:
+            case AGENTITE_ROUTE_MILITARY:
                 bonus.repair_rate += 0.2f * eff;
                 bonus.reinforce_rate += 0.3f * eff;
                 break;
-            case CARBON_ROUTE_COLONIAL:
+            case AGENTITE_ROUTE_COLONIAL:
                 bonus.growth_rate += 0.2f * eff;
                 break;
-            case CARBON_ROUTE_RESEARCH:
+            case AGENTITE_ROUTE_RESEARCH:
                 bonus.research_rate += 0.2f * eff;
                 break;
             default:
@@ -609,14 +609,14 @@ Carbon_SupplyBonus carbon_trade_get_supply_bonus(const Carbon_TradeSystem *trade
  * Route Queries
  *============================================================================*/
 
-int carbon_trade_get_routes_from(const Carbon_TradeSystem *trade,
+int agentite_trade_get_routes_from(const Agentite_TradeSystem *trade,
                                   uint32_t source,
                                   uint32_t *out_routes, int max) {
     if (!trade || !out_routes || max <= 0) return 0;
 
     int count = 0;
-    for (int i = 0; i < CARBON_TRADE_MAX_ROUTES && count < max; i++) {
-        const Carbon_TradeRoute *route = &trade->routes[i];
+    for (int i = 0; i < AGENTITE_TRADE_MAX_ROUTES && count < max; i++) {
+        const Agentite_TradeRoute *route = &trade->routes[i];
         if (route->active && route->source == source) {
             out_routes[count++] = route->id;
         }
@@ -624,14 +624,14 @@ int carbon_trade_get_routes_from(const Carbon_TradeSystem *trade,
     return count;
 }
 
-int carbon_trade_get_routes_to(const Carbon_TradeSystem *trade,
+int agentite_trade_get_routes_to(const Agentite_TradeSystem *trade,
                                 uint32_t dest,
                                 uint32_t *out_routes, int max) {
     if (!trade || !out_routes || max <= 0) return 0;
 
     int count = 0;
-    for (int i = 0; i < CARBON_TRADE_MAX_ROUTES && count < max; i++) {
-        const Carbon_TradeRoute *route = &trade->routes[i];
+    for (int i = 0; i < AGENTITE_TRADE_MAX_ROUTES && count < max; i++) {
+        const Agentite_TradeRoute *route = &trade->routes[i];
         if (route->active && route->dest == dest) {
             out_routes[count++] = route->id;
         }
@@ -639,14 +639,14 @@ int carbon_trade_get_routes_to(const Carbon_TradeSystem *trade,
     return count;
 }
 
-int carbon_trade_get_routes_by_faction(const Carbon_TradeSystem *trade,
+int agentite_trade_get_routes_by_faction(const Agentite_TradeSystem *trade,
                                         int32_t faction_id,
                                         uint32_t *out_routes, int max) {
     if (!trade || !out_routes || max <= 0) return 0;
 
     int count = 0;
-    for (int i = 0; i < CARBON_TRADE_MAX_ROUTES && count < max; i++) {
-        const Carbon_TradeRoute *route = &trade->routes[i];
+    for (int i = 0; i < AGENTITE_TRADE_MAX_ROUTES && count < max; i++) {
+        const Agentite_TradeRoute *route = &trade->routes[i];
         if (route->active && route->owner_faction == faction_id) {
             out_routes[count++] = route->id;
         }
@@ -654,14 +654,14 @@ int carbon_trade_get_routes_by_faction(const Carbon_TradeSystem *trade,
     return count;
 }
 
-int carbon_trade_get_routes_by_type(const Carbon_TradeSystem *trade,
-                                     Carbon_RouteType type,
+int agentite_trade_get_routes_by_type(const Agentite_TradeSystem *trade,
+                                     Agentite_RouteType type,
                                      uint32_t *out_routes, int max) {
     if (!trade || !out_routes || max <= 0) return 0;
 
     int count = 0;
-    for (int i = 0; i < CARBON_TRADE_MAX_ROUTES && count < max; i++) {
-        const Carbon_TradeRoute *route = &trade->routes[i];
+    for (int i = 0; i < AGENTITE_TRADE_MAX_ROUTES && count < max; i++) {
+        const Agentite_TradeRoute *route = &trade->routes[i];
         if (route->active && route->type == type) {
             out_routes[count++] = route->id;
         }
@@ -669,12 +669,12 @@ int carbon_trade_get_routes_by_type(const Carbon_TradeSystem *trade,
     return count;
 }
 
-int carbon_trade_get_all_routes(const Carbon_TradeSystem *trade,
+int agentite_trade_get_all_routes(const Agentite_TradeSystem *trade,
                                  uint32_t *out_routes, int max) {
     if (!trade || !out_routes || max <= 0) return 0;
 
     int count = 0;
-    for (int i = 0; i < CARBON_TRADE_MAX_ROUTES && count < max; i++) {
+    for (int i = 0; i < AGENTITE_TRADE_MAX_ROUTES && count < max; i++) {
         if (trade->routes[i].active) {
             out_routes[count++] = trade->routes[i].id;
         }
@@ -682,25 +682,25 @@ int carbon_trade_get_all_routes(const Carbon_TradeSystem *trade,
     return count;
 }
 
-uint32_t carbon_trade_find_route(const Carbon_TradeSystem *trade,
+uint32_t agentite_trade_find_route(const Agentite_TradeSystem *trade,
                                   uint32_t source, uint32_t dest) {
-    if (!trade) return CARBON_TRADE_INVALID;
+    if (!trade) return AGENTITE_TRADE_INVALID;
 
-    for (int i = 0; i < CARBON_TRADE_MAX_ROUTES; i++) {
-        const Carbon_TradeRoute *route = &trade->routes[i];
+    for (int i = 0; i < AGENTITE_TRADE_MAX_ROUTES; i++) {
+        const Agentite_TradeRoute *route = &trade->routes[i];
         if (route->active && route->source == source && route->dest == dest) {
             return route->id;
         }
     }
-    return CARBON_TRADE_INVALID;
+    return AGENTITE_TRADE_INVALID;
 }
 
-uint32_t carbon_trade_find_route_any(const Carbon_TradeSystem *trade,
+uint32_t agentite_trade_find_route_any(const Agentite_TradeSystem *trade,
                                       uint32_t loc1, uint32_t loc2) {
-    if (!trade) return CARBON_TRADE_INVALID;
+    if (!trade) return AGENTITE_TRADE_INVALID;
 
-    for (int i = 0; i < CARBON_TRADE_MAX_ROUTES; i++) {
-        const Carbon_TradeRoute *route = &trade->routes[i];
+    for (int i = 0; i < AGENTITE_TRADE_MAX_ROUTES; i++) {
+        const Agentite_TradeRoute *route = &trade->routes[i];
         if (!route->active) continue;
 
         if ((route->source == loc1 && route->dest == loc2) ||
@@ -708,47 +708,47 @@ uint32_t carbon_trade_find_route_any(const Carbon_TradeSystem *trade,
             return route->id;
         }
     }
-    return CARBON_TRADE_INVALID;
+    return AGENTITE_TRADE_INVALID;
 }
 
 /*============================================================================
  * Statistics
  *============================================================================*/
 
-void carbon_trade_get_stats(const Carbon_TradeSystem *trade,
+void agentite_trade_get_stats(const Agentite_TradeSystem *trade,
                              int32_t faction_id,
-                             Carbon_TradeStats *out_stats) {
+                             Agentite_TradeStats *out_stats) {
     if (!out_stats) return;
 
-    memset(out_stats, 0, sizeof(Carbon_TradeStats));
+    memset(out_stats, 0, sizeof(Agentite_TradeStats));
 
     if (!trade) return;
 
     float total_eff = 0.0f;
     float total_prot = 0.0f;
 
-    for (int i = 0; i < CARBON_TRADE_MAX_ROUTES; i++) {
-        const Carbon_TradeRoute *route = &trade->routes[i];
+    for (int i = 0; i < AGENTITE_TRADE_MAX_ROUTES; i++) {
+        const Agentite_TradeRoute *route = &trade->routes[i];
         if (!route->active || route->owner_faction != faction_id) continue;
 
         out_stats->total_routes++;
 
-        if (route->status == CARBON_ROUTE_ACTIVE) {
+        if (route->status == AGENTITE_ROUTE_ACTIVE) {
             out_stats->active_routes++;
         }
 
         switch (route->type) {
-            case CARBON_ROUTE_TRADE:
+            case AGENTITE_ROUTE_TRADE:
                 out_stats->trade_routes++;
-                out_stats->total_income += carbon_trade_calculate_route_income(trade, route->id);
+                out_stats->total_income += agentite_trade_calculate_route_income(trade, route->id);
                 break;
-            case CARBON_ROUTE_MILITARY:
+            case AGENTITE_ROUTE_MILITARY:
                 out_stats->military_routes++;
                 break;
-            case CARBON_ROUTE_COLONIAL:
+            case AGENTITE_ROUTE_COLONIAL:
                 out_stats->colonial_routes++;
                 break;
-            case CARBON_ROUTE_RESEARCH:
+            case AGENTITE_ROUTE_RESEARCH:
                 out_stats->research_routes++;
                 break;
             default:
@@ -765,17 +765,17 @@ void carbon_trade_get_stats(const Carbon_TradeSystem *trade,
     }
 }
 
-int carbon_trade_count(const Carbon_TradeSystem *trade) {
+int agentite_trade_count(const Agentite_TradeSystem *trade) {
     if (!trade) return 0;
 
     int count = 0;
-    for (int i = 0; i < CARBON_TRADE_MAX_ROUTES; i++) {
+    for (int i = 0; i < AGENTITE_TRADE_MAX_ROUTES; i++) {
         if (trade->routes[i].active) count++;
     }
     return count;
 }
 
-int carbon_trade_hub_count(const Carbon_TradeSystem *trade) {
+int agentite_trade_hub_count(const Agentite_TradeSystem *trade) {
     return trade ? trade->hub_count : 0;
 }
 
@@ -783,8 +783,8 @@ int carbon_trade_hub_count(const Carbon_TradeSystem *trade) {
  * Event Callback
  *============================================================================*/
 
-void carbon_trade_set_event_callback(Carbon_TradeSystem *trade,
-                                      Carbon_RouteEventFunc callback,
+void agentite_trade_set_event_callback(Agentite_TradeSystem *trade,
+                                      Agentite_RouteEventFunc callback,
                                       void *userdata) {
     if (trade) {
         trade->event_fn = callback;
@@ -796,17 +796,17 @@ void carbon_trade_set_event_callback(Carbon_TradeSystem *trade,
  * Turn Management
  *============================================================================*/
 
-void carbon_trade_update(Carbon_TradeSystem *trade) {
+void agentite_trade_update(Agentite_TradeSystem *trade) {
     if (!trade) return;
 
-    for (int i = 0; i < CARBON_TRADE_MAX_ROUTES; i++) {
-        Carbon_TradeRoute *route = &trade->routes[i];
+    for (int i = 0; i < AGENTITE_TRADE_MAX_ROUTES; i++) {
+        Agentite_TradeRoute *route = &trade->routes[i];
         if (route->active) {
             route->turns_active++;
 
             /* Routes that are establishing become active after 1 turn */
-            if (route->status == CARBON_ROUTE_ESTABLISHING && route->turns_active > 0) {
-                route->status = CARBON_ROUTE_ACTIVE;
+            if (route->status == AGENTITE_ROUTE_ESTABLISHING && route->turns_active > 0) {
+                route->status = AGENTITE_ROUTE_ACTIVE;
                 route->efficiency = calc_efficiency(route);
                 emit_event(trade, route->id, 2);  /* Status changed */
             }
@@ -814,13 +814,13 @@ void carbon_trade_update(Carbon_TradeSystem *trade) {
     }
 }
 
-void carbon_trade_clear(Carbon_TradeSystem *trade) {
+void agentite_trade_clear(Agentite_TradeSystem *trade) {
     if (!trade) return;
 
-    for (int i = 0; i < CARBON_TRADE_MAX_ROUTES; i++) {
+    for (int i = 0; i < AGENTITE_TRADE_MAX_ROUTES; i++) {
         trade->routes[i].active = false;
     }
-    for (int i = 0; i < CARBON_TRADE_MAX_HUBS; i++) {
+    for (int i = 0; i < AGENTITE_TRADE_MAX_HUBS; i++) {
         trade->hubs[i].active = false;
     }
     trade->hub_count = 0;
@@ -830,24 +830,24 @@ void carbon_trade_clear(Carbon_TradeSystem *trade) {
  * Utility Functions
  *============================================================================*/
 
-const char *carbon_trade_route_type_name(Carbon_RouteType type) {
+const char *agentite_trade_route_type_name(Agentite_RouteType type) {
     switch (type) {
-        case CARBON_ROUTE_TRADE:    return "Trade";
-        case CARBON_ROUTE_MILITARY: return "Military";
-        case CARBON_ROUTE_COLONIAL: return "Colonial";
-        case CARBON_ROUTE_RESEARCH: return "Research";
+        case AGENTITE_ROUTE_TRADE:    return "Trade";
+        case AGENTITE_ROUTE_MILITARY: return "Military";
+        case AGENTITE_ROUTE_COLONIAL: return "Colonial";
+        case AGENTITE_ROUTE_RESEARCH: return "Research";
         default:
-            if (type >= CARBON_ROUTE_USER) return "Custom";
+            if (type >= AGENTITE_ROUTE_USER) return "Custom";
             return "Unknown";
     }
 }
 
-const char *carbon_trade_route_status_name(Carbon_RouteStatus status) {
+const char *agentite_trade_route_status_name(Agentite_RouteStatus status) {
     switch (status) {
-        case CARBON_ROUTE_ACTIVE:       return "Active";
-        case CARBON_ROUTE_DISRUPTED:    return "Disrupted";
-        case CARBON_ROUTE_BLOCKED:      return "Blocked";
-        case CARBON_ROUTE_ESTABLISHING: return "Establishing";
+        case AGENTITE_ROUTE_ACTIVE:       return "Active";
+        case AGENTITE_ROUTE_DISRUPTED:    return "Disrupted";
+        case AGENTITE_ROUTE_BLOCKED:      return "Blocked";
+        case AGENTITE_ROUTE_ESTABLISHING: return "Establishing";
         default:                        return "Unknown";
     }
 }

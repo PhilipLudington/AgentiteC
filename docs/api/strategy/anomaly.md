@@ -5,47 +5,47 @@ Discoverable points of interest with research mechanics.
 ## Quick Start
 
 ```c
-#include "carbon/anomaly.h"
+#include "agentite/anomaly.h"
 
-Carbon_AnomalyRegistry *registry = carbon_anomaly_registry_create();
+Agentite_AnomalyRegistry *registry = agentite_anomaly_registry_create();
 
 // Define anomaly type
-Carbon_AnomalyTypeDef ruins = carbon_anomaly_type_default();
+Agentite_AnomalyTypeDef ruins = agentite_anomaly_type_default();
 strcpy(ruins.id, "ancient_ruins");
 strcpy(ruins.name, "Ancient Ruins");
-ruins.rarity = CARBON_ANOMALY_UNCOMMON;
+ruins.rarity = AGENTITE_ANOMALY_UNCOMMON;
 ruins.research_time = 10.0f;
 ruins.reward_count = 1;
-ruins.rewards[0] = (Carbon_AnomalyReward){
-    .type = CARBON_ANOMALY_REWARD_TECH,
+ruins.rewards[0] = (Agentite_AnomalyReward){
+    .type = AGENTITE_ANOMALY_REWARD_TECH,
     .amount = 50,
 };
-int ruins_type = carbon_anomaly_register_type(registry, &ruins);
+int ruins_type = agentite_anomaly_register_type(registry, &ruins);
 
-Carbon_AnomalyManager *anomalies = carbon_anomaly_manager_create(registry);
+Agentite_AnomalyManager *anomalies = agentite_anomaly_manager_create(registry);
 ```
 
 ## Spawning
 
 ```c
-uint32_t id = carbon_anomaly_spawn(anomalies, ruins_type, 50, 50, 0);
-uint32_t random = carbon_anomaly_spawn_random(anomalies, x, y, CARBON_ANOMALY_RARE);
+uint32_t id = agentite_anomaly_spawn(anomalies, ruins_type, 50, 50, 0);
+uint32_t random = agentite_anomaly_spawn_random(anomalies, x, y, AGENTITE_ANOMALY_RARE);
 ```
 
 ## Discovery & Research
 
 ```c
 // Discovery (when unit explores)
-carbon_anomaly_discover(anomalies, id, player_faction);
+agentite_anomaly_discover(anomalies, id, player_faction);
 
 // Start research
-carbon_anomaly_start_research(anomalies, id, player_faction, scientist);
+agentite_anomaly_start_research(anomalies, id, player_faction, scientist);
 
 // Update (auto-progress)
-carbon_anomaly_update(anomalies, delta_time);
+agentite_anomaly_update(anomalies, delta_time);
 
 // Or manual progress
-if (carbon_anomaly_add_progress(anomalies, id, 1.0f)) {
+if (agentite_anomaly_add_progress(anomalies, id, 1.0f)) {
     printf("Complete!\n");
 }
 ```
@@ -53,8 +53,8 @@ if (carbon_anomaly_add_progress(anomalies, id, 1.0f)) {
 ## Collect Rewards
 
 ```c
-if (carbon_anomaly_is_complete(anomalies, id)) {
-    Carbon_AnomalyResult result = carbon_anomaly_collect_rewards(anomalies, id);
+if (agentite_anomaly_is_complete(anomalies, id)) {
+    Agentite_AnomalyResult result = agentite_anomaly_collect_rewards(anomalies, id);
     for (int i = 0; i < result.reward_count; i++) {
         apply_reward(&result.rewards[i]);
     }

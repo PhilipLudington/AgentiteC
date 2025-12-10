@@ -1,9 +1,9 @@
-#include "carbon/carbon.h"
-#include "carbon/ecs.h"
+#include "agentite/agentite.h"
+#include "agentite/ecs.h"
 #include <stdlib.h>
 #include <stdio.h>
 
-struct Carbon_World {
+struct Agentite_World {
     ecs_world_t *world;
 };
 
@@ -17,8 +17,8 @@ ECS_COMPONENT_DECLARE(C_Active);
 ECS_COMPONENT_DECLARE(C_Health);
 ECS_COMPONENT_DECLARE(C_RenderLayer);
 
-Carbon_World *carbon_ecs_init(void) {
-    Carbon_World *cworld = CARBON_ALLOC(Carbon_World);
+Agentite_World *agentite_ecs_init(void) {
+    Agentite_World *cworld = AGENTITE_ALLOC(Agentite_World);
     if (!cworld) {
         return NULL;
     }
@@ -30,7 +30,7 @@ Carbon_World *carbon_ecs_init(void) {
     }
 
     // Register built-in components
-    carbon_ecs_register_components(cworld);
+    agentite_ecs_register_components(cworld);
 
     ecs_log(1, "Carbon ECS initialized with Flecs v%d.%d.%d",
             FLECS_VERSION_MAJOR, FLECS_VERSION_MINOR, FLECS_VERSION_PATCH);
@@ -38,7 +38,7 @@ Carbon_World *carbon_ecs_init(void) {
     return cworld;
 }
 
-void carbon_ecs_shutdown(Carbon_World *world) {
+void agentite_ecs_shutdown(Agentite_World *world) {
     if (!world) return;
 
     if (world->world) {
@@ -54,38 +54,38 @@ void carbon_ecs_shutdown(Carbon_World *world) {
     ecs_log(1, "Carbon ECS shutdown complete");
 }
 
-ecs_world_t *carbon_ecs_get_world(Carbon_World *world) {
+ecs_world_t *agentite_ecs_get_world(Agentite_World *world) {
     return world ? world->world : NULL;
 }
 
-bool carbon_ecs_progress(Carbon_World *world, float delta_time) {
+bool agentite_ecs_progress(Agentite_World *world, float delta_time) {
     if (!world || !world->world) return false;
     return ecs_progress(world->world, delta_time);
 }
 
-ecs_entity_t carbon_ecs_entity_new(Carbon_World *world) {
+ecs_entity_t agentite_ecs_entity_new(Agentite_World *world) {
     if (!world || !world->world) return 0;
     return ecs_new(world->world);
 }
 
-ecs_entity_t carbon_ecs_entity_new_named(Carbon_World *world, const char *name) {
+ecs_entity_t agentite_ecs_entity_new_named(Agentite_World *world, const char *name) {
     if (!world || !world->world) return 0;
     ecs_entity_desc_t desc = {};
     desc.name = name;
     return ecs_entity_init(world->world, &desc);
 }
 
-void carbon_ecs_entity_delete(Carbon_World *world, ecs_entity_t entity) {
+void agentite_ecs_entity_delete(Agentite_World *world, ecs_entity_t entity) {
     if (!world || !world->world) return;
     ecs_delete(world->world, entity);
 }
 
-bool carbon_ecs_entity_is_alive(Carbon_World *world, ecs_entity_t entity) {
+bool agentite_ecs_entity_is_alive(Agentite_World *world, ecs_entity_t entity) {
     if (!world || !world->world) return false;
     return ecs_is_alive(world->world, entity);
 }
 
-void carbon_ecs_register_components(Carbon_World *world) {
+void agentite_ecs_register_components(Agentite_World *world) {
     if (!world || !world->world) return;
 
     ecs_world_t *w = world->world;

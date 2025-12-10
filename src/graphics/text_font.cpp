@@ -13,27 +13,27 @@
  * Font Functions
  * ============================================================================ */
 
-Carbon_Font *carbon_font_load(Carbon_TextRenderer *tr, const char *path, float size)
+Agentite_Font *agentite_font_load(Agentite_TextRenderer *tr, const char *path, float size)
 {
     if (!tr || !path) return NULL;
 
     /* Read TTF file */
     SDL_IOStream *file = SDL_IOFromFile(path, "rb");
     if (!file) {
-        carbon_set_error("Text: Failed to open font file '%s': %s", path, SDL_GetError());
+        agentite_set_error("Text: Failed to open font file '%s': %s", path, SDL_GetError());
         return NULL;
     }
 
     Sint64 file_size = SDL_GetIOSize(file);
     if (file_size <= 0) {
-        carbon_set_error("Text: Invalid font file size");
+        agentite_set_error("Text: Invalid font file size");
         SDL_CloseIO(file);
         return NULL;
     }
 
     unsigned char *font_data = (unsigned char*)malloc((size_t)file_size);
     if (!font_data) {
-        carbon_set_error("Text: Failed to allocate font data buffer");
+        agentite_set_error("Text: Failed to allocate font data buffer");
         SDL_CloseIO(file);
         return NULL;
     }
@@ -42,12 +42,12 @@ Carbon_Font *carbon_font_load(Carbon_TextRenderer *tr, const char *path, float s
     SDL_CloseIO(file);
 
     if (read != (size_t)file_size) {
-        carbon_set_error("Text: Failed to read font file");
+        agentite_set_error("Text: Failed to read font file");
         free(font_data);
         return NULL;
     }
 
-    Carbon_Font *font = carbon_font_load_memory(tr, font_data, (int)file_size, size);
+    Agentite_Font *font = agentite_font_load_memory(tr, font_data, (int)file_size, size);
     if (!font) {
         free(font_data);
         return NULL;
@@ -60,18 +60,18 @@ Carbon_Font *carbon_font_load(Carbon_TextRenderer *tr, const char *path, float s
     return font;
 }
 
-Carbon_Font *carbon_font_load_memory(Carbon_TextRenderer *tr,
+Agentite_Font *agentite_font_load_memory(Agentite_TextRenderer *tr,
                                       const void *data, int data_size,
                                       float size)
 {
     if (!tr || !data || data_size <= 0) return NULL;
 
-    Carbon_Font *font = CARBON_ALLOC(Carbon_Font);
+    Agentite_Font *font = AGENTITE_ALLOC(Agentite_Font);
     if (!font) return NULL;
 
     /* Initialize stb_truetype */
     if (!stbtt_InitFont(&font->stb_font, (const unsigned char *)data, 0)) {
-        carbon_set_error("Text: Failed to initialize font");
+        agentite_set_error("Text: Failed to initialize font");
         free(font);
         return NULL;
     }
@@ -89,7 +89,7 @@ Carbon_Font *carbon_font_load_memory(Carbon_TextRenderer *tr,
     /* Bake font atlas using stb_truetype's built-in packer */
     unsigned char *atlas_bitmap = (unsigned char*)malloc(ATLAS_SIZE * ATLAS_SIZE);
     if (!atlas_bitmap) {
-        carbon_set_error("Text: Failed to allocate atlas bitmap");
+        agentite_set_error("Text: Failed to allocate atlas bitmap");
         free(font);
         return NULL;
     }
@@ -101,7 +101,7 @@ Carbon_Font *carbon_font_load_memory(Carbon_TextRenderer *tr,
                                        FIRST_CHAR, NUM_CHARS,
                                        baked_chars);
     if (result <= 0) {
-        carbon_set_error("Text: Font atlas baking failed (too many chars or atlas too small)");
+        agentite_set_error("Text: Font atlas baking failed (too many chars or atlas too small)");
         free(atlas_bitmap);
         free(font);
         return NULL;
@@ -137,7 +137,7 @@ Carbon_Font *carbon_font_load_memory(Carbon_TextRenderer *tr,
     return font;
 }
 
-void carbon_font_destroy(Carbon_TextRenderer *tr, Carbon_Font *font)
+void agentite_font_destroy(Agentite_TextRenderer *tr, Agentite_Font *font)
 {
     if (!tr || !font) return;
 
@@ -148,22 +148,22 @@ void carbon_font_destroy(Carbon_TextRenderer *tr, Carbon_Font *font)
     free(font);
 }
 
-float carbon_font_get_size(Carbon_Font *font)
+float agentite_font_get_size(Agentite_Font *font)
 {
     return font ? font->size : 0.0f;
 }
 
-float carbon_font_get_line_height(Carbon_Font *font)
+float agentite_font_get_line_height(Agentite_Font *font)
 {
     return font ? font->line_height : 0.0f;
 }
 
-float carbon_font_get_ascent(Carbon_Font *font)
+float agentite_font_get_ascent(Agentite_Font *font)
 {
     return font ? font->ascent : 0.0f;
 }
 
-float carbon_font_get_descent(Carbon_Font *font)
+float agentite_font_get_descent(Agentite_Font *font)
 {
     return font ? font->descent : 0.0f;
 }
@@ -172,7 +172,7 @@ float carbon_font_get_descent(Carbon_Font *font)
  * Text Measurement
  * ============================================================================ */
 
-float carbon_text_measure(Carbon_Font *font, const char *text)
+float agentite_text_measure(Agentite_Font *font, const char *text)
 {
     if (!font || !text) return 0.0f;
 
@@ -191,7 +191,7 @@ float carbon_text_measure(Carbon_Font *font, const char *text)
     return width;
 }
 
-void carbon_text_measure_bounds(Carbon_Font *font, const char *text,
+void agentite_text_measure_bounds(Agentite_Font *font, const char *text,
                                  float *out_width, float *out_height)
 {
     if (!font || !text) {
@@ -200,6 +200,6 @@ void carbon_text_measure_bounds(Carbon_Font *font, const char *text,
         return;
     }
 
-    if (out_width) *out_width = carbon_text_measure(font, text);
+    if (out_width) *out_width = agentite_text_measure(font, text);
     if (out_height) *out_height = font->line_height;
 }
