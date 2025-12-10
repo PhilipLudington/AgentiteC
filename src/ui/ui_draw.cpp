@@ -1,5 +1,7 @@
 /*
  * Carbon UI - Drawing and GPU Pipeline
+ *
+ * Implements a draw command queue with layer sorting and multi-texture batching.
  */
 
 #include "carbon/ui.h"
@@ -13,6 +15,7 @@
  * Embedded MSL Shader Source
  * ============================================================================ */
 
+/* Bitmap font / solid primitives shader */
 static const char ui_shader_msl[] =
 "#include <metal_stdlib>\n"
 "using namespace metal;\n"
@@ -58,6 +61,113 @@ static const char ui_shader_msl[] =
 ") {\n"
 "    float alpha = font_atlas.sample(font_sampler, in.texcoord).r;\n"
 "    return float4(in.color.rgb, in.color.a * alpha);\n"
+"}\n";
+
+/* SDF (single-channel) font shader */
+static const char ui_sdf_shader_msl[] =
+"#include <metal_stdlib>\n"
+"using namespace metal;\n"
+"\n"
+"struct Uniforms {\n"
+"    float2 screen_size;\n"
+"    float2 sdf_params;\n"  /* x = distance_range, y = scale */
+"};\n"
+"\n"
+"struct VertexIn {\n"
+"    float2 position [[attribute(0)]];\n"
+"    float2 texcoord [[attribute(1)]];\n"
+"    uint color [[attribute(2)]];\n"
+"};\n"
+"\n"
+"struct VertexOut {\n"
+"    float4 position [[position]];\n"
+"    float2 texcoord;\n"
+"    float4 color;\n"
+"};\n"
+"\n"
+"vertex VertexOut ui_sdf_vertex(\n"
+"    VertexIn in [[stage_in]],\n"
+"    constant Uniforms& uniforms [[buffer(0)]]\n"
+") {\n"
+"    VertexOut out;\n"
+"    float2 ndc;\n"
+"    ndc.x = (in.position.x / uniforms.screen_size.x) * 2.0 - 1.0;\n"
+"    ndc.y = 1.0 - (in.position.y / uniforms.screen_size.y) * 2.0;\n"
+"    out.position = float4(ndc, 0.0, 1.0);\n"
+"    out.texcoord = in.texcoord;\n"
+"    out.color.r = float((in.color >> 0) & 0xFF) / 255.0;\n"
+"    out.color.g = float((in.color >> 8) & 0xFF) / 255.0;\n"
+"    out.color.b = float((in.color >> 16) & 0xFF) / 255.0;\n"
+"    out.color.a = float((in.color >> 24) & 0xFF) / 255.0;\n"
+"    return out;\n"
+"}\n"
+"\n"
+"fragment float4 ui_sdf_fragment(\n"
+"    VertexOut in [[stage_in]],\n"
+"    texture2d<float> sdf_atlas [[texture(0)]],\n"
+"    sampler sdf_sampler [[sampler(0)]],\n"
+"    constant Uniforms& uniforms [[buffer(0)]]\n"
+") {\n"
+"    float distance = sdf_atlas.sample(sdf_sampler, in.texcoord).r;\n"
+"    float screen_px_distance = uniforms.sdf_params.x * (distance - 0.5);\n"
+"    float opacity = clamp(screen_px_distance * uniforms.sdf_params.y + 0.5, 0.0, 1.0);\n"
+"    return float4(in.color.rgb, in.color.a * opacity);\n"
+"}\n";
+
+/* MSDF (multi-channel) font shader */
+static const char ui_msdf_shader_msl[] =
+"#include <metal_stdlib>\n"
+"using namespace metal;\n"
+"\n"
+"struct Uniforms {\n"
+"    float2 screen_size;\n"
+"    float2 sdf_params;\n"  /* x = distance_range, y = scale */
+"};\n"
+"\n"
+"struct VertexIn {\n"
+"    float2 position [[attribute(0)]];\n"
+"    float2 texcoord [[attribute(1)]];\n"
+"    uint color [[attribute(2)]];\n"
+"};\n"
+"\n"
+"struct VertexOut {\n"
+"    float4 position [[position]];\n"
+"    float2 texcoord;\n"
+"    float4 color;\n"
+"};\n"
+"\n"
+"vertex VertexOut ui_msdf_vertex(\n"
+"    VertexIn in [[stage_in]],\n"
+"    constant Uniforms& uniforms [[buffer(0)]]\n"
+") {\n"
+"    VertexOut out;\n"
+"    float2 ndc;\n"
+"    ndc.x = (in.position.x / uniforms.screen_size.x) * 2.0 - 1.0;\n"
+"    ndc.y = 1.0 - (in.position.y / uniforms.screen_size.y) * 2.0;\n"
+"    out.position = float4(ndc, 0.0, 1.0);\n"
+"    out.texcoord = in.texcoord;\n"
+"    out.color.r = float((in.color >> 0) & 0xFF) / 255.0;\n"
+"    out.color.g = float((in.color >> 8) & 0xFF) / 255.0;\n"
+"    out.color.b = float((in.color >> 16) & 0xFF) / 255.0;\n"
+"    out.color.a = float((in.color >> 24) & 0xFF) / 255.0;\n"
+"    return out;\n"
+"}\n"
+"\n"
+"float median(float r, float g, float b) {\n"
+"    return max(min(r, g), min(max(r, g), b));\n"
+"}\n"
+"\n"
+"fragment float4 ui_msdf_fragment(\n"
+"    VertexOut in [[stage_in]],\n"
+"    texture2d<float> msdf_atlas [[texture(0)]],\n"
+"    sampler msdf_sampler [[sampler(0)]],\n"
+"    constant Uniforms& uniforms [[buffer(0)]]\n"
+") {\n"
+"    float3 msd = msdf_atlas.sample(msdf_sampler, in.texcoord).rgb;\n"
+"    float sd = median(msd.r, msd.g, msd.b);\n"
+"    float screen_px_distance = uniforms.sdf_params.x * (sd - 0.5);\n"
+"    float opacity = clamp(screen_px_distance * uniforms.sdf_params.y + 0.5, 0.0, 1.0);\n"
+"    return float4(in.color.rgb, in.color.a * opacity);\n"
 "}\n";
 
 /* ============================================================================
@@ -218,6 +328,189 @@ static bool cui_create_graphics_pipeline(CUI_Context *ctx)
     return true;
 }
 
+/* Create an SDF or MSDF pipeline */
+static SDL_GPUGraphicsPipeline *cui_create_sdf_pipeline(CUI_Context *ctx, bool is_msdf)
+{
+    if (!ctx || !ctx->gpu) return NULL;
+
+    SDL_GPUShaderFormat formats = SDL_GetGPUShaderFormats(ctx->gpu);
+    if (!(formats & SDL_GPU_SHADERFORMAT_MSL)) {
+        return NULL;
+    }
+
+    const char *shader_src = is_msdf ? ui_msdf_shader_msl : ui_sdf_shader_msl;
+    size_t shader_size = is_msdf ? sizeof(ui_msdf_shader_msl) : sizeof(ui_sdf_shader_msl);
+    const char *vs_entry = is_msdf ? "ui_msdf_vertex" : "ui_sdf_vertex";
+    const char *fs_entry = is_msdf ? "ui_msdf_fragment" : "ui_sdf_fragment";
+
+    /* Create vertex shader */
+    SDL_GPUShaderCreateInfo vs_info = {
+        .code = (const Uint8 *)shader_src,
+        .code_size = shader_size,
+        .entrypoint = vs_entry,
+        .format = SDL_GPU_SHADERFORMAT_MSL,
+        .stage = SDL_GPU_SHADERSTAGE_VERTEX,
+        .num_samplers = 0,
+        .num_storage_textures = 0,
+        .num_storage_buffers = 0,
+        .num_uniform_buffers = 1,
+    };
+    SDL_GPUShader *vertex_shader = SDL_CreateGPUShader(ctx->gpu, &vs_info);
+    if (!vertex_shader) {
+        return NULL;
+    }
+
+    /* Create fragment shader */
+    SDL_GPUShaderCreateInfo fs_info = {
+        .code = (const Uint8 *)shader_src,
+        .code_size = shader_size,
+        .entrypoint = fs_entry,
+        .format = SDL_GPU_SHADERFORMAT_MSL,
+        .stage = SDL_GPU_SHADERSTAGE_FRAGMENT,
+        .num_samplers = 1,
+        .num_storage_textures = 0,
+        .num_storage_buffers = 0,
+        .num_uniform_buffers = 1,  /* SDF shaders need fragment uniforms */
+    };
+    SDL_GPUShader *fragment_shader = SDL_CreateGPUShader(ctx->gpu, &fs_info);
+    if (!fragment_shader) {
+        SDL_ReleaseGPUShader(ctx->gpu, vertex_shader);
+        return NULL;
+    }
+
+    /* Define vertex attributes (same as bitmap pipeline) */
+    SDL_GPUVertexAttribute attributes[] = {
+        { .location = 0, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = offsetof(CUI_Vertex, pos) },
+        { .location = 1, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = offsetof(CUI_Vertex, uv) },
+        { .location = 2, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_UINT, .offset = offsetof(CUI_Vertex, color) }
+    };
+
+    SDL_GPUVertexBufferDescription vb_desc = {
+        .slot = 0,
+        .pitch = sizeof(CUI_Vertex),
+        .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
+        .instance_step_rate = 0
+    };
+
+    SDL_GPUVertexInputState vertex_input = {
+        .vertex_buffer_descriptions = &vb_desc,
+        .num_vertex_buffers = 1,
+        .vertex_attributes = attributes,
+        .num_vertex_attributes = 3
+    };
+
+    SDL_GPUColorTargetBlendState blend_state = {
+        .enable_blend = true,
+        .src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA,
+        .dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+        .color_blend_op = SDL_GPU_BLENDOP_ADD,
+        .src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE,
+        .dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+        .alpha_blend_op = SDL_GPU_BLENDOP_ADD,
+        .color_write_mask = SDL_GPU_COLORCOMPONENT_R | SDL_GPU_COLORCOMPONENT_G |
+                           SDL_GPU_COLORCOMPONENT_B | SDL_GPU_COLORCOMPONENT_A
+    };
+
+    SDL_GPUColorTargetDescription color_target = {
+        .format = SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM,
+        .blend_state = blend_state
+    };
+
+    SDL_GPUGraphicsPipelineCreateInfo pipeline_info = {
+        .vertex_shader = vertex_shader,
+        .fragment_shader = fragment_shader,
+        .vertex_input_state = vertex_input,
+        .primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
+        .rasterizer_state = {
+            .fill_mode = SDL_GPU_FILLMODE_FILL,
+            .cull_mode = SDL_GPU_CULLMODE_NONE,
+            .front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE,
+            .enable_depth_clip = false
+        },
+        .multisample_state = {
+            .sample_count = SDL_GPU_SAMPLECOUNT_1,
+            .sample_mask = 0
+        },
+        .depth_stencil_state = {
+            .enable_depth_test = false,
+            .enable_depth_write = false,
+            .enable_stencil_test = false
+        },
+        .target_info = {
+            .color_target_descriptions = &color_target,
+            .num_color_targets = 1,
+            .depth_stencil_format = SDL_GPU_TEXTUREFORMAT_INVALID,
+            .has_depth_stencil_target = false
+        }
+    };
+
+    SDL_GPUGraphicsPipeline *pipeline = SDL_CreateGPUGraphicsPipeline(ctx->gpu, &pipeline_info);
+
+    SDL_ReleaseGPUShader(ctx->gpu, vertex_shader);
+    SDL_ReleaseGPUShader(ctx->gpu, fragment_shader);
+
+    return pipeline;
+}
+
+/* Create 1x1 white texture for solid color primitives */
+static bool cui_create_white_texture(CUI_Context *ctx)
+{
+    SDL_GPUTextureCreateInfo tex_info = {
+        .type = SDL_GPU_TEXTURETYPE_2D,
+        .format = SDL_GPU_TEXTUREFORMAT_R8_UNORM,
+        .width = 1,
+        .height = 1,
+        .layer_count_or_depth = 1,
+        .num_levels = 1,
+        .usage = SDL_GPU_TEXTUREUSAGE_SAMPLER
+    };
+    ctx->white_texture = SDL_CreateGPUTexture(ctx->gpu, &tex_info);
+    if (!ctx->white_texture) {
+        carbon_set_error_from_sdl("CUI: Failed to create white texture");
+        return false;
+    }
+
+    /* Upload white pixel */
+    unsigned char white = 255;
+    SDL_GPUTransferBufferCreateInfo transfer_info = {
+        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+        .size = 1,
+        .props = 0
+    };
+    SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(ctx->gpu, &transfer_info);
+    if (transfer) {
+        void *mapped = SDL_MapGPUTransferBuffer(ctx->gpu, transfer, false);
+        if (mapped) {
+            memcpy(mapped, &white, 1);
+            SDL_UnmapGPUTransferBuffer(ctx->gpu, transfer);
+
+            SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(ctx->gpu);
+            if (cmd) {
+                SDL_GPUCopyPass *copy_pass = SDL_BeginGPUCopyPass(cmd);
+                if (copy_pass) {
+                    SDL_GPUTextureTransferInfo src = {
+                        .transfer_buffer = transfer,
+                        .offset = 0,
+                        .pixels_per_row = 1,
+                        .rows_per_layer = 1
+                    };
+                    SDL_GPUTextureRegion dst = {
+                        .texture = ctx->white_texture,
+                        .x = 0, .y = 0, .z = 0,
+                        .w = 1, .h = 1, .d = 1
+                    };
+                    SDL_UploadToGPUTexture(copy_pass, &src, &dst, false);
+                    SDL_EndGPUCopyPass(copy_pass);
+                }
+                SDL_SubmitGPUCommandBuffer(cmd);
+            }
+        }
+        SDL_ReleaseGPUTransferBuffer(ctx->gpu, transfer);
+    }
+
+    return true;
+}
+
 bool cui_create_pipeline(CUI_Context *ctx)
 {
     if (!ctx || !ctx->gpu) return false;
@@ -261,10 +554,34 @@ bool cui_create_pipeline(CUI_Context *ctx)
         return false;
     }
 
+    /* Create white texture for solid primitives */
+    if (!cui_create_white_texture(ctx)) {
+        return false;
+    }
+
+    /* Allocate draw command queue */
+    ctx->draw_cmd_capacity = CUI_MAX_DRAW_CMDS;
+    ctx->draw_cmds = (CUI_DrawCmd *)calloc(ctx->draw_cmd_capacity, sizeof(CUI_DrawCmd));
+    if (!ctx->draw_cmds) {
+        carbon_set_error("CUI: Failed to allocate draw command queue");
+        return false;
+    }
+
     /* Create graphics pipeline with shaders */
     if (!cui_create_graphics_pipeline(ctx)) {
         carbon_set_error("CUI: Failed to create graphics pipeline");
         return false;
+    }
+
+    /* Create SDF and MSDF pipelines (optional - created lazily if needed) */
+    ctx->sdf_pipeline = cui_create_sdf_pipeline(ctx, false);
+    ctx->msdf_pipeline = cui_create_sdf_pipeline(ctx, true);
+
+    if (ctx->sdf_pipeline) {
+        SDL_Log("CUI: SDF pipeline created successfully");
+    }
+    if (ctx->msdf_pipeline) {
+        SDL_Log("CUI: MSDF pipeline created successfully");
     }
 
     SDL_Log("CUI: GPU resources created successfully");
@@ -279,6 +596,14 @@ void cui_destroy_pipeline(CUI_Context *ctx)
         SDL_ReleaseGPUGraphicsPipeline(ctx->gpu, ctx->pipeline);
         ctx->pipeline = NULL;
     }
+    if (ctx->sdf_pipeline) {
+        SDL_ReleaseGPUGraphicsPipeline(ctx->gpu, ctx->sdf_pipeline);
+        ctx->sdf_pipeline = NULL;
+    }
+    if (ctx->msdf_pipeline) {
+        SDL_ReleaseGPUGraphicsPipeline(ctx->gpu, ctx->msdf_pipeline);
+        ctx->msdf_pipeline = NULL;
+    }
     if (ctx->vertex_buffer) {
         SDL_ReleaseGPUBuffer(ctx->gpu, ctx->vertex_buffer);
         ctx->vertex_buffer = NULL;
@@ -291,6 +616,131 @@ void cui_destroy_pipeline(CUI_Context *ctx)
         SDL_ReleaseGPUSampler(ctx->gpu, ctx->sampler);
         ctx->sampler = NULL;
     }
+    if (ctx->white_texture) {
+        SDL_ReleaseGPUTexture(ctx->gpu, ctx->white_texture);
+        ctx->white_texture = NULL;
+    }
+    free(ctx->draw_cmds);
+    ctx->draw_cmds = NULL;
+}
+
+/* ============================================================================
+ * Draw Command Queue Management
+ * ============================================================================ */
+
+/* Flush current batch to draw command queue */
+static void cui_flush_draw_cmd(CUI_Context *ctx)
+{
+    if (!ctx) return;
+
+    uint32_t vertex_count = ctx->vertex_count - ctx->cmd_vertex_start;
+    uint32_t index_count = ctx->index_count - ctx->cmd_index_start;
+
+    /* Don't create empty commands */
+    if (vertex_count == 0 || index_count == 0) return;
+
+    /* Check capacity */
+    if (ctx->draw_cmd_count >= ctx->draw_cmd_capacity) {
+        SDL_Log("CUI: Draw command queue full");
+        return;
+    }
+
+    /* Create draw command */
+    CUI_DrawCmd *cmd = &ctx->draw_cmds[ctx->draw_cmd_count++];
+    cmd->type = ctx->current_texture ? CUI_DRAW_CMD_BITMAP_TEXT : CUI_DRAW_CMD_SOLID;
+    cmd->texture = ctx->current_texture ? ctx->current_texture : ctx->white_texture;
+    cmd->layer = ctx->current_layer;
+    cmd->vertex_offset = ctx->cmd_vertex_start;
+    cmd->index_offset = ctx->cmd_index_start;
+    cmd->vertex_count = vertex_count;
+    cmd->index_count = index_count;
+    cmd->sdf_scale = 1.0f;
+    cmd->sdf_distance_range = 0.0f;
+
+    /* Update start positions for next command */
+    ctx->cmd_vertex_start = ctx->vertex_count;
+    ctx->cmd_index_start = ctx->index_count;
+}
+
+/* Ensure we're batching with the correct texture */
+static void cui_ensure_texture(CUI_Context *ctx, SDL_GPUTexture *texture)
+{
+    if (!ctx) return;
+
+    /* If texture or layer changes, flush current batch */
+    if (ctx->current_texture != texture) {
+        cui_flush_draw_cmd(ctx);
+        ctx->current_texture = texture;
+    }
+}
+
+/* Reset draw state for new frame */
+void cui_reset_draw_state(CUI_Context *ctx)
+{
+    if (!ctx) return;
+
+    ctx->vertex_count = 0;
+    ctx->index_count = 0;
+    ctx->draw_cmd_count = 0;
+    ctx->current_texture = NULL;
+    ctx->current_layer = CUI_DEFAULT_LAYER;
+    ctx->cmd_vertex_start = 0;
+    ctx->cmd_index_start = 0;
+    ctx->layer_stack_depth = 0;
+}
+
+/* ============================================================================
+ * Layer System
+ * ============================================================================ */
+
+void cui_set_layer(CUI_Context *ctx, int layer)
+{
+    if (!ctx) return;
+
+    if (ctx->current_layer != layer) {
+        cui_flush_draw_cmd(ctx);
+        ctx->current_layer = layer;
+    }
+}
+
+int cui_get_layer(CUI_Context *ctx)
+{
+    return ctx ? ctx->current_layer : 0;
+}
+
+void cui_push_layer(CUI_Context *ctx, int layer)
+{
+    if (!ctx || ctx->layer_stack_depth >= 16) return;
+
+    ctx->layer_stack[ctx->layer_stack_depth++] = ctx->current_layer;
+    cui_set_layer(ctx, layer);
+}
+
+void cui_pop_layer(CUI_Context *ctx)
+{
+    if (!ctx || ctx->layer_stack_depth <= 0) return;
+
+    int layer = ctx->layer_stack[--ctx->layer_stack_depth];
+    cui_set_layer(ctx, layer);
+}
+
+/* Legacy channel API - maps to layer system */
+void cui_draw_split_begin(CUI_Context *ctx, int channel_count)
+{
+    (void)ctx;
+    (void)channel_count;
+    /* No-op - layers are automatic now */
+}
+
+void cui_draw_set_channel(CUI_Context *ctx, int channel)
+{
+    cui_set_layer(ctx, channel);
+}
+
+void cui_draw_split_merge(CUI_Context *ctx)
+{
+    (void)ctx;
+    /* No-op - sorting happens at render time */
 }
 
 /* ============================================================================
@@ -313,12 +763,15 @@ static bool cui_reserve(CUI_Context *ctx, uint32_t vert_count, uint32_t idx_coun
     return true;
 }
 
-/* Add a quad (4 vertices, 6 indices) with optional scissor clipping */
-static void cui_add_quad(CUI_Context *ctx,
-                         float x0, float y0, float x1, float y1,
-                         float u0, float v0, float u1, float v1,
-                         uint32_t color)
+/* Add a quad with specified texture */
+static void cui_add_quad_textured(CUI_Context *ctx, SDL_GPUTexture *texture,
+                                   float x0, float y0, float x1, float y1,
+                                   float u0, float v0, float u1, float v1,
+                                   uint32_t color)
 {
+    /* Ensure we're batching with this texture */
+    cui_ensure_texture(ctx, texture);
+
     /* Apply scissor clipping if active */
     if (ctx->scissor_depth > 0) {
         CUI_Rect scissor = ctx->scissor_stack[ctx->scissor_depth - 1];
@@ -386,6 +839,17 @@ static void cui_add_quad(CUI_Context *ctx,
     i[5] = (uint16_t)(base + 3);
 }
 
+/* Add a quad using the white texture (for solid colors) */
+static void cui_add_quad(CUI_Context *ctx,
+                         float x0, float y0, float x1, float y1,
+                         float u0, float v0, float u1, float v1,
+                         uint32_t color)
+{
+    /* Use white texture for solid primitives, or font atlas if legacy mode */
+    SDL_GPUTexture *tex = ctx->white_texture ? ctx->white_texture : ctx->font_atlas;
+    cui_add_quad_textured(ctx, tex, x0, y0, x1, y1, u0, v0, u1, v1, color);
+}
+
 /* ============================================================================
  * Drawing Primitives
  * ============================================================================ */
@@ -395,7 +859,7 @@ void cui_draw_rect(CUI_Context *ctx, float x, float y, float w, float h,
 {
     if (!ctx || w <= 0 || h <= 0) return;
 
-    /* UV at (0,0) is white pixel in font atlas for solid colors */
+    /* UV at (0,0) for white texture gives solid white */
     cui_add_quad(ctx, x, y, x + w, y + h, 0.0f, 0.0f, 0.0f, 0.0f, color);
 }
 
@@ -421,7 +885,6 @@ void cui_draw_rect_rounded(CUI_Context *ctx, float x, float y, float w, float h,
     if (!ctx || w <= 0 || h <= 0) return;
 
     /* For now, just draw a regular rect (rounded corners need more vertices) */
-    /* TODO: Implement proper rounded corners with arc segments */
     (void)radius;
     cui_draw_rect(ctx, x, y, w, h, color);
 }
@@ -430,6 +893,10 @@ void cui_draw_line(CUI_Context *ctx, float x1, float y1, float x2, float y2,
                    uint32_t color, float thickness)
 {
     if (!ctx) return;
+
+    /* Ensure solid texture */
+    SDL_GPUTexture *tex = ctx->white_texture ? ctx->white_texture : ctx->font_atlas;
+    cui_ensure_texture(ctx, tex);
 
     /* Calculate perpendicular offset for line thickness */
     float dx = x2 - x1;
@@ -465,6 +932,10 @@ void cui_draw_triangle(CUI_Context *ctx,
 {
     if (!ctx) return;
 
+    /* Ensure solid texture */
+    SDL_GPUTexture *tex = ctx->white_texture ? ctx->white_texture : ctx->font_atlas;
+    cui_ensure_texture(ctx, tex);
+
     uint32_t base;
     if (!cui_reserve(ctx, 3, 3, &base)) return;
 
@@ -478,6 +949,137 @@ void cui_draw_triangle(CUI_Context *ctx,
     idx[0] = (uint16_t)base;
     idx[1] = (uint16_t)(base + 1);
     idx[2] = (uint16_t)(base + 2);
+}
+
+/* ============================================================================
+ * Textured Quad (for text rendering with explicit texture)
+ * ============================================================================ */
+
+void cui_draw_textured_quad_ex(CUI_Context *ctx,
+                                SDL_GPUTexture *texture,
+                                float x0, float y0, float x1, float y1,
+                                float u0, float v0, float u1, float v1,
+                                uint32_t color)
+{
+    if (!ctx || !texture) return;
+    cui_add_quad_textured(ctx, texture, x0, y0, x1, y1, u0, v0, u1, v1, color);
+}
+
+/* Legacy function - uses font_atlas */
+void cui_draw_textured_quad(CUI_Context *ctx,
+                            float x0, float y0, float x1, float y1,
+                            float u0, float v0, float u1, float v1,
+                            uint32_t color)
+{
+    if (!ctx) return;
+    SDL_GPUTexture *tex = ctx->font_atlas ? ctx->font_atlas : ctx->white_texture;
+    cui_add_quad_textured(ctx, tex, x0, y0, x1, y1, u0, v0, u1, v1, color);
+}
+
+/* ============================================================================
+ * SDF Text Drawing
+ * ============================================================================ */
+
+/* Forward declarations of static functions used here */
+static void cui_flush_draw_cmd(CUI_Context *ctx);
+static bool cui_reserve(CUI_Context *ctx, uint32_t vert_count, uint32_t idx_count,
+                        uint32_t *out_vert_base);
+
+/* We need access to CUI_Font internals for SDF rendering */
+struct CUI_Font;  /* Forward declaration */
+
+/* Get font type - defined in ui_text.cpp */
+extern CUI_FontType cui_font_get_type(CUI_Font *font);
+
+/* Internal structure access - we need the sdf_font pointer */
+/* This is a bit of a hack but avoids exposing Carbon_SDFFont in the public header */
+typedef struct CUI_FontInternal {
+    CUI_FontType type;
+    void *bitmap_font;
+    void *sdf_font;  /* Actually Carbon_SDFFont* */
+} CUI_FontInternal;
+
+/* Include internal header for Carbon_SDFFont access */
+#include "../graphics/text_internal.h"
+
+void cui_draw_sdf_quad(CUI_Context *ctx, CUI_Font *font,
+                        float x0, float y0, float x1, float y1,
+                        float u0, float v0, float u1, float v1,
+                        uint32_t color, float scale)
+{
+    if (!ctx || !font) return;
+
+    /* Get font internals */
+    CUI_FontInternal *fi = (CUI_FontInternal *)font;
+    if (fi->type != CUI_FONT_SDF && fi->type != CUI_FONT_MSDF) return;
+
+    Carbon_SDFFont *sdf_font = (Carbon_SDFFont *)fi->sdf_font;
+    if (!sdf_font || !sdf_font->atlas_texture) return;
+
+    /* Flush current batch if texture or type changes */
+    bool is_msdf = (fi->type == CUI_FONT_MSDF);
+    CUI_DrawCmdType needed_type = is_msdf ? CUI_DRAW_CMD_MSDF_TEXT : CUI_DRAW_CMD_SDF_TEXT;
+
+    /* Check if we need to start a new batch */
+    if (ctx->current_texture != sdf_font->atlas_texture ||
+        (ctx->draw_cmd_count > 0 &&
+         ctx->draw_cmds[ctx->draw_cmd_count - 1].type != needed_type)) {
+        /* Flush current batch */
+        cui_flush_draw_cmd(ctx);
+        ctx->current_texture = sdf_font->atlas_texture;
+    }
+
+    /* Apply scissor clipping if active */
+    if (ctx->scissor_depth > 0) {
+        CUI_Rect scissor = ctx->scissor_stack[ctx->scissor_depth - 1];
+        float sx0 = scissor.x;
+        float sy0 = scissor.y;
+        float sx1 = scissor.x + scissor.w;
+        float sy1 = scissor.y + scissor.h;
+
+        if (x1 <= sx0 || x0 >= sx1 || y1 <= sy0 || y0 >= sy1) {
+            return;  /* Fully clipped */
+        }
+
+        /* Clip and adjust UVs */
+        float orig_w = x1 - x0;
+        float orig_h = y1 - y0;
+        float uv_w = u1 - u0;
+        float uv_h = v1 - v0;
+
+        if (x0 < sx0) { float t = (sx0 - x0) / orig_w; u0 += uv_w * t; x0 = sx0; }
+        if (x1 > sx1) { float t = (x1 - sx1) / orig_w; u1 -= uv_w * t; x1 = sx1; }
+        if (y0 < sy0) { float t = (sy0 - y0) / orig_h; v0 += uv_h * t; y0 = sy0; }
+        if (y1 > sy1) { float t = (y1 - sy1) / orig_h; v1 -= uv_h * t; y1 = sy1; }
+
+        if (x1 <= x0 || y1 <= y0) return;
+    }
+
+    /* Reserve vertices and indices */
+    uint32_t base;
+    if (!cui_reserve(ctx, 4, 6, &base)) return;
+
+    CUI_Vertex *v = &ctx->vertices[base];
+    uint16_t *i = &ctx->indices[ctx->index_count - 6];
+
+    v[0].pos[0] = x0; v[0].pos[1] = y0; v[0].uv[0] = u0; v[0].uv[1] = v0; v[0].color = color;
+    v[1].pos[0] = x1; v[1].pos[1] = y0; v[1].uv[0] = u1; v[1].uv[1] = v0; v[1].color = color;
+    v[2].pos[0] = x1; v[2].pos[1] = y1; v[2].uv[0] = u1; v[2].uv[1] = v1; v[2].color = color;
+    v[3].pos[0] = x0; v[3].pos[1] = y1; v[3].uv[0] = u0; v[3].uv[1] = v1; v[3].color = color;
+
+    i[0] = (uint16_t)base;
+    i[1] = (uint16_t)(base + 1);
+    i[2] = (uint16_t)(base + 2);
+    i[3] = (uint16_t)base;
+    i[4] = (uint16_t)(base + 2);
+    i[5] = (uint16_t)(base + 3);
+
+    /* Store SDF parameters in the current command (will be finalized in flush) */
+    /* We need to track this for the batch - store in context temporarily */
+    /* The flush function will pick up these values */
+    ctx->draw_cmds[ctx->draw_cmd_count].sdf_scale = scale;
+    ctx->draw_cmds[ctx->draw_cmd_count].sdf_distance_range = sdf_font->distance_range;
+    ctx->draw_cmds[ctx->draw_cmd_count].type = needed_type;
 }
 
 /* ============================================================================
@@ -505,6 +1107,29 @@ void cui_pop_scissor(CUI_Context *ctx)
 }
 
 /* ============================================================================
+ * Draw Command Sorting (for layer ordering)
+ * ============================================================================ */
+
+static int cui_draw_cmd_compare(const void *a, const void *b)
+{
+    const CUI_DrawCmd *cmd_a = (const CUI_DrawCmd *)a;
+    const CUI_DrawCmd *cmd_b = (const CUI_DrawCmd *)b;
+
+    /* Sort by layer first (lower layers render first) */
+    if (cmd_a->layer != cmd_b->layer) {
+        return cmd_a->layer - cmd_b->layer;
+    }
+
+    /* Within same layer, sort by texture to maximize batching */
+    if (cmd_a->texture != cmd_b->texture) {
+        return (cmd_a->texture < cmd_b->texture) ? -1 : 1;
+    }
+
+    /* Preserve original order for same layer and texture */
+    return (int)(cmd_a->vertex_offset - cmd_b->vertex_offset);
+}
+
+/* ============================================================================
  * Rendering
  * ============================================================================ */
 
@@ -512,6 +1137,10 @@ void cui_pop_scissor(CUI_Context *ctx)
 void cui_upload(CUI_Context *ctx, SDL_GPUCommandBuffer *cmd)
 {
     if (!ctx || !cmd) return;
+
+    /* Flush any pending draw command */
+    cui_flush_draw_cmd(ctx);
+
     if (ctx->vertex_count == 0 || ctx->index_count == 0) return;
 
     /* Upload vertex data to GPU */
@@ -570,54 +1199,90 @@ void cui_upload(CUI_Context *ctx, SDL_GPUCommandBuffer *cmd)
 void cui_render(CUI_Context *ctx, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *pass)
 {
     if (!ctx || !cmd || !pass) return;
-    if (ctx->vertex_count == 0 || ctx->index_count == 0) return;
-    if (!ctx->pipeline || !ctx->font_atlas) {
-        /* Pipeline not ready yet */
+    if (ctx->draw_cmd_count == 0) return;
+    if (!ctx->pipeline) {
         return;
     }
 
-    /* Bind pipeline */
-    SDL_BindGPUGraphicsPipeline(pass, ctx->pipeline);
+    /* Sort draw commands by layer, then by type, then by texture */
+    qsort(ctx->draw_cmds, ctx->draw_cmd_count, sizeof(CUI_DrawCmd), cui_draw_cmd_compare);
 
-    /* Bind vertex buffer */
+    /* Bind vertex buffer (shared by all pipelines) */
     SDL_GPUBufferBinding vb_binding = {
         .buffer = ctx->vertex_buffer,
         .offset = 0
     };
     SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
 
-    /* Bind index buffer */
+    /* Bind index buffer (shared by all pipelines) */
     SDL_GPUBufferBinding ib_binding = {
         .buffer = ctx->index_buffer,
         .offset = 0
     };
     SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
 
-    /* Push uniform data (screen size) */
-    float uniforms[4] = {(float)ctx->width, (float)ctx->height, 0, 0};
-    SDL_PushGPUVertexUniformData(cmd, 0, uniforms, sizeof(uniforms));
+    /* Track current state */
+    SDL_GPUGraphicsPipeline *current_pipeline = NULL;
+    SDL_GPUTexture *current_texture = NULL;
+    CUI_DrawCmdType current_type = CUI_DRAW_CMD_SOLID;
 
-    /* Bind font atlas texture and sampler */
-    SDL_GPUTextureSamplerBinding tex_binding = {
-        .texture = ctx->font_atlas,
-        .sampler = ctx->sampler
-    };
-    SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
+    /* Render each draw command */
+    for (uint32_t i = 0; i < ctx->draw_cmd_count; i++) {
+        CUI_DrawCmd *draw_cmd = &ctx->draw_cmds[i];
 
-    /* Draw all UI elements */
-    SDL_DrawGPUIndexedPrimitives(pass, ctx->index_count, 1, 0, 0, 0);
-}
+        /* Select pipeline based on command type */
+        SDL_GPUGraphicsPipeline *pipeline;
+        switch (draw_cmd->type) {
+            case CUI_DRAW_CMD_SDF_TEXT:
+                pipeline = ctx->sdf_pipeline;
+                break;
+            case CUI_DRAW_CMD_MSDF_TEXT:
+                pipeline = ctx->msdf_pipeline;
+                break;
+            case CUI_DRAW_CMD_SOLID:
+            case CUI_DRAW_CMD_BITMAP_TEXT:
+            default:
+                pipeline = ctx->pipeline;
+                break;
+        }
 
-/* ============================================================================
- * Internal: Add textured quad (used by text rendering)
- * ============================================================================ */
+        if (!pipeline) {
+            pipeline = ctx->pipeline;  /* Fallback to bitmap pipeline */
+        }
 
-void cui_draw_textured_quad(CUI_Context *ctx,
-                            float x0, float y0, float x1, float y1,
-                            float u0, float v0, float u1, float v1,
-                            uint32_t color)
-{
-    cui_add_quad(ctx, x0, y0, x1, y1, u0, v0, u1, v1, color);
+        /* Bind pipeline if changed */
+        if (pipeline != current_pipeline) {
+            SDL_BindGPUGraphicsPipeline(pass, pipeline);
+            current_pipeline = pipeline;
+        }
+
+        /* Push uniforms */
+        float uniforms[4] = {
+            (float)ctx->width,
+            (float)ctx->height,
+            draw_cmd->sdf_distance_range,  /* For SDF shaders */
+            draw_cmd->sdf_scale            /* For SDF shaders */
+        };
+        SDL_PushGPUVertexUniformData(cmd, 0, uniforms, sizeof(uniforms));
+
+        /* Bind texture if changed */
+        if (draw_cmd->texture != current_texture) {
+            SDL_GPUTextureSamplerBinding tex_binding = {
+                .texture = draw_cmd->texture,
+                .sampler = ctx->sampler
+            };
+            SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
+            current_texture = draw_cmd->texture;
+        }
+
+        /* Draw this command */
+        if (draw_cmd->index_count > 0 && draw_cmd->texture) {
+            SDL_DrawGPUIndexedPrimitives(pass, draw_cmd->index_count, 1,
+                                          draw_cmd->index_offset, 0, 0);
+        }
+
+        current_type = draw_cmd->type;
+    }
 }
 
 /* ============================================================================
@@ -858,102 +1523,4 @@ void cui_path_fill(CUI_Context *ctx, uint32_t color)
     }
 
     ctx->path_count = 0;
-}
-
-/* ============================================================================
- * Draw List Channels (Layer Sorting)
- * ============================================================================ */
-
-#define CUI_MAX_CHANNELS 16
-
-void cui_draw_split_begin(CUI_Context *ctx, int channel_count)
-{
-    if (!ctx || channel_count <= 0 || channel_count > CUI_MAX_CHANNELS) return;
-    if (ctx->channels.channel_count > 0) return;  /* Already split */
-
-    /* Allocate channel tracking arrays */
-    ctx->channels.channel_starts = (uint32_t *)malloc(channel_count * sizeof(uint32_t));
-    ctx->channels.channel_counts = (uint32_t *)malloc(channel_count * sizeof(uint32_t));
-    ctx->channels.channel_idx_starts = (uint32_t *)malloc(channel_count * sizeof(uint32_t));
-    ctx->channels.channel_idx_counts = (uint32_t *)malloc(channel_count * sizeof(uint32_t));
-
-    if (!ctx->channels.channel_starts || !ctx->channels.channel_counts ||
-        !ctx->channels.channel_idx_starts || !ctx->channels.channel_idx_counts) {
-        free(ctx->channels.channel_starts);
-        free(ctx->channels.channel_counts);
-        free(ctx->channels.channel_idx_starts);
-        free(ctx->channels.channel_idx_counts);
-        ctx->channels.channel_starts = NULL;
-        ctx->channels.channel_counts = NULL;
-        ctx->channels.channel_idx_starts = NULL;
-        ctx->channels.channel_idx_counts = NULL;
-        return;
-    }
-
-    /* Initialize all channels starting at current position */
-    for (int i = 0; i < channel_count; i++) {
-        ctx->channels.channel_starts[i] = ctx->vertex_count;
-        ctx->channels.channel_counts[i] = 0;
-        ctx->channels.channel_idx_starts[i] = ctx->index_count;
-        ctx->channels.channel_idx_counts[i] = 0;
-    }
-
-    ctx->channels.channel_count = channel_count;
-    ctx->channels.current_channel = 0;
-}
-
-void cui_draw_set_channel(CUI_Context *ctx, int channel)
-{
-    if (!ctx || ctx->channels.channel_count <= 0) return;
-    if (channel < 0 || channel >= ctx->channels.channel_count) return;
-
-    /* Save current channel's count */
-    int old_channel = ctx->channels.current_channel;
-    ctx->channels.channel_counts[old_channel] =
-        ctx->vertex_count - ctx->channels.channel_starts[old_channel];
-    ctx->channels.channel_idx_counts[old_channel] =
-        ctx->index_count - ctx->channels.channel_idx_starts[old_channel];
-
-    /* Switch to new channel - append at current position */
-    ctx->channels.channel_starts[channel] = ctx->vertex_count;
-    ctx->channels.channel_idx_starts[channel] = ctx->index_count;
-    ctx->channels.current_channel = channel;
-}
-
-void cui_draw_split_merge(CUI_Context *ctx)
-{
-    if (!ctx || ctx->channels.channel_count <= 0) return;
-
-    /* Save final channel counts */
-    int current = ctx->channels.current_channel;
-    ctx->channels.channel_counts[current] =
-        ctx->vertex_count - ctx->channels.channel_starts[current];
-    ctx->channels.channel_idx_counts[current] =
-        ctx->index_count - ctx->channels.channel_idx_starts[current];
-
-    /* For a simple implementation, we don't actually need to reorder
-     * if channels were written in order. The vertex/index buffers
-     * already contain the data in the order it was added.
-     *
-     * A more sophisticated implementation would allocate separate buffers
-     * per channel and then merge them in order. For now, we rely on
-     * users calling set_channel in the correct order (background first,
-     * foreground last) to achieve the layering effect.
-     *
-     * Future enhancement: Actually reorder vertices/indices by channel
-     * to support arbitrary channel order during drawing.
-     */
-
-    /* Clean up */
-    free(ctx->channels.channel_starts);
-    free(ctx->channels.channel_counts);
-    free(ctx->channels.channel_idx_starts);
-    free(ctx->channels.channel_idx_counts);
-
-    ctx->channels.channel_starts = NULL;
-    ctx->channels.channel_counts = NULL;
-    ctx->channels.channel_idx_starts = NULL;
-    ctx->channels.channel_idx_counts = NULL;
-    ctx->channels.channel_count = 0;
-    ctx->channels.current_channel = 0;
 }

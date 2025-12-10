@@ -4,6 +4,9 @@
  * Handles bitmap font loading and metrics.
  */
 
+/* Define STB_TRUETYPE_IMPLEMENTATION before including the header
+ * to generate the function implementations in this compilation unit */
+#define STB_TRUETYPE_IMPLEMENTATION
 #include "text_internal.h"
 
 /* ============================================================================

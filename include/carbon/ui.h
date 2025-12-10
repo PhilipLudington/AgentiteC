@@ -145,7 +145,46 @@ typedef struct CUI_Input {
     bool shift, ctrl, alt;
 } CUI_Input;
 
-/* Glyph data is stored as opaque pointer, actual type is stbtt_bakedchar* */
+/* ============================================================================
+ * Font System (Multi-Font Support with SDF/MSDF)
+ * ============================================================================ */
+
+#define CUI_MAX_FONTS 16
+#define CUI_FONT_ATLAS_SIZE 512
+
+/* Font type enumeration */
+typedef enum CUI_FontType {
+    CUI_FONT_BITMAP,    /* Standard bitmap font (stb_truetype) */
+    CUI_FONT_SDF,       /* Single-channel signed distance field */
+    CUI_FONT_MSDF       /* Multi-channel signed distance field */
+} CUI_FontType;
+
+/* Font handle - wraps either bitmap or SDF font (opaque pointer) */
+typedef struct CUI_Font CUI_Font;
+
+/* Draw command types */
+typedef enum CUI_DrawCmdType {
+    CUI_DRAW_CMD_SOLID,         /* Solid color primitives (rects, lines) */
+    CUI_DRAW_CMD_BITMAP_TEXT,   /* Bitmap font text */
+    CUI_DRAW_CMD_SDF_TEXT,      /* SDF font text */
+    CUI_DRAW_CMD_MSDF_TEXT      /* MSDF font text */
+} CUI_DrawCmdType;
+
+/* Draw command - represents a batch of primitives sharing texture and layer */
+typedef struct CUI_DrawCmd {
+    CUI_DrawCmdType type;
+    SDL_GPUTexture *texture;    /* Font atlas texture */
+    int layer;                  /* Layer for z-ordering (lower = back) */
+    uint32_t vertex_offset;     /* Start index in vertex buffer */
+    uint32_t index_offset;      /* Start index in index buffer */
+    uint32_t vertex_count;      /* Number of vertices */
+    uint32_t index_count;       /* Number of indices */
+    float sdf_scale;            /* Scale for SDF rendering */
+    float sdf_distance_range;   /* Distance range for SDF font */
+} CUI_DrawCmd;
+
+#define CUI_MAX_DRAW_CMDS 256
+#define CUI_DEFAULT_LAYER 0
 
 /* Table sort specification (forward declared for use in context) */
 typedef struct CUI_TableSortSpec {
@@ -166,10 +205,12 @@ typedef struct CUI_MultiSelectState {
 typedef struct CUI_Context {
     /* GPU resources */
     SDL_GPUDevice *gpu;
-    SDL_GPUGraphicsPipeline *pipeline;
+    SDL_GPUGraphicsPipeline *pipeline;           /* Bitmap/solid pipeline */
+    SDL_GPUGraphicsPipeline *sdf_pipeline;       /* SDF text pipeline */
+    SDL_GPUGraphicsPipeline *msdf_pipeline;      /* MSDF text pipeline */
     SDL_GPUBuffer *vertex_buffer;
     SDL_GPUBuffer *index_buffer;
-    SDL_GPUTexture *font_atlas;
+    SDL_GPUTexture *white_texture;  /* 1x1 white texture for solid primitives */
     SDL_GPUSampler *sampler;
 
     /* Draw list (per-frame) */
@@ -177,6 +218,17 @@ typedef struct CUI_Context {
     uint16_t *indices;
     uint32_t vertex_count, index_count;
     uint32_t vertex_capacity, index_capacity;
+
+    /* Draw command queue */
+    CUI_DrawCmd *draw_cmds;
+    uint32_t draw_cmd_count;
+    uint32_t draw_cmd_capacity;
+
+    /* Current draw state */
+    SDL_GPUTexture *current_texture; /* Current texture being batched */
+    int current_layer;               /* Current layer for new primitives */
+    uint32_t cmd_vertex_start;       /* Start of current command's vertices */
+    uint32_t cmd_index_start;        /* Start of current command's indices */
 
     /* Input state */
     CUI_Input input;
@@ -201,8 +253,15 @@ typedef struct CUI_Context {
     CUI_Id id_stack[32];
     int id_stack_depth;
 
-    /* Font data (opaque, actual type is stbtt_bakedchar*) */
-    void *glyphs; /* ASCII 32-127 (96 chars) */
+    /* Font registry (multi-font support) */
+    CUI_Font *fonts[CUI_MAX_FONTS];
+    int font_count;
+    CUI_Font *default_font;         /* Default font for widgets */
+    CUI_Font *current_font;         /* Currently active font for drawing */
+
+    /* Legacy compatibility - points to default font data */
+    void *glyphs; /* ASCII 32-127 (96 chars) - DEPRECATED, use fonts */
+    SDL_GPUTexture *font_atlas;     /* DEPRECATED, use fonts */
     float font_size;
     float line_height;
     float ascent;
@@ -258,15 +317,9 @@ typedef struct CUI_Context {
     /* Active multi-select state pointer (set during begin/end) */
     CUI_MultiSelectState *multi_select;
 
-    /* Draw channel state for layer sorting */
-    struct {
-        int channel_count;          /* Number of channels (0 = not split) */
-        int current_channel;        /* Current active channel */
-        uint32_t *channel_starts;   /* Start vertex index for each channel */
-        uint32_t *channel_counts;   /* Vertex count for each channel */
-        uint32_t *channel_idx_starts; /* Start index index for each channel */
-        uint32_t *channel_idx_counts; /* Index count for each channel */
-    } channels;
+    /* Layer system for z-ordering */
+    int layer_stack[16];            /* Stack of pushed layers */
+    int layer_stack_depth;
 } CUI_Context;
 
 /* Panel flags */
@@ -301,6 +354,43 @@ typedef struct CUI_Context {
 #define CUI_COLORPICKER_INPUT_HSV    (1 << 4)  /* Show HSV input fields */
 #define CUI_COLORPICKER_INPUT_HEX    (1 << 5)  /* Show hex input field */
 #define CUI_COLORPICKER_PALETTE      (1 << 6)  /* Show saved color palette */
+
+/* ============================================================================
+ * Font Management
+ * ============================================================================ */
+
+/* Load a bitmap font (standard TTF rasterization). Returns NULL on failure. */
+CUI_Font *cui_font_load(CUI_Context *ctx, const char *path, float size);
+
+/* Load an SDF/MSDF font from pre-generated atlas files (msdf-atlas-gen format).
+ * atlas_path: Path to PNG atlas image
+ * metrics_path: Path to JSON metrics file
+ * Returns NULL on failure. */
+CUI_Font *cui_font_load_sdf(CUI_Context *ctx, const char *atlas_path,
+                            const char *metrics_path);
+
+/* Unload a font (removes from registry and frees resources) */
+void cui_font_unload(CUI_Context *ctx, CUI_Font *font);
+
+/* Get font type (bitmap, SDF, or MSDF) */
+CUI_FontType cui_font_get_type(CUI_Font *font);
+
+/* Set the default font for widgets */
+void cui_set_default_font(CUI_Context *ctx, CUI_Font *font);
+
+/* Get the default font */
+CUI_Font *cui_get_default_font(CUI_Context *ctx);
+
+/* Set the current font for subsequent text drawing */
+void cui_set_font(CUI_Context *ctx, CUI_Font *font);
+
+/* Get the current font */
+CUI_Font *cui_get_font(CUI_Context *ctx);
+
+/* Get font metrics */
+float cui_font_size(CUI_Font *font);
+float cui_font_line_height(CUI_Font *font);
+float cui_font_ascent(CUI_Font *font);
 
 /* ============================================================================
  * Lifecycle Functions
@@ -460,7 +550,21 @@ bool cui_color_edit4(CUI_Context *ctx, const char *label, float *rgba);
 void cui_rgb_to_hsv(float r, float g, float b, float *h, float *s, float *v);
 void cui_hsv_to_rgb(float h, float s, float v, float *r, float *g, float *b);
 
-/* Draw List Channels (Layer Sorting) */
+/* ============================================================================
+ * Layer System (Z-Ordering)
+ * ============================================================================ */
+
+/* Set current layer for subsequent draw operations (lower = back, higher = front) */
+void cui_set_layer(CUI_Context *ctx, int layer);
+
+/* Get current layer */
+int cui_get_layer(CUI_Context *ctx);
+
+/* Push/pop layer (for nested layer changes) */
+void cui_push_layer(CUI_Context *ctx, int layer);
+void cui_pop_layer(CUI_Context *ctx);
+
+/* Legacy API (deprecated - use cui_set_layer instead) */
 void cui_draw_split_begin(CUI_Context *ctx, int channel_count);
 void cui_draw_set_channel(CUI_Context *ctx, int channel);
 void cui_draw_split_merge(CUI_Context *ctx);
@@ -520,11 +624,23 @@ void cui_draw_triangle(CUI_Context *ctx,
                        float x0, float y0, float x1, float y1, float x2, float y2,
                        uint32_t color);
 
-/* Text */
+/* Text (uses current font set by cui_set_font, or default font) */
 float cui_draw_text(CUI_Context *ctx, const char *text, float x, float y,
                     uint32_t color);
 void cui_draw_text_clipped(CUI_Context *ctx, const char *text,
                            CUI_Rect bounds, uint32_t color);
+
+/* Text with explicit font */
+float cui_draw_text_font(CUI_Context *ctx, CUI_Font *font, const char *text,
+                         float x, float y, uint32_t color);
+void cui_draw_text_font_clipped(CUI_Context *ctx, CUI_Font *font, const char *text,
+                                CUI_Rect bounds, uint32_t color);
+
+/* Scaled text drawing (useful for SDF fonts) */
+float cui_draw_text_scaled(CUI_Context *ctx, const char *text, float x, float y,
+                           float scale, uint32_t color);
+float cui_draw_text_font_scaled(CUI_Context *ctx, CUI_Font *font, const char *text,
+                                float x, float y, float scale, uint32_t color);
 
 /* Scissor/clipping */
 void cui_push_scissor(CUI_Context *ctx, float x, float y, float w, float h);
@@ -534,9 +650,21 @@ void cui_pop_scissor(CUI_Context *ctx);
  * Text Measurement
  * ============================================================================ */
 
+/* Measure text with current/default font */
 float cui_text_width(CUI_Context *ctx, const char *text);
 float cui_text_height(CUI_Context *ctx);
 void cui_text_size(CUI_Context *ctx, const char *text, float *out_w, float *out_h);
+
+/* Measure text with explicit font */
+float cui_text_width_font(CUI_Font *font, const char *text);
+float cui_text_height_font(CUI_Font *font);
+void cui_text_size_font(CUI_Font *font, const char *text, float *out_w, float *out_h);
+
+/* Measure text with explicit font and scale (for SDF fonts) */
+float cui_text_width_font_scaled(CUI_Font *font, const char *text, float scale);
+float cui_text_height_font_scaled(CUI_Font *font, float scale);
+void cui_text_size_font_scaled(CUI_Font *font, const char *text, float scale,
+                               float *out_w, float *out_h);
 
 /* ============================================================================
  * Utility Functions

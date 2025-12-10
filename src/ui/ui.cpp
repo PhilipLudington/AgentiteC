@@ -248,6 +248,9 @@ void cui_shutdown(CUI_Context *ctx)
     SDL_Log("CUI: Shutdown complete");
 }
 
+/* Forward declaration from ui_draw.cpp */
+extern void cui_reset_draw_state(CUI_Context *ctx);
+
 void cui_begin_frame(CUI_Context *ctx, float delta_time)
 {
     if (!ctx) return;
@@ -255,9 +258,8 @@ void cui_begin_frame(CUI_Context *ctx, float delta_time)
     ctx->delta_time = delta_time;
     ctx->frame_count++;
 
-    /* Reset draw buffers */
-    ctx->vertex_count = 0;
-    ctx->index_count = 0;
+    /* Reset draw state (buffers, command queue, layers) */
+    cui_reset_draw_state(ctx);
 
     /* Reset layout to root */
     ctx->layout_depth = 1;
