@@ -115,7 +115,9 @@ typedef struct SDFFragmentUniforms {
     float outline_color[4];    // RGBA
     float glow_params[4];      // glow_width, pad, pad, pad
     float glow_color[4];       // RGBA
-    uint32_t flags;
+    float shadow_params[4];    // shadow_offset_x, shadow_offset_y, shadow_softness, pad
+    float shadow_color[4];     // RGBA
+    uint32_t flags;            // bit 0: outline, bit 1: glow, bit 2: shadow
     float _padding[3];
 } SDFFragmentUniforms;
 

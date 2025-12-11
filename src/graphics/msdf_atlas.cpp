@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <stdio.h>
+#include <SDL3/SDL.h>
 
 /* stb libraries */
 #define STB_RECT_PACK_IMPLEMENTATION
@@ -122,19 +124,20 @@ MSDF_Atlas *msdf_atlas_create(const MSDF_AtlasConfig *config)
     int ascent, descent, line_gap;
     stbtt_GetFontVMetrics(&atlas->font, &ascent, &descent, &line_gap);
 
-    /* Calculate em size from font units */
-    float scale = stbtt_ScaleForPixelHeight(&atlas->font, 1.0f);
-    atlas->em_size = 1.0f / scale;
+    /* Calculate em size from font's unitsPerEm (typically 2048 or 1000)
+     * This matches what msdf-atlas-gen uses for normalization */
+    float scale_for_em = stbtt_ScaleForMappingEmToPixels(&atlas->font, 1.0f);
+    atlas->em_size = 1.0f / scale_for_em;  /* This gives unitsPerEm */
     atlas->ascender = ascent / atlas->em_size;
     atlas->descender = descent / atlas->em_size;
     atlas->line_height = (ascent - descent + line_gap) / atlas->em_size;
 
-    /* Store configuration */
+    /* Store configuration - use improved defaults from msdf.h */
     atlas->atlas_width = config->atlas_width > 0 ? config->atlas_width : 1024;
     atlas->atlas_height = config->atlas_height > 0 ? config->atlas_height : 1024;
-    atlas->glyph_scale = config->glyph_scale > 0 ? config->glyph_scale : 48.0f;
-    atlas->pixel_range = config->pixel_range > 0 ? config->pixel_range : 4.0f;
-    atlas->padding = config->padding > 0 ? config->padding : 2;
+    atlas->glyph_scale = config->glyph_scale > 0 ? config->glyph_scale : (float)MSDF_DEFAULT_GLYPH_SCALE;
+    atlas->pixel_range = config->pixel_range > 0 ? config->pixel_range : (float)MSDF_DEFAULT_PIXEL_RANGE;
+    atlas->padding = config->padding > 0 ? config->padding : MSDF_DEFAULT_PADDING;
     atlas->format = config->format != 0 ? config->format : MSDF_BITMAP_RGB;
 
     /* Initialize glyph array */
@@ -221,17 +224,23 @@ bool msdf_atlas_add_codepoint(MSDF_Atlas *atlas, uint32_t codepoint)
     int advance_width, left_bearing;
     stbtt_GetGlyphHMetrics(&atlas->font, glyph_index, &advance_width, &left_bearing);
 
-    glyph->advance = advance_width / atlas->em_size;
-    glyph->left_bearing = left_bearing / atlas->em_size;
+    glyph->advance = (float)advance_width / atlas->em_size;
+    glyph->left_bearing = (float)left_bearing / atlas->em_size;
 
-    /* Get glyph bounding box */
-    int x0, y0, x1, y1;
+    /* Get glyph bounding box
+     * Note: stbtt_GetGlyphBox may not write values for glyphs without outlines (e.g., space)
+     * Initialize to 0 to handle this case */
+    int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
     stbtt_GetGlyphBox(&atlas->font, glyph_index, &x0, &y0, &x1, &y1);
 
-    glyph->plane_left = x0 / atlas->em_size;
-    glyph->plane_bottom = y0 / atlas->em_size;
-    glyph->plane_right = x1 / atlas->em_size;
-    glyph->plane_top = y1 / atlas->em_size;
+    /* Convert to em-normalized coordinates
+     * Note: We store raw glyph bounds here. The SDF range expansion is handled
+     * during MSDF generation (via bitmap padding) and added to plane bounds
+     * after generation for correct rendering. */
+    glyph->plane_left = (float)x0 / atlas->em_size;
+    glyph->plane_bottom = (float)y0 / atlas->em_size;
+    glyph->plane_right = (float)x1 / atlas->em_size;
+    glyph->plane_top = (float)y1 / atlas->em_size;
 
     atlas->glyph_count++;
     atlas->atlas_generated = false; /* Need to regenerate */
@@ -286,10 +295,12 @@ static bool generate_glyph_msdf(MSDF_Atlas *atlas, MSDF_AtlasGlyph *glyph)
 {
     if (glyph->has_bitmap) return true; /* Already generated */
 
-    /* Calculate glyph size in pixels */
-    float scale = atlas->glyph_scale / atlas->em_size;
-    float glyph_w = (glyph->plane_right - glyph->plane_left) * scale;
-    float glyph_h = (glyph->plane_top - glyph->plane_bottom) * scale;
+    /* Calculate glyph size in pixels
+     * Plane bounds are em-normalized (divided by em_size in add_codepoint),
+     * so multiply by glyph_scale to get pixel dimensions */
+    float pixel_scale = atlas->glyph_scale;
+    float glyph_w = (glyph->plane_right - glyph->plane_left) * pixel_scale;
+    float glyph_h = (glyph->plane_top - glyph->plane_bottom) * pixel_scale;
 
     /* Add padding for SDF range */
     int padding = (int)ceil(atlas->pixel_range) + atlas->padding;
@@ -303,9 +314,10 @@ static bool generate_glyph_msdf(MSDF_Atlas *atlas, MSDF_AtlasGlyph *glyph)
     glyph->atlas_w = bitmap_w;
     glyph->atlas_h = bitmap_h;
 
-    /* Check if glyph has actual geometry */
-    if (glyph->plane_left >= glyph->plane_right ||
-        glyph->plane_bottom >= glyph->plane_top) {
+    /* Check if glyph has actual geometry (using raw bounds, not expanded) */
+    int raw_x0 = 0, raw_y0 = 0, raw_x1 = 0, raw_y1 = 0;
+    stbtt_GetGlyphBox(&atlas->font, glyph->glyph_index, &raw_x0, &raw_y0, &raw_x1, &raw_y1);
+    if (raw_x0 >= raw_x1 || raw_y0 >= raw_y1) {
         /* Empty glyph (e.g., space) - create empty bitmap */
         if (!msdf_bitmap_alloc(&glyph->bitmap, bitmap_w, bitmap_h, atlas->format)) {
             return false;
@@ -318,8 +330,12 @@ static bool generate_glyph_msdf(MSDF_Atlas *atlas, MSDF_AtlasGlyph *glyph)
         return true;
     }
 
+    /* Scale for converting font units to pixels (for shape extraction)
+     * This is different from pixel_scale because shape uses raw font units */
+    float shape_scale = atlas->glyph_scale / atlas->em_size;
+
     /* Extract shape from glyph */
-    MSDF_Shape *shape = msdf_shape_from_glyph(&atlas->font, glyph->glyph_index, scale);
+    MSDF_Shape *shape = msdf_shape_from_glyph(&atlas->font, glyph->glyph_index, shape_scale);
     if (!shape) {
         agentite_set_error("Failed to extract glyph shape");
         return false;
@@ -334,28 +350,49 @@ static bool generate_glyph_msdf(MSDF_Atlas *atlas, MSDF_AtlasGlyph *glyph)
         return false;
     }
 
-    /* Create projection */
+    /* Create projection
+     * The shape coordinates are in pixels (scaled by shape_scale).
+     * Font shapes use Y-up (Y=0 at baseline, positive Y goes up),
+     * but bitmap uses Y-down (Y=0 at top, positive Y goes down).
+     * We need to flip Y: bitmap_y = bitmap_h - shape_y
+     *
+     * For a shape point at (shape_x, shape_y):
+     *   bitmap_x = shape_x - plane_left*scale + padding
+     *   bitmap_y = bitmap_h - (shape_y - plane_bottom*scale + padding)
+     *            = bitmap_h - padding - shape_y + plane_bottom*scale
+     *
+     * Using negative scale_y achieves the flip:
+     *   unproject gives: shape_y = (bitmap_y - translate_y) / scale_y
+     *   With scale_y = -1 and translate_y = bitmap_h - padding + plane_bottom*scale:
+     *   shape_y = (bitmap_y - (bitmap_h - padding + plane_bottom*scale)) / (-1)
+     *           = -bitmap_y + bitmap_h - padding + plane_bottom*scale
+     */
     MSDF_Projection proj;
-    proj.scale_x = scale;
-    proj.scale_y = scale;
-    proj.translate_x = padding - glyph->plane_left * scale;
-    proj.translate_y = padding - glyph->plane_bottom * scale;
+    proj.scale_x = 1.0;
+    proj.scale_y = -1.0;  /* Flip Y for bitmap coordinates */
+    proj.translate_x = padding - glyph->plane_left * pixel_scale;
+    proj.translate_y = bitmap_h - padding + glyph->plane_bottom * pixel_scale;
 
-    /* Generate MSDF */
-    switch (atlas->format) {
-        case MSDF_BITMAP_GRAY:
-            msdf_generate_sdf(shape, &glyph->bitmap, &proj, atlas->pixel_range);
-            break;
-        case MSDF_BITMAP_RGB:
-            msdf_generate_msdf(shape, &glyph->bitmap, &proj, atlas->pixel_range);
-            break;
-        case MSDF_BITMAP_RGBA:
-            msdf_generate_mtsdf(shape, &glyph->bitmap, &proj, atlas->pixel_range);
-            break;
-    }
+    /* Generate MSDF with error correction */
+    MSDF_GeneratorConfig gen_config = MSDF_GENERATOR_CONFIG_DEFAULT;
+    gen_config.error_correction.mode = MSDF_ERROR_CORRECTION_EDGE_PRIORITY;
+    gen_config.error_correction.min_deviation_ratio = 1.11;
+    gen_config.error_correction.min_improve_ratio = 1.11;
+
+    msdf_generate_ex(shape, &glyph->bitmap, &proj, atlas->pixel_range, &gen_config);
 
     msdf_shape_free(shape);
     glyph->has_bitmap = true;
+
+    /* Expand plane bounds to include SDF padding region for correct rendering.
+     * The bitmap includes 'padding' pixels on each side for SDF bleed,
+     * so the plane bounds (used for screen quad positioning) must be expanded
+     * to match the full bitmap region. */
+    float padding_em = (float)padding / pixel_scale;
+    glyph->plane_left -= padding_em;
+    glyph->plane_bottom -= padding_em;
+    glyph->plane_right += padding_em;
+    glyph->plane_top += padding_em;
 
     return true;
 }
@@ -410,7 +447,9 @@ bool msdf_atlas_generate(MSDF_Atlas *atlas)
         /* Not all glyphs fit - log which ones failed */
         int failed_count = 0;
         for (int i = 0; i < atlas->glyph_count; i++) {
-            if (!rects[i].was_packed) failed_count++;
+            if (!rects[i].was_packed) {
+                failed_count++;
+            }
         }
         free(nodes);
         free(rects);
@@ -486,14 +525,21 @@ bool msdf_atlas_get_glyph(const MSDF_Atlas *atlas, uint32_t codepoint,
             out_info->plane_right = g->plane_right;
             out_info->plane_top = g->plane_top;
 
-            /* Atlas UV coordinates (normalized 0-1) */
+            /* Atlas UV coordinates (normalized 0-1)
+             * Since we render glyphs right-side-up in the bitmap (by flipping Y in projection),
+             * the atlas coordinates are straightforward:
+             *   atlas_bottom = atlas_y (top of glyph region in screen Y-down coords)
+             *   atlas_top = atlas_y + atlas_h (bottom of glyph region)
+             * But we need to match msdf-atlas-gen's yOrigin=bottom convention for the
+             * rendering code, so we still need to flip Y. */
             float inv_w = 1.0f / atlas->atlas_width;
             float inv_h = 1.0f / atlas->atlas_height;
 
             out_info->atlas_left = g->atlas_x * inv_w;
-            out_info->atlas_bottom = g->atlas_y * inv_h;
             out_info->atlas_right = (g->atlas_x + g->atlas_w) * inv_w;
-            out_info->atlas_top = (g->atlas_y + g->atlas_h) * inv_h;
+            /* Convert Y-down (screen) to Y-up (msdf-atlas-gen yOrigin=bottom) */
+            out_info->atlas_bottom = (atlas->atlas_height - (g->atlas_y + g->atlas_h)) * inv_h;
+            out_info->atlas_top = (atlas->atlas_height - g->atlas_y) * inv_h;
 
             return true;
         }
@@ -540,24 +586,27 @@ bool msdf_atlas_get_bitmap_rgba8(const MSDF_Atlas *atlas, unsigned char *out_dat
             unsigned char *dst = &out_data[(y * bmp->width + x) * 4];
 
             if (src) {
+                /* Helper to clamp and convert float [0,1] to uint8 [0,255] */
+                #define FLOAT_TO_UINT8(f) ((unsigned char)(fminf(fmaxf((f), 0.0f), 1.0f) * 255.0f + 0.5f))
                 switch (bmp->format) {
                     case MSDF_BITMAP_GRAY:
-                        dst[0] = dst[1] = dst[2] = (unsigned char)(src[0] * 255.0f);
+                        dst[0] = dst[1] = dst[2] = FLOAT_TO_UINT8(src[0]);
                         dst[3] = 255;
                         break;
                     case MSDF_BITMAP_RGB:
-                        dst[0] = (unsigned char)(src[0] * 255.0f);
-                        dst[1] = (unsigned char)(src[1] * 255.0f);
-                        dst[2] = (unsigned char)(src[2] * 255.0f);
+                        dst[0] = FLOAT_TO_UINT8(src[0]);
+                        dst[1] = FLOAT_TO_UINT8(src[1]);
+                        dst[2] = FLOAT_TO_UINT8(src[2]);
                         dst[3] = 255;
                         break;
                     case MSDF_BITMAP_RGBA:
-                        dst[0] = (unsigned char)(src[0] * 255.0f);
-                        dst[1] = (unsigned char)(src[1] * 255.0f);
-                        dst[2] = (unsigned char)(src[2] * 255.0f);
-                        dst[3] = (unsigned char)(src[3] * 255.0f);
+                        dst[0] = FLOAT_TO_UINT8(src[0]);
+                        dst[1] = FLOAT_TO_UINT8(src[1]);
+                        dst[2] = FLOAT_TO_UINT8(src[2]);
+                        dst[3] = FLOAT_TO_UINT8(src[3]);
                         break;
                 }
+                #undef FLOAT_TO_UINT8
             } else {
                 dst[0] = dst[1] = dst[2] = dst[3] = 0;
             }

@@ -601,6 +601,100 @@ MSDF_Bounds msdf_edge_get_bounds(const MSDF_EdgeSegment *edge)
  * Signed Distance Calculation
  * ============================================================================ */
 
+/*
+ * MSDF Sign Determination
+ * =======================
+ * The sign of a signed distance field indicates inside (negative) vs outside (positive).
+ *
+ * The msdfgen algorithm uses "pseudo-distance" where the sign comes from the relationship
+ * between the point and the edge's ORIENTED direction. For a counter-clockwise contour,
+ * points to the LEFT of the edge direction are OUTSIDE, points to the RIGHT are INSIDE.
+ *
+ * However, this local edge sign must be consistent with the global inside/outside state.
+ * We achieve this by:
+ * 1. Computing the winding number to determine if a point is truly inside/outside
+ * 2. Using that global sign for the final distance
+ *
+ * The multi-channel MSDF then works because each channel tracks different edges,
+ * and the MEDIAN in the shader filters out incorrect local signs at corners.
+ */
+
+/* Calculate winding number contribution from a single edge segment */
+static double edge_winding_contribution(const MSDF_EdgeSegment *edge, MSDF_Vector2 point)
+{
+    /*
+     * For winding number calculation, we count how many times a ray from the point
+     * crosses the edge. We use a horizontal ray going right (+X direction).
+     *
+     * For each crossing:
+     * - Upward crossing (edge going up at intersection): +1
+     * - Downward crossing (edge going down at intersection): -1
+     */
+    double winding = 0.0;
+
+    /* Sample the edge at multiple points for accuracy with curves */
+    int samples = (edge->type == MSDF_EDGE_LINEAR) ? 1 : 16;
+
+    for (int i = 0; i < samples; i++) {
+        double t0 = (double)i / samples;
+        double t1 = (double)(i + 1) / samples;
+
+        MSDF_Vector2 p0 = msdf_edge_point_at(edge, t0);
+        MSDF_Vector2 p1 = msdf_edge_point_at(edge, t1);
+
+        /* Check if this segment crosses the horizontal ray from point */
+        if ((p0.y <= point.y && p1.y > point.y) ||  /* Upward crossing */
+            (p0.y > point.y && p1.y <= point.y)) {  /* Downward crossing */
+
+            /* Find x-coordinate of intersection with horizontal line y = point.y */
+            double t = (point.y - p0.y) / (p1.y - p0.y);
+            double x_intersect = p0.x + t * (p1.x - p0.x);
+
+            /* Only count crossings to the right of the point */
+            if (x_intersect > point.x) {
+                if (p1.y > p0.y) {
+                    winding += 1.0;  /* Upward crossing */
+                } else {
+                    winding -= 1.0;  /* Downward crossing */
+                }
+            }
+        }
+    }
+
+    return winding;
+}
+
+/* Calculate winding number for a point relative to a contour */
+static double contour_winding_number(const MSDF_Contour *contour, MSDF_Vector2 point)
+{
+    double winding = 0.0;
+
+    for (int i = 0; i < contour->edge_count; i++) {
+        winding += edge_winding_contribution(&contour->edges[i], point);
+    }
+
+    return winding;
+}
+
+/* Calculate winding number for a point relative to entire shape */
+static double shape_winding_number(const MSDF_Shape *shape, MSDF_Vector2 point)
+{
+    double winding = 0.0;
+
+    for (int c = 0; c < shape->contour_count; c++) {
+        winding += contour_winding_number(&shape->contours[c], point);
+    }
+
+    return winding;
+}
+
+/* Determine if a point is inside the shape (non-zero winding rule) */
+static bool point_inside_shape(const MSDF_Shape *shape, MSDF_Vector2 point)
+{
+    double winding = shape_winding_number(shape, point);
+    return fabs(winding) > 0.5;  /* Non-zero winding rule */
+}
+
 /* Helper: solve quadratic equation ax^2 + bx + c = 0, return number of real roots */
 static int solve_quadratic(double a, double b, double c, double roots[2])
 {
@@ -667,6 +761,16 @@ static int solve_cubic_normalized(double a, double b, double c, double roots[3])
     return 3;
 }
 
+/*
+ * Edge distance functions now return UNSIGNED distances along with the
+ * edge-local sign (pseudo-sign). The actual inside/outside determination
+ * is done globally using the winding number.
+ *
+ * The 'pseudo_sign' output indicates which side of the edge the point is on:
+ * +1 = left side of edge direction (typically outside for CCW contours)
+ * -1 = right side of edge direction (typically inside for CCW contours)
+ */
+
 /* Signed distance to linear segment */
 static MSDF_SignedDistance linear_signed_distance(const MSDF_EdgeSegment *edge,
                                                     MSDF_Vector2 point,
@@ -678,7 +782,14 @@ static MSDF_SignedDistance linear_signed_distance(const MSDF_EdgeSegment *edge,
     MSDF_Vector2 aq = msdf_vec2_sub(point, p0);
     MSDF_Vector2 ab = msdf_vec2_sub(p1, p0);
 
-    double param = msdf_vec2_dot(aq, ab) / msdf_vec2_dot(ab, ab);
+    double ab_len_sq = msdf_vec2_dot(ab, ab);
+    if (ab_len_sq < MSDF_EPSILON) {
+        /* Degenerate edge */
+        if (out_param) *out_param = 0;
+        return (MSDF_SignedDistance){ msdf_vec2_length(aq), 0 };
+    }
+
+    double param = msdf_vec2_dot(aq, ab) / ab_len_sq;
 
     /* Clamp to segment */
     if (param < 0) param = 0;
@@ -689,20 +800,35 @@ static MSDF_SignedDistance linear_signed_distance(const MSDF_EdgeSegment *edge,
 
     double distance = msdf_vec2_length(to_point);
 
-    /* Sign based on which side of the line the point is on */
-    double cross = msdf_vec2_cross(ab, aq);
-    if (cross < 0) distance = -distance;
+    /*
+     * Pseudo-sign based on which side of the edge the point is on.
+     * cross(edge_direction, to_point) > 0 means point is to the LEFT of the edge.
+     *
+     * TrueType coordinate convention (stb_truetype outputs Y-up):
+     * - Outer contours wind COUNTER-CLOCKWISE in Y-up
+     * - Inner contours (holes) wind CLOCKWISE in Y-up
+     *
+     * For CCW outer contour: LEFT of edge = INSIDE = negative distance
+     * Standard SDF convention: negative = inside, positive = outside
+     * So: cross > 0 (left) → INSIDE → negative distance
+     */
+    double cross = msdf_vec2_cross(ab, to_point);
+    double pseudo_sign = (cross > 0) ? -1.0 : 1.0;
 
-    /* Dot product for disambiguation */
-    MSDF_Vector2 dir = msdf_vec2_normalize(ab);
-    MSDF_Vector2 to_point_norm = msdf_vec2_length(to_point) > MSDF_EPSILON
-        ? msdf_vec2_normalize(to_point)
-        : msdf_vec2(0, 0);
-    double dot = fabs(msdf_vec2_dot(dir, to_point_norm));
+    /* Dot product for disambiguation (orthogonality) */
+    double dot;
+    if (distance > MSDF_EPSILON) {
+        MSDF_Vector2 dir = msdf_vec2_normalize(ab);
+        MSDF_Vector2 to_point_norm = msdf_vec2_normalize(to_point);
+        dot = fabs(msdf_vec2_dot(dir, to_point_norm));
+    } else {
+        dot = 0;
+    }
 
     if (out_param) *out_param = param;
 
-    return (MSDF_SignedDistance){ distance, dot };
+    /* Return distance with pseudo-sign applied */
+    return (MSDF_SignedDistance){ pseudo_sign * distance, dot };
 }
 
 /* Signed distance to quadratic bezier */
@@ -714,16 +840,21 @@ static MSDF_SignedDistance quadratic_signed_distance(const MSDF_EdgeSegment *edg
     MSDF_Vector2 p1 = edge->p[1];
     MSDF_Vector2 p2 = edge->p[2];
 
-    /* Coefficients for the bezier curve */
-    MSDF_Vector2 qa = msdf_vec2_sub(point, p0);
+    /* Coefficients matching msdfgen exactly:
+     * qa = p0 - origin (NOT origin - p0!)
+     * ab = p1 - p0
+     * br = p2 - p1 - ab = p2 - 2*p1 + p0 (NOT just p2 - p1!)
+     *
+     * The cubic equation at³ + bt² + ct + d = 0 finds where
+     * the derivative of |B(t) - origin|² equals zero.
+     */
+    MSDF_Vector2 qa = msdf_vec2_sub(p0, point);  /* qa = p0 - origin */
     MSDF_Vector2 ab = msdf_vec2_sub(p1, p0);
-    MSDF_Vector2 bc = msdf_vec2_sub(p2, p1);
-    MSDF_Vector2 qc = msdf_vec2_sub(p2, point);
-    MSDF_Vector2 ac = msdf_vec2_sub(p2, p0);
+    MSDF_Vector2 br = msdf_vec2_sub(msdf_vec2_sub(p2, p1), ab);  /* br = (p2-p1) - (p1-p0) */
 
-    double a = msdf_vec2_dot(bc, bc);
-    double b = 3.0 * msdf_vec2_dot(ab, bc);
-    double c = 2.0 * msdf_vec2_dot(ab, ab) + msdf_vec2_dot(qa, bc);
+    double a = msdf_vec2_dot(br, br);
+    double b = 3.0 * msdf_vec2_dot(ab, br);
+    double c = 2.0 * msdf_vec2_dot(ab, ab) + msdf_vec2_dot(qa, br);
     double d = msdf_vec2_dot(qa, ab);
 
     /* Solve cubic for parameter t */
@@ -742,152 +873,220 @@ static MSDF_SignedDistance quadratic_signed_distance(const MSDF_EdgeSegment *edg
         num_roots = 1;
     }
 
-    /* Find closest point among roots and endpoints */
-    double min_dist_sq = DBL_MAX;
-    double best_param = 0;
-    MSDF_Vector2 best_point = p0;
+    /*
+     * msdfgen approach: compute signed distance for each candidate point
+     * (endpoints and roots), keeping track of the minimum absolute distance
+     * while preserving the correct sign from the tangent direction.
+     */
 
-    /* Check endpoints */
-    double dist_p0 = msdf_vec2_length_squared(qa);
-    double dist_p2 = msdf_vec2_length_squared(qc);
+    /* Helper function behavior: nonZeroSign returns +1 if > 0, else -1 */
+    #define nonZeroSign(x) (((x) > 0) ? 1.0 : -1.0)
 
-    if (dist_p0 < min_dist_sq) {
-        min_dist_sq = dist_p0;
-        best_param = 0;
-        best_point = p0;
+    /* Start with endpoint at t=0 */
+    MSDF_Vector2 epDir = msdf_edge_direction_at(edge, 0);
+    double minDistance = nonZeroSign(msdf_vec2_cross(epDir, qa)) * msdf_vec2_length(qa);
+    double param = -msdf_vec2_dot(qa, epDir) / msdf_vec2_dot(epDir, epDir);
+
+    /* Check endpoint at t=1 */
+    {
+        MSDF_Vector2 qc = msdf_vec2_sub(p2, point);  /* p2 - origin */
+        double distance = msdf_vec2_length(qc);
+        if (distance < fabs(minDistance)) {
+            epDir = msdf_edge_direction_at(edge, 1);
+            minDistance = nonZeroSign(msdf_vec2_cross(epDir, qc)) * distance;
+            MSDF_Vector2 origin_minus_p1 = msdf_vec2_sub(point, p1);
+            param = msdf_vec2_dot(origin_minus_p1, epDir) / msdf_vec2_dot(epDir, epDir);
+        }
     }
-    if (dist_p2 < min_dist_sq) {
-        min_dist_sq = dist_p2;
-        best_param = 1;
-        best_point = p2;
-    }
 
-    /* Check roots in [0, 1] */
+    /* Check roots in (0, 1) */
     for (int i = 0; i < num_roots; i++) {
         double t = roots[i];
-        if (t > MSDF_EPSILON && t < 1.0 - MSDF_EPSILON) {
-            MSDF_Vector2 p = msdf_edge_point_at(edge, t);
-            MSDF_Vector2 diff = msdf_vec2_sub(point, p);
-            double dist_sq = msdf_vec2_length_squared(diff);
-
-            if (dist_sq < min_dist_sq) {
-                min_dist_sq = dist_sq;
-                best_param = t;
-                best_point = p;
+        if (t > 0 && t < 1) {
+            /* qe = qa + 2*t*ab + t²*br = B(t) - origin (using msdfgen's qa convention) */
+            MSDF_Vector2 qe = msdf_vec2_add(
+                msdf_vec2_add(qa, msdf_vec2_mul(ab, 2.0 * t)),
+                msdf_vec2_mul(br, t * t)
+            );
+            double distance = msdf_vec2_length(qe);
+            if (distance <= fabs(minDistance)) {
+                /* Tangent at t: direction = 2*(ab + t*br) */
+                MSDF_Vector2 tangent = msdf_vec2_add(ab, msdf_vec2_mul(br, t));
+                minDistance = nonZeroSign(msdf_vec2_cross(tangent, qe)) * distance;
+                param = t;
             }
         }
     }
 
-    /* Calculate signed distance */
-    MSDF_Vector2 to_point = msdf_vec2_sub(point, best_point);
-    double distance = sqrt(min_dist_sq);
+    #undef nonZeroSign
 
-    /* Sign based on curve orientation at closest point */
-    MSDF_Vector2 tangent = msdf_edge_direction_at(edge, best_param);
-    double cross = msdf_vec2_cross(tangent, to_point);
-    if (cross < 0) distance = -distance;
+    /* Compute dot product for disambiguation */
+    double dot;
+    if (param >= 0 && param <= 1) {
+        dot = 0;  /* Perpendicular to edge - best case */
+    } else if (param < 0.5) {
+        MSDF_Vector2 dir0 = msdf_vec2_normalize(msdf_edge_direction_at(edge, 0));
+        MSDF_Vector2 qa_norm = msdf_vec2_normalize(qa);
+        dot = fabs(msdf_vec2_dot(dir0, qa_norm));
+    } else {
+        MSDF_Vector2 dir1 = msdf_vec2_normalize(msdf_edge_direction_at(edge, 1));
+        MSDF_Vector2 qc = msdf_vec2_sub(p2, point);
+        MSDF_Vector2 qc_norm = msdf_vec2_normalize(qc);
+        dot = fabs(msdf_vec2_dot(dir1, qc_norm));
+    }
 
-    /* Dot product for disambiguation */
-    MSDF_Vector2 tangent_norm = msdf_vec2_normalize(tangent);
-    MSDF_Vector2 to_point_norm = distance != 0
-        ? msdf_vec2_normalize(to_point)
-        : msdf_vec2(0, 0);
-    double dot = fabs(msdf_vec2_dot(tangent_norm, to_point_norm));
+    if (out_param) *out_param = param;
 
-    if (out_param) *out_param = best_param;
-
-    return (MSDF_SignedDistance){ distance, dot };
+    return (MSDF_SignedDistance){ minDistance, dot };
 }
 
-/* Signed distance to cubic bezier (Newton-Raphson iteration) */
+/* Signed distance to cubic bezier (msdfgen-style Newton-Raphson with second derivative) */
 static MSDF_SignedDistance cubic_signed_distance(const MSDF_EdgeSegment *edge,
                                                    MSDF_Vector2 point,
                                                    double *out_param)
 {
-    /* For cubic beziers, we use iterative refinement starting from samples */
-    double min_dist_sq = DBL_MAX;
-    double best_param = 0;
-    MSDF_Vector2 best_point = edge->p[0];
+    /*
+     * Cubic Bezier coefficients (matching msdfgen exactly):
+     * B(t) = p0 + 3t*ab + 3t²*br + t³*as
+     * where:
+     *   ab = p1 - p0
+     *   br = p2 - p1 - ab = p2 - 2*p1 + p0
+     *   as = (p3 - p2) - (p2 - p1) - br = p3 - 3*p2 + 3*p1 - p0
+     *
+     * Derivatives:
+     *   B'(t)  = 3*ab + 6t*br + 3t²*as
+     *   B''(t) = 6*br + 6t*as
+     */
+    MSDF_Vector2 p0 = edge->p[0];
+    MSDF_Vector2 p1 = edge->p[1];
+    MSDF_Vector2 p2 = edge->p[2];
+    MSDF_Vector2 p3 = edge->p[3];
 
-    /* Sample at multiple points and refine */
-    const int num_samples = MSDF_CUBIC_SEARCH_ITERATIONS;
+    MSDF_Vector2 qa = msdf_vec2_sub(p0, point);  /* qa = p0 - origin */
+    MSDF_Vector2 ab = msdf_vec2_sub(p1, p0);
+    MSDF_Vector2 br = msdf_vec2_sub(msdf_vec2_sub(p2, p1), ab);
+    MSDF_Vector2 as_vec = msdf_vec2_sub(msdf_vec2_sub(msdf_vec2_sub(p3, p2), msdf_vec2_sub(p2, p1)), br);
 
-    for (int i = 0; i <= num_samples; i++) {
-        double t = (double)i / num_samples;
-        MSDF_Vector2 p = msdf_edge_point_at(edge, t);
-        MSDF_Vector2 diff = msdf_vec2_sub(point, p);
-        double dist_sq = msdf_vec2_length_squared(diff);
+    #define nonZeroSign(x) (((x) > 0) ? 1.0 : -1.0)
 
-        if (dist_sq < min_dist_sq) {
-            min_dist_sq = dist_sq;
-            best_param = t;
-            best_point = p;
+    /* Start with endpoint at t=0 */
+    MSDF_Vector2 epDir = msdf_edge_direction_at(edge, 0);
+    double minDistance = nonZeroSign(msdf_vec2_cross(epDir, qa)) * msdf_vec2_length(qa);
+    double param = -msdf_vec2_dot(qa, epDir) / msdf_vec2_dot(epDir, epDir);
+
+    /* Check endpoint at t=1 */
+    {
+        MSDF_Vector2 qc = msdf_vec2_sub(p3, point);
+        double distance = msdf_vec2_length(qc);
+        if (distance < fabs(minDistance)) {
+            epDir = msdf_edge_direction_at(edge, 1);
+            minDistance = nonZeroSign(msdf_vec2_cross(epDir, qc)) * distance;
+            /* param calculation for endpoint at t=1 */
+            MSDF_Vector2 ep_diff = msdf_vec2_sub(epDir, qc);
+            param = msdf_vec2_dot(ep_diff, epDir) / msdf_vec2_dot(epDir, epDir);
         }
     }
 
-    /* Newton-Raphson refinement */
-    for (int iter = 0; iter < MSDF_CUBIC_SEARCH_ITERATIONS; iter++) {
-        MSDF_Vector2 p = msdf_edge_point_at(edge, best_param);
-        MSDF_Vector2 d = msdf_edge_direction_at(edge, best_param);
+    /* Iterative search from multiple starting points with improved Newton's method */
+    const int SEARCH_STARTS = MSDF_CUBIC_SAMPLES;
+    const int SEARCH_STEPS = MSDF_CUBIC_SEARCH_ITERATIONS;
 
-        MSDF_Vector2 diff = msdf_vec2_sub(point, p);
-        double numerator = msdf_vec2_dot(diff, d);
-        double denominator = msdf_vec2_dot(d, d);
+    for (int i = 0; i <= SEARCH_STARTS; i++) {
+        double t = (double)i / SEARCH_STARTS;
 
-        if (fabs(denominator) < MSDF_EPSILON) break;
+        /* qe = B(t) - origin = qa + 3t*ab + 3t²*br + t³*as */
+        MSDF_Vector2 qe = msdf_vec2_add(
+            msdf_vec2_add(
+                msdf_vec2_add(qa, msdf_vec2_mul(ab, 3.0 * t)),
+                msdf_vec2_mul(br, 3.0 * t * t)
+            ),
+            msdf_vec2_mul(as_vec, t * t * t)
+        );
 
-        double delta = numerator / denominator;
-        double new_param = best_param + delta;
+        /* d1 = B'(t) = 3*ab + 6t*br + 3t²*as */
+        MSDF_Vector2 d1 = msdf_vec2_add(
+            msdf_vec2_add(
+                msdf_vec2_mul(ab, 3.0),
+                msdf_vec2_mul(br, 6.0 * t)
+            ),
+            msdf_vec2_mul(as_vec, 3.0 * t * t)
+        );
 
-        /* Clamp to [0, 1] */
-        if (new_param < 0) new_param = 0;
-        else if (new_param > 1) new_param = 1;
+        /* d2 = B''(t) = 6*br + 6t*as */
+        MSDF_Vector2 d2 = msdf_vec2_add(
+            msdf_vec2_mul(br, 6.0),
+            msdf_vec2_mul(as_vec, 6.0 * t)
+        );
 
-        if (fabs(new_param - best_param) < MSDF_EPSILON) break;
-        best_param = new_param;
+        /* Improved Newton's method: t -= dot(qe, d1) / (dot(d1, d1) + dot(qe, d2)) */
+        double denom = msdf_vec2_dot(d1, d1) + msdf_vec2_dot(qe, d2);
+        if (fabs(denom) < MSDF_EPSILON) continue;
 
-        best_point = msdf_edge_point_at(edge, best_param);
-        diff = msdf_vec2_sub(point, best_point);
-        min_dist_sq = msdf_vec2_length_squared(diff);
+        double improvedT = t - msdf_vec2_dot(qe, d1) / denom;
+
+        if (improvedT > 0 && improvedT < 1) {
+            int remainingSteps = SEARCH_STEPS;
+            do {
+                t = improvedT;
+
+                /* Recompute qe, d1 at new t */
+                qe = msdf_vec2_add(
+                    msdf_vec2_add(
+                        msdf_vec2_add(qa, msdf_vec2_mul(ab, 3.0 * t)),
+                        msdf_vec2_mul(br, 3.0 * t * t)
+                    ),
+                    msdf_vec2_mul(as_vec, t * t * t)
+                );
+
+                d1 = msdf_vec2_add(
+                    msdf_vec2_add(
+                        msdf_vec2_mul(ab, 3.0),
+                        msdf_vec2_mul(br, 6.0 * t)
+                    ),
+                    msdf_vec2_mul(as_vec, 3.0 * t * t)
+                );
+
+                if (--remainingSteps == 0) break;
+
+                d2 = msdf_vec2_add(
+                    msdf_vec2_mul(br, 6.0),
+                    msdf_vec2_mul(as_vec, 6.0 * t)
+                );
+
+                denom = msdf_vec2_dot(d1, d1) + msdf_vec2_dot(qe, d2);
+                if (fabs(denom) < MSDF_EPSILON) break;
+
+                improvedT = t - msdf_vec2_dot(qe, d1) / denom;
+            } while (improvedT > 0 && improvedT < 1);
+
+            double distance = msdf_vec2_length(qe);
+            if (distance < fabs(minDistance)) {
+                minDistance = nonZeroSign(msdf_vec2_cross(d1, qe)) * distance;
+                param = t;
+            }
+        }
     }
 
-    /* Check endpoints (may be closer than iterative result) */
-    MSDF_Vector2 diff_p0 = msdf_vec2_sub(point, edge->p[0]);
-    MSDF_Vector2 diff_p3 = msdf_vec2_sub(point, edge->p[3]);
+    #undef nonZeroSign
 
-    double dist_p0_sq = msdf_vec2_length_squared(diff_p0);
-    double dist_p3_sq = msdf_vec2_length_squared(diff_p3);
-
-    if (dist_p0_sq < min_dist_sq) {
-        min_dist_sq = dist_p0_sq;
-        best_param = 0;
-        best_point = edge->p[0];
+    /* Compute dot product for disambiguation */
+    double dot;
+    if (param >= 0 && param <= 1) {
+        dot = 0;  /* Perpendicular to edge - best case */
+    } else if (param < 0.5) {
+        MSDF_Vector2 dir0 = msdf_vec2_normalize(msdf_edge_direction_at(edge, 0));
+        MSDF_Vector2 qa_norm = msdf_vec2_normalize(qa);
+        dot = fabs(msdf_vec2_dot(dir0, qa_norm));
+    } else {
+        MSDF_Vector2 dir1 = msdf_vec2_normalize(msdf_edge_direction_at(edge, 1));
+        MSDF_Vector2 qc = msdf_vec2_sub(p3, point);
+        MSDF_Vector2 qc_norm = msdf_vec2_normalize(qc);
+        dot = fabs(msdf_vec2_dot(dir1, qc_norm));
     }
-    if (dist_p3_sq < min_dist_sq) {
-        min_dist_sq = dist_p3_sq;
-        best_param = 1;
-        best_point = edge->p[3];
-    }
 
-    /* Calculate signed distance */
-    MSDF_Vector2 to_point = msdf_vec2_sub(point, best_point);
-    double distance = sqrt(min_dist_sq);
+    if (out_param) *out_param = param;
 
-    /* Sign based on curve orientation */
-    MSDF_Vector2 tangent = msdf_edge_direction_at(edge, best_param);
-    double cross = msdf_vec2_cross(tangent, to_point);
-    if (cross < 0) distance = -distance;
-
-    /* Dot product for disambiguation */
-    MSDF_Vector2 tangent_norm = msdf_vec2_normalize(tangent);
-    MSDF_Vector2 to_point_norm = distance != 0
-        ? msdf_vec2_normalize(to_point)
-        : msdf_vec2(0, 0);
-    double dot = fabs(msdf_vec2_dot(tangent_norm, to_point_norm));
-
-    if (out_param) *out_param = best_param;
-
-    return (MSDF_SignedDistance){ distance, dot };
+    return (MSDF_SignedDistance){ minDistance, dot };
 }
 
 MSDF_SignedDistance msdf_edge_signed_distance(const MSDF_EdgeSegment *edge,

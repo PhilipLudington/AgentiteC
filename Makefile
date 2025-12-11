@@ -123,6 +123,7 @@ dirs:
 	@mkdir -p $(BUILD_DIR)/examples/ui_node
 	@mkdir -p $(BUILD_DIR)/examples/strategy
 	@mkdir -p $(BUILD_DIR)/examples/strategy-sim
+	@mkdir -p $(BUILD_DIR)/examples/msdf
 
 # Link main executable (game template)
 $(BUILD_DIR)/$(EXECUTABLE): $(OBJS) $(FLECS_OBJ) $(TOML_OBJ)
@@ -203,6 +204,11 @@ example-strategy: dirs $(BUILD_DIR)/examples/strategy/main.o $(patsubst $(SRC_DI
 example-strategy-sim: dirs $(BUILD_DIR)/examples/strategy-sim/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
 	$(CXX) $(BUILD_DIR)/examples/strategy-sim/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-strategy-sim $(LDFLAGS)
 	./$(BUILD_DIR)/example-strategy-sim
+
+# Build and run MSDF text rendering demo
+example-msdf: dirs $(BUILD_DIR)/examples/msdf/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/msdf/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-msdf $(LDFLAGS)
+	./$(BUILD_DIR)/example-msdf
 
 #============================================================================
 # Test targets
@@ -301,6 +307,7 @@ help:
 	@echo "  make example-ui        - UI system demo"
 	@echo "  make example-strategy  - Strategy game patterns"
 	@echo "  make example-strategy-sim - Strategy systems demo"
+	@echo "  make example-msdf      - MSDF text rendering demo"
 	@echo ""
 	@echo "Utilities:"
 	@echo "  make clean        - Remove build files"
@@ -308,4 +315,4 @@ help:
 	@echo "  make DEBUG=1      - Build with debug symbols"
 
 .PHONY: all dirs run run-demo clean install-deps-macos install-deps-linux info help test test-verbose
-.PHONY: example-minimal example-sprites example-animation example-tilemap example-ui example-strategy example-strategy-sim
+.PHONY: example-minimal example-sprites example-animation example-tilemap example-ui example-strategy example-strategy-sim example-msdf

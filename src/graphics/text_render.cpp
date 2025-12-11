@@ -310,12 +310,25 @@ void agentite_text_render(Agentite_TextRenderer *tr, SDL_GPUCommandBuffer *cmd,
                     batch->effects.glow_color[2],
                     batch->effects.glow_color[3]
                 },
+                .shadow_params = {
+                    batch->effects.shadow_offset[0],
+                    batch->effects.shadow_offset[1],
+                    batch->effects.shadow_softness,
+                    0.0f
+                },
+                .shadow_color = {
+                    batch->effects.shadow_color[0],
+                    batch->effects.shadow_color[1],
+                    batch->effects.shadow_color[2],
+                    batch->effects.shadow_color[3]
+                },
                 .flags = 0,
                 ._padding = {0, 0, 0}
             };
 
             if (batch->effects.outline_enabled) sdf_uniforms.flags |= 1;
             if (batch->effects.glow_enabled) sdf_uniforms.flags |= 2;
+            if (batch->effects.shadow_enabled) sdf_uniforms.flags |= 4;
 
             SDL_PushGPUFragmentUniformData(cmd, 0, &sdf_uniforms, sizeof(sdf_uniforms));
         }

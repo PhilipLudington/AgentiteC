@@ -40,17 +40,28 @@ extern "C" {
  * Configuration
  * ============================================================================ */
 
-/* Default angle threshold for corner detection (radians) */
-#define MSDF_DEFAULT_ANGLE_THRESHOLD 3.0
+/* Default angle threshold for corner detection.
+ * msdfgen uses 3.0 DEGREES as default. We store in radians internally.
+ * 3.0 degrees = 3.0 * PI / 180 = ~0.0524 radians */
+#define MSDF_DEFAULT_ANGLE_THRESHOLD (3.0 * 3.14159265358979323846 / 180.0)
 
-/* Default pixel range for distance field */
-#define MSDF_DEFAULT_PIXEL_RANGE 4.0
+/* Default pixel range for distance field (higher = smoother edges, more blur) */
+#define MSDF_DEFAULT_PIXEL_RANGE 6.0
+
+/* Default glyph scale (pixels per em) - higher = more detail */
+#define MSDF_DEFAULT_GLYPH_SCALE 64.0
+
+/* Default padding around glyphs (should be >= pixel_range/2) */
+#define MSDF_DEFAULT_PADDING 4
 
 /* Numerical precision epsilon */
 #define MSDF_EPSILON 1e-14
 
 /* Maximum iterations for cubic root finding */
 #define MSDF_CUBIC_SEARCH_ITERATIONS 8
+
+/* Number of samples for cubic bezier distance calculation */
+#define MSDF_CUBIC_SAMPLES 32
 
 /* ============================================================================
  * Core Types
@@ -333,6 +344,15 @@ void msdf_generate_sdf(const MSDF_Shape *shape,
                         double pixel_range);
 
 /**
+ * Generate single-channel SDF with sign inversion option.
+ */
+void msdf_generate_sdf_ex(const MSDF_Shape *shape,
+                           MSDF_Bitmap *bitmap,
+                           const MSDF_Projection *projection,
+                           double pixel_range,
+                           bool invert_sign);
+
+/**
  * Generate multi-channel signed distance field.
  *
  * @param shape  Input shape (must be colored)
@@ -344,6 +364,15 @@ void msdf_generate_msdf(const MSDF_Shape *shape,
                          MSDF_Bitmap *bitmap,
                          const MSDF_Projection *projection,
                          double pixel_range);
+
+/**
+ * Generate multi-channel SDF with sign inversion option.
+ */
+void msdf_generate_msdf_ex(const MSDF_Shape *shape,
+                            MSDF_Bitmap *bitmap,
+                            const MSDF_Projection *projection,
+                            double pixel_range,
+                            bool invert_sign);
 
 /**
  * Generate multi-channel + true SDF (MTSDF).
@@ -358,6 +387,15 @@ void msdf_generate_mtsdf(const MSDF_Shape *shape,
                           MSDF_Bitmap *bitmap,
                           const MSDF_Projection *projection,
                           double pixel_range);
+
+/**
+ * Generate MTSDF with sign inversion option.
+ */
+void msdf_generate_mtsdf_ex(const MSDF_Shape *shape,
+                             MSDF_Bitmap *bitmap,
+                             const MSDF_Projection *projection,
+                             double pixel_range,
+                             bool invert_sign);
 
 /**
  * Generate MSDF with full configuration.

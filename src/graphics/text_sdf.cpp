@@ -569,6 +569,7 @@ Agentite_SDFFont *agentite_sdf_font_generate(Agentite_TextRenderer *tr,
 
     /* Generate atlas */
     if (!msdf_atlas_generate(atlas)) {
+        SDL_Log("Text: Atlas generation failed: %s", agentite_get_last_error());
         msdf_atlas_destroy(atlas);
         free(font_data);
         return NULL;
@@ -600,7 +601,7 @@ Agentite_SDFFont *agentite_sdf_font_generate(Agentite_TextRenderer *tr,
 
     /* Copy glyph data */
     int glyph_count = msdf_atlas_get_glyph_count(atlas);
-    font->glyphs = (SDFGlyphInfo *)malloc(glyph_count * sizeof(SDFGlyphInfo));
+    font->glyphs = (SDFGlyphInfo *)calloc(glyph_count, sizeof(SDFGlyphInfo));
     if (!font->glyphs) {
         free(font);
         msdf_atlas_destroy(atlas);
@@ -609,30 +610,43 @@ Agentite_SDFFont *agentite_sdf_font_generate(Agentite_TextRenderer *tr,
     }
     font->glyph_count = glyph_count;
 
-    /* Convert MSDF glyph info to Carbon format */
-    for (int i = 0; i < glyph_count; i++) {
-        /* We need to iterate through all possible codepoints we added */
-        /* Since we added ASCII, iterate through those */
+    /* Convert MSDF glyph info to Agentite format */
+    int valid_glyphs = 0;
+
+    /* Determine iteration bounds based on charset source */
+    int iter_count;
+    if (config->charset && config->charset[0]) {
+        /* Custom charset: iterate through string characters */
+        iter_count = (int)strlen(config->charset);
+    } else {
+        /* ASCII charset: 95 printable characters (32-126) */
+        iter_count = 95;
+    }
+
+    for (int i = 0; i < iter_count; i++) {
         uint32_t codepoint = (config->charset && config->charset[0])
             ? (uint8_t)config->charset[i]
-            : (32 + i);
+            : (uint32_t)(32 + i);
 
         MSDF_GlyphInfo msdf_glyph;
         if (msdf_atlas_get_glyph(atlas, codepoint, &msdf_glyph)) {
-            font->glyphs[i].codepoint = msdf_glyph.codepoint;
-            font->glyphs[i].advance = msdf_glyph.advance;
-            font->glyphs[i].plane_left = msdf_glyph.plane_left;
-            font->glyphs[i].plane_bottom = msdf_glyph.plane_bottom;
-            font->glyphs[i].plane_right = msdf_glyph.plane_right;
-            font->glyphs[i].plane_top = msdf_glyph.plane_top;
+            font->glyphs[valid_glyphs].codepoint = msdf_glyph.codepoint;
+            font->glyphs[valid_glyphs].advance = msdf_glyph.advance;
+            font->glyphs[valid_glyphs].plane_left = msdf_glyph.plane_left;
+            font->glyphs[valid_glyphs].plane_bottom = msdf_glyph.plane_bottom;
+            font->glyphs[valid_glyphs].plane_right = msdf_glyph.plane_right;
+            font->glyphs[valid_glyphs].plane_top = msdf_glyph.plane_top;
 
             /* Convert normalized UV to pixel coordinates for compatibility */
-            font->glyphs[i].atlas_left = msdf_glyph.atlas_left * metrics.atlas_width;
-            font->glyphs[i].atlas_bottom = msdf_glyph.atlas_bottom * metrics.atlas_height;
-            font->glyphs[i].atlas_right = msdf_glyph.atlas_right * metrics.atlas_width;
-            font->glyphs[i].atlas_top = msdf_glyph.atlas_top * metrics.atlas_height;
+            font->glyphs[valid_glyphs].atlas_left = msdf_glyph.atlas_left * metrics.atlas_width;
+            font->glyphs[valid_glyphs].atlas_bottom = msdf_glyph.atlas_bottom * metrics.atlas_height;
+            font->glyphs[valid_glyphs].atlas_right = msdf_glyph.atlas_right * metrics.atlas_width;
+            font->glyphs[valid_glyphs].atlas_top = msdf_glyph.atlas_top * metrics.atlas_height;
+
+            valid_glyphs++;
         }
     }
+    font->glyph_count = valid_glyphs;
 
     /* Create GPU texture */
     SDL_GPUTextureFormat format = config->generate_msdf
@@ -829,6 +843,7 @@ void agentite_sdf_text_draw_ex(Agentite_TextRenderer *tr, Agentite_SDFFont *font
 
         SDFGlyphInfo *glyph = text_sdf_find_glyph(font, c);
         if (glyph) {
+
             /* Calculate screen position from plane bounds (em units) */
             float gx0 = cursor_x + glyph->plane_left * px_size;
             float gy0 = cursor_y - glyph->plane_top * px_size;  /* Y flipped for screen coords */

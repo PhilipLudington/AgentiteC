@@ -221,17 +221,22 @@ TEST_CASE("MSDF signed distance to linear edge", "[msdf][distance]") {
     edge.p[0] = msdf_vec2(0, 0);
     edge.p[1] = msdf_vec2(100, 0);
 
-    SECTION("Point above line") {
+    /* For an edge going right (0,0 → 100,0), in Y-up coordinates:
+     * - Points ABOVE the line (y > 0) are to the LEFT of the edge direction
+     * - For CCW outer contours, LEFT = INSIDE = negative distance
+     * - Points BELOW the line (y < 0) are to the RIGHT = OUTSIDE = positive distance
+     */
+    SECTION("Point above line (LEFT of edge = inside)") {
         double param;
         MSDF_SignedDistance sd = msdf_edge_signed_distance(&edge, msdf_vec2(50, 10), &param);
-        REQUIRE(sd.distance == Approx(10.0));
+        REQUIRE(sd.distance == Approx(-10.0));  /* Inside = negative */
         REQUIRE(param == Approx(0.5));
     }
 
-    SECTION("Point below line") {
+    SECTION("Point below line (RIGHT of edge = outside)") {
         double param;
         MSDF_SignedDistance sd = msdf_edge_signed_distance(&edge, msdf_vec2(50, -10), &param);
-        REQUIRE(sd.distance == Approx(-10.0));
+        REQUIRE(sd.distance == Approx(10.0));  /* Outside = positive */
     }
 
     SECTION("Point at endpoint") {
