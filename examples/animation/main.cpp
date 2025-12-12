@@ -11,6 +11,7 @@
 #include "agentite/input.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <cmath>
 
 /* Create a procedural sprite sheet (4 frames of a simple animation) */
 static Agentite_Texture *create_animation_sheet(Agentite_SpriteRenderer *sr) {
@@ -19,7 +20,7 @@ static Agentite_Texture *create_animation_sheet(Agentite_SpriteRenderer *sr) {
     int width = frame_size * num_frames;
     int height = frame_size;
 
-    unsigned char *pixels = malloc(width * height * 4);
+    unsigned char *pixels = (unsigned char *)malloc(width * height * 4);
     if (!pixels) return NULL;
 
     /* Create 4 frames showing a pulsing/spinning effect */
@@ -79,7 +80,7 @@ int main(int argc, char *argv[]) {
     (void)argv;
 
     Agentite_Config config = {
-        .window_title = "Carbon - Animation Example",
+        .window_title = "Agentite - Animation Example",
         .window_width = 1280,
         .window_height = 720,
         .vsync = true
@@ -97,6 +98,8 @@ int main(int argc, char *argv[]) {
     );
 
     Agentite_Camera *camera = agentite_camera_create(1280.0f, 720.0f);
+    /* Position camera so (0,0) is at top-left of screen */
+    agentite_camera_set_position(camera, 640.0f, 360.0f);
     agentite_sprite_set_camera(sprites, camera);
 
     Agentite_Input *input = agentite_input_init();

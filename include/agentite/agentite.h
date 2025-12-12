@@ -83,6 +83,7 @@ struct Agentite_Config {
     int window_width;
     int window_height;
     bool fullscreen;
+    bool resizable;
     bool vsync;
 };
 
@@ -92,6 +93,7 @@ struct Agentite_Config {
     .window_width = 1280, \
     .window_height = 720, \
     .fullscreen = false, \
+    .resizable = true, \
     .vsync = true \
 }
 
@@ -126,6 +128,14 @@ void agentite_end_render_pass(Agentite_Engine *engine);  // End render pass and 
 // Get current render pass and command buffer (for UI rendering)
 SDL_GPURenderPass *agentite_get_render_pass(Agentite_Engine *engine);
 SDL_GPUCommandBuffer *agentite_get_command_buffer(Agentite_Engine *engine);
+
+// DPI and screen dimension functions
+// Returns the DPI scale factor (1.0 on standard displays, 2.0 on retina/high-DPI)
+float agentite_get_dpi_scale(Agentite_Engine *engine);
+// Get logical window size (use for game coordinates, UI layout)
+void agentite_get_window_size(Agentite_Engine *engine, int *w, int *h);
+// Get physical drawable size in actual pixels (use for rendering, GPU operations)
+void agentite_get_drawable_size(Agentite_Engine *engine, int *w, int *h);
 
 // Core infrastructure
 #include "agentite/error.h"

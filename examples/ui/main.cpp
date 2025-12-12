@@ -14,7 +14,7 @@ int main(int argc, char *argv[]) {
     (void)argv;
 
     Agentite_Config config = {
-        .window_title = "Carbon - UI Example",
+        .window_title = "Agentite - UI Example",
         .window_width = 1280,
         .window_height = 720,
         .vsync = true
@@ -41,6 +41,10 @@ int main(int argc, char *argv[]) {
         agentite_shutdown(engine);
         return 1;
     }
+
+    /* Set DPI scale for input coordinate conversion (logical coords used throughout) */
+    float dpi_scale = agentite_get_dpi_scale(engine);
+    aui_set_dpi_scale(ui, dpi_scale);
 
     Agentite_Input *input = agentite_input_init();
 

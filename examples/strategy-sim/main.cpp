@@ -1,7 +1,7 @@
 /**
  * Strategy-Sim Example
  *
- * Demonstrates the Carbon engine's strategy game systems:
+ * Demonstrates the Agentite engine's strategy game systems:
  * - Turn-based game loop with phases
  * - Resource management (money, research points)
  * - Modifier stacking for policy effects
@@ -85,7 +85,7 @@ __attribute__((unused))
 static bool parse_policy(const char *key, toml_table_t *table, void *out, void *userdata) {
     (void)key;
     (void)userdata;
-    PolicyDef *p = out;
+    PolicyDef *p = (PolicyDef *)out;
 
     agentite_toml_get_string(table, "id", p->id, sizeof(p->id));
     agentite_toml_get_string(table, "name", p->name, sizeof(p->name));
@@ -102,7 +102,7 @@ static bool parse_policy(const char *key, toml_table_t *table, void *out, void *
 static bool parse_tech(const char *key, toml_table_t *table, void *out, void *userdata) {
     (void)key;
     (void)userdata;
-    Agentite_UnlockDef *t = out;
+    Agentite_UnlockDef *t = (Agentite_UnlockDef *)out;
 
     agentite_toml_get_string(table, "id", t->id, sizeof(t->id));
     agentite_toml_get_string(table, "name", t->name, sizeof(t->name));
@@ -156,10 +156,10 @@ static void game_init(void) {
     if (agentite_data_load(tech_loader, "examples/strategy-sim/data/techs.toml",
                          "tech", sizeof(Agentite_UnlockDef), parse_tech, NULL)) {
         for (size_t i = 0; i < agentite_data_count(tech_loader); i++) {
-            Agentite_UnlockDef *def = agentite_data_get_by_index(tech_loader, i);
+            Agentite_UnlockDef *def = (Agentite_UnlockDef *)agentite_data_get_by_index(tech_loader, i);
             agentite_unlock_register(game.tech_tree, def);
         }
-        printf("Loaded %zu technologies\n", agentite_data_count(tech_loader));
+        SDL_Log("Loaded %zu technologies", agentite_data_count(tech_loader));
     }
     agentite_data_destroy(tech_loader);
 
@@ -223,7 +223,7 @@ static void check_end_conditions(void) {
 
 // Serialize game state for saving
 static bool serialize_game(void *gs, Agentite_SaveWriter *writer) {
-    GameState *g = gs;
+    GameState *g = (GameState *)gs;
 
     agentite_save_write_int(writer, "turn", g->turns.turn_number);
     agentite_save_write_int(writer, "money", g->money.current);
@@ -236,7 +236,7 @@ static bool serialize_game(void *gs, Agentite_SaveWriter *writer) {
 
 // Deserialize game state when loading
 static bool deserialize_game(void *gs, Agentite_SaveReader *reader) {
-    GameState *g = gs;
+    GameState *g = (GameState *)gs;
 
     agentite_save_read_int(reader, "turn", &g->turns.turn_number);
     agentite_save_read_int(reader, "money", &g->money.current);
@@ -249,6 +249,8 @@ static bool deserialize_game(void *gs, Agentite_SaveReader *reader) {
 
 // Process one game turn
 static void process_turn(void) {
+    SDL_Log("Processing turn %d...", game.turns.turn_number);
+
     // Record state before turn
     record_history_snapshot();
 
@@ -260,7 +262,7 @@ static void process_turn(void) {
     // Process ongoing research
     if (agentite_unlock_is_researching(&game.research)) {
         if (agentite_unlock_add_points(game.tech_tree, &game.research, 5)) {
-            printf("Research completed!\n");
+            SDL_Log("Research completed: %s", game.research.current_id);
 
             // Apply tech effect
             const Agentite_UnlockDef *tech = agentite_unlock_find(game.tech_tree,
@@ -282,9 +284,9 @@ static void process_turn(void) {
 
     if (agentite_event_check_triggers(game.events, &ctx)) {
         const Agentite_ActiveEvent *event = agentite_event_get_pending(game.events);
-        printf("\n=== EVENT: %s ===\n%s\n", event->def->name, event->def->description);
+        SDL_Log("EVENT: %s - %s", event->def->name, event->def->description);
         for (int i = 0; i < event->def->choice_count; i++) {
-            printf("[%d] %s - %s\n", i + 1,
+            SDL_Log("  [%d] %s - %s", i + 1,
                    event->def->choices[i].label,
                    event->def->choices[i].description);
         }
@@ -296,6 +298,9 @@ static void process_turn(void) {
 
     // Advance turn
     game.turns.turn_number++;
+    SDL_Log("Turn %d started. Money: %d, Research: %d, Emissions: %.0f%%, Approval: %.0f%%",
+            game.turns.turn_number, game.money.current, game.research_points.current,
+            game.emissions * 100.0f, game.approval * 100.0f);
 }
 
 // Handle event choice
@@ -331,7 +336,9 @@ static void handle_event_choice(int choice) {
 static void start_research(const char *tech_id) {
     if (agentite_unlock_can_research(game.tech_tree, tech_id)) {
         agentite_unlock_start_research(game.tech_tree, &game.research, tech_id);
-        printf("Started researching: %s\n", tech_id);
+        SDL_Log("Started researching: %s", tech_id);
+    } else {
+        SDL_Log("Cannot research: %s (already completed or missing prereqs)", tech_id);
     }
 }
 
@@ -366,9 +373,17 @@ int main(int argc, char *argv[]) {
     // Initialize game
     game_init();
 
-    printf("\n=== Strategy Sim Demo ===\n");
-    printf("SPACE: Advance turn | S: Save | L: Load | ESC: Quit\n");
-    printf("1-9: Event choices | R: Start research\n\n");
+    SDL_Log("=== Strategy Sim Demo ===");
+    SDL_Log("SPACE: Advance turn | S: Save | L: Load | ESC: Quit");
+    SDL_Log("1-9: Event choices | R: Start research");
+
+    // Debug: Check available techs at start
+    const Agentite_UnlockDef *initial_techs[10];
+    int initial_count = agentite_unlock_get_available(game.tech_tree, initial_techs, 10);
+    SDL_Log("Available techs at start: %d", initial_count);
+    for (int i = 0; i < initial_count; i++) {
+        SDL_Log("  - %s: %s", initial_techs[i]->id, initial_techs[i]->name);
+    }
 
     // Main loop
     while (agentite_is_running(engine)) {
@@ -376,7 +391,6 @@ int main(int argc, char *argv[]) {
 
         // Input handling
         agentite_input_begin_frame(input);
-        agentite_poll_events(engine);
 
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -396,7 +410,7 @@ int main(int argc, char *argv[]) {
             if (game.awaiting_choice) {
                 // Handle event choices 1-9
                 for (int i = 0; i < 9; i++) {
-                    if (agentite_input_key_just_pressed(input, SDL_SCANCODE_1 + i)) {
+                    if (agentite_input_key_just_pressed(input, (SDL_Scancode)(SDL_SCANCODE_1 + i))) {
                         handle_event_choice(i);
                     }
                 }
@@ -410,8 +424,12 @@ int main(int argc, char *argv[]) {
                     // Find first available tech
                     const Agentite_UnlockDef *available[10];
                     int count = agentite_unlock_get_available(game.tech_tree, available, 10);
+                    SDL_Log("R pressed - available techs: %d", count);
                     if (count > 0) {
+                        SDL_Log("Starting research: %s", available[0]->id);
                         start_research(available[0]->id);
+                    } else {
+                        SDL_Log("No techs available to research");
                     }
                 }
             }
@@ -421,18 +439,18 @@ int main(int argc, char *argv[]) {
         if (agentite_input_key_just_pressed(input, SDL_SCANCODE_S)) {
             Agentite_SaveResult result = agentite_save_quick(game.saves, serialize_game, &game);
             if (result.success) {
-                printf("Game saved: %s\n", result.filepath);
+                SDL_Log("Game saved: %s", result.filepath);
             } else {
-                printf("Save failed: %s\n", result.error_message);
+                SDL_Log("Save failed: %s", result.error_message);
             }
         }
 
         if (agentite_input_key_just_pressed(input, SDL_SCANCODE_L)) {
             Agentite_SaveResult result = agentite_load_quick(game.saves, deserialize_game, &game);
             if (result.success) {
-                printf("Game loaded from: %s\n", result.filepath);
+                SDL_Log("Game loaded from: %s", result.filepath);
             } else {
-                printf("Load failed: %s\n", result.error_message);
+                SDL_Log("Load failed: %s", result.error_message);
             }
         }
 

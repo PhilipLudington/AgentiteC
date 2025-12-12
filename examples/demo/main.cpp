@@ -23,7 +23,7 @@ static void *create_test_beep_wav(int frequency, float duration, float volume, s
 
     /* WAV header is 44 bytes */
     int wav_size = 44 + data_size;
-    unsigned char *wav = malloc(wav_size);
+    unsigned char *wav = (unsigned char *)malloc(wav_size);
     if (!wav) return NULL;
 
     /* Write WAV header */
@@ -76,7 +76,7 @@ static Agentite_Texture *create_tileset_texture(Agentite_SpriteRenderer *sr, int
 {
     int cols = 4, rows = 4;
     int size = tile_size * cols;
-    unsigned char *pixels = malloc(size * size * 4);
+    unsigned char *pixels = (unsigned char *)malloc(size * size * 4);
     if (!pixels) return NULL;
 
     /* Define 16 different tile colors */
@@ -133,7 +133,7 @@ static Agentite_Texture *create_tileset_texture(Agentite_SpriteRenderer *sr, int
 /* Helper: Create a procedural checkerboard texture */
 static Agentite_Texture *create_test_texture(Agentite_SpriteRenderer *sr, int size, int tile_size)
 {
-    unsigned char *pixels = malloc(size * size * 4);
+    unsigned char *pixels = (unsigned char *)malloc(size * size * 4);
     if (!pixels) return NULL;
 
     for (int y = 0; y < size; y++) {
@@ -197,6 +197,10 @@ int main(int argc, char *argv[]) {
         agentite_shutdown(engine);
         return 1;
     }
+
+    /* Set DPI scale for input coordinate conversion (logical coords used throughout) */
+    float dpi_scale = agentite_get_dpi_scale(engine);
+    aui_set_dpi_scale(ui, dpi_scale);
 
     /* Initialize sprite renderer */
     Agentite_SpriteRenderer *sprites = agentite_sprite_init(
@@ -300,14 +304,20 @@ int main(int argc, char *argv[]) {
     ecs_world_t *w = agentite_ecs_get_world(ecs_world);
 
     ecs_entity_t player = agentite_ecs_entity_new_named(ecs_world, "Player");
-    ecs_set(w, player, C_Position, { .x = 100.0f, .y = 100.0f });
-    ecs_set(w, player, C_Velocity, { .vx = 0.0f, .vy = 0.0f });
-    ecs_set(w, player, C_Health, { .health = 100, .max_health = 100 });
+    C_Position player_pos = { .x = 100.0f, .y = 100.0f };
+    C_Velocity player_vel = { .vx = 0.0f, .vy = 0.0f };
+    C_Health player_hp = { .health = 100, .max_health = 100 };
+    ecs_set_ptr(w, player, C_Position, &player_pos);
+    ecs_set_ptr(w, player, C_Velocity, &player_vel);
+    ecs_set_ptr(w, player, C_Health, &player_hp);
 
     ecs_entity_t enemy = agentite_ecs_entity_new_named(ecs_world, "Enemy");
-    ecs_set(w, enemy, C_Position, { .x = 500.0f, .y = 300.0f });
-    ecs_set(w, enemy, C_Velocity, { .vx = -10.0f, .vy = 5.0f });
-    ecs_set(w, enemy, C_Health, { .health = 50, .max_health = 50 });
+    C_Position enemy_pos_init = { .x = 500.0f, .y = 300.0f };
+    C_Velocity enemy_vel_init = { .vx = -10.0f, .vy = 5.0f };
+    C_Health enemy_hp = { .health = 50, .max_health = 50 };
+    ecs_set_ptr(w, enemy, C_Position, &enemy_pos_init);
+    ecs_set_ptr(w, enemy, C_Velocity, &enemy_vel_init);
+    ecs_set_ptr(w, enemy, C_Health, &enemy_hp);
 
     SDL_Log("Created player entity: %llu", (unsigned long long)player);
     SDL_Log("Created enemy entity: %llu", (unsigned long long)enemy);
@@ -604,8 +614,10 @@ int main(int argc, char *argv[]) {
             float new_vy = enemy_vel->vy;
             if (new_x < 0 || new_x > 1280) new_vx = -enemy_vel->vx;
             if (new_y < 0 || new_y > 720) new_vy = -enemy_vel->vy;
-            ecs_set(w, enemy, C_Position, { .x = new_x, .y = new_y });
-            ecs_set(w, enemy, C_Velocity, { .vx = new_vx, .vy = new_vy });
+            C_Position new_pos = { .x = new_x, .y = new_y };
+            C_Velocity new_vel = { .vx = new_vx, .vy = new_vy };
+            ecs_set_ptr(w, enemy, C_Position, &new_pos);
+            ecs_set_ptr(w, enemy, C_Velocity, &new_vel);
         }
 
         /* Begin UI frame */
@@ -727,7 +739,7 @@ int main(int argc, char *argv[]) {
         }
 
         /* Draw Audio panel */
-        if (aui_begin_panel(ui, "Audio", 700, 450, 280, 200,
+        if (aui_begin_panel(ui, "Audio", 760, 450, 280, 250,
                            AUI_PANEL_TITLE_BAR | AUI_PANEL_BORDER)) {
 
             /* Master volume slider */
@@ -836,13 +848,13 @@ int main(int argc, char *argv[]) {
                 agentite_sdf_text_set_outline(text, 0.2f, 0.1f, 0.1f, 0.1f, 1.0f);
                 agentite_sdf_text_draw_colored(text, msdf_font, "MSDF Text Demo", 450.0f, 50.0f, 1.2f,
                                              1.0f, 0.9f, 0.4f, 1.0f);
-                agentite_sdf_text_draw_colored(text, msdf_font, "MSDF Font:", 120.0f, 520.0f, 0.8f,
+                agentite_sdf_text_draw_colored(text, msdf_font, "MSDF Font:", 50.0f, 480.0f, 0.8f,
                                              0.8f, 0.8f, 0.8f, 1.0f);
-                agentite_sdf_text_draw_colored(text, msdf_font, "Outlined", 120.0f, 550.0f, 1.0f,
+                agentite_sdf_text_draw_colored(text, msdf_font, "Outlined", 50.0f, 520.0f, 1.0f,
                                              1.0f, 1.0f, 1.0f, 1.0f);
-                agentite_sdf_text_draw_colored(text, msdf_font, "Sharp!", 280.0f, 550.0f, msdf_scale,
+                agentite_sdf_text_draw_colored(text, msdf_font, "Sharp!", 200.0f, 520.0f, msdf_scale,
                                              0.4f, 1.0f, 0.6f, 1.0f);
-                agentite_sdf_text_draw_colored(text, msdf_font, "With Outline!", 120.0f, 590.0f, 1.0f,
+                agentite_sdf_text_draw_colored(text, msdf_font, "With Outline!", 50.0f, 560.0f, 1.0f,
                                              0.5f, 0.8f, 1.0f, 1.0f);
                 agentite_text_end(text);
             }

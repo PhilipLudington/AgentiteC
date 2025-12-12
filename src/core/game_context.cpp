@@ -100,13 +100,18 @@ Agentite_GameContext *agentite_game_context_create(const Agentite_GameContextCon
         const char *ui_font = config->ui_font_path ? config->ui_font_path : config->font_path;
         float ui_size = config->ui_font_size > 0 ? config->ui_font_size : 16.0f;
 
-        /* UI requires a font - use a default path if none specified */
+        /* Get logical dimensions and DPI scale */
+        int logical_w, logical_h;
+        agentite_get_window_size(ctx->engine, &logical_w, &logical_h);
+        float dpi_scale = agentite_get_dpi_scale(ctx->engine);
+
+        /* UI uses logical coordinates (matches camera and sprite renderer) */
         if (ui_font) {
             ctx->ui = aui_init(
                 agentite_get_gpu_device(ctx->engine),
                 agentite_get_window(ctx->engine),
-                config->window_width,
-                config->window_height,
+                logical_w,
+                logical_h,
                 ui_font,
                 ui_size
             );
@@ -114,6 +119,9 @@ Agentite_GameContext *agentite_game_context_create(const Agentite_GameContextCon
                 agentite_set_error("Failed to initialize UI system");
                 goto error;
             }
+
+            /* Set DPI scale for high-DPI awareness (used for input scaling) */
+            aui_set_dpi_scale(ctx->ui, dpi_scale);
         }
     }
 
@@ -223,9 +231,39 @@ void agentite_game_context_poll_events(Agentite_GameContext *ctx) {
         /* Let input system process the event */
         agentite_input_process_event(ctx->input, &event);
 
-        /* Handle quit event */
-        if (event.type == SDL_EVENT_QUIT) {
-            agentite_quit(ctx->engine);
+        /* Handle window events */
+        switch (event.type) {
+            case SDL_EVENT_QUIT:
+                agentite_quit(ctx->engine);
+                break;
+
+            case SDL_EVENT_WINDOW_RESIZED: {
+                /* Logical window size changed - update all renderers */
+                int logical_w = event.window.data1;
+                int logical_h = event.window.data2;
+
+                /* All renderers use logical coordinates for consistency */
+                if (ctx->sprites) {
+                    agentite_sprite_set_screen_size(ctx->sprites, logical_w, logical_h);
+                }
+
+                if (ctx->text) {
+                    agentite_text_set_screen_size(ctx->text, logical_w, logical_h);
+                }
+
+                if (ctx->ui) {
+                    aui_set_screen_size(ctx->ui, logical_w, logical_h);
+                }
+
+                if (ctx->camera) {
+                    agentite_camera_set_viewport(ctx->camera, (float)logical_w, (float)logical_h);
+                }
+
+                /* Update cached dimensions */
+                ctx->window_width = logical_w;
+                ctx->window_height = logical_h;
+                break;
+            }
         }
     }
 

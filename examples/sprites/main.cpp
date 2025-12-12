@@ -14,7 +14,7 @@
 
 /* Create a simple checkerboard texture procedurally */
 static Agentite_Texture *create_checker_texture(Agentite_SpriteRenderer *sr, int size) {
-    unsigned char *pixels = malloc(size * size * 4);
+    unsigned char *pixels = (unsigned char *)malloc(size * size * 4);
     if (!pixels) return NULL;
 
     for (int y = 0; y < size; y++) {
@@ -47,7 +47,7 @@ int main(int argc, char *argv[]) {
     (void)argv;
 
     Agentite_Config config = {
-        .window_title = "Carbon - Sprites Example",
+        .window_title = "Agentite - Sprites Example",
         .window_width = 1280,
         .window_height = 720,
         .vsync = true

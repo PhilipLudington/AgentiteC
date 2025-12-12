@@ -12,6 +12,13 @@ struct Agentite_Engine {
     uint64_t last_frame_time;
     float delta_time;
 
+    // Window dimensions and DPI scaling
+    int logical_width;      // Window size in logical (CSS-like) pixels
+    int logical_height;
+    int physical_width;     // Drawable size in actual screen pixels
+    int physical_height;
+    float dpi_scale;        // physical / logical ratio (1.0 on standard, 2.0 on retina)
+
     // Current frame rendering state
     SDL_GPUCommandBuffer *cmd_buffer;
     SDL_GPURenderPass *render_pass;
@@ -43,6 +50,9 @@ Agentite_Engine *agentite_init(const Agentite_Config *config) {
     SDL_WindowFlags window_flags = SDL_WINDOW_HIGH_PIXEL_DENSITY;
     if (config->fullscreen) {
         window_flags |= SDL_WINDOW_FULLSCREEN;
+    }
+    if (config->resizable) {
+        window_flags |= SDL_WINDOW_RESIZABLE;
     }
 
     engine->window = SDL_CreateWindow(
@@ -96,6 +106,22 @@ Agentite_Engine *agentite_init(const Agentite_Config *config) {
     const char *driver_name = SDL_GetGPUDeviceDriver(engine->gpu_device);
     SDL_Log("Agentite Engine initialized with GPU driver: %s", driver_name);
 
+    // Query window dimensions and DPI scale
+    SDL_GetWindowSize(engine->window, &engine->logical_width, &engine->logical_height);
+    SDL_GetWindowSizeInPixels(engine->window, &engine->physical_width, &engine->physical_height);
+
+    // Calculate DPI scale (avoid division by zero)
+    if (engine->logical_width > 0) {
+        engine->dpi_scale = (float)engine->physical_width / (float)engine->logical_width;
+    } else {
+        engine->dpi_scale = 1.0f;
+    }
+
+    SDL_Log("Window: %dx%d logical, %dx%d physical, DPI scale: %.2f",
+            engine->logical_width, engine->logical_height,
+            engine->physical_width, engine->physical_height,
+            engine->dpi_scale);
+
     engine->running = true;
     engine->frame_count = 0;
     engine->last_frame_time = SDL_GetPerformanceCounter();
@@ -145,6 +171,27 @@ void agentite_poll_events(Agentite_Engine *engine) {
                 if (event.key.key == SDLK_ESCAPE) {
                     engine->running = false;
                 }
+                break;
+            case SDL_EVENT_WINDOW_RESIZED:
+                // Logical window size changed
+                engine->logical_width = event.window.data1;
+                engine->logical_height = event.window.data2;
+                // Recalculate DPI scale
+                if (engine->logical_width > 0) {
+                    engine->dpi_scale = (float)engine->physical_width / (float)engine->logical_width;
+                }
+                SDL_Log("Window resized: %dx%d logical", engine->logical_width, engine->logical_height);
+                break;
+            case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+                // Physical pixel size changed (DPI change, display change, etc.)
+                engine->physical_width = event.window.data1;
+                engine->physical_height = event.window.data2;
+                // Recalculate DPI scale
+                if (engine->logical_width > 0) {
+                    engine->dpi_scale = (float)engine->physical_width / (float)engine->logical_width;
+                }
+                SDL_Log("Pixel size changed: %dx%d physical, DPI scale: %.2f",
+                        engine->physical_width, engine->physical_height, engine->dpi_scale);
                 break;
             default:
                 break;
@@ -324,4 +371,30 @@ SDL_GPURenderPass *agentite_get_render_pass(Agentite_Engine *engine) {
 
 SDL_GPUCommandBuffer *agentite_get_command_buffer(Agentite_Engine *engine) {
     return engine ? engine->cmd_buffer : NULL;
+}
+
+/* DPI and dimension functions */
+
+float agentite_get_dpi_scale(Agentite_Engine *engine) {
+    return engine ? engine->dpi_scale : 1.0f;
+}
+
+void agentite_get_window_size(Agentite_Engine *engine, int *w, int *h) {
+    if (engine) {
+        if (w) *w = engine->logical_width;
+        if (h) *h = engine->logical_height;
+    } else {
+        if (w) *w = 0;
+        if (h) *h = 0;
+    }
+}
+
+void agentite_get_drawable_size(Agentite_Engine *engine, int *w, int *h) {
+    if (engine) {
+        if (w) *w = engine->physical_width;
+        if (h) *h = engine->physical_height;
+    } else {
+        if (w) *w = 0;
+        if (h) *h = 0;
+    }
 }

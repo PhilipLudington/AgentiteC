@@ -14,7 +14,7 @@ int main(int argc, char *argv[]) {
 
     /* Configure engine with minimal settings */
     Agentite_Config config = {
-        .window_title = "Carbon - Minimal Example",
+        .window_title = "Agentite - Minimal Example",
         .window_width = 800,
         .window_height = 600,
         .fullscreen = false,

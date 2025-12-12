@@ -167,6 +167,30 @@ void aui_theme_set_semantic_colors(AUI_Theme *theme,
     theme->info_hover = aui_color_brighten(info, 0.15f);
 }
 
+void aui_theme_scale(AUI_Theme *theme, float dpi_scale)
+{
+    if (!theme || dpi_scale <= 0.0f) return;
+
+    /* Scale all metric values by DPI factor */
+    theme->corner_radius *= dpi_scale;
+    theme->border_width *= dpi_scale;
+    theme->widget_height *= dpi_scale;
+    theme->spacing *= dpi_scale;
+    theme->padding *= dpi_scale;
+    theme->scrollbar_width *= dpi_scale;
+}
+
+void aui_set_dpi_scale(AUI_Context *ctx, float dpi_scale)
+{
+    if (!ctx) return;
+    ctx->dpi_scale = dpi_scale > 0.0f ? dpi_scale : 1.0f;
+}
+
+float aui_get_dpi_scale(const AUI_Context *ctx)
+{
+    return ctx ? ctx->dpi_scale : 1.0f;
+}
+
 static void aui_init_theme(AUI_Context *ctx)
 {
     ctx->theme = aui_theme_dark();
@@ -189,6 +213,7 @@ AUI_Context *aui_init(SDL_GPUDevice *gpu, SDL_Window *window, int width, int hei
     ctx->window = window;
     ctx->width = width;
     ctx->height = height;
+    ctx->dpi_scale = 1.0f;  /* Default to 1.0, caller can adjust via aui_set_dpi_scale */
 
     /* Initialize theme */
     aui_init_theme(ctx);

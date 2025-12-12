@@ -477,7 +477,7 @@ Agentite_SpriteRenderer *agentite_sprite_init(SDL_GPUDevice *gpu, SDL_Window *wi
     sr->gpu = gpu;
     sr->window = window;
 
-    /* Get window size */
+    /* Get window size in logical coordinates (matches camera and text renderer) */
     SDL_GetWindowSize(window, &sr->screen_width, &sr->screen_height);
 
     /* Allocate CPU-side buffers */

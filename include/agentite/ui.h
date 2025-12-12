@@ -272,6 +272,7 @@ typedef struct AUI_Context {
 
     /* Screen dimensions */
     int width, height;
+    float dpi_scale;        /* DPI scale factor (1.0 standard, 2.0 retina) */
 
     /* Frame timing */
     float delta_time;
@@ -702,6 +703,13 @@ void aui_theme_set_accent(AUI_Theme *theme, uint32_t color);
 void aui_theme_set_semantic_colors(AUI_Theme *theme,
                                     uint32_t success, uint32_t warning,
                                     uint32_t danger, uint32_t info);
+
+/* Scale theme metrics by DPI factor (corner_radius, border_width, etc.) */
+void aui_theme_scale(AUI_Theme *theme, float dpi_scale);
+
+/* Set DPI scale for the UI context (affects coordinate scaling) */
+void aui_set_dpi_scale(AUI_Context *ctx, float dpi_scale);
+float aui_get_dpi_scale(const AUI_Context *ctx);
 
 #ifdef __cplusplus
 }

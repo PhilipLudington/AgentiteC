@@ -16,7 +16,7 @@
 static Agentite_Texture *create_tileset_texture(Agentite_SpriteRenderer *sr, int tile_size) {
     int cols = 4, rows = 4;
     int size = tile_size * cols;
-    unsigned char *pixels = malloc(size * size * 4);
+    unsigned char *pixels = (unsigned char *)malloc(size * size * 4);
     if (!pixels) return NULL;
 
     /* Tile colors */
@@ -74,7 +74,7 @@ int main(int argc, char *argv[]) {
     (void)argv;
 
     Agentite_Config config = {
-        .window_title = "Carbon - Tilemap Example",
+        .window_title = "Agentite - Tilemap Example",
         .window_width = 1280,
         .window_height = 720,
         .vsync = true

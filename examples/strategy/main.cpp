@@ -34,7 +34,7 @@ typedef struct {
 /* Create simple unit texture */
 static Agentite_Texture *create_unit_texture(Agentite_SpriteRenderer *sr) {
     int size = 24;
-    unsigned char *pixels = malloc(size * size * 4);
+    unsigned char *pixels = (unsigned char *)malloc(size * size * 4);
 
     for (int y = 0; y < size; y++) {
         for (int x = 0; x < size; x++) {
@@ -71,7 +71,7 @@ static Agentite_Texture *create_unit_texture(Agentite_SpriteRenderer *sr) {
 static Agentite_Texture *create_tileset(Agentite_SpriteRenderer *sr) {
     int tile_size = TILE_SIZE;
     int size = tile_size * 4;
-    unsigned char *pixels = malloc(size * size * 4);
+    unsigned char *pixels = (unsigned char *)malloc(size * size * 4);
 
     unsigned char colors[16][3] = {
         {34, 139, 34},    /* 0: Grass */
@@ -119,7 +119,7 @@ int main(int argc, char *argv[]) {
     (void)argv;
 
     Agentite_Config config = {
-        .window_title = "Carbon - Strategy Example",
+        .window_title = "Agentite - Strategy Example",
         .window_width = 1280,
         .window_height = 720,
         .vsync = true
@@ -137,6 +137,12 @@ int main(int argc, char *argv[]) {
     AUI_Context *ui = aui_init(
         agentite_get_gpu_device(engine), agentite_get_window(engine),
         1280, 720, "assets/fonts/Roboto-Regular.ttf", 14.0f);
+
+    /* Set up DPI scaling for high-DPI displays */
+    if (ui) {
+        float dpi_scale = agentite_get_dpi_scale(engine);
+        aui_set_dpi_scale(ui, dpi_scale);
+    }
 
     /* Create textures */
     Agentite_Texture *unit_tex = create_unit_texture(sprites);
@@ -228,7 +234,7 @@ int main(int argc, char *argv[]) {
         agentite_camera_screen_to_world(camera, mouse_x, mouse_y, &world_x, &world_y);
 
         /* Selection box (left click + drag) */
-        if (agentite_input_mouse_button_just_pressed(input, 0)) {
+        if (agentite_input_mouse_button_pressed(input, 0)) {
             selecting = true;
             sel_start_x = world_x;
             sel_start_y = world_y;
@@ -239,7 +245,7 @@ int main(int argc, char *argv[]) {
             sel_end_x = world_x;
             sel_end_y = world_y;
         }
-        if (selecting && agentite_input_mouse_button_just_released(input, 0)) {
+        if (selecting && agentite_input_mouse_button_released(input, 0)) {
             selecting = false;
 
             /* Select units in box */
@@ -255,7 +261,7 @@ int main(int argc, char *argv[]) {
         }
 
         /* Right click: move selected units */
-        if (agentite_input_mouse_button_just_pressed(input, 2)) {
+        if (agentite_input_mouse_button_pressed(input, 2)) {
             int tile_x = (int)(world_x / TILE_SIZE);
             int tile_y = (int)(world_y / TILE_SIZE);
 
