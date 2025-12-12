@@ -701,7 +701,9 @@ Agentite_TextRenderer *agentite_text_init(SDL_GPUDevice *gpu, SDL_Window *window
     tr->gpu = gpu;
     tr->window = window;
 
-    /* Get window size */
+    /* Get logical window size - user coordinates are in logical space, not pixel space.
+     * This ensures text positioned at y=700 in a 720-point window appears near the bottom,
+     * regardless of Retina/HiDPI scaling. */
     SDL_GetWindowSize(window, &tr->screen_width, &tr->screen_height);
 
     /* Allocate CPU-side buffers */
