@@ -192,3 +192,291 @@ if (!tex) {
 - Graphics: SDL3 SDL_GPU (auto-selects Metal/Vulkan/D3D12)
 - ECS: Flecs v4.0.0
 - Math: cglm (SIMD-optimized)
+
+## Conventions
+
+### Memory Ownership
+
+**Create/Destroy Pattern:**
+- Functions named `_create()` allocate and return ownership to caller
+- Functions named `_destroy()` free resources; caller must not use pointer after
+- Every `_create()` must have a matching `_destroy()` call
+
+**Ownership Transfer:**
+- `agentite_texture_load()` → Caller owns the texture, must call `agentite_texture_destroy()`
+- `agentite_*_renderer_create()` → Caller owns renderer, must destroy before GPU device
+- Config structs are copied; safe to pass stack-allocated configs
+
+**Lifetime Requirements:**
+- Textures must outlive sprites/tilemaps using them
+- Renderers must outlive their resources (textures, fonts)
+- GPU device must outlive all renderers
+- Destroying a renderer invalidates all resources created from it
+
+**Borrowed References:**
+- Functions returning `const char*` return borrowed pointers; do not free
+- `agentite_get_last_error()` returns static/thread-local string; valid until next error
+- Iterator/query results in ECS are borrowed; invalid after world modifications
+
+### Error Handling
+
+**Return Value Patterns:**
+- Pointer-returning functions: `NULL` = failure
+- Bool-returning functions: `false` = failure
+- Int-returning functions: negative = error code, 0+ = success
+
+**When to Check `agentite_get_last_error()`:**
+```c
+// After any function that can fail
+Agentite_Texture *tex = agentite_texture_load(sr, "sprite.png");
+if (!tex) {
+    SDL_Log("Error: %s", agentite_get_last_error());
+    // Handle gracefully or exit
+}
+```
+
+**Functions That Can Fail:**
+- All `_create()` functions (allocation, GPU resource creation)
+- All `_load()` functions (file I/O, parsing)
+- `agentite_begin_render_pass()` (GPU state)
+- Shader compilation (during renderer creation)
+
+**Functions That Cannot Fail (no error check needed):**
+- `_destroy()` functions (safe even with NULL)
+- `_draw()` / `_render()` functions (no-op if nothing to draw)
+- Getter functions (`_get_width()`, `_get_position()`, etc.)
+
+### Naming Conventions
+
+| Prefix/Suffix | Usage | Example |
+|---------------|-------|---------|
+| `Agentite_` | Public types (structs, enums) | `Agentite_Camera` |
+| `agentite_` | Public functions | `agentite_sprite_draw()` |
+| `C_` | ECS components | `C_Position`, `C_Velocity` |
+| `S_` | ECS singleton components | `S_GameState` |
+| `_create/_destroy` | Lifecycle functions | `agentite_text_create()` |
+| `_init/_deinit` | Initialize existing memory | `agentite_camera_init()` |
+| `_begin/_end` | Scoped operations | `agentite_sprite_begin()` |
+
+**Internal Naming (in .cpp files):**
+- Static functions: lowercase with underscores, no prefix
+- Static variables: `s_` prefix
+- Constants: `k_` prefix or `SCREAMING_CASE`
+
+### Thread Safety
+
+**Main Thread Only (NOT thread-safe):**
+- All SDL functions
+- All rendering functions (`_render()`, `_draw()`, `_upload()`)
+- Window/input handling
+- ECS world modifications
+
+**Thread-Safe:**
+- `agentite_get_last_error()` (thread-local storage)
+- Read-only ECS queries (with proper synchronization)
+- Formula evaluation (after parsing)
+- Pure math functions (cglm)
+
+**Safe Patterns for Background Loading:**
+```c
+// WRONG - GPU operations on background thread
+void* load_thread(void* arg) {
+    tex = agentite_texture_load(sr, path);  // CRASH!
+}
+
+// RIGHT - Load data on background, create GPU resource on main
+void* load_thread(void* arg) {
+    // Load raw image data (CPU only)
+    image_data = stbi_load(path, &w, &h, &c, 4);
+}
+// Then on main thread:
+tex = agentite_texture_create_from_data(sr, image_data, w, h);
+```
+
+## Common Pitfalls
+
+### Rendering Order
+
+**Upload Before Render Pass:**
+```c
+// WRONG - upload during render pass
+agentite_begin_render_pass(engine, cmd, &pass);
+agentite_sprite_upload(sr, cmd);  // TOO LATE!
+agentite_sprite_render(sr, cmd, pass);
+
+// RIGHT - upload before render pass
+agentite_sprite_upload(sr, cmd);
+agentite_begin_render_pass(engine, cmd, &pass);
+agentite_sprite_render(sr, cmd, pass);
+```
+
+**Correct Render Layer Order:**
+1. Tilemap (background)
+2. Sprites (game objects)
+3. Text (labels, HUD)
+4. UI (menus, dialogs - rendered last, on top)
+
+**Batch Operations Must Be Paired:**
+```c
+agentite_sprite_begin(sr, camera);  // MUST call before draw
+agentite_sprite_draw(sr, ...);
+agentite_sprite_draw(sr, ...);
+agentite_sprite_upload(sr, cmd);    // MUST call after all draws
+// ... begin render pass ...
+agentite_sprite_render(sr, cmd, pass);
+```
+
+### ECS Pitfalls
+
+**Never Delete During Iteration:**
+```c
+// WRONG - modifies world during iteration
+void BadSystem(ecs_iter_t *it) {
+    for (int i = 0; i < it->count; i++) {
+        if (should_remove) {
+            ecs_delete(it->world, it->entities[i]);  // CRASH or undefined!
+        }
+    }
+}
+
+// RIGHT - defer deletion
+void GoodSystem(ecs_iter_t *it) {
+    for (int i = 0; i < it->count; i++) {
+        if (should_remove) {
+            ecs_delete(it->world, it->entities[i]);  // Deferred by default in systems
+        }
+    }
+}
+// Or use ecs_defer_begin/end for manual control
+```
+
+**Component Pointers Invalidate:**
+```c
+// WRONG - pointer may be invalid after add
+C_Position *pos = ecs_get_mut(world, entity, C_Position);
+ecs_add(world, entity, C_Velocity);  // May relocate entity!
+pos->x = 10;  // CRASH - pos may be stale
+
+// RIGHT - get pointer after modifications
+ecs_add(world, entity, C_Velocity);
+C_Position *pos = ecs_get_mut(world, entity, C_Position);
+pos->x = 10;  // Safe
+```
+
+**System Execution Order:**
+- Systems run in registration order within a phase
+- Use `EcsOnUpdate`, `EcsPreUpdate`, `EcsPostUpdate` for ordering
+- For explicit ordering: `ecs_add_pair(world, sys, EcsDependsOn, other_sys)`
+
+**Field Indices Start at 0:**
+```c
+// Query: C_Position, C_Velocity
+C_Position *pos = ecs_field(it, C_Position, 0);  // First field = 0
+C_Velocity *vel = ecs_field(it, C_Velocity, 1);  // Second field = 1
+```
+
+### Memory Pitfalls
+
+**Texture Lifetime:**
+```c
+// WRONG - texture destroyed while sprite references it
+Agentite_Texture *tex = agentite_texture_load(sr, "sprite.png");
+Agentite_Sprite sprite = { .texture = tex, ... };
+agentite_texture_destroy(tex);
+agentite_sprite_draw(sr, &sprite, x, y);  // CRASH - tex is freed
+
+// RIGHT - keep texture alive while in use
+// Destroy textures only after they're no longer referenced
+```
+
+**Renderer Destruction Order:**
+```c
+// WRONG - destroy renderer before resources
+agentite_sprite_renderer_destroy(sr);
+agentite_texture_destroy(tex);  // CRASH - tex belongs to destroyed renderer
+
+// RIGHT - destroy resources first
+agentite_texture_destroy(tex);
+agentite_sprite_renderer_destroy(sr);
+```
+
+**String Parameters Are Copied:**
+```c
+// This is safe - engine copies the string
+char temp[256];
+snprintf(temp, sizeof(temp), "Player %d", id);
+config.window_title = temp;  // OK - copied during create
+agentite_game_context_create(&config);
+// temp can go out of scope
+```
+
+### Coordinate Systems
+
+**Screen Coordinates:**
+- Origin: top-left (0, 0)
+- X increases rightward
+- Y increases downward
+- Units: pixels
+
+**World Coordinates:**
+- Can use any convention (engine/camera handles transform)
+- Common: origin at center, Y-up for math, Y-down for 2D games
+
+**Tile Coordinates:**
+- Integer-based (tile_x, tile_y)
+- Convert to world: `world_x = tile_x * tile_width`
+- Convert from world: `tile_x = floor(world_x / tile_width)`
+
+**Camera Transform:**
+```c
+// Screen → World
+vec2 world_pos;
+agentite_camera_screen_to_world(camera, screen_x, screen_y, world_pos);
+
+// World → Screen
+vec2 screen_pos;
+agentite_camera_world_to_screen(camera, world_x, world_y, screen_pos);
+```
+
+### Input Pitfalls
+
+**Frame Timing:**
+```c
+// WRONG - missing begin_frame
+while (running) {
+    agentite_input_update(input);  // pressed/released won't work!
+}
+
+// RIGHT
+while (running) {
+    agentite_input_begin_frame(input);  // Clear previous frame state
+    // ... poll events ...
+    agentite_input_update(input);       // Process this frame
+}
+```
+
+**UI Event Consumption:**
+```c
+// WRONG - game processes event UI already handled
+SDL_Event event;
+while (SDL_PollEvent(&event)) {
+    aui_process_event(ui, &event);
+    agentite_input_process_event(input, &event);  // Double-handling!
+}
+
+// RIGHT - check if UI consumed event
+while (SDL_PollEvent(&event)) {
+    if (!aui_process_event(ui, &event)) {
+        agentite_input_process_event(input, &event);
+    }
+}
+```
+
+**Action vs Raw Input:**
+```c
+// Prefer actions for game logic (rebindable)
+if (agentite_input_action_pressed(input, "jump")) { ... }
+
+// Use raw input only for UI/editor (specific key needed)
+if (agentite_input_key_pressed(input, SDL_SCANCODE_ESCAPE)) { ... }
+```

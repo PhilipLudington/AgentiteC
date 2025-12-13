@@ -77,14 +77,17 @@
 typedef struct Agentite_Engine Agentite_Engine;
 typedef struct Agentite_Config Agentite_Config;
 
-// Engine configuration
+/**
+ * Engine configuration.
+ * Use AGENTITE_DEFAULT_CONFIG for sensible defaults.
+ */
 struct Agentite_Config {
-    const char *window_title;
-    int window_width;
-    int window_height;
-    bool fullscreen;
-    bool resizable;
-    bool vsync;
+    const char *window_title;   /* Window title bar text (copied) */
+    int window_width;           /* Initial window width in pixels */
+    int window_height;          /* Initial window height in pixels */
+    bool fullscreen;            /* Start in fullscreen mode */
+    bool resizable;             /* Allow window resizing */
+    bool vsync;                 /* Enable vertical sync (recommended) */
 };
 
 // Default configuration
@@ -97,44 +100,215 @@ struct Agentite_Config {
     .vsync = true \
 }
 
-// Core engine functions
+/* ============================================================================
+ * Core Engine Functions
+ * ============================================================================ */
+
+/**
+ * Initialize the Agentite engine.
+ * Creates window, initializes SDL3, and creates GPU device.
+ * Caller OWNS the returned pointer and MUST call agentite_shutdown().
+ *
+ * @param config Configuration (NULL for defaults)
+ * @return New engine instance, or NULL on failure. Check agentite_get_last_error().
+ */
 Agentite_Engine *agentite_init(const Agentite_Config *config);
+
+/**
+ * Shutdown the engine and free all resources.
+ * Destroys GPU device, window, and deinitializes SDL.
+ * Safe to call with NULL.
+ *
+ * @param engine Engine to shutdown
+ */
 void agentite_shutdown(Agentite_Engine *engine);
+
+/**
+ * Check if the engine is still running.
+ *
+ * @param engine Engine instance
+ * @return false if quit was requested
+ */
 bool agentite_is_running(Agentite_Engine *engine);
+
+/**
+ * Request the engine to quit.
+ * agentite_is_running() will return false after this call.
+ *
+ * @param engine Engine instance
+ */
 void agentite_quit(Agentite_Engine *engine);
 
-// Main loop functions
+/* ============================================================================
+ * Main Loop Functions
+ * ============================================================================ */
+
+/**
+ * Begin a new frame.
+ * Call at the START of your game loop.
+ * Updates timing (delta_time, frame_count).
+ *
+ * @param engine Engine instance
+ */
 void agentite_begin_frame(Agentite_Engine *engine);
+
+/**
+ * End the current frame.
+ * Call at the END of your game loop.
+ *
+ * @param engine Engine instance
+ */
 void agentite_end_frame(Agentite_Engine *engine);
+
+/**
+ * Get time elapsed since last frame.
+ *
+ * @param engine Engine instance
+ * @return Delta time in seconds
+ */
 float agentite_get_delta_time(Agentite_Engine *engine);
+
+/**
+ * Get total number of frames rendered.
+ *
+ * @param engine Engine instance
+ * @return Frame count
+ */
 uint64_t agentite_get_frame_count(Agentite_Engine *engine);
 
-// Event handling
+/* ============================================================================
+ * Event Handling
+ * ============================================================================ */
+
+/**
+ * Poll and process all pending SDL events.
+ * Handles quit events automatically.
+ * Call after agentite_begin_frame().
+ *
+ * @param engine Engine instance
+ */
 void agentite_poll_events(Agentite_Engine *engine);
 
-// Graphics (SDL_GPU)
+/* ============================================================================
+ * Graphics (SDL_GPU)
+ * ============================================================================ */
+
+/**
+ * Get the GPU device for custom rendering.
+ * The device is owned by the engine; do NOT destroy it.
+ *
+ * @param engine Engine instance
+ * @return GPU device (borrowed)
+ */
 SDL_GPUDevice *agentite_get_gpu_device(Agentite_Engine *engine);
+
+/**
+ * Get the window handle.
+ * The window is owned by the engine; do NOT destroy it.
+ *
+ * @param engine Engine instance
+ * @return Window handle (borrowed)
+ */
 SDL_Window *agentite_get_window(Agentite_Engine *engine);
 
-// Acquire command buffer for the frame (call before render pass for copy operations)
+/**
+ * Acquire a command buffer for this frame.
+ * Call BEFORE upload operations (sprite_upload, text_upload).
+ * The command buffer is valid until agentite_end_render_pass().
+ *
+ * @param engine Engine instance
+ * @return Command buffer (borrowed)
+ */
 SDL_GPUCommandBuffer *agentite_acquire_command_buffer(Agentite_Engine *engine);
 
-// Render pass management
-bool agentite_begin_render_pass(Agentite_Engine *engine, float r, float g, float b, float a);
-bool agentite_begin_render_pass_no_clear(Agentite_Engine *engine);
-void agentite_end_render_pass_no_submit(Agentite_Engine *engine);  // End render pass but keep cmd buffer
-void agentite_end_render_pass(Agentite_Engine *engine);  // End render pass and submit
+/* ============================================================================
+ * Render Pass Management
+ * ============================================================================ */
 
-// Get current render pass and command buffer (for UI rendering)
+/**
+ * Begin a render pass with a clear color.
+ * Call AFTER all upload operations.
+ *
+ * @param engine Engine instance
+ * @param r Red component (0.0-1.0)
+ * @param g Green component (0.0-1.0)
+ * @param b Blue component (0.0-1.0)
+ * @param a Alpha component (0.0-1.0)
+ * @return true on success
+ */
+bool agentite_begin_render_pass(Agentite_Engine *engine, float r, float g, float b, float a);
+
+/**
+ * Begin a render pass without clearing (preserves existing content).
+ * Use for additional render passes after the first.
+ *
+ * @param engine Engine instance
+ * @return true on success
+ */
+bool agentite_begin_render_pass_no_clear(Agentite_Engine *engine);
+
+/**
+ * End the render pass but keep the command buffer open.
+ * Use when you need multiple render passes per frame.
+ *
+ * @param engine Engine instance
+ */
+void agentite_end_render_pass_no_submit(Agentite_Engine *engine);
+
+/**
+ * End the render pass and submit the command buffer.
+ * Call at the end of rendering, presents to screen.
+ *
+ * @param engine Engine instance
+ */
+void agentite_end_render_pass(Agentite_Engine *engine);
+
+/**
+ * Get the current render pass (during rendering).
+ *
+ * @param engine Engine instance
+ * @return Current render pass, or NULL if not in a render pass
+ */
 SDL_GPURenderPass *agentite_get_render_pass(Agentite_Engine *engine);
+
+/**
+ * Get the current command buffer.
+ *
+ * @param engine Engine instance
+ * @return Current command buffer, or NULL if not acquired
+ */
 SDL_GPUCommandBuffer *agentite_get_command_buffer(Agentite_Engine *engine);
 
-// DPI and screen dimension functions
-// Returns the DPI scale factor (1.0 on standard displays, 2.0 on retina/high-DPI)
+/* ============================================================================
+ * DPI and Screen Dimensions
+ * ============================================================================ */
+
+/**
+ * Get the DPI scale factor.
+ *
+ * @param engine Engine instance
+ * @return Scale factor (1.0 = standard, 2.0 = retina/high-DPI)
+ */
 float agentite_get_dpi_scale(Agentite_Engine *engine);
-// Get logical window size (use for game coordinates, UI layout)
+
+/**
+ * Get the logical window size.
+ * Use for game coordinates and UI layout.
+ *
+ * @param engine Engine instance
+ * @param w Output width (can be NULL)
+ * @param h Output height (can be NULL)
+ */
 void agentite_get_window_size(Agentite_Engine *engine, int *w, int *h);
-// Get physical drawable size in actual pixels (use for rendering, GPU operations)
+
+/**
+ * Get the physical drawable size in pixels.
+ * Use for GPU operations and rendering.
+ *
+ * @param engine Engine instance
+ * @param w Output width (can be NULL)
+ * @param h Output height (can be NULL)
+ */
 void agentite_get_drawable_size(Agentite_Engine *engine, int *w, int *h);
 
 // Core infrastructure
