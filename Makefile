@@ -256,6 +256,43 @@ test-verbose: dirs $(BUILD_DIR)/test_runner
 	./$(BUILD_DIR)/test_runner --success
 
 #============================================================================
+# Carbide Static Analysis & Formatting
+#============================================================================
+
+# Source files to analyze (excluding third-party libs)
+ANALYZE_SRCS := $(ENGINE_SRCS) $(GAME_SRCS)
+ANALYZE_HDRS := $(wildcard $(INCLUDE_DIR)/agentite/*.h)
+
+# Run clang-tidy static analysis
+check:
+	@echo "Running clang-tidy static analysis..."
+	@command -v clang-tidy >/dev/null 2>&1 || { echo "clang-tidy not found. Install with: brew install llvm"; exit 1; }
+	@clang-tidy $(ANALYZE_SRCS) -- -std=c++17 -I$(INCLUDE_DIR) -I$(LIB_DIR) -I$(LIB_DIR)/cglm/include -I$(SRC_DIR) $(SDL3_CFLAGS) 2>&1 || true
+	@echo "Static analysis complete."
+
+# Run security-focused checks
+safety:
+	@echo "Running security-focused checks..."
+	@command -v clang-tidy >/dev/null 2>&1 || { echo "clang-tidy not found. Install with: brew install llvm"; exit 1; }
+	@clang-tidy $(ANALYZE_SRCS) \
+		-checks='-*,clang-analyzer-security.*,bugprone-*,cert-*' \
+		-- -std=c++17 -I$(INCLUDE_DIR) -I$(LIB_DIR) -I$(LIB_DIR)/cglm/include -I$(SRC_DIR) $(SDL3_CFLAGS) 2>&1 || true
+	@echo "Security checks complete."
+
+# Auto-format code with clang-format
+format:
+	@echo "Formatting source files..."
+	@command -v clang-format >/dev/null 2>&1 || { echo "clang-format not found. Install with: brew install clang-format"; exit 1; }
+	@clang-format -i $(ANALYZE_SRCS) $(ANALYZE_HDRS) 2>/dev/null || echo "No files to format"
+	@echo "Formatting complete."
+
+# Check formatting without modifying
+format-check:
+	@echo "Checking format..."
+	@command -v clang-format >/dev/null 2>&1 || { echo "clang-format not found. Install with: brew install clang-format"; exit 1; }
+	@clang-format --dry-run --Werror $(ANALYZE_SRCS) $(ANALYZE_HDRS) 2>/dev/null && echo "All files formatted correctly." || echo "Some files need formatting. Run 'make format' to fix."
+
+#============================================================================
 # Utility targets
 #============================================================================
 
@@ -299,6 +336,12 @@ help:
 	@echo "  make test         - Build and run all tests"
 	@echo "  make test-verbose - Run tests with detailed output"
 	@echo ""
+	@echo "Code Quality (Carbide):"
+	@echo "  make check        - Run clang-tidy static analysis"
+	@echo "  make safety       - Run security-focused checks"
+	@echo "  make format       - Auto-format code with clang-format"
+	@echo "  make format-check - Check formatting without modifying"
+	@echo ""
 	@echo "Examples:"
 	@echo "  make example-minimal   - Minimal window setup"
 	@echo "  make example-sprites   - Sprite rendering demo"
@@ -315,4 +358,5 @@ help:
 	@echo "  make DEBUG=1      - Build with debug symbols"
 
 .PHONY: all dirs run run-demo clean install-deps-macos install-deps-linux info help test test-verbose
+.PHONY: check safety format format-check
 .PHONY: example-minimal example-sprites example-animation example-tilemap example-ui example-strategy example-strategy-sim example-msdf

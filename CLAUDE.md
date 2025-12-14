@@ -2,6 +2,27 @@
 
 This file provides guidance to Claude Code when working with code in this repository.
 
+## Coding Standards
+
+This project follows **Carbide** standards for safe, maintainable C/C++ code:
+
+- **[CARBIDE.md](CARBIDE.md)** - AI development guide with patterns and examples
+- **[STANDARDS.md](STANDARDS.md)** - Detailed coding rules and conventions
+
+**Quick Reference:**
+- Types: `PascalCase` with `Agentite_` prefix
+- Functions: `snake_case` with `agentite_` prefix
+- Check all allocations for NULL
+- Use `_create`/`_destroy` pairs
+- Validate external input at boundaries
+
+**Available Commands:**
+- `/carbide-review <file>` - Check code against standards
+- `/carbide-safety <file>` - Security-focused review
+- `make check` - Run clang-tidy static analysis
+- `make safety` - Run security checks
+- `make format` - Auto-format code
+
 ## Project Overview
 
 Agentite is a C-based game engine targeting strategy games and AI agent development. Uses SDL3 with SDL_GPU for cross-platform rendering (Metal on macOS, Vulkan on Linux, D3D12/Vulkan on Windows).
