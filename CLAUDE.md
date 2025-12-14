@@ -216,58 +216,9 @@ if (!tex) {
 
 ## Conventions
 
-### Memory Ownership
+For general C/C++ coding standards (memory management, error handling, security), see [CARBIDE.md](CARBIDE.md) and [STANDARDS.md](STANDARDS.md).
 
-**Create/Destroy Pattern:**
-- Functions named `_create()` allocate and return ownership to caller
-- Functions named `_destroy()` free resources; caller must not use pointer after
-- Every `_create()` must have a matching `_destroy()` call
-
-**Ownership Transfer:**
-- `agentite_texture_load()` → Caller owns the texture, must call `agentite_texture_destroy()`
-- `agentite_*_renderer_create()` → Caller owns renderer, must destroy before GPU device
-- Config structs are copied; safe to pass stack-allocated configs
-
-**Lifetime Requirements:**
-- Textures must outlive sprites/tilemaps using them
-- Renderers must outlive their resources (textures, fonts)
-- GPU device must outlive all renderers
-- Destroying a renderer invalidates all resources created from it
-
-**Borrowed References:**
-- Functions returning `const char*` return borrowed pointers; do not free
-- `agentite_get_last_error()` returns static/thread-local string; valid until next error
-- Iterator/query results in ECS are borrowed; invalid after world modifications
-
-### Error Handling
-
-**Return Value Patterns:**
-- Pointer-returning functions: `NULL` = failure
-- Bool-returning functions: `false` = failure
-- Int-returning functions: negative = error code, 0+ = success
-
-**When to Check `agentite_get_last_error()`:**
-```c
-// After any function that can fail
-Agentite_Texture *tex = agentite_texture_load(sr, "sprite.png");
-if (!tex) {
-    SDL_Log("Error: %s", agentite_get_last_error());
-    // Handle gracefully or exit
-}
-```
-
-**Functions That Can Fail:**
-- All `_create()` functions (allocation, GPU resource creation)
-- All `_load()` functions (file I/O, parsing)
-- `agentite_begin_render_pass()` (GPU state)
-- Shader compilation (during renderer creation)
-
-**Functions That Cannot Fail (no error check needed):**
-- `_destroy()` functions (safe even with NULL)
-- `_draw()` / `_render()` functions (no-op if nothing to draw)
-- Getter functions (`_get_width()`, `_get_position()`, etc.)
-
-### Naming Conventions
+### Agentite-Specific Naming
 
 | Prefix/Suffix | Usage | Example |
 |---------------|-------|---------|
@@ -275,14 +226,19 @@ if (!tex) {
 | `agentite_` | Public functions | `agentite_sprite_draw()` |
 | `C_` | ECS components | `C_Position`, `C_Velocity` |
 | `S_` | ECS singleton components | `S_GameState` |
-| `_create/_destroy` | Lifecycle functions | `agentite_text_create()` |
-| `_init/_deinit` | Initialize existing memory | `agentite_camera_init()` |
-| `_begin/_end` | Scoped operations | `agentite_sprite_begin()` |
 
 **Internal Naming (in .cpp files):**
 - Static functions: lowercase with underscores, no prefix
 - Static variables: `s_` prefix
 - Constants: `k_` prefix or `SCREAMING_CASE`
+
+### Agentite Lifetime Rules
+
+- Textures must outlive sprites/tilemaps using them
+- Renderers must outlive their resources (textures, fonts)
+- GPU device must outlive all renderers
+- Destroying a renderer invalidates all resources created from it
+- Iterator/query results in ECS are borrowed; invalid after world modifications
 
 ### Thread Safety
 
