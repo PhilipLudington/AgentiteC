@@ -86,6 +86,120 @@ lib/                    # Dependencies (flecs, stb, cglm)
 2. Main loop: `agentite_begin_frame()` → `agentite_poll_events()` → `agentite_begin_render_pass()` → render → `agentite_end_render_pass()` → `agentite_end_frame()`
 3. `agentite_shutdown()` - Cleanup
 
+## System Dependencies
+
+Understanding which systems depend on others helps avoid initialization errors and guides destruction order.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           SYSTEM DEPENDENCY GRAPH                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────┐                                                            │
+│  │ GPU Device  │◄─────────────────────────────────────────┐                 │
+│  └──────┬──────┘                                          │                 │
+│         │ creates                                         │                 │
+│         ▼                                                 │                 │
+│  ┌─────────────────┐     ┌─────────────┐                  │                 │
+│  │ Sprite Renderer │────►│  Texture    │──────────────────┤                 │
+│  └────────┬────────┘     └──────┬──────┘                  │                 │
+│           │                     │ referenced by           │                 │
+│           │ uploads to          ▼                         │                 │
+│           │              ┌─────────────┐    ┌──────────┐  │                 │
+│           │              │   Sprite    │    │ Tilemap  │──┘                 │
+│           │              └─────────────┘    └──────────┘                    │
+│           │                                                                 │
+│           ▼                                                                 │
+│  ┌─────────────────┐                                                        │
+│  │ Command Buffer  │◄───────────────────────────────────────────────┐       │
+│  └────────┬────────┘                                                │       │
+│           │                                                         │       │
+│           ▼                                                         │       │
+│  ┌─────────────────┐     ┌─────────────┐     ┌─────────────────┐    │       │
+│  │  Render Pass    │     │ Text Render │────►│ Font / MSDF     │────┘       │
+│  └─────────────────┘     └─────────────┘     └─────────────────┘            │
+│                                                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  GAME SYSTEMS (independent of graphics)                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌────────────┐      ┌─────────────┐      ┌──────────────┐                  │
+│  │ ECS World  │◄─────│ Components  │      │ Input System │                  │
+│  └─────┬──────┘      └─────────────┘      └──────┬───────┘                  │
+│        │                                         │                          │
+│        │ queries                                 │ events                   │
+│        ▼                                         ▼                          │
+│  ┌────────────┐      ┌─────────────┐      ┌──────────────┐                  │
+│  │  Systems   │      │ Pathfinding │      │      UI      │◄─── consumes     │
+│  └────────────┘      └─────────────┘      └──────────────┘     events first │
+│                                                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  STRATEGY SYSTEMS (can be used independently)                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌──────────┐   ┌───────────┐   ┌─────────────┐   ┌────────────────┐        │
+│  │ Turn Mgr │   │ Resources │   │  Tech Tree  │   │ Fleet Manager  │        │
+│  └──────────┘   └───────────┘   └─────────────┘   └────────────────┘        │
+│                                                                             │
+│  ┌──────────┐   ┌───────────┐   ┌─────────────┐   ┌────────────────┐        │
+│  │ Fog/War  │   │  Spatial  │   │ Combat Sys  │   │ Power Network  │        │
+│  └──────────┘   └───────────┘   └─────────────┘   └────────────────┘        │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+DESTRUCTION ORDER (reverse of creation):
+  1. Game systems (ECS entities, strategy systems)
+  2. Textures, Fonts
+  3. Renderers (Sprite, Text, Tilemap)
+  4. GPU Device / Engine
+```
+
+### Key Dependency Rules
+
+| If you use... | You must first create... | And destroy in reverse |
+|---------------|-------------------------|------------------------|
+| `Sprite` | `Texture` | Sprite usage stops → Texture destroy |
+| `Texture` | `SpriteRenderer` | Texture destroy → Renderer destroy |
+| `Tilemap` | `Texture` + `Camera` | Tilemap destroy → Texture destroy |
+| `Text Renderer` | `Font` | Font outlives text draws |
+| `ECS System` | `ECS World` + `Components` | Delete entities → Destroy world |
+| `UI` | `Input` (optional) | UI consumes input first |
+
+### When to Use Which System
+
+```
+Need to...                              → Use
+─────────────────────────────────────────────────────────────
+Render sprites/images                   → sprite.h + texture
+Animate sprite sequences                → animation.h
+Render tile-based maps                  → tilemap.h
+Display text                            → text.h (bitmap) or msdf.h (SDF)
+Handle keyboard/mouse/gamepad           → input.h
+Play sounds/music                       → audio.h
+Manage game entities                    → ecs.h (Flecs wrapper)
+Find paths on a grid                    → pathfinding.h
+Show menus/buttons/dialogs              → ui.h
+─────────────────────────────────────────────────────────────
+Simple AI behaviors                     → ai.h (personality)
+Complex goal-oriented AI                → htn.h (HTN planner)
+Share data between AI agents            → blackboard.h
+Parallel AI decision tracks             → ai_tracks.h
+Sequential task execution               → task.h
+─────────────────────────────────────────────────────────────
+Turn-based game flow                    → turn.h
+Tech trees and research                 → tech.h
+Multiple victory conditions             → victory.h
+Exploration/visibility                  → fog.h
+Economy with stockpiles                 → resource.h
+Fast entity spatial lookup              → spatial.h
+Buff/debuff stacking                    → modifier.h
+Building placement preview              → construction.h + blueprint.h
+Tactical grid combat                    → combat.h
+Fleet/army management                   → fleet.h
+Factory power distribution              → power.h
+Resolution-independent rendering        → virtual_resolution.h
+```
+
 ## API Documentation
 
 See [docs/README.md](docs/README.md) for comprehensive API documentation organized by system:

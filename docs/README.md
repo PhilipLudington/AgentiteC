@@ -42,6 +42,10 @@
 | [Construction](api/strategy/construction.md) | Ghost buildings | `agentite/construction.h` |
 | [Anomaly](api/strategy/anomaly.md) | Discoveries & research | `agentite/anomaly.h` |
 | [Siege](api/strategy/siege.md) | Location assault | `agentite/siege.h` |
+| [Combat](api/strategy/combat.md) | Tactical grid combat | `agentite/combat.h` |
+| [Fleet](api/strategy/fleet.md) | Army/fleet management | `agentite/fleet.h` |
+| [Power](api/strategy/power.md) | Power grid distribution | `agentite/power.h` |
+| [Virtual Resolution](api/virtual_resolution.md) | Resolution-independent rendering | `agentite/virtual_resolution.h` |
 | [Other Systems](api/strategy/other.md) | Rate, Network, Dialog, etc. | Various |
 
 ### Utilities
@@ -49,6 +53,12 @@
 | System | Description | Header |
 |--------|-------------|--------|
 | [Utilities](api/utilities.md) | Containers, validation, formula, events, etc. | Various |
+
+## Guides
+
+| Guide | Description |
+|-------|-------------|
+| [Integration Recipes](integration-recipes.md) | Multi-system patterns for common game features |
 
 ## Quick Links
 
