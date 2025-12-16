@@ -213,6 +213,11 @@ void agentite_game_context_begin_frame(Agentite_GameContext *ctx) {
     agentite_begin_frame(ctx->engine);
     agentite_input_begin_frame(ctx->input);
 
+    /* Begin UI frame (resets draw state for new frame) */
+    if (ctx->ui) {
+        aui_begin_frame(ctx->ui, agentite_get_delta_time(ctx->engine));
+    }
+
     /* Cache timing info */
     ctx->delta_time = agentite_get_delta_time(ctx->engine);
     ctx->frame_count = agentite_get_frame_count(ctx->engine);
@@ -273,6 +278,12 @@ void agentite_game_context_poll_events(Agentite_GameContext *ctx) {
 
 void agentite_game_context_end_frame(Agentite_GameContext *ctx) {
     if (!ctx || !ctx->engine) return;
+
+    /* End UI frame (clears per-frame input state) */
+    if (ctx->ui) {
+        aui_end_frame(ctx->ui);
+    }
+
     agentite_end_frame(ctx->engine);
 }
 
