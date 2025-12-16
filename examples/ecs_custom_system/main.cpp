@@ -138,23 +138,30 @@ static void EmitterSystem(ecs_iter_t *it)
             ecs_entity_t particle = ecs_new(it->world);
 
             /* Add components */
-            ecs_set(it->world, particle, C_Position, {pos[i].x, pos[i].y});
-            ecs_set(it->world, particle, C_Velocity, {
+            C_Position p_pos = {pos[i].x, pos[i].y};
+            C_Velocity p_vel = {
                 cosf(angle_rad) * speed,
                 sinf(angle_rad) * speed
-            });
-            ecs_set(it->world, particle, C_Lifetime, {
+            };
+            C_Lifetime p_life = {
                 2.0f + (float)rand() / RAND_MAX * 1.0f,  /* 2-3 second lifetime */
                 3.0f
-            });
-            ecs_set(it->world, particle, C_Particle, {it->entities[i]});
-            ecs_set(it->world, particle, C_GravityAffected, {1.0f});
-            ecs_set(it->world, particle, C_Color, {
+            };
+            C_Particle p_part = {it->entities[i]};
+            C_GravityAffected p_grav = {1.0f};
+            C_Color p_col = {
                 0.9f + (float)rand() / RAND_MAX * 0.1f,
                 0.5f + (float)rand() / RAND_MAX * 0.3f,
                 0.1f,
                 1.0f
-            });
+            };
+
+            ecs_set_id(it->world, particle, ecs_id(C_Position), sizeof(C_Position), &p_pos);
+            ecs_set_id(it->world, particle, ecs_id(C_Velocity), sizeof(C_Velocity), &p_vel);
+            ecs_set_id(it->world, particle, ecs_id(C_Lifetime), sizeof(C_Lifetime), &p_life);
+            ecs_set_id(it->world, particle, ecs_id(C_Particle), sizeof(C_Particle), &p_part);
+            ecs_set_id(it->world, particle, ecs_id(C_GravityAffected), sizeof(C_GravityAffected), &p_grav);
+            ecs_set_id(it->world, particle, ecs_id(C_Color), sizeof(C_Color), &p_col);
         }
     }
 }
@@ -163,13 +170,11 @@ static void EmitterSystem(ecs_iter_t *it)
 static void render_particles(ecs_world_t *world, RenderContext *ctx)
 {
     /* Query for all particles with position and color */
-    ecs_query_t *q = ecs_query(world, {
-        .terms = {
-            { .id = ecs_id(C_Position) },
-            { .id = ecs_id(C_Color) },
-            { .id = ecs_id(C_Lifetime) }
-        }
-    });
+    ecs_query_desc_t q_desc = {0};
+    q_desc.terms[0].id = ecs_id(C_Position);
+    q_desc.terms[1].id = ecs_id(C_Color);
+    q_desc.terms[2].id = ecs_id(C_Lifetime);
+    ecs_query_t *q = ecs_query_init(world, &q_desc);
 
     ctx->particle_count = 0;
 
@@ -199,12 +204,10 @@ static void render_particles(ecs_world_t *world, RenderContext *ctx)
 /* Render emitters (as larger circles) */
 static void render_emitters(ecs_world_t *world, RenderContext *ctx)
 {
-    ecs_query_t *q = ecs_query(world, {
-        .terms = {
-            { .id = ecs_id(C_Emitter) },
-            { .id = ecs_id(C_Position) }
-        }
-    });
+    ecs_query_desc_t q_desc = {0};
+    q_desc.terms[0].id = ecs_id(C_Emitter);
+    q_desc.terms[1].id = ecs_id(C_Position);
+    ecs_query_t *q = ecs_query_init(world, &q_desc);
 
     ctx->emitter_count = 0;
 
@@ -315,31 +318,22 @@ int main(int argc, char *argv[])
 
     /* Create emitters at different positions */
     ecs_entity_t emitter1 = ecs_new(world);
-    ecs_set(world, emitter1, C_Position, {300, 600});
-    ecs_set(world, emitter1, C_Emitter, {
-        .spawn_rate = 50.0f,
-        .particle_speed = 150.0f,
-        .spread_angle = 60.0f,
-        .direction = -90.0f  /* Up */
-    });
+    C_Position e1_pos = {300, 600};
+    C_Emitter e1_emit = {50.0f, 0.0f, 150.0f, 60.0f, -90.0f};  /* Up */
+    ecs_set_id(world, emitter1, ecs_id(C_Position), sizeof(C_Position), &e1_pos);
+    ecs_set_id(world, emitter1, ecs_id(C_Emitter), sizeof(C_Emitter), &e1_emit);
 
     ecs_entity_t emitter2 = ecs_new(world);
-    ecs_set(world, emitter2, C_Position, {700, 600});
-    ecs_set(world, emitter2, C_Emitter, {
-        .spawn_rate = 30.0f,
-        .particle_speed = 200.0f,
-        .spread_angle = 45.0f,
-        .direction = -90.0f  /* Up */
-    });
+    C_Position e2_pos = {700, 600};
+    C_Emitter e2_emit = {30.0f, 0.0f, 200.0f, 45.0f, -90.0f};  /* Up */
+    ecs_set_id(world, emitter2, ecs_id(C_Position), sizeof(C_Position), &e2_pos);
+    ecs_set_id(world, emitter2, ecs_id(C_Emitter), sizeof(C_Emitter), &e2_emit);
 
     ecs_entity_t emitter3 = ecs_new(world);
-    ecs_set(world, emitter3, C_Position, {500, 400});
-    ecs_set(world, emitter3, C_Emitter, {
-        .spawn_rate = 20.0f,
-        .particle_speed = 100.0f,
-        .spread_angle = 360.0f,  /* All directions */
-        .direction = 0.0f
-    });
+    C_Position e3_pos = {500, 400};
+    C_Emitter e3_emit = {20.0f, 0.0f, 100.0f, 360.0f, 0.0f};  /* All directions */
+    ecs_set_id(world, emitter3, ecs_id(C_Position), sizeof(C_Position), &e3_pos);
+    ecs_set_id(world, emitter3, ecs_id(C_Emitter), sizeof(C_Emitter), &e3_emit);
 
     /* Render context */
     RenderContext render_ctx = {
