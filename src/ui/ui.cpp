@@ -377,6 +377,8 @@ void aui_end_frame(AUI_Context *ctx)
         }
     }
 
+    /* NOTE: Tooltip is drawn in aui_render() for proper z-ordering */
+
     /* Clear per-frame input state (pressed/released are one-shot) */
     for (int i = 0; i < 3; i++) {
         ctx->input.mouse_pressed[i] = false;

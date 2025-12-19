@@ -237,6 +237,7 @@ typedef struct AUI_Context {
     AUI_Id hot;                     /* Hovered widget */
     AUI_Id active;                  /* Mouse-down widget */
     AUI_Id focused;                 /* Keyboard focus */
+    AUI_Id last_widget_id;          /* ID of last widget processed (for tooltip association) */
 
     /* Persistent state hash table */
     AUI_StateEntry *state_table[256];
@@ -317,6 +318,10 @@ typedef struct AUI_Context {
 
     /* Active multi-select state pointer (set during begin/end) */
     AUI_MultiSelectState *multi_select;
+
+    /* Pending tooltip for deferred rendering (on top of everything) */
+    char pending_tooltip[512];      /* Tooltip text buffer */
+    bool pending_tooltip_active;    /* Whether a tooltip should be drawn */
 
     /* Layer system for z-ordering */
     int layer_stack[16];            /* Stack of pushed layers */

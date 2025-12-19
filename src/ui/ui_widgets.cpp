@@ -22,6 +22,9 @@ static bool aui_widget_behavior(AUI_Context *ctx, AUI_Id id, AUI_Rect rect,
     bool hovered = aui_rect_contains(rect, ctx->input.mouse_x, ctx->input.mouse_y);
     bool pressed = false;
 
+    /* Track this widget as the last processed (for tooltip association) */
+    ctx->last_widget_id = id;
+
     if (hovered) {
         ctx->hot = id;
     }
@@ -67,6 +70,13 @@ void aui_label_colored(AUI_Context *ctx, const char *text, uint32_t color)
     float text_h = aui_text_height(ctx);
 
     AUI_Rect rect = aui_allocate_rect(ctx, text_w, text_h);
+
+    /* Generate an ID and track for tooltip support */
+    AUI_Id id = aui_make_id(ctx, text);
+    ctx->last_widget_id = id;
+    if (aui_rect_contains(rect, ctx->input.mouse_x, ctx->input.mouse_y)) {
+        ctx->hot = id;
+    }
 
     /* Center text vertically */
     float y = rect.y + (rect.h - text_h) * 0.5f;
@@ -953,30 +963,18 @@ void aui_tooltip(AUI_Context *ctx, const char *text)
 {
     if (!ctx || !text) return;
 
-    /* Only show if something is hovered */
-    if (ctx->hot == AUI_ID_NONE) return;
+    /* Only show if the last widget processed is currently hovered */
+    if (ctx->hot != ctx->last_widget_id) return;
+    if (ctx->last_widget_id == AUI_ID_NONE) return;
 
-    float text_w = aui_text_width(ctx, text);
-    float text_h = aui_text_height(ctx);
-    float pad = ctx->theme.padding;
-
-    float x = ctx->input.mouse_x + 16;
-    float y = ctx->input.mouse_y + 16;
-
-    /* Keep tooltip on screen */
-    if (x + text_w + pad * 2 > ctx->width) {
-        x = ctx->width - text_w - pad * 2;
+    /* Store tooltip for deferred rendering in aui_upload() */
+    size_t len = strlen(text);
+    if (len >= sizeof(ctx->pending_tooltip)) {
+        len = sizeof(ctx->pending_tooltip) - 1;
     }
-    if (y + text_h + pad * 2 > ctx->height) {
-        y = ctx->height - text_h - pad * 2;
-    }
-
-    /* Draw tooltip */
-    aui_draw_rect_rounded(ctx, x, y, text_w + pad * 2, text_h + pad * 2,
-                          ctx->theme.bg_panel, ctx->theme.corner_radius);
-    aui_draw_rect_outline(ctx, x, y, text_w + pad * 2, text_h + pad * 2,
-                          ctx->theme.border, 1.0f);
-    aui_draw_text(ctx, text, x + pad, y + pad, ctx->theme.text);
+    memcpy(ctx->pending_tooltip, text, len);
+    ctx->pending_tooltip[len] = '\0';
+    ctx->pending_tooltip_active = true;
 }
 
 /* ============================================================================

@@ -1134,10 +1134,101 @@ static int aui_draw_cmd_compare(const void *a, const void *b)
  * Rendering
  * ============================================================================ */
 
+/* Forward declarations for text functions (defined in ui_text.cpp) */
+extern float aui_draw_text(AUI_Context *ctx, const char *text, float x, float y, uint32_t color);
+extern float aui_text_height(AUI_Context *ctx);
+extern float aui_text_width(AUI_Context *ctx, const char *text);
+
+/* Draw pending tooltip - called during upload to ensure it's included in the batch */
+static void aui_draw_pending_tooltip(AUI_Context *ctx)
+{
+    if (!ctx || !ctx->pending_tooltip_active || !ctx->pending_tooltip[0]) return;
+
+    const char *text = ctx->pending_tooltip;
+    float line_h = aui_text_height(ctx);
+    float pad = ctx->theme.padding;
+
+    /* Calculate dimensions for multiline text */
+    float max_line_w = 0;
+    int line_count = 1;
+    const char *line_start = text;
+    const char *p = text;
+
+    while (*p) {
+        if (*p == '\n') {
+            /* Measure this line */
+            char line_buf[256];
+            size_t len = p - line_start;
+            if (len >= sizeof(line_buf)) len = sizeof(line_buf) - 1;
+            memcpy(line_buf, line_start, len);
+            line_buf[len] = '\0';
+
+            float w = aui_text_width(ctx, line_buf);
+            if (w > max_line_w) max_line_w = w;
+
+            line_count++;
+            line_start = p + 1;
+        }
+        p++;
+    }
+
+    /* Measure final line */
+    float w = aui_text_width(ctx, line_start);
+    if (w > max_line_w) max_line_w = w;
+
+    float text_w = max_line_w;
+    float text_h = line_h * line_count;
+
+    float x = ctx->input.mouse_x + 16;
+    float y = ctx->input.mouse_y + 16;
+
+    /* Keep tooltip on screen */
+    if (x + text_w + pad * 2 > ctx->width) {
+        x = ctx->width - text_w - pad * 2;
+    }
+    if (y + text_h + pad * 2 > ctx->height) {
+        y = ctx->height - text_h - pad * 2;
+    }
+
+    /* Draw tooltip background */
+    aui_draw_rect(ctx, x, y, text_w + pad * 2, text_h + pad * 2, ctx->theme.bg_panel);
+    aui_draw_rect_outline(ctx, x, y, text_w + pad * 2, text_h + pad * 2,
+                          ctx->theme.border, 1.0f);
+
+    /* Draw each line */
+    float text_y = y + pad;
+    line_start = text;
+    p = text;
+
+    while (*p) {
+        if (*p == '\n') {
+            char line_buf[256];
+            size_t len = p - line_start;
+            if (len >= sizeof(line_buf)) len = sizeof(line_buf) - 1;
+            memcpy(line_buf, line_start, len);
+            line_buf[len] = '\0';
+
+            aui_draw_text(ctx, line_buf, x + pad, text_y, ctx->theme.text);
+            text_y += line_h;
+            line_start = p + 1;
+        }
+        p++;
+    }
+
+    /* Draw final line */
+    aui_draw_text(ctx, line_start, x + pad, text_y, ctx->theme.text);
+
+    /* Clear for next frame */
+    ctx->pending_tooltip_active = false;
+}
+
 /* Upload UI vertex/index data to GPU - call BEFORE render pass */
 void aui_upload(AUI_Context *ctx, SDL_GPUCommandBuffer *cmd)
 {
     if (!ctx || !cmd) return;
+
+    /* Draw pending tooltip before uploading (ensures it's included in the batch) */
+    aui_draw_pending_tooltip(ctx);
 
     /* Flush any pending draw command */
     aui_flush_draw_cmd(ctx);
