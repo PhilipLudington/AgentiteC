@@ -368,17 +368,16 @@ Agentite_SDFFont *agentite_sdf_font_load(Agentite_TextRenderer *tr,
         bytes_per_pixel = 1;
     }
 
-    SDL_GPUTextureCreateInfo tex_info = {
-        .type = SDL_GPU_TEXTURETYPE_2D,
-        .format = format,
-        .usage = SDL_GPU_TEXTUREUSAGE_SAMPLER,
-        .width = (Uint32)width,
-        .height = (Uint32)height,
-        .layer_count_or_depth = 1,
-        .num_levels = 1,
-        .sample_count = SDL_GPU_SAMPLECOUNT_1,
-        .props = 0
-    };
+    SDL_GPUTextureCreateInfo tex_info = {};
+    tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+    tex_info.format = format;
+    tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    tex_info.width = (Uint32)width;
+    tex_info.height = (Uint32)height;
+    tex_info.layer_count_or_depth = 1;
+    tex_info.num_levels = 1;
+    tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    tex_info.props = 0;
 
     font->atlas_texture = SDL_CreateGPUTexture(tr->gpu, &tex_info);
     if (!font->atlas_texture) {
@@ -437,11 +436,10 @@ Agentite_SDFFont *agentite_sdf_font_load(Agentite_TextRenderer *tr,
 
     /* Upload to GPU */
     uint32_t data_size = width * height * bytes_per_pixel;
-    SDL_GPUTransferBufferCreateInfo transfer_info = {
-        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        .size = data_size,
-        .props = 0
-    };
+    SDL_GPUTransferBufferCreateInfo transfer_info = {};
+    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    transfer_info.size = data_size;
+    transfer_info.props = 0;
     SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(tr->gpu, &transfer_info);
     if (transfer) {
         void *mapped = SDL_MapGPUTransferBuffer(tr->gpu, transfer, false);
@@ -454,21 +452,21 @@ Agentite_SDFFont *agentite_sdf_font_load(Agentite_TextRenderer *tr,
         if (cmd) {
             SDL_GPUCopyPass *copy_pass = SDL_BeginGPUCopyPass(cmd);
             if (copy_pass) {
-                SDL_GPUTextureTransferInfo src = {
-                    .transfer_buffer = transfer,
-                    .offset = 0,
-                    .pixels_per_row = (Uint32)width,
-                    .rows_per_layer = (Uint32)height
-                };
-                SDL_GPUTextureRegion dst = {
-                    .texture = font->atlas_texture,
-                    .mip_level = 0,
-                    .layer = 0,
-                    .x = 0, .y = 0, .z = 0,
-                    .w = (Uint32)width,
-                    .h = (Uint32)height,
-                    .d = 1
-                };
+                SDL_GPUTextureTransferInfo src = {};
+                src.transfer_buffer = transfer;
+                src.offset = 0;
+                src.pixels_per_row = (Uint32)width;
+                src.rows_per_layer = (Uint32)height;
+                SDL_GPUTextureRegion dst = {};
+                dst.texture = font->atlas_texture;
+                dst.mip_level = 0;
+                dst.layer = 0;
+                dst.x = 0;
+                dst.y = 0;
+                dst.z = 0;
+                dst.w = (Uint32)width;
+                dst.h = (Uint32)height;
+                dst.d = 1;
                 SDL_UploadToGPUTexture(copy_pass, &src, &dst, false);
                 SDL_EndGPUCopyPass(copy_pass);
             }
@@ -654,17 +652,16 @@ Agentite_SDFFont *agentite_sdf_font_generate(Agentite_TextRenderer *tr,
         : SDL_GPU_TEXTUREFORMAT_R8_UNORM;
     uint32_t bytes_per_pixel = config->generate_msdf ? 4 : 1;
 
-    SDL_GPUTextureCreateInfo tex_info = {
-        .type = SDL_GPU_TEXTURETYPE_2D,
-        .format = format,
-        .usage = SDL_GPU_TEXTUREUSAGE_SAMPLER,
-        .width = (Uint32)metrics.atlas_width,
-        .height = (Uint32)metrics.atlas_height,
-        .layer_count_or_depth = 1,
-        .num_levels = 1,
-        .sample_count = SDL_GPU_SAMPLECOUNT_1,
-        .props = 0
-    };
+    SDL_GPUTextureCreateInfo tex_info = {};
+    tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+    tex_info.format = format;
+    tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    tex_info.width = (Uint32)metrics.atlas_width;
+    tex_info.height = (Uint32)metrics.atlas_height;
+    tex_info.layer_count_or_depth = 1;
+    tex_info.num_levels = 1;
+    tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    tex_info.props = 0;
 
     font->atlas_texture = SDL_CreateGPUTexture(tr->gpu, &tex_info);
     if (!font->atlas_texture) {
@@ -701,11 +698,10 @@ Agentite_SDFFont *agentite_sdf_font_generate(Agentite_TextRenderer *tr,
     }
 
     /* Upload to GPU */
-    SDL_GPUTransferBufferCreateInfo transfer_info = {
-        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        .size = data_size,
-        .props = 0
-    };
+    SDL_GPUTransferBufferCreateInfo transfer_info = {};
+    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    transfer_info.size = data_size;
+    transfer_info.props = 0;
     SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(tr->gpu, &transfer_info);
     if (transfer) {
         void *mapped = SDL_MapGPUTransferBuffer(tr->gpu, transfer, false);
@@ -718,21 +714,21 @@ Agentite_SDFFont *agentite_sdf_font_generate(Agentite_TextRenderer *tr,
         if (cmd) {
             SDL_GPUCopyPass *copy_pass = SDL_BeginGPUCopyPass(cmd);
             if (copy_pass) {
-                SDL_GPUTextureTransferInfo src = {
-                    .transfer_buffer = transfer,
-                    .offset = 0,
-                    .pixels_per_row = (Uint32)metrics.atlas_width,
-                    .rows_per_layer = (Uint32)metrics.atlas_height
-                };
-                SDL_GPUTextureRegion dst = {
-                    .texture = font->atlas_texture,
-                    .mip_level = 0,
-                    .layer = 0,
-                    .x = 0, .y = 0, .z = 0,
-                    .w = (Uint32)metrics.atlas_width,
-                    .h = (Uint32)metrics.atlas_height,
-                    .d = 1
-                };
+                SDL_GPUTextureTransferInfo src = {};
+                src.transfer_buffer = transfer;
+                src.offset = 0;
+                src.pixels_per_row = (Uint32)metrics.atlas_width;
+                src.rows_per_layer = (Uint32)metrics.atlas_height;
+                SDL_GPUTextureRegion dst = {};
+                dst.texture = font->atlas_texture;
+                dst.mip_level = 0;
+                dst.layer = 0;
+                dst.x = 0;
+                dst.y = 0;
+                dst.z = 0;
+                dst.w = (Uint32)metrics.atlas_width;
+                dst.h = (Uint32)metrics.atlas_height;
+                dst.d = 1;
                 SDL_UploadToGPUTexture(copy_pass, &src, &dst, false);
                 SDL_EndGPUCopyPass(copy_pass);
             }

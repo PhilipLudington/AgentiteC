@@ -167,12 +167,11 @@ void agentite_text_upload(Agentite_TextRenderer *tr, SDL_GPUCommandBuffer *cmd)
     if (!tr || !cmd || tr->queued_batch_count == 0 || tr->vertex_count == 0) return;
 
     /* Upload vertex and index data */
-    SDL_GPUTransferBufferCreateInfo transfer_info = {
-        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        .size = (Uint32)(tr->vertex_count * sizeof(TextVertex) +
-                tr->index_count * sizeof(uint16_t)),
-        .props = 0
-    };
+    SDL_GPUTransferBufferCreateInfo transfer_info = {};
+    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    transfer_info.size = (Uint32)(tr->vertex_count * sizeof(TextVertex) +
+            tr->index_count * sizeof(uint16_t));
+    transfer_info.props = 0;
     SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(tr->gpu, &transfer_info);
     if (!transfer) return;
 
@@ -188,27 +187,23 @@ void agentite_text_upload(Agentite_TextRenderer *tr, SDL_GPUCommandBuffer *cmd)
     SDL_GPUCopyPass *copy_pass = SDL_BeginGPUCopyPass(cmd);
     if (copy_pass) {
         /* Upload vertices */
-        SDL_GPUTransferBufferLocation src_vert = {
-            .transfer_buffer = transfer,
-            .offset = 0
-        };
-        SDL_GPUBufferRegion dst_vert = {
-            .buffer = tr->vertex_buffer,
-            .offset = 0,
-            .size = (Uint32)(tr->vertex_count * sizeof(TextVertex))
-        };
+        SDL_GPUTransferBufferLocation src_vert = {};
+        src_vert.transfer_buffer = transfer;
+        src_vert.offset = 0;
+        SDL_GPUBufferRegion dst_vert = {};
+        dst_vert.buffer = tr->vertex_buffer;
+        dst_vert.offset = 0;
+        dst_vert.size = (Uint32)(tr->vertex_count * sizeof(TextVertex));
         SDL_UploadToGPUBuffer(copy_pass, &src_vert, &dst_vert, false);
 
         /* Upload indices */
-        SDL_GPUTransferBufferLocation src_idx = {
-            .transfer_buffer = transfer,
-            .offset = (Uint32)(tr->vertex_count * sizeof(TextVertex))
-        };
-        SDL_GPUBufferRegion dst_idx = {
-            .buffer = tr->index_buffer,
-            .offset = 0,
-            .size = (Uint32)(tr->index_count * sizeof(uint16_t))
-        };
+        SDL_GPUTransferBufferLocation src_idx = {};
+        src_idx.transfer_buffer = transfer;
+        src_idx.offset = (Uint32)(tr->vertex_count * sizeof(TextVertex));
+        SDL_GPUBufferRegion dst_idx = {};
+        dst_idx.buffer = tr->index_buffer;
+        dst_idx.offset = 0;
+        dst_idx.size = (Uint32)(tr->index_count * sizeof(uint16_t));
         SDL_UploadToGPUBuffer(copy_pass, &src_idx, &dst_idx, false);
 
         SDL_EndGPUCopyPass(copy_pass);
@@ -241,17 +236,15 @@ void agentite_text_render(Agentite_TextRenderer *tr, SDL_GPUCommandBuffer *cmd,
     uniforms.padding[1] = 0.0f;
 
     /* Bind vertex buffer (shared by all batches) */
-    SDL_GPUBufferBinding vb_binding = {
-        .buffer = tr->vertex_buffer,
-        .offset = 0
-    };
+    SDL_GPUBufferBinding vb_binding = {};
+    vb_binding.buffer = tr->vertex_buffer;
+    vb_binding.offset = 0;
     SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
 
     /* Bind index buffer (shared by all batches) */
-    SDL_GPUBufferBinding ib_binding = {
-        .buffer = tr->index_buffer,
-        .offset = 0
-    };
+    SDL_GPUBufferBinding ib_binding = {};
+    ib_binding.buffer = tr->index_buffer;
+    ib_binding.offset = 0;
     SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
 
     /* Render each queued batch */
@@ -334,10 +327,9 @@ void agentite_text_render(Agentite_TextRenderer *tr, SDL_GPUCommandBuffer *cmd,
         }
 
         /* Bind atlas texture for this batch */
-        SDL_GPUTextureSamplerBinding tex_binding = {
-            .texture = batch->atlas_texture,
-            .sampler = tr->sampler
-        };
+        SDL_GPUTextureSamplerBinding tex_binding = {};
+        tex_binding.texture = batch->atlas_texture;
+        tex_binding.sampler = tr->sampler;
         SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
 
         /* Draw this batch
