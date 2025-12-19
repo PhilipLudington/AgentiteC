@@ -64,10 +64,11 @@ test_saves/
 # Planning files
 PLAN.md
 
-# Claude Code local settings (but track commands and rules)
+# Claude Code local settings (but track commands, rules, and agents)
 .claude/*
 !.claude/commands/
 !.claude/rules/
+!.claude/agents/
 
 # Game saves
 saves/
