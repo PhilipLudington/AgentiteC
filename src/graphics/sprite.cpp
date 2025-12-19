@@ -199,17 +199,16 @@ static bool sprite_create_pipeline(Agentite_SpriteRenderer *sr)
 
     if (formats & SDL_GPU_SHADERFORMAT_MSL) {
         /* Create vertex shader */
-        SDL_GPUShaderCreateInfo vs_info = {
-            .code = (const Uint8 *)sprite_shader_msl,
-            .code_size = sizeof(sprite_shader_msl),
-            .entrypoint = "sprite_vertex",
-            .format = SDL_GPU_SHADERFORMAT_MSL,
-            .stage = SDL_GPU_SHADERSTAGE_VERTEX,
-            .num_samplers = 0,
-            .num_storage_textures = 0,
-            .num_storage_buffers = 0,
-            .num_uniform_buffers = 1,
-        };
+        SDL_GPUShaderCreateInfo vs_info = {};
+        vs_info.code = (const Uint8 *)sprite_shader_msl;
+        vs_info.code_size = sizeof(sprite_shader_msl);
+        vs_info.entrypoint = "sprite_vertex";
+        vs_info.format = SDL_GPU_SHADERFORMAT_MSL;
+        vs_info.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+        vs_info.num_samplers = 0;
+        vs_info.num_storage_textures = 0;
+        vs_info.num_storage_buffers = 0;
+        vs_info.num_uniform_buffers = 1;
         vertex_shader = SDL_CreateGPUShader(sr->gpu, &vs_info);
         if (!vertex_shader) {
             agentite_set_error_from_sdl("Sprite: Failed to create vertex shader");
@@ -217,17 +216,16 @@ static bool sprite_create_pipeline(Agentite_SpriteRenderer *sr)
         }
 
         /* Create fragment shader */
-        SDL_GPUShaderCreateInfo fs_info = {
-            .code = (const Uint8 *)sprite_shader_msl,
-            .code_size = sizeof(sprite_shader_msl),
-            .entrypoint = "sprite_fragment",
-            .format = SDL_GPU_SHADERFORMAT_MSL,
-            .stage = SDL_GPU_SHADERSTAGE_FRAGMENT,
-            .num_samplers = 1,
-            .num_storage_textures = 0,
-            .num_storage_buffers = 0,
-            .num_uniform_buffers = 0,
-        };
+        SDL_GPUShaderCreateInfo fs_info = {};
+        fs_info.code = (const Uint8 *)sprite_shader_msl;
+        fs_info.code_size = sizeof(sprite_shader_msl);
+        fs_info.entrypoint = "sprite_fragment";
+        fs_info.format = SDL_GPU_SHADERFORMAT_MSL;
+        fs_info.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
+        fs_info.num_samplers = 1;
+        fs_info.num_storage_textures = 0;
+        fs_info.num_storage_buffers = 0;
+        fs_info.num_uniform_buffers = 0;
         fragment_shader = SDL_CreateGPUShader(sr->gpu, &fs_info);
         if (!fragment_shader) {
             agentite_set_error_from_sdl("Sprite: Failed to create fragment shader");
@@ -240,86 +238,66 @@ static bool sprite_create_pipeline(Agentite_SpriteRenderer *sr)
     }
 
     /* Define vertex attributes */
-    SDL_GPUVertexAttribute attributes[] = {
-        { /* position */
-            .location = 0,
-            .buffer_slot = 0,
-            .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
-            .offset = offsetof(Agentite_SpriteVertex, pos)
-        },
-        { /* texcoord */
-            .location = 1,
-            .buffer_slot = 0,
-            .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
-            .offset = offsetof(Agentite_SpriteVertex, uv)
-        },
-        { /* color */
-            .location = 2,
-            .buffer_slot = 0,
-            .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
-            .offset = offsetof(Agentite_SpriteVertex, color)
-        }
-    };
+    SDL_GPUVertexAttribute attributes[3] = {};
+    attributes[0].location = 0;
+    attributes[0].buffer_slot = 0;
+    attributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+    attributes[0].offset = offsetof(Agentite_SpriteVertex, pos);
+    attributes[1].location = 1;
+    attributes[1].buffer_slot = 0;
+    attributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+    attributes[1].offset = offsetof(Agentite_SpriteVertex, uv);
+    attributes[2].location = 2;
+    attributes[2].buffer_slot = 0;
+    attributes[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+    attributes[2].offset = offsetof(Agentite_SpriteVertex, color);
 
-    SDL_GPUVertexBufferDescription vb_desc = {
-        .slot = 0,
-        .pitch = sizeof(Agentite_SpriteVertex),
-        .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
-        .instance_step_rate = 0
-    };
+    SDL_GPUVertexBufferDescription vb_desc = {};
+    vb_desc.slot = 0;
+    vb_desc.pitch = sizeof(Agentite_SpriteVertex);
+    vb_desc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+    vb_desc.instance_step_rate = 0;
 
-    SDL_GPUVertexInputState vertex_input = {
-        .vertex_buffer_descriptions = &vb_desc,
-        .num_vertex_buffers = 1,
-        .vertex_attributes = attributes,
-        .num_vertex_attributes = 3
-    };
+    SDL_GPUVertexInputState vertex_input = {};
+    vertex_input.vertex_buffer_descriptions = &vb_desc;
+    vertex_input.num_vertex_buffers = 1;
+    vertex_input.vertex_attributes = attributes;
+    vertex_input.num_vertex_attributes = 3;
 
     /* Alpha blending */
-    SDL_GPUColorTargetBlendState blend_state = {
-        .enable_blend = true,
-        .src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA,
-        .dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
-        .color_blend_op = SDL_GPU_BLENDOP_ADD,
-        .src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE,
-        .dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
-        .alpha_blend_op = SDL_GPU_BLENDOP_ADD,
-        .color_write_mask = SDL_GPU_COLORCOMPONENT_R | SDL_GPU_COLORCOMPONENT_G |
-                           SDL_GPU_COLORCOMPONENT_B | SDL_GPU_COLORCOMPONENT_A
-    };
+    SDL_GPUColorTargetBlendState blend_state = {};
+    blend_state.enable_blend = true;
+    blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+    blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+    blend_state.color_write_mask = SDL_GPU_COLORCOMPONENT_R | SDL_GPU_COLORCOMPONENT_G |
+                                   SDL_GPU_COLORCOMPONENT_B | SDL_GPU_COLORCOMPONENT_A;
 
-    SDL_GPUColorTargetDescription color_target = {
-        .format = SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM,
-        .blend_state = blend_state
-    };
+    SDL_GPUColorTargetDescription color_target = {};
+    color_target.format = SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM;
+    color_target.blend_state = blend_state;
 
-    SDL_GPUGraphicsPipelineCreateInfo pipeline_info = {
-        .vertex_shader = vertex_shader,
-        .fragment_shader = fragment_shader,
-        .vertex_input_state = vertex_input,
-        .primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
-        .rasterizer_state = {
-            .fill_mode = SDL_GPU_FILLMODE_FILL,
-            .cull_mode = SDL_GPU_CULLMODE_NONE,
-            .front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE,
-            .enable_depth_clip = false
-        },
-        .multisample_state = {
-            .sample_count = SDL_GPU_SAMPLECOUNT_1,
-            .sample_mask = 0
-        },
-        .depth_stencil_state = {
-            .enable_depth_test = false,
-            .enable_depth_write = false,
-            .enable_stencil_test = false
-        },
-        .target_info = {
-            .color_target_descriptions = &color_target,
-            .num_color_targets = 1,
-            .depth_stencil_format = SDL_GPU_TEXTUREFORMAT_INVALID,
-            .has_depth_stencil_target = false
-        }
-    };
+    SDL_GPUGraphicsPipelineCreateInfo pipeline_info = {};
+    pipeline_info.vertex_shader = vertex_shader;
+    pipeline_info.fragment_shader = fragment_shader;
+    pipeline_info.vertex_input_state = vertex_input;
+    pipeline_info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+    pipeline_info.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+    pipeline_info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+    pipeline_info.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+    pipeline_info.rasterizer_state.enable_depth_clip = false;
+    pipeline_info.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    pipeline_info.multisample_state.sample_mask = 0;
+    pipeline_info.depth_stencil_state.enable_depth_test = false;
+    pipeline_info.depth_stencil_state.enable_depth_write = false;
+    pipeline_info.depth_stencil_state.enable_stencil_test = false;
+    pipeline_info.target_info.color_target_descriptions = &color_target;
+    pipeline_info.target_info.num_color_targets = 1;
+    pipeline_info.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_INVALID;
+    pipeline_info.target_info.has_depth_stencil_target = false;
 
     sr->pipeline = SDL_CreateGPUGraphicsPipeline(sr->gpu, &pipeline_info);
 
@@ -346,34 +324,32 @@ static bool sprite_create_vignette_pipeline(Agentite_SpriteRenderer *sr)
     SDL_GPUShader *fragment_shader = NULL;
 
     if (formats & SDL_GPU_SHADERFORMAT_MSL) {
-        SDL_GPUShaderCreateInfo vs_info = {
-            .code = (const Uint8 *)vignette_shader_msl,
-            .code_size = sizeof(vignette_shader_msl),
-            .entrypoint = "vignette_vertex",
-            .format = SDL_GPU_SHADERFORMAT_MSL,
-            .stage = SDL_GPU_SHADERSTAGE_VERTEX,
-            .num_samplers = 0,
-            .num_storage_textures = 0,
-            .num_storage_buffers = 0,
-            .num_uniform_buffers = 1,
-        };
+        SDL_GPUShaderCreateInfo vs_info = {};
+        vs_info.code = (const Uint8 *)vignette_shader_msl;
+        vs_info.code_size = sizeof(vignette_shader_msl);
+        vs_info.entrypoint = "vignette_vertex";
+        vs_info.format = SDL_GPU_SHADERFORMAT_MSL;
+        vs_info.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+        vs_info.num_samplers = 0;
+        vs_info.num_storage_textures = 0;
+        vs_info.num_storage_buffers = 0;
+        vs_info.num_uniform_buffers = 1;
         vertex_shader = SDL_CreateGPUShader(sr->gpu, &vs_info);
         if (!vertex_shader) {
             SDL_Log("Vignette: Failed to create vertex shader: %s", SDL_GetError());
             return false;
         }
 
-        SDL_GPUShaderCreateInfo fs_info = {
-            .code = (const Uint8 *)vignette_shader_msl,
-            .code_size = sizeof(vignette_shader_msl),
-            .entrypoint = "vignette_fragment",
-            .format = SDL_GPU_SHADERFORMAT_MSL,
-            .stage = SDL_GPU_SHADERSTAGE_FRAGMENT,
-            .num_samplers = 1,
-            .num_storage_textures = 0,
-            .num_storage_buffers = 0,
-            .num_uniform_buffers = 0,
-        };
+        SDL_GPUShaderCreateInfo fs_info = {};
+        fs_info.code = (const Uint8 *)vignette_shader_msl;
+        fs_info.code_size = sizeof(vignette_shader_msl);
+        fs_info.entrypoint = "vignette_fragment";
+        fs_info.format = SDL_GPU_SHADERFORMAT_MSL;
+        fs_info.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
+        fs_info.num_samplers = 1;
+        fs_info.num_storage_textures = 0;
+        fs_info.num_storage_buffers = 0;
+        fs_info.num_uniform_buffers = 0;
         fragment_shader = SDL_CreateGPUShader(sr->gpu, &fs_info);
         if (!fragment_shader) {
             SDL_Log("Vignette: Failed to create fragment shader: %s", SDL_GetError());
@@ -384,67 +360,59 @@ static bool sprite_create_vignette_pipeline(Agentite_SpriteRenderer *sr)
         return false;
     }
 
-    SDL_GPUVertexAttribute attributes[] = {
-        { .location = 0, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
-          .offset = offsetof(Agentite_SpriteVertex, pos) },
-        { .location = 1, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
-          .offset = offsetof(Agentite_SpriteVertex, uv) },
-        { .location = 2, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
-          .offset = offsetof(Agentite_SpriteVertex, color) }
-    };
+    SDL_GPUVertexAttribute attributes[3] = {};
+    attributes[0].location = 0;
+    attributes[0].buffer_slot = 0;
+    attributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+    attributes[0].offset = offsetof(Agentite_SpriteVertex, pos);
+    attributes[1].location = 1;
+    attributes[1].buffer_slot = 0;
+    attributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+    attributes[1].offset = offsetof(Agentite_SpriteVertex, uv);
+    attributes[2].location = 2;
+    attributes[2].buffer_slot = 0;
+    attributes[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+    attributes[2].offset = offsetof(Agentite_SpriteVertex, color);
 
-    SDL_GPUVertexBufferDescription vb_desc = {
-        .slot = 0,
-        .pitch = sizeof(Agentite_SpriteVertex),
-        .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
-        .instance_step_rate = 0
-    };
+    SDL_GPUVertexBufferDescription vb_desc = {};
+    vb_desc.slot = 0;
+    vb_desc.pitch = sizeof(Agentite_SpriteVertex);
+    vb_desc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+    vb_desc.instance_step_rate = 0;
 
-    SDL_GPUVertexInputState vertex_input = {
-        .vertex_buffer_descriptions = &vb_desc,
-        .num_vertex_buffers = 1,
-        .vertex_attributes = attributes,
-        .num_vertex_attributes = 3
-    };
+    SDL_GPUVertexInputState vertex_input = {};
+    vertex_input.vertex_buffer_descriptions = &vb_desc;
+    vertex_input.num_vertex_buffers = 1;
+    vertex_input.vertex_attributes = attributes;
+    vertex_input.num_vertex_attributes = 3;
 
-    SDL_GPUColorTargetBlendState blend_state = {
-        .enable_blend = false,
-        .color_write_mask = SDL_GPU_COLORCOMPONENT_R | SDL_GPU_COLORCOMPONENT_G |
-                           SDL_GPU_COLORCOMPONENT_B | SDL_GPU_COLORCOMPONENT_A
-    };
+    SDL_GPUColorTargetBlendState blend_state = {};
+    blend_state.enable_blend = false;
+    blend_state.color_write_mask = SDL_GPU_COLORCOMPONENT_R | SDL_GPU_COLORCOMPONENT_G |
+                                   SDL_GPU_COLORCOMPONENT_B | SDL_GPU_COLORCOMPONENT_A;
 
-    SDL_GPUColorTargetDescription color_target = {
-        .format = SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM,
-        .blend_state = blend_state
-    };
+    SDL_GPUColorTargetDescription color_target = {};
+    color_target.format = SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM;
+    color_target.blend_state = blend_state;
 
-    SDL_GPUGraphicsPipelineCreateInfo pipeline_info = {
-        .vertex_shader = vertex_shader,
-        .fragment_shader = fragment_shader,
-        .vertex_input_state = vertex_input,
-        .primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
-        .rasterizer_state = {
-            .fill_mode = SDL_GPU_FILLMODE_FILL,
-            .cull_mode = SDL_GPU_CULLMODE_NONE,
-            .front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE,
-            .enable_depth_clip = false
-        },
-        .multisample_state = {
-            .sample_count = SDL_GPU_SAMPLECOUNT_1,
-            .sample_mask = 0
-        },
-        .depth_stencil_state = {
-            .enable_depth_test = false,
-            .enable_depth_write = false,
-            .enable_stencil_test = false
-        },
-        .target_info = {
-            .color_target_descriptions = &color_target,
-            .num_color_targets = 1,
-            .depth_stencil_format = SDL_GPU_TEXTUREFORMAT_INVALID,
-            .has_depth_stencil_target = false
-        }
-    };
+    SDL_GPUGraphicsPipelineCreateInfo pipeline_info = {};
+    pipeline_info.vertex_shader = vertex_shader;
+    pipeline_info.fragment_shader = fragment_shader;
+    pipeline_info.vertex_input_state = vertex_input;
+    pipeline_info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+    pipeline_info.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+    pipeline_info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+    pipeline_info.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+    pipeline_info.rasterizer_state.enable_depth_clip = false;
+    pipeline_info.multisample_state.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    pipeline_info.multisample_state.sample_mask = 0;
+    pipeline_info.depth_stencil_state.enable_depth_test = false;
+    pipeline_info.depth_stencil_state.enable_depth_write = false;
+    pipeline_info.depth_stencil_state.enable_stencil_test = false;
+    pipeline_info.target_info.color_target_descriptions = &color_target;
+    pipeline_info.target_info.num_color_targets = 1;
+    pipeline_info.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_INVALID;
+    pipeline_info.target_info.has_depth_stencil_target = false;
 
     sr->vignette_pipeline = SDL_CreateGPUGraphicsPipeline(sr->gpu, &pipeline_info);
 
@@ -502,11 +470,10 @@ Agentite_SpriteRenderer *agentite_sprite_init(SDL_GPUDevice *gpu, SDL_Window *wi
     }
 
     /* Create GPU buffers */
-    SDL_GPUBufferCreateInfo vb_info = {
-        .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
-        .size = (Uint32)(SPRITE_VERTEX_CAPACITY * sizeof(Agentite_SpriteVertex)),
-        .props = 0
-    };
+    SDL_GPUBufferCreateInfo vb_info = {};
+    vb_info.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+    vb_info.size = (Uint32)(SPRITE_VERTEX_CAPACITY * sizeof(Agentite_SpriteVertex));
+    vb_info.props = 0;
     sr->vertex_buffer = SDL_CreateGPUBuffer(gpu, &vb_info);
     if (!sr->vertex_buffer) {
         agentite_set_error_from_sdl("Sprite: Failed to create vertex buffer");
@@ -514,11 +481,10 @@ Agentite_SpriteRenderer *agentite_sprite_init(SDL_GPUDevice *gpu, SDL_Window *wi
         return NULL;
     }
 
-    SDL_GPUBufferCreateInfo ib_info = {
-        .usage = SDL_GPU_BUFFERUSAGE_INDEX,
-        .size = (Uint32)(SPRITE_INDEX_CAPACITY * sizeof(uint16_t)),
-        .props = 0
-    };
+    SDL_GPUBufferCreateInfo ib_info = {};
+    ib_info.usage = SDL_GPU_BUFFERUSAGE_INDEX;
+    ib_info.size = (Uint32)(SPRITE_INDEX_CAPACITY * sizeof(uint16_t));
+    ib_info.props = 0;
     sr->index_buffer = SDL_CreateGPUBuffer(gpu, &ib_info);
     if (!sr->index_buffer) {
         agentite_set_error_from_sdl("Sprite: Failed to create index buffer");
@@ -527,14 +493,13 @@ Agentite_SpriteRenderer *agentite_sprite_init(SDL_GPUDevice *gpu, SDL_Window *wi
     }
 
     /* Create sampler (nearest for pixel art) */
-    SDL_GPUSamplerCreateInfo sampler_info = {
-        .min_filter = SDL_GPU_FILTER_NEAREST,  /* Pixel art friendly */
-        .mag_filter = SDL_GPU_FILTER_NEAREST,
-        .mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST,
-        .address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
-        .address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
-        .address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
-    };
+    SDL_GPUSamplerCreateInfo sampler_info = {};
+    sampler_info.min_filter = SDL_GPU_FILTER_NEAREST;  /* Pixel art friendly */
+    sampler_info.mag_filter = SDL_GPU_FILTER_NEAREST;
+    sampler_info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+    sampler_info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
     sr->sampler = SDL_CreateGPUSampler(gpu, &sampler_info);
     if (!sr->sampler) {
         agentite_set_error_from_sdl("Sprite: Failed to create sampler");
@@ -543,14 +508,13 @@ Agentite_SpriteRenderer *agentite_sprite_init(SDL_GPUDevice *gpu, SDL_Window *wi
     }
 
     /* Create linear sampler (for post-process effects) */
-    SDL_GPUSamplerCreateInfo linear_sampler_info = {
-        .min_filter = SDL_GPU_FILTER_LINEAR,
-        .mag_filter = SDL_GPU_FILTER_LINEAR,
-        .mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR,
-        .address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
-        .address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
-        .address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
-    };
+    SDL_GPUSamplerCreateInfo linear_sampler_info = {};
+    linear_sampler_info.min_filter = SDL_GPU_FILTER_LINEAR;
+    linear_sampler_info.mag_filter = SDL_GPU_FILTER_LINEAR;
+    linear_sampler_info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
+    linear_sampler_info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    linear_sampler_info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    linear_sampler_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
     sr->linear_sampler = SDL_CreateGPUSampler(gpu, &linear_sampler_info);
     if (!sr->linear_sampler) {
         agentite_set_error_from_sdl("Sprite: Failed to create linear sampler");
@@ -668,17 +632,16 @@ Agentite_Texture *agentite_texture_create(Agentite_SpriteRenderer *sr,
     texture->height = height;
 
     /* Create GPU texture */
-    SDL_GPUTextureCreateInfo tex_info = {
-        .type = SDL_GPU_TEXTURETYPE_2D,
-        .format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-        .usage = SDL_GPU_TEXTUREUSAGE_SAMPLER,
-        .width = (Uint32)width,
-        .height = (Uint32)height,
-        .layer_count_or_depth = 1,
-        .num_levels = 1,
-        .sample_count = SDL_GPU_SAMPLECOUNT_1,
-        .props = 0
-    };
+    SDL_GPUTextureCreateInfo tex_info = {};
+    tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+    tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    tex_info.width = (Uint32)width;
+    tex_info.height = (Uint32)height;
+    tex_info.layer_count_or_depth = 1;
+    tex_info.num_levels = 1;
+    tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    tex_info.props = 0;
     texture->gpu_texture = SDL_CreateGPUTexture(sr->gpu, &tex_info);
     if (!texture->gpu_texture) {
         agentite_set_error_from_sdl("Sprite: Failed to create GPU texture");
@@ -687,11 +650,10 @@ Agentite_Texture *agentite_texture_create(Agentite_SpriteRenderer *sr,
     }
 
     /* Upload pixel data */
-    SDL_GPUTransferBufferCreateInfo transfer_info = {
-        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        .size = (Uint32)(width * height * 4),
-        .props = 0
-    };
+    SDL_GPUTransferBufferCreateInfo transfer_info = {};
+    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    transfer_info.size = (Uint32)(width * height * 4);
+    transfer_info.props = 0;
     SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(sr->gpu, &transfer_info);
     if (!transfer) {
         agentite_set_error_from_sdl("Sprite: Failed to create transfer buffer");
@@ -711,23 +673,21 @@ Agentite_Texture *agentite_texture_create(Agentite_SpriteRenderer *sr,
     if (cmd) {
         SDL_GPUCopyPass *copy_pass = SDL_BeginGPUCopyPass(cmd);
         if (copy_pass) {
-            SDL_GPUTextureTransferInfo src = {
-                .transfer_buffer = transfer,
-                .offset = 0,
-                .pixels_per_row = (Uint32)width,
-                .rows_per_layer = (Uint32)height
-            };
-            SDL_GPUTextureRegion dst = {
-                .texture = texture->gpu_texture,
-                .mip_level = 0,
-                .layer = 0,
-                .x = 0,
-                .y = 0,
-                .z = 0,
-                .w = (Uint32)width,
-                .h = (Uint32)height,
-                .d = 1
-            };
+            SDL_GPUTextureTransferInfo src = {};
+            src.transfer_buffer = transfer;
+            src.offset = 0;
+            src.pixels_per_row = (Uint32)width;
+            src.rows_per_layer = (Uint32)height;
+            SDL_GPUTextureRegion dst = {};
+            dst.texture = texture->gpu_texture;
+            dst.mip_level = 0;
+            dst.layer = 0;
+            dst.x = 0;
+            dst.y = 0;
+            dst.z = 0;
+            dst.w = (Uint32)width;
+            dst.h = (Uint32)height;
+            dst.d = 1;
             SDL_UploadToGPUTexture(copy_pass, &src, &dst, false);
             SDL_EndGPUCopyPass(copy_pass);
         }
@@ -987,11 +947,10 @@ void agentite_sprite_flush(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cm
     if (!sr->current_texture) return;
 
     /* Upload vertex data */
-    SDL_GPUTransferBufferCreateInfo transfer_info = {
-        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        .size = (Uint32)(sr->vertex_count * sizeof(Agentite_SpriteVertex)),
-        .props = 0
-    };
+    SDL_GPUTransferBufferCreateInfo transfer_info = {};
+    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    transfer_info.size = (Uint32)(sr->vertex_count * sizeof(Agentite_SpriteVertex));
+    transfer_info.props = 0;
     SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(sr->gpu, &transfer_info);
     if (!transfer) return;
 
@@ -1010,17 +969,15 @@ void agentite_sprite_flush(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cm
     SDL_BindGPUGraphicsPipeline(pass, sr->pipeline);
 
     /* Bind vertex buffer */
-    SDL_GPUBufferBinding vb_binding = {
-        .buffer = sr->vertex_buffer,
-        .offset = 0
-    };
+    SDL_GPUBufferBinding vb_binding = {};
+    vb_binding.buffer = sr->vertex_buffer;
+    vb_binding.offset = 0;
     SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
 
     /* Bind index buffer */
-    SDL_GPUBufferBinding ib_binding = {
-        .buffer = sr->index_buffer,
-        .offset = 0
-    };
+    SDL_GPUBufferBinding ib_binding = {};
+    ib_binding.buffer = sr->index_buffer;
+    ib_binding.offset = 0;
     SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
 
     /* Push uniforms */
@@ -1028,10 +985,9 @@ void agentite_sprite_flush(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cm
     SDL_PushGPUVertexUniformData(cmd, 0, uniforms, sizeof(uniforms));
 
     /* Bind texture */
-    SDL_GPUTextureSamplerBinding tex_binding = {
-        .texture = sr->current_texture->gpu_texture,
-        .sampler = sr->sampler
-    };
+    SDL_GPUTextureSamplerBinding tex_binding = {};
+    tex_binding.texture = sr->current_texture->gpu_texture;
+    tex_binding.sampler = sr->sampler;
     SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
 
     /* Draw */
@@ -1050,12 +1006,11 @@ void agentite_sprite_end(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
 
     if (sr->sprite_count > 0 && sr->current_texture) {
         /* Upload vertex data before drawing */
-        SDL_GPUTransferBufferCreateInfo transfer_info = {
-            .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-            .size = (Uint32)(sr->vertex_count * sizeof(Agentite_SpriteVertex) +
-                    sr->index_count * sizeof(uint16_t)),
-            .props = 0
-        };
+        SDL_GPUTransferBufferCreateInfo transfer_info = {};
+        transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+        transfer_info.size = (Uint32)(sr->vertex_count * sizeof(Agentite_SpriteVertex) +
+                sr->index_count * sizeof(uint16_t));
+        transfer_info.props = 0;
         SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(sr->gpu, &transfer_info);
 
         if (transfer) {
@@ -1086,17 +1041,15 @@ void agentite_sprite_end(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
             SDL_BindGPUGraphicsPipeline(pass, sr->pipeline);
 
             /* Bind vertex buffer */
-            SDL_GPUBufferBinding vb_binding = {
-                .buffer = sr->vertex_buffer,
-                .offset = 0
-            };
+            SDL_GPUBufferBinding vb_binding = {};
+            vb_binding.buffer = sr->vertex_buffer;
+            vb_binding.offset = 0;
             SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
 
             /* Bind index buffer */
-            SDL_GPUBufferBinding ib_binding = {
-                .buffer = sr->index_buffer,
-                .offset = 0
-            };
+            SDL_GPUBufferBinding ib_binding = {};
+            ib_binding.buffer = sr->index_buffer;
+            ib_binding.offset = 0;
             SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
 
             /* Build uniforms: mat4 view_projection + vec2 screen_size + vec2 padding */
@@ -1125,10 +1078,9 @@ void agentite_sprite_end(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
             SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(uniforms));
 
             /* Bind texture */
-            SDL_GPUTextureSamplerBinding tex_binding = {
-                .texture = sr->current_texture->gpu_texture,
-                .sampler = sr->sampler
-            };
+            SDL_GPUTextureSamplerBinding tex_binding = {};
+            tex_binding.texture = sr->current_texture->gpu_texture;
+            tex_binding.sampler = sr->sampler;
             SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
 
             /* Draw */
@@ -1145,12 +1097,11 @@ void agentite_sprite_upload(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *c
     if (!sr || !cmd || sr->sprite_count == 0) return;
 
     /* Upload vertex and index data */
-    SDL_GPUTransferBufferCreateInfo transfer_info = {
-        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        .size = (Uint32)(sr->vertex_count * sizeof(Agentite_SpriteVertex) +
-                sr->index_count * sizeof(uint16_t)),
-        .props = 0
-    };
+    SDL_GPUTransferBufferCreateInfo transfer_info = {};
+    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    transfer_info.size = (Uint32)(sr->vertex_count * sizeof(Agentite_SpriteVertex) +
+            sr->index_count * sizeof(uint16_t));
+    transfer_info.props = 0;
     SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(sr->gpu, &transfer_info);
     if (!transfer) return;
 
@@ -1166,27 +1117,23 @@ void agentite_sprite_upload(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *c
     SDL_GPUCopyPass *copy_pass = SDL_BeginGPUCopyPass(cmd);
     if (copy_pass) {
         /* Upload vertices */
-        SDL_GPUTransferBufferLocation src_vert = {
-            .transfer_buffer = transfer,
-            .offset = 0
-        };
-        SDL_GPUBufferRegion dst_vert = {
-            .buffer = sr->vertex_buffer,
-            .offset = 0,
-            .size = (Uint32)(sr->vertex_count * sizeof(Agentite_SpriteVertex))
-        };
+        SDL_GPUTransferBufferLocation src_vert = {};
+        src_vert.transfer_buffer = transfer;
+        src_vert.offset = 0;
+        SDL_GPUBufferRegion dst_vert = {};
+        dst_vert.buffer = sr->vertex_buffer;
+        dst_vert.offset = 0;
+        dst_vert.size = (Uint32)(sr->vertex_count * sizeof(Agentite_SpriteVertex));
         SDL_UploadToGPUBuffer(copy_pass, &src_vert, &dst_vert, false);
 
         /* Upload indices */
-        SDL_GPUTransferBufferLocation src_idx = {
-            .transfer_buffer = transfer,
-            .offset = (Uint32)(sr->vertex_count * sizeof(Agentite_SpriteVertex))
-        };
-        SDL_GPUBufferRegion dst_idx = {
-            .buffer = sr->index_buffer,
-            .offset = 0,
-            .size = (Uint32)(sr->index_count * sizeof(uint16_t))
-        };
+        SDL_GPUTransferBufferLocation src_idx = {};
+        src_idx.transfer_buffer = transfer;
+        src_idx.offset = (Uint32)(sr->vertex_count * sizeof(Agentite_SpriteVertex));
+        SDL_GPUBufferRegion dst_idx = {};
+        dst_idx.buffer = sr->index_buffer;
+        dst_idx.offset = 0;
+        dst_idx.size = (Uint32)(sr->index_count * sizeof(uint16_t));
         SDL_UploadToGPUBuffer(copy_pass, &src_idx, &dst_idx, false);
 
         SDL_EndGPUCopyPass(copy_pass);
@@ -1201,10 +1148,9 @@ static void sprite_render_segment(Agentite_SpriteRenderer *sr,
                                    uint32_t start_index, uint32_t index_count)
 {
     /* Bind texture */
-    SDL_GPUTextureSamplerBinding tex_binding = {
-        .texture = texture->gpu_texture,
-        .sampler = sr->sampler
-    };
+    SDL_GPUTextureSamplerBinding tex_binding = {};
+    tex_binding.texture = texture->gpu_texture;
+    tex_binding.sampler = sr->sampler;
     SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
 
     /* Draw this segment */
@@ -1221,17 +1167,15 @@ void agentite_sprite_render(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *c
     SDL_BindGPUGraphicsPipeline(pass, sr->pipeline);
 
     /* Bind vertex buffer */
-    SDL_GPUBufferBinding vb_binding = {
-        .buffer = sr->vertex_buffer,
-        .offset = 0
-    };
+    SDL_GPUBufferBinding vb_binding = {};
+    vb_binding.buffer = sr->vertex_buffer;
+    vb_binding.offset = 0;
     SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
 
     /* Bind index buffer */
-    SDL_GPUBufferBinding ib_binding = {
-        .buffer = sr->index_buffer,
-        .offset = 0
-    };
+    SDL_GPUBufferBinding ib_binding = {};
+    ib_binding.buffer = sr->index_buffer;
+    ib_binding.offset = 0;
     SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
 
     /* Build uniforms: mat4 view_projection + vec2 screen_size + vec2 padding */
@@ -1311,17 +1255,16 @@ Agentite_Texture *agentite_texture_create_render_target(Agentite_SpriteRenderer 
     texture->height = height;
 
     /* Create GPU texture with render target usage */
-    SDL_GPUTextureCreateInfo tex_info = {
-        .type = SDL_GPU_TEXTURETYPE_2D,
-        .format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-        .usage = SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
-        .width = (Uint32)width,
-        .height = (Uint32)height,
-        .layer_count_or_depth = 1,
-        .num_levels = 1,
-        .sample_count = SDL_GPU_SAMPLECOUNT_1,
-        .props = 0
-    };
+    SDL_GPUTextureCreateInfo tex_info = {};
+    tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+    tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
+    tex_info.width = (Uint32)width;
+    tex_info.height = (Uint32)height;
+    tex_info.layer_count_or_depth = 1;
+    tex_info.num_levels = 1;
+    tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    tex_info.props = 0;
     texture->gpu_texture = SDL_CreateGPUTexture(sr->gpu, &tex_info);
     if (!texture->gpu_texture) {
         SDL_Log("Sprite: Failed to create render target texture: %s", SDL_GetError());
@@ -1341,19 +1284,21 @@ SDL_GPURenderPass *agentite_sprite_begin_render_to_texture(Agentite_SpriteRender
 {
     if (!sr || !target || !cmd) return NULL;
 
-    SDL_GPUColorTargetInfo color_target = {
-        .texture = target->gpu_texture,
-        .mip_level = 0,
-        .layer_or_depth_plane = 0,
-        .clear_color = { clear_r, clear_g, clear_b, clear_a },
-        .load_op = SDL_GPU_LOADOP_CLEAR,
-        .store_op = SDL_GPU_STOREOP_STORE,
-        .resolve_texture = NULL,
-        .resolve_mip_level = 0,
-        .resolve_layer = 0,
-        .cycle = false,
-        .cycle_resolve_texture = false
-    };
+    SDL_GPUColorTargetInfo color_target = {};
+    color_target.texture = target->gpu_texture;
+    color_target.mip_level = 0;
+    color_target.layer_or_depth_plane = 0;
+    color_target.clear_color.r = clear_r;
+    color_target.clear_color.g = clear_g;
+    color_target.clear_color.b = clear_b;
+    color_target.clear_color.a = clear_a;
+    color_target.load_op = SDL_GPU_LOADOP_CLEAR;
+    color_target.store_op = SDL_GPU_STOREOP_STORE;
+    color_target.resolve_texture = NULL;
+    color_target.resolve_mip_level = 0;
+    color_target.resolve_layer = 0;
+    color_target.cycle = false;
+    color_target.cycle_resolve_texture = false;
 
     SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &color_target, 1, NULL);
     if (!pass) {
@@ -1362,14 +1307,13 @@ SDL_GPURenderPass *agentite_sprite_begin_render_to_texture(Agentite_SpriteRender
     }
 
     /* Set viewport to texture size */
-    SDL_GPUViewport viewport = {
-        .x = 0.0f,
-        .y = 0.0f,
-        .w = (float)target->width,
-        .h = (float)target->height,
-        .min_depth = 0.0f,
-        .max_depth = 1.0f
-    };
+    SDL_GPUViewport viewport = {};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.w = (float)target->width;
+    viewport.h = (float)target->height;
+    viewport.min_depth = 0.0f;
+    viewport.max_depth = 1.0f;
     SDL_SetGPUViewport(pass, &viewport);
 
     return pass;
@@ -1410,17 +1354,15 @@ void agentite_sprite_render_vignette(Agentite_SpriteRenderer *sr,
     SDL_BindGPUGraphicsPipeline(pass, sr->vignette_pipeline);
 
     /* Bind vertex buffer */
-    SDL_GPUBufferBinding vb_binding = {
-        .buffer = sr->vertex_buffer,
-        .offset = 0
-    };
+    SDL_GPUBufferBinding vb_binding = {};
+    vb_binding.buffer = sr->vertex_buffer;
+    vb_binding.offset = 0;
     SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
 
     /* Bind index buffer */
-    SDL_GPUBufferBinding ib_binding = {
-        .buffer = sr->index_buffer,
-        .offset = 0
-    };
+    SDL_GPUBufferBinding ib_binding = {};
+    ib_binding.buffer = sr->index_buffer;
+    ib_binding.offset = 0;
     SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
 
     /* Build uniforms: ortho projection for screen-space quad */
@@ -1441,10 +1383,9 @@ void agentite_sprite_render_vignette(Agentite_SpriteRenderer *sr,
     SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(uniforms));
 
     /* Bind scene texture with linear sampler */
-    SDL_GPUTextureSamplerBinding tex_binding = {
-        .texture = scene_texture->gpu_texture,
-        .sampler = sr->linear_sampler
-    };
+    SDL_GPUTextureSamplerBinding tex_binding = {};
+    tex_binding.texture = scene_texture->gpu_texture;
+    tex_binding.sampler = sr->linear_sampler;
     SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
 
     /* Draw a single fullscreen quad (first 6 indices) */
@@ -1492,11 +1433,10 @@ void agentite_sprite_upload_fullscreen_quad(Agentite_SpriteRenderer *sr, SDL_GPU
     if (!sr || !cmd) return;
 
     /* Upload vertex data for fullscreen quad */
-    SDL_GPUTransferBufferCreateInfo transfer_info = {
-        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        .size = (Uint32)(4 * sizeof(Agentite_SpriteVertex) + 6 * sizeof(uint16_t)),
-        .props = 0
-    };
+    SDL_GPUTransferBufferCreateInfo transfer_info = {};
+    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    transfer_info.size = (Uint32)(4 * sizeof(Agentite_SpriteVertex) + 6 * sizeof(uint16_t));
+    transfer_info.props = 0;
     SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(sr->gpu, &transfer_info);
     if (!transfer) return;
 
@@ -1511,24 +1451,23 @@ void agentite_sprite_upload_fullscreen_quad(Agentite_SpriteRenderer *sr, SDL_GPU
     SDL_GPUCopyPass *copy_pass = SDL_BeginGPUCopyPass(cmd);
     if (copy_pass) {
         /* Upload vertices */
-        SDL_GPUTransferBufferLocation src_vert = { .transfer_buffer = transfer, .offset = 0 };
-        SDL_GPUBufferRegion dst_vert = {
-            .buffer = sr->vertex_buffer,
-            .offset = 0,
-            .size = (Uint32)(4 * sizeof(Agentite_SpriteVertex))
-        };
+        SDL_GPUTransferBufferLocation src_vert = {};
+        src_vert.transfer_buffer = transfer;
+        src_vert.offset = 0;
+        SDL_GPUBufferRegion dst_vert = {};
+        dst_vert.buffer = sr->vertex_buffer;
+        dst_vert.offset = 0;
+        dst_vert.size = (Uint32)(4 * sizeof(Agentite_SpriteVertex));
         SDL_UploadToGPUBuffer(copy_pass, &src_vert, &dst_vert, false);
 
         /* Upload indices */
-        SDL_GPUTransferBufferLocation src_idx = {
-            .transfer_buffer = transfer,
-            .offset = (Uint32)(4 * sizeof(Agentite_SpriteVertex))
-        };
-        SDL_GPUBufferRegion dst_idx = {
-            .buffer = sr->index_buffer,
-            .offset = 0,
-            .size = (Uint32)(6 * sizeof(uint16_t))
-        };
+        SDL_GPUTransferBufferLocation src_idx = {};
+        src_idx.transfer_buffer = transfer;
+        src_idx.offset = (Uint32)(4 * sizeof(Agentite_SpriteVertex));
+        SDL_GPUBufferRegion dst_idx = {};
+        dst_idx.buffer = sr->index_buffer;
+        dst_idx.offset = 0;
+        dst_idx.size = (Uint32)(6 * sizeof(uint16_t));
         SDL_UploadToGPUBuffer(copy_pass, &src_idx, &dst_idx, false);
 
         SDL_EndGPUCopyPass(copy_pass);

@@ -281,12 +281,11 @@ bool agentite_begin_render_pass(Agentite_Engine *engine, float r, float g, float
     engine->swapchain_texture = swapchain_texture;
 
     // Set up color target with clear color
-    SDL_GPUColorTargetInfo color_target = {
-        .texture = swapchain_texture,
-        .load_op = SDL_GPU_LOADOP_CLEAR,
-        .store_op = SDL_GPU_STOREOP_STORE,
-        .clear_color = { r, g, b, a }
-    };
+    SDL_GPUColorTargetInfo color_target = {};
+    color_target.texture = swapchain_texture;
+    color_target.load_op = SDL_GPU_LOADOP_CLEAR;
+    color_target.store_op = SDL_GPU_STOREOP_STORE;
+    color_target.clear_color = { r, g, b, a };
 
     // Begin render pass
     engine->render_pass = SDL_BeginGPURenderPass(
@@ -317,12 +316,10 @@ bool agentite_begin_render_pass_no_clear(Agentite_Engine *engine) {
     }
 
     // Set up color target with LOAD (preserve existing content)
-    SDL_GPUColorTargetInfo color_target = {
-        .texture = engine->swapchain_texture,
-        .load_op = SDL_GPU_LOADOP_LOAD,
-        .store_op = SDL_GPU_STOREOP_STORE,
-        .clear_color = { 0, 0, 0, 0 }  // Not used with LOAD
-    };
+    SDL_GPUColorTargetInfo color_target = {};
+    color_target.texture = engine->swapchain_texture;
+    color_target.load_op = SDL_GPU_LOADOP_LOAD;
+    color_target.store_op = SDL_GPU_STOREOP_STORE;
 
     // Begin render pass
     engine->render_pass = SDL_BeginGPURenderPass(

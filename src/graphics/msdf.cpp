@@ -19,6 +19,10 @@
 #include <math.h>
 #include <float.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 /* Include stb_truetype header (implementation is in text_font.cpp) */
 #include "stb_truetype.h"
 
