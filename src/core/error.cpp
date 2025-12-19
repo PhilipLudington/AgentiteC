@@ -8,6 +8,8 @@
 
 #if defined(_MSC_VER)
     #define AGENTITE_THREAD_LOCAL __declspec(thread)
+#elif defined(__cplusplus)
+    #define AGENTITE_THREAD_LOCAL thread_local
 #else
     #define AGENTITE_THREAD_LOCAL _Thread_local
 #endif
