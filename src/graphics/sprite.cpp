@@ -19,6 +19,9 @@
 #define STBI_ONLY_TGA
 #include "stb_image.h"
 
+/* Embedded SPIRV shaders for Vulkan/D3D12 (cross-platform) */
+#include "sprite_shaders_spirv.h"
+
 /* ============================================================================
  * Constants
  * ============================================================================ */
@@ -198,7 +201,7 @@ static bool sprite_create_pipeline(Agentite_SpriteRenderer *sr)
     SDL_GPUShader *fragment_shader = NULL;
 
     if (formats & SDL_GPU_SHADERFORMAT_MSL) {
-        /* Create vertex shader */
+        /* Create vertex shader (Metal) */
         SDL_GPUShaderCreateInfo vs_info = {};
         vs_info.code = (const Uint8 *)sprite_shader_msl;
         vs_info.code_size = sizeof(sprite_shader_msl);
@@ -215,7 +218,7 @@ static bool sprite_create_pipeline(Agentite_SpriteRenderer *sr)
             return false;
         }
 
-        /* Create fragment shader */
+        /* Create fragment shader (Metal) */
         SDL_GPUShaderCreateInfo fs_info = {};
         fs_info.code = (const Uint8 *)sprite_shader_msl;
         fs_info.code_size = sizeof(sprite_shader_msl);
@@ -232,8 +235,43 @@ static bool sprite_create_pipeline(Agentite_SpriteRenderer *sr)
             SDL_ReleaseGPUShader(sr->gpu, vertex_shader);
             return false;
         }
+    } else if (formats & SDL_GPU_SHADERFORMAT_SPIRV) {
+        /* Create vertex shader (Vulkan/D3D12 via SPIRV) */
+        SDL_GPUShaderCreateInfo vs_info = {};
+        vs_info.code = sprite_vert_spv;
+        vs_info.code_size = sprite_vert_spv_len;
+        vs_info.entrypoint = "main";
+        vs_info.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        vs_info.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+        vs_info.num_samplers = 0;
+        vs_info.num_storage_textures = 0;
+        vs_info.num_storage_buffers = 0;
+        vs_info.num_uniform_buffers = 1;
+        vertex_shader = SDL_CreateGPUShader(sr->gpu, &vs_info);
+        if (!vertex_shader) {
+            agentite_set_error_from_sdl("Sprite: Failed to create SPIRV vertex shader");
+            return false;
+        }
+
+        /* Create fragment shader (Vulkan/D3D12 via SPIRV) */
+        SDL_GPUShaderCreateInfo fs_info = {};
+        fs_info.code = sprite_frag_spv;
+        fs_info.code_size = sprite_frag_spv_len;
+        fs_info.entrypoint = "main";
+        fs_info.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        fs_info.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
+        fs_info.num_samplers = 1;
+        fs_info.num_storage_textures = 0;
+        fs_info.num_storage_buffers = 0;
+        fs_info.num_uniform_buffers = 0;
+        fragment_shader = SDL_CreateGPUShader(sr->gpu, &fs_info);
+        if (!fragment_shader) {
+            agentite_set_error_from_sdl("Sprite: Failed to create SPIRV fragment shader");
+            SDL_ReleaseGPUShader(sr->gpu, vertex_shader);
+            return false;
+        }
     } else {
-        agentite_set_error("Sprite: No supported shader format (need MSL for Metal)");
+        agentite_set_error("Sprite: No supported shader format (need MSL or SPIRV)");
         return false;
     }
 
@@ -353,6 +391,39 @@ static bool sprite_create_vignette_pipeline(Agentite_SpriteRenderer *sr)
         fragment_shader = SDL_CreateGPUShader(sr->gpu, &fs_info);
         if (!fragment_shader) {
             SDL_Log("Vignette: Failed to create fragment shader: %s", SDL_GetError());
+            SDL_ReleaseGPUShader(sr->gpu, vertex_shader);
+            return false;
+        }
+    } else if (formats & SDL_GPU_SHADERFORMAT_SPIRV) {
+        SDL_GPUShaderCreateInfo vs_info = {};
+        vs_info.code = vignette_vert_spv;
+        vs_info.code_size = vignette_vert_spv_len;
+        vs_info.entrypoint = "main";
+        vs_info.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        vs_info.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+        vs_info.num_samplers = 0;
+        vs_info.num_storage_textures = 0;
+        vs_info.num_storage_buffers = 0;
+        vs_info.num_uniform_buffers = 1;
+        vertex_shader = SDL_CreateGPUShader(sr->gpu, &vs_info);
+        if (!vertex_shader) {
+            SDL_Log("Vignette: Failed to create SPIRV vertex shader: %s", SDL_GetError());
+            return false;
+        }
+
+        SDL_GPUShaderCreateInfo fs_info = {};
+        fs_info.code = vignette_frag_spv;
+        fs_info.code_size = vignette_frag_spv_len;
+        fs_info.entrypoint = "main";
+        fs_info.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        fs_info.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
+        fs_info.num_samplers = 1;
+        fs_info.num_storage_textures = 0;
+        fs_info.num_storage_buffers = 0;
+        fs_info.num_uniform_buffers = 0;
+        fragment_shader = SDL_CreateGPUShader(sr->gpu, &fs_info);
+        if (!fragment_shader) {
+            SDL_Log("Vignette: Failed to create SPIRV fragment shader: %s", SDL_GetError());
             SDL_ReleaseGPUShader(sr->gpu, vertex_shader);
             return false;
         }
