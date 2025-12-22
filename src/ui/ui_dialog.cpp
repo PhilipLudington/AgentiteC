@@ -1069,3 +1069,19 @@ void aui_notify_clear_all(AUI_Context *ctx)
         dm->notification_count = 0;
     }
 }
+
+void aui_dialogs_update(AUI_Context *ctx, float dt)
+{
+    AUI_DialogManager *dm = aui_get_dialog_manager(ctx);
+    if (dm) {
+        aui_dialog_manager_update(dm, ctx, dt);
+    }
+}
+
+void aui_dialogs_render(AUI_Context *ctx)
+{
+    AUI_DialogManager *dm = aui_get_dialog_manager(ctx);
+    if (dm) {
+        aui_dialog_manager_render(dm, ctx);
+    }
+}

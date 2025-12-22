@@ -347,6 +347,12 @@ void aui_notify_set_position(AUI_Context *ctx, AUI_NotifyPosition position);
 /* Clear all notifications */
 void aui_notify_clear_all(AUI_Context *ctx);
 
+/* Update dialogs and notifications (call each frame) */
+void aui_dialogs_update(AUI_Context *ctx, float dt);
+
+/* Render dialogs and notifications (call each frame after UI) */
+void aui_dialogs_render(AUI_Context *ctx);
+
 #ifdef __cplusplus
 }
 #endif
