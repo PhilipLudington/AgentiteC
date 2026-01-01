@@ -1676,6 +1676,21 @@ bool aui_scene_process_event(AUI_Context *ctx, AUI_Node *root, const SDL_Event *
 {
     if (!ctx || !root || !event) return false;
 
+    /* Update input state for key events (needed for shortcuts) */
+    if (event->type == SDL_EVENT_KEY_DOWN) {
+        if (event->key.scancode < 512) {
+            ctx->input.keys_down[event->key.scancode] = true;
+            ctx->input.keys_pressed[event->key.scancode] = true;
+        }
+        ctx->input.shift = (event->key.mod & SDL_KMOD_SHIFT) != 0;
+        ctx->input.ctrl = (event->key.mod & SDL_KMOD_CTRL) != 0;
+        ctx->input.alt = (event->key.mod & SDL_KMOD_ALT) != 0;
+    } else if (event->type == SDL_EVENT_KEY_UP) {
+        if (event->key.scancode < 512) {
+            ctx->input.keys_down[event->key.scancode] = false;
+        }
+    }
+
     /* Ensure layout is up-to-date before hit testing */
     aui_scene_layout(ctx, root);
 
@@ -1714,7 +1729,19 @@ bool aui_scene_process_event(AUI_Context *ctx, AUI_Node *root, const SDL_Event *
         /* Handle click */
         if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN && hit) {
             if (hit->focus_mode_click) {
+                AUI_Node *old_focused = s_focused_node;
                 aui_node_grab_focus(hit);
+
+                /* Start/stop text input for textbox focus changes */
+                if (ctx && ctx->window) {
+                    bool old_is_textbox = old_focused && old_focused->type == AUI_NODE_TEXTBOX;
+                    bool new_is_textbox = hit->type == AUI_NODE_TEXTBOX;
+                    if (new_is_textbox && !old_is_textbox) {
+                        SDL_StartTextInput(ctx->window);
+                    } else if (!new_is_textbox && old_is_textbox) {
+                        SDL_StopTextInput(ctx->window);
+                    }
+                }
             }
 
             hit->pressed = true;
@@ -2215,6 +2242,20 @@ bool aui_scene_process_event(AUI_Context *ctx, AUI_Node *root, const SDL_Event *
         /* Custom input handler for other focused nodes */
         if (s_focused_node->on_gui_input) {
             return s_focused_node->on_gui_input(s_focused_node, ctx, event);
+        }
+    }
+
+    /* Process keyboard shortcuts */
+    if (event->type == SDL_EVENT_KEY_DOWN) {
+        bool textbox_focused = s_focused_node && s_focused_node->type == AUI_NODE_TEXTBOX;
+
+        /* Allow shortcuts with Ctrl/Alt modifiers even when textbox focused */
+        bool has_modifier = (event->key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT)) != 0;
+
+        if (!textbox_focused || has_modifier) {
+            if (aui_shortcuts_process(ctx)) {
+                return true;
+            }
         }
     }
 
