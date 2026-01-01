@@ -19,6 +19,133 @@
 static uint32_t s_next_node_id = 1;
 static AUI_Node *s_focused_node = NULL;
 
+/* Drag threshold in pixels before drag starts */
+static const float TREE_DRAG_THRESHOLD = 5.0f;
+
+/* Helper: Find tree item at Y position (returns item and its depth via out param) */
+static AUI_TreeItem *tree_find_item_at_y(AUI_TreeItem *items, float item_h, float indent,
+                                          float target_y, float *current_y_out, int *depth_out)
+{
+    float current_y = current_y_out ? *current_y_out : 0;
+    int depth = depth_out ? *depth_out : 0;
+
+    AUI_TreeItem *item = items;
+    while (item) {
+        if (target_y >= current_y && target_y < current_y + item_h) {
+            if (current_y_out) *current_y_out = current_y;
+            if (depth_out) *depth_out = depth;
+            return item;
+        }
+        current_y += item_h;
+
+        if (item->expanded && item->first_child) {
+            float child_y = current_y;
+            int child_depth = depth + 1;
+            AUI_TreeItem *found = tree_find_item_at_y(item->first_child, item_h, indent,
+                                                       target_y, &child_y, &child_depth);
+            if (found) {
+                if (current_y_out) *current_y_out = child_y;
+                if (depth_out) *depth_out = child_depth;
+                return found;
+            }
+            current_y = child_y;
+        }
+        item = item->next_sibling;
+    }
+
+    if (current_y_out) *current_y_out = current_y;
+    return NULL;
+}
+
+/* Helper: Check if item is a descendant of potential_ancestor */
+static bool tree_is_descendant(AUI_TreeItem *item, AUI_TreeItem *potential_ancestor)
+{
+    AUI_TreeItem *parent = item->parent;
+    while (parent) {
+        if (parent == potential_ancestor) return true;
+        parent = parent->parent;
+    }
+    return false;
+}
+
+/* Helper: Unlink item from its current location in tree */
+static void tree_unlink_item(AUI_Node *tree, AUI_TreeItem *item)
+{
+    /* Remove from sibling list */
+    if (item->prev_sibling) {
+        item->prev_sibling->next_sibling = item->next_sibling;
+    }
+    if (item->next_sibling) {
+        item->next_sibling->prev_sibling = item->prev_sibling;
+    }
+
+    /* Update parent's child pointers */
+    if (item->parent) {
+        if (item->parent->first_child == item) {
+            item->parent->first_child = item->next_sibling;
+        }
+        if (item->parent->last_child == item) {
+            item->parent->last_child = item->prev_sibling;
+        }
+    } else {
+        /* Root item */
+        if (tree->tree.root_items == item) {
+            tree->tree.root_items = item->next_sibling;
+        }
+    }
+
+    item->parent = NULL;
+    item->prev_sibling = NULL;
+    item->next_sibling = NULL;
+}
+
+/* Helper: Insert item as sibling before target */
+static void tree_insert_before(AUI_Node *tree, AUI_TreeItem *item, AUI_TreeItem *target)
+{
+    item->parent = target->parent;
+    item->next_sibling = target;
+    item->prev_sibling = target->prev_sibling;
+
+    if (target->prev_sibling) {
+        target->prev_sibling->next_sibling = item;
+    } else if (target->parent) {
+        target->parent->first_child = item;
+    } else {
+        tree->tree.root_items = item;
+    }
+    target->prev_sibling = item;
+}
+
+/* Helper: Insert item as sibling after target */
+static void tree_insert_after(AUI_Node * /*tree*/, AUI_TreeItem *item, AUI_TreeItem *target)
+{
+    item->parent = target->parent;
+    item->prev_sibling = target;
+    item->next_sibling = target->next_sibling;
+
+    if (target->next_sibling) {
+        target->next_sibling->prev_sibling = item;
+    } else if (target->parent) {
+        target->parent->last_child = item;
+    }
+    target->next_sibling = item;
+}
+
+/* Helper: Insert item as child of target (at end) */
+static void tree_insert_as_child(AUI_TreeItem *item, AUI_TreeItem *target)
+{
+    item->parent = target;
+    item->prev_sibling = target->last_child;
+    item->next_sibling = NULL;
+
+    if (target->last_child) {
+        target->last_child->next_sibling = item;
+    } else {
+        target->first_child = item;
+    }
+    target->last_child = item;
+}
+
 /* Helper to apply opacity to a color (format: 0xAABBGGRR - alpha in high byte) */
 static inline uint32_t aui_apply_opacity(uint32_t color, float opacity) {
     if (opacity >= 1.0f) return color;
@@ -252,6 +379,12 @@ AUI_Node *aui_node_create(AUI_Context *ctx, AUI_NodeType type, const char *name)
             node->tree.hide_root = false;
             node->tree.allow_reorder = false;
             node->tree.next_item_id = 1;
+            node->tree.dragging_item = NULL;
+            node->tree.drop_target = NULL;
+            node->tree.drop_pos = AUI_TREE_DROP_NONE;
+            node->tree.drag_start_x = 0;
+            node->tree.drag_start_y = 0;
+            node->tree.drag_started = false;
             node->clip_contents = true;
             node->focus_mode_click = true;
             break;
@@ -1814,6 +1947,121 @@ bool aui_scene_process_event(AUI_Context *ctx, AUI_Node *root, const SDL_Event *
             s_pressed_node->splitter.dragging = false;
         }
 
+        /* Tree drag-to-reorder: Start potential drag on mouse down */
+        if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN && hit &&
+            hit->type == AUI_NODE_TREE && hit->tree.allow_reorder) {
+            float item_h = hit->tree.item_height;
+            float tree_y = hit->global_rect.y;
+            float local_y = my - tree_y + hit->tree.scroll_offset;
+
+            float current_y = 0;
+            int depth = 0;
+            AUI_TreeItem *clicked_item = tree_find_item_at_y(hit->tree.root_items, item_h,
+                                                              hit->tree.indent_width,
+                                                              local_y, &current_y, &depth);
+            if (clicked_item) {
+                /* Store drag start info (but don't start drag yet - wait for threshold) */
+                hit->tree.dragging_item = clicked_item;
+                hit->tree.drag_start_x = mx;
+                hit->tree.drag_start_y = my;
+                hit->tree.drag_started = false;
+                hit->tree.drop_target = NULL;
+                hit->tree.drop_pos = AUI_TREE_DROP_NONE;
+            }
+        }
+
+        /* Tree drag-to-reorder: Update drag state on mouse motion */
+        if (event->type == SDL_EVENT_MOUSE_MOTION && s_pressed_node &&
+            s_pressed_node->type == AUI_NODE_TREE && s_pressed_node->tree.dragging_item) {
+            AUI_Node *tree = s_pressed_node;
+
+            /* Check if drag threshold exceeded */
+            if (!tree->tree.drag_started) {
+                float dx = mx - tree->tree.drag_start_x;
+                float dy = my - tree->tree.drag_start_y;
+                if (dx * dx + dy * dy > TREE_DRAG_THRESHOLD * TREE_DRAG_THRESHOLD) {
+                    tree->tree.drag_started = true;
+                }
+            }
+
+            if (tree->tree.drag_started) {
+                float item_h = tree->tree.item_height;
+                float tree_y = tree->global_rect.y;
+                float local_y = my - tree_y + tree->tree.scroll_offset;
+
+                float current_y = 0;
+                int depth = 0;
+                AUI_TreeItem *target = tree_find_item_at_y(tree->tree.root_items, item_h,
+                                                            tree->tree.indent_width,
+                                                            local_y, &current_y, &depth);
+
+                /* Can't drop on self or descendant */
+                if (target && (target == tree->tree.dragging_item ||
+                    tree_is_descendant(target, tree->tree.dragging_item))) {
+                    target = NULL;
+                }
+
+                tree->tree.drop_target = target;
+
+                if (target) {
+                    /* Determine drop position based on mouse Y within item */
+                    float item_y = tree_y + current_y - tree->tree.scroll_offset;
+                    float rel_y = my - item_y;
+                    float third = item_h / 3.0f;
+
+                    if (rel_y < third) {
+                        tree->tree.drop_pos = AUI_TREE_DROP_BEFORE;
+                    } else if (rel_y > item_h - third) {
+                        tree->tree.drop_pos = AUI_TREE_DROP_AFTER;
+                    } else {
+                        tree->tree.drop_pos = AUI_TREE_DROP_INTO;
+                    }
+                } else {
+                    tree->tree.drop_pos = AUI_TREE_DROP_NONE;
+                }
+            }
+        }
+
+        /* Tree drag-to-reorder: Perform drop on mouse up */
+        if (event->type == SDL_EVENT_MOUSE_BUTTON_UP && s_pressed_node &&
+            s_pressed_node->type == AUI_NODE_TREE && s_pressed_node->tree.dragging_item) {
+            AUI_Node *tree = s_pressed_node;
+
+            if (tree->tree.drag_started && tree->tree.drop_target &&
+                tree->tree.drop_pos != AUI_TREE_DROP_NONE) {
+                AUI_TreeItem *item = tree->tree.dragging_item;
+                AUI_TreeItem *target = tree->tree.drop_target;
+
+                /* Remove item from current position */
+                tree_unlink_item(tree, item);
+
+                /* Insert at new position */
+                switch (tree->tree.drop_pos) {
+                    case AUI_TREE_DROP_BEFORE:
+                        tree_insert_before(tree, item, target);
+                        break;
+                    case AUI_TREE_DROP_AFTER:
+                        tree_insert_after(tree, item, target);
+                        break;
+                    case AUI_TREE_DROP_INTO:
+                        tree_insert_as_child(item, target);
+                        target->expanded = true;  /* Expand to show dropped item */
+                        break;
+                    default:
+                        break;
+                }
+
+                /* Emit signal for reorder */
+                aui_node_emit_simple(tree, AUI_SIGNAL_VALUE_CHANGED);
+            }
+
+            /* Clear drag state */
+            tree->tree.dragging_item = NULL;
+            tree->tree.drop_target = NULL;
+            tree->tree.drop_pos = AUI_TREE_DROP_NONE;
+            tree->tree.drag_started = false;
+        }
+
         return hit != NULL && !hit->mouse_filter_ignore;
     }
 
@@ -2466,8 +2714,44 @@ static void aui_node_render_recursive(AUI_Context *ctx, AUI_Node *node, float in
                             /* Draw item text */
                             float text_x = item_x + (has_children ? 28.0f : 8.0f);
                             float text_y = current_y + (item_h - aui_text_height(ctx)) / 2;
+
+                            /* Dim the item being dragged */
+                            float text_opacity = effective_opacity;
+                            if (node->tree.drag_started && item == node->tree.dragging_item) {
+                                text_opacity *= 0.5f;
+                            }
                             aui_draw_text(ctx, item->text, text_x, text_y,
-                                          aui_apply_opacity(ctx->theme.text, effective_opacity));
+                                          aui_apply_opacity(ctx->theme.text, text_opacity));
+
+                            /* Draw drop indicator for reorder */
+                            if (node->tree.drag_started && item == node->tree.drop_target) {
+                                uint32_t indicator_color = ctx->theme.accent;
+                                float indicator_thickness = 2.0f;
+
+                                switch (node->tree.drop_pos) {
+                                    case AUI_TREE_DROP_BEFORE:
+                                        /* Line above item */
+                                        aui_draw_rect(ctx, x + depth * indent, current_y,
+                                                      w - depth * indent, indicator_thickness,
+                                                      aui_apply_opacity(indicator_color, effective_opacity));
+                                        break;
+                                    case AUI_TREE_DROP_AFTER:
+                                        /* Line below item */
+                                        aui_draw_rect(ctx, x + depth * indent, current_y + item_h - indicator_thickness,
+                                                      w - depth * indent, indicator_thickness,
+                                                      aui_apply_opacity(indicator_color, effective_opacity));
+                                        break;
+                                    case AUI_TREE_DROP_INTO:
+                                        /* Highlight entire item as drop target */
+                                        aui_draw_rect_outline(ctx, x + depth * indent, current_y,
+                                                              w - depth * indent, item_h,
+                                                              aui_apply_opacity(indicator_color, effective_opacity),
+                                                              indicator_thickness);
+                                        break;
+                                    default:
+                                        break;
+                                }
+                            }
                         }
 
                         current_y += item_h;
@@ -3479,6 +3763,12 @@ void aui_tree_set_item_height(AUI_Node *tree, float height)
 {
     if (!tree || tree->type != AUI_NODE_TREE) return;
     tree->tree.item_height = fmaxf(16.0f, height);
+}
+
+void aui_tree_set_allow_reorder(AUI_Node *tree, bool allow)
+{
+    if (!tree || tree->type != AUI_NODE_TREE) return;
+    tree->tree.allow_reorder = allow;
 }
 
 void aui_tree_item_set_text(AUI_TreeItem *item, const char *text)

@@ -344,6 +344,14 @@ struct AUI_TreeItem {
     AUI_TreeItem *prev_sibling;
 };
 
+/* Tree drag drop position */
+typedef enum AUI_TreeDropPosition {
+    AUI_TREE_DROP_NONE,             /* No drop target */
+    AUI_TREE_DROP_BEFORE,           /* Drop as sibling before target */
+    AUI_TREE_DROP_AFTER,            /* Drop as sibling after target */
+    AUI_TREE_DROP_INTO              /* Drop as child of target */
+} AUI_TreeDropPosition;
+
 /* Tree widget data */
 typedef struct AUI_TreeData {
     AUI_TreeItem *root_items;       /* First root item (linked list) */
@@ -356,6 +364,13 @@ typedef struct AUI_TreeData {
     bool hide_root;                 /* Hide root level items */
     bool allow_reorder;             /* Allow drag to reorder */
     uint32_t next_item_id;          /* Counter for unique IDs */
+
+    /* Drag-to-reorder state */
+    AUI_TreeItem *dragging_item;    /* Item being dragged (NULL if not dragging) */
+    AUI_TreeItem *drop_target;      /* Potential drop target item */
+    AUI_TreeDropPosition drop_pos;  /* Where to drop relative to target */
+    float drag_start_x, drag_start_y; /* Mouse position when drag started */
+    bool drag_started;              /* Has drag threshold been exceeded */
 } AUI_TreeData;
 
 /* VBox/HBox data */
@@ -843,6 +858,7 @@ AUI_TreeItem *aui_tree_find_by_data(AUI_Node *tree, void *user_data);
 void aui_tree_set_multi_select(AUI_Node *tree, bool multi);
 void aui_tree_set_indent(AUI_Node *tree, float indent_width);
 void aui_tree_set_item_height(AUI_Node *tree, float height);
+void aui_tree_set_allow_reorder(AUI_Node *tree, bool allow);
 
 /* Item properties */
 void aui_tree_item_set_text(AUI_TreeItem *item, const char *text);

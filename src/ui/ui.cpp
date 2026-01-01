@@ -6,6 +6,7 @@
 #include "agentite/error.h"
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 /* Forward declarations from other UI modules */
 extern void aui_state_clear(AUI_Context *ctx);
@@ -303,6 +304,13 @@ void aui_begin_frame(AUI_Context *ctx, float delta_time)
     ctx->prev_focusable = AUI_ID_NONE;
     ctx->focus_found_this_frame = false;
 
+    /* Reset spatial focus tracking for this frame */
+    ctx->focusable_widget_count = 0;
+
+    /* Clear gamepad per-frame states */
+    memset(ctx->input.gamepad_button_pressed, 0, sizeof(ctx->input.gamepad_button_pressed));
+    memset(ctx->input.gamepad_button_released, 0, sizeof(ctx->input.gamepad_button_released));
+
     /* Garbage collect old state entries every 60 frames */
     if (ctx->frame_count % 60 == 0) {
         aui_state_gc(ctx, 300);  /* Remove entries not used for 5 seconds */
@@ -315,6 +323,76 @@ extern void aui_draw_rect_outline(AUI_Context *ctx, float x, float y, float w, f
 extern float aui_draw_text(AUI_Context *ctx, const char *text, float x, float y, uint32_t color);
 extern float aui_text_height(AUI_Context *ctx);
 
+/* Find the widget position by ID in the focusable widgets array */
+static bool aui_find_widget_position(AUI_Context *ctx, AUI_Id id,
+                                      float *out_x, float *out_y)
+{
+    for (int i = 0; i < ctx->focusable_widget_count; i++) {
+        if (ctx->focusable_widgets[i].id == id) {
+            *out_x = ctx->focusable_widgets[i].center_x;
+            *out_y = ctx->focusable_widgets[i].center_y;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Find the best widget in a direction for spatial navigation */
+static AUI_Id aui_find_widget_in_direction(AUI_Context *ctx, float from_x, float from_y,
+                                            bool up, bool down, bool left, bool right)
+{
+    AUI_Id best_id = AUI_ID_NONE;
+    float best_score = 1e10f;
+
+    for (int i = 0; i < ctx->focusable_widget_count; i++) {
+        AUI_Id id = ctx->focusable_widgets[i].id;
+        if (id == ctx->focused) continue;  /* Skip current */
+
+        float wx = ctx->focusable_widgets[i].center_x;
+        float wy = ctx->focusable_widgets[i].center_y;
+
+        float dx = wx - from_x;
+        float dy = wy - from_y;
+
+        /* Check if widget is in the right direction */
+        bool valid = false;
+        float primary_dist = 0;
+        float secondary_dist = 0;
+
+        if (up && dy < -5.0f) {
+            valid = true;
+            primary_dist = -dy;  /* Distance upward (positive = further up) */
+            secondary_dist = fabsf(dx);  /* Lateral offset */
+        } else if (down && dy > 5.0f) {
+            valid = true;
+            primary_dist = dy;   /* Distance downward */
+            secondary_dist = fabsf(dx);
+        } else if (left && dx < -5.0f) {
+            valid = true;
+            primary_dist = -dx;  /* Distance leftward */
+            secondary_dist = fabsf(dy);
+        } else if (right && dx > 5.0f) {
+            valid = true;
+            primary_dist = dx;   /* Distance rightward */
+            secondary_dist = fabsf(dy);
+        }
+
+        if (!valid) continue;
+
+        /* Score: prefer widgets that are more aligned (lower secondary distance)
+           and closer (lower primary distance). Secondary is weighted more heavily
+           to favor aligned widgets even if slightly further away. */
+        float score = primary_dist + secondary_dist * 2.0f;
+
+        if (score < best_score) {
+            best_score = score;
+            best_id = id;
+        }
+    }
+
+    return best_id;
+}
+
 void aui_end_frame(AUI_Context *ctx)
 {
     if (!ctx) return;
@@ -322,6 +400,38 @@ void aui_end_frame(AUI_Context *ctx)
     /* Store previous mouse position */
     ctx->input.mouse_prev_x = ctx->input.mouse_x;
     ctx->input.mouse_prev_y = ctx->input.mouse_y;
+
+    /* Handle spatial (D-pad/gamepad) focus navigation */
+    bool any_direction = ctx->focus_up_requested || ctx->focus_down_requested ||
+                         ctx->focus_left_requested || ctx->focus_right_requested;
+
+    if (any_direction && ctx->focusable_widget_count > 0) {
+        float from_x = ctx->width * 0.5f;   /* Default to screen center */
+        float from_y = ctx->height * 0.5f;
+
+        /* Get current focused widget position */
+        if (ctx->focused != AUI_ID_NONE) {
+            aui_find_widget_position(ctx, ctx->focused, &from_x, &from_y);
+        }
+
+        /* Find best widget in requested direction */
+        AUI_Id target = aui_find_widget_in_direction(ctx, from_x, from_y,
+            ctx->focus_up_requested, ctx->focus_down_requested,
+            ctx->focus_left_requested, ctx->focus_right_requested);
+
+        if (target != AUI_ID_NONE) {
+            ctx->focused = target;
+        } else if (ctx->focused == AUI_ID_NONE && ctx->first_focusable != AUI_ID_NONE) {
+            /* No current focus and no target found - focus first widget */
+            ctx->focused = ctx->first_focusable;
+        }
+    }
+
+    /* Clear directional focus requests */
+    ctx->focus_up_requested = false;
+    ctx->focus_down_requested = false;
+    ctx->focus_left_requested = false;
+    ctx->focus_right_requested = false;
 
     /* Handle focus wrap-around for Tab navigation */
     if (ctx->focus_next_requested) {
@@ -438,6 +548,14 @@ bool aui_process_event(AUI_Context *ctx, const SDL_Event *event)
     case SDL_EVENT_MOUSE_MOTION:
         ctx->input.mouse_x = event->motion.x;
         ctx->input.mouse_y = event->motion.y;
+        /* Switch to mouse mode on significant mouse movement */
+        if (ctx->gamepad_mode) {
+            float dx = event->motion.xrel;
+            float dy = event->motion.yrel;
+            if (dx * dx + dy * dy > 4.0f) {  /* Movement threshold */
+                ctx->gamepad_mode = false;
+            }
+        }
         return false;  /* Don't consume motion events */
 
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -481,6 +599,13 @@ bool aui_process_event(AUI_Context *ctx, const SDL_Event *event)
             return true;  /* Consume Tab key */
         }
 
+        /* Process global keyboard shortcuts (only when no textbox has focus) */
+        if (ctx->focused == AUI_ID_NONE) {
+            if (aui_shortcuts_process(ctx)) {
+                return true;  /* Consume if shortcut triggered */
+            }
+        }
+
         return ctx->focused != AUI_ID_NONE;
 
     case SDL_EVENT_KEY_UP:
@@ -504,6 +629,129 @@ bool aui_process_event(AUI_Context *ctx, const SDL_Event *event)
             return true;
         }
         return false;
+
+    /* Gamepad events */
+    case SDL_EVENT_GAMEPAD_ADDED: {
+        SDL_JoystickID id = event->gdevice.which;
+        if (ctx->gamepad_id == 0) {
+            /* Open the gamepad if we don't have one */
+            SDL_Gamepad *gp = SDL_OpenGamepad(id);
+            if (gp) {
+                ctx->gamepad_id = id;
+                SDL_Log("AUI: Gamepad connected (id=%d)", (int)id);
+            }
+        }
+        return false;
+    }
+
+    case SDL_EVENT_GAMEPAD_REMOVED: {
+        SDL_JoystickID id = event->gdevice.which;
+        if (ctx->gamepad_id == id) {
+            ctx->gamepad_id = 0;
+            ctx->gamepad_mode = false;
+            memset(ctx->input.gamepad_button_down, 0,
+                   sizeof(ctx->input.gamepad_button_down));
+            SDL_Log("AUI: Gamepad disconnected (id=%d)", (int)id);
+        }
+        return false;
+    }
+
+    case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
+        int btn = event->gbutton.button;
+        if (btn >= 0 && btn < AUI_GAMEPAD_BUTTON_COUNT) {
+            ctx->input.gamepad_button_down[btn] = true;
+            ctx->input.gamepad_button_pressed[btn] = true;
+        }
+
+        /* Switch to gamepad mode on any button press */
+        ctx->gamepad_mode = true;
+
+        /* D-pad navigation */
+        if (btn == SDL_GAMEPAD_BUTTON_DPAD_UP) {
+            ctx->focus_up_requested = true;
+            return true;
+        }
+        if (btn == SDL_GAMEPAD_BUTTON_DPAD_DOWN) {
+            ctx->focus_down_requested = true;
+            return true;
+        }
+        if (btn == SDL_GAMEPAD_BUTTON_DPAD_LEFT) {
+            ctx->focus_left_requested = true;
+            return true;
+        }
+        if (btn == SDL_GAMEPAD_BUTTON_DPAD_RIGHT) {
+            ctx->focus_right_requested = true;
+            return true;
+        }
+
+        /* A button = activate (like Enter/Space) */
+        if (btn == SDL_GAMEPAD_BUTTON_SOUTH) {
+            /* Simulate space key press for widget activation */
+            ctx->input.keys_pressed[SDL_SCANCODE_RETURN] = true;
+            ctx->input.keys_down[SDL_SCANCODE_RETURN] = true;
+            return true;
+        }
+
+        /* B button = cancel (like Escape) */
+        if (btn == SDL_GAMEPAD_BUTTON_EAST) {
+            /* Simulate escape key press for cancel */
+            ctx->input.keys_pressed[SDL_SCANCODE_ESCAPE] = true;
+            ctx->input.keys_down[SDL_SCANCODE_ESCAPE] = true;
+            return true;
+        }
+
+        return false;
+    }
+
+    case SDL_EVENT_GAMEPAD_BUTTON_UP: {
+        int btn = event->gbutton.button;
+        if (btn >= 0 && btn < AUI_GAMEPAD_BUTTON_COUNT) {
+            ctx->input.gamepad_button_down[btn] = false;
+            ctx->input.gamepad_button_released[btn] = true;
+        }
+
+        /* Release simulated keys for A and B buttons */
+        if (btn == SDL_GAMEPAD_BUTTON_SOUTH) {
+            ctx->input.keys_down[SDL_SCANCODE_RETURN] = false;
+        }
+        if (btn == SDL_GAMEPAD_BUTTON_EAST) {
+            ctx->input.keys_down[SDL_SCANCODE_ESCAPE] = false;
+        }
+
+        return false;
+    }
+
+    case SDL_EVENT_GAMEPAD_AXIS_MOTION: {
+        int axis = event->gaxis.axis;
+        float value = event->gaxis.value / 32767.0f;  /* Normalize to -1..1 */
+
+        /* Apply deadzone (0.2) */
+        if (value > -0.2f && value < 0.2f) {
+            value = 0.0f;
+        }
+
+        switch (axis) {
+        case SDL_GAMEPAD_AXIS_LEFTX:
+            ctx->input.gamepad_axis_left_x = value;
+            break;
+        case SDL_GAMEPAD_AXIS_LEFTY:
+            ctx->input.gamepad_axis_left_y = value;
+            break;
+        case SDL_GAMEPAD_AXIS_RIGHTX:
+            ctx->input.gamepad_axis_right_x = value;
+            break;
+        case SDL_GAMEPAD_AXIS_RIGHTY:
+            ctx->input.gamepad_axis_right_y = value;
+            break;
+        }
+
+        /* Switch to gamepad mode on significant stick movement */
+        if (value < -0.5f || value > 0.5f) {
+            ctx->gamepad_mode = true;
+        }
+
+        return false;
+    }
 
     default:
         return false;
@@ -615,9 +863,17 @@ AUI_Rect aui_rect_intersect(AUI_Rect a, AUI_Rect b)
  * Focus Navigation
  * ============================================================================ */
 
-bool aui_focus_register(AUI_Context *ctx, AUI_Id id)
+bool aui_focus_register_rect(AUI_Context *ctx, AUI_Id id, AUI_Rect rect)
 {
     if (!ctx || id == AUI_ID_NONE) return false;
+
+    /* Track widget position for spatial (gamepad) navigation */
+    if (ctx->focusable_widget_count < 128) {
+        int idx = ctx->focusable_widget_count++;
+        ctx->focusable_widgets[idx].id = id;
+        ctx->focusable_widgets[idx].center_x = rect.x + rect.w * 0.5f;
+        ctx->focusable_widgets[idx].center_y = rect.y + rect.h * 0.5f;
+    }
 
     /* Track first focusable widget */
     if (ctx->first_focusable == AUI_ID_NONE) {
@@ -658,6 +914,14 @@ bool aui_focus_register(AUI_Context *ctx, AUI_Id id)
     return should_focus;
 }
 
+bool aui_focus_register(AUI_Context *ctx, AUI_Id id)
+{
+    /* Register with default position (will use first tracked position for
+       this widget, or screen center if none) */
+    AUI_Rect default_rect = { 0, 0, 0, 0 };
+    return aui_focus_register_rect(ctx, id, default_rect);
+}
+
 bool aui_has_focus(AUI_Context *ctx, AUI_Id id)
 {
     if (!ctx) return false;
@@ -674,4 +938,182 @@ void aui_clear_focus(AUI_Context *ctx)
 {
     if (!ctx) return;
     ctx->focused = AUI_ID_NONE;
+}
+
+/* ============================================================================
+ * Gamepad Navigation
+ * ============================================================================ */
+
+bool aui_is_gamepad_mode(AUI_Context *ctx)
+{
+    if (!ctx) return false;
+    return ctx->gamepad_mode;
+}
+
+void aui_set_gamepad_mode(AUI_Context *ctx, bool enabled)
+{
+    if (!ctx) return;
+    ctx->gamepad_mode = enabled;
+}
+
+SDL_JoystickID aui_get_gamepad_id(AUI_Context *ctx)
+{
+    if (!ctx) return 0;
+    return ctx->gamepad_id;
+}
+
+bool aui_gamepad_button_down(AUI_Context *ctx, int button)
+{
+    if (!ctx || button < 0 || button >= AUI_GAMEPAD_BUTTON_COUNT) return false;
+    return ctx->input.gamepad_button_down[button];
+}
+
+bool aui_gamepad_button_pressed(AUI_Context *ctx, int button)
+{
+    if (!ctx || button < 0 || button >= AUI_GAMEPAD_BUTTON_COUNT) return false;
+    return ctx->input.gamepad_button_pressed[button];
+}
+
+bool aui_gamepad_button_released(AUI_Context *ctx, int button)
+{
+    if (!ctx || button < 0 || button >= AUI_GAMEPAD_BUTTON_COUNT) return false;
+    return ctx->input.gamepad_button_released[button];
+}
+
+float aui_gamepad_axis(AUI_Context *ctx, int axis)
+{
+    if (!ctx) return 0.0f;
+
+    switch (axis) {
+    case SDL_GAMEPAD_AXIS_LEFTX:  return ctx->input.gamepad_axis_left_x;
+    case SDL_GAMEPAD_AXIS_LEFTY:  return ctx->input.gamepad_axis_left_y;
+    case SDL_GAMEPAD_AXIS_RIGHTX: return ctx->input.gamepad_axis_right_x;
+    case SDL_GAMEPAD_AXIS_RIGHTY: return ctx->input.gamepad_axis_right_y;
+    default: return 0.0f;
+    }
+}
+
+/* ============================================================================
+ * Keyboard Shortcuts
+ * ============================================================================ */
+
+int aui_shortcut_register(AUI_Context *ctx, SDL_Keycode key, uint8_t modifiers,
+                          const char *name, AUI_ShortcutCallback callback,
+                          void *userdata)
+{
+    if (!ctx || !callback) return -1;
+
+    /* Find an empty slot */
+    int slot = -1;
+    for (int i = 0; i < AUI_MAX_SHORTCUTS; i++) {
+        if (!ctx->shortcuts[i].active) {
+            slot = i;
+            break;
+        }
+    }
+
+    if (slot < 0) return -1;  /* Table full */
+
+    ctx->shortcuts[slot].key = key;
+    ctx->shortcuts[slot].modifiers = modifiers;
+    ctx->shortcuts[slot].callback = callback;
+    ctx->shortcuts[slot].userdata = userdata;
+    ctx->shortcuts[slot].active = true;
+
+    if (name) {
+        strncpy(ctx->shortcuts[slot].name, name, sizeof(ctx->shortcuts[slot].name) - 1);
+        ctx->shortcuts[slot].name[sizeof(ctx->shortcuts[slot].name) - 1] = '\0';
+    } else {
+        ctx->shortcuts[slot].name[0] = '\0';
+    }
+
+    if (slot >= ctx->shortcut_count) {
+        ctx->shortcut_count = slot + 1;
+    }
+
+    return slot;
+}
+
+void aui_shortcut_unregister(AUI_Context *ctx, int id)
+{
+    if (!ctx || id < 0 || id >= AUI_MAX_SHORTCUTS) return;
+    ctx->shortcuts[id].active = false;
+}
+
+void aui_shortcuts_clear(AUI_Context *ctx)
+{
+    if (!ctx) return;
+    for (int i = 0; i < AUI_MAX_SHORTCUTS; i++) {
+        ctx->shortcuts[i].active = false;
+    }
+    ctx->shortcut_count = 0;
+}
+
+bool aui_shortcuts_process(AUI_Context *ctx)
+{
+    if (!ctx) return false;
+
+    /* Check each registered shortcut */
+    for (int i = 0; i < ctx->shortcut_count; i++) {
+        if (!ctx->shortcuts[i].active) continue;
+
+        SDL_Keycode key = ctx->shortcuts[i].key;
+        uint8_t mods = ctx->shortcuts[i].modifiers;
+
+        /* Convert SDL keycode to scancode for lookup */
+        SDL_Scancode scancode = SDL_GetScancodeFromKey(key, NULL);
+        if (scancode == SDL_SCANCODE_UNKNOWN) continue;
+
+        /* Check if this key was pressed this frame */
+        if (!ctx->input.keys_pressed[scancode]) continue;
+
+        /* Check modifier state matches */
+        bool ctrl_match = ((mods & AUI_MOD_CTRL) != 0) == ctx->input.ctrl;
+        bool shift_match = ((mods & AUI_MOD_SHIFT) != 0) == ctx->input.shift;
+        bool alt_match = ((mods & AUI_MOD_ALT) != 0) == ctx->input.alt;
+
+        if (ctrl_match && shift_match && alt_match) {
+            /* Trigger the callback */
+            ctx->shortcuts[i].callback(ctx, ctx->shortcuts[i].userdata);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+const char *aui_shortcut_get_display(AUI_Context *ctx, int id, char *buffer,
+                                      int buffer_size)
+{
+    if (!ctx || !buffer || buffer_size < 8 || id < 0 || id >= AUI_MAX_SHORTCUTS) {
+        return NULL;
+    }
+
+    if (!ctx->shortcuts[id].active) return NULL;
+
+    buffer[0] = '\0';
+    int pos = 0;
+
+    uint8_t mods = ctx->shortcuts[id].modifiers;
+
+    /* Add modifier keys */
+    if (mods & AUI_MOD_CTRL) {
+        pos += snprintf(buffer + pos, buffer_size - pos, "Ctrl+");
+    }
+    if (mods & AUI_MOD_ALT) {
+        pos += snprintf(buffer + pos, buffer_size - pos, "Alt+");
+    }
+    if (mods & AUI_MOD_SHIFT) {
+        pos += snprintf(buffer + pos, buffer_size - pos, "Shift+");
+    }
+
+    /* Add key name */
+    const char *key_name = SDL_GetKeyName(ctx->shortcuts[id].key);
+    if (key_name && key_name[0]) {
+        snprintf(buffer + pos, buffer_size - pos, "%s", key_name);
+    } else {
+        snprintf(buffer + pos, buffer_size - pos, "?");
+    }
+
+    return buffer;
 }

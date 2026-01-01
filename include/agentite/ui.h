@@ -33,6 +33,9 @@ extern "C" {
  * Types
  * ============================================================================ */
 
+/* Forward declarations */
+typedef struct AUI_Context AUI_Context;
+
 typedef uint32_t AUI_Id;
 #define AUI_ID_NONE ((AUI_Id)0)
 
@@ -51,6 +54,16 @@ typedef struct AUI_Vertex {
     uint32_t color;     /* Packed RGBA (0xAABBGGRR) */
 } AUI_Vertex;
 
+/* Undo/redo history for textbox */
+#define AUI_UNDO_HISTORY_SIZE 8
+#define AUI_UNDO_TEXT_SIZE 256
+
+typedef struct AUI_UndoEntry {
+    char text[AUI_UNDO_TEXT_SIZE];
+    int cursor_pos;
+    int text_len;
+} AUI_UndoEntry;
+
 /* Persistent widget state (survives across frames) */
 typedef struct AUI_WidgetState {
     AUI_Id id;
@@ -59,6 +72,12 @@ typedef struct AUI_WidgetState {
     int selection_start, selection_end;
     bool expanded;                  /* For collapsible headers */
     uint64_t last_frame;            /* For garbage collection */
+
+    /* Undo/redo history for textbox */
+    AUI_UndoEntry undo_history[AUI_UNDO_HISTORY_SIZE];
+    int undo_pos;       /* Current position in undo history (0 = oldest) */
+    int undo_count;     /* Number of valid entries in history */
+    int redo_count;     /* Number of redo entries available */
 } AUI_WidgetState;
 
 /* State hash table entry */
@@ -130,6 +149,9 @@ typedef struct AUI_Theme {
     float scrollbar_width;
 } AUI_Theme;
 
+/* Gamepad button indices (matches SDL_GamepadButton) */
+#define AUI_GAMEPAD_BUTTON_COUNT 21
+
 /* Input state */
 typedef struct AUI_Input {
     float mouse_x, mouse_y;
@@ -143,6 +165,15 @@ typedef struct AUI_Input {
     char text_input[64];            /* UTF-8 text input this frame */
     int text_input_len;
     bool shift, ctrl, alt;
+
+    /* Gamepad state */
+    bool gamepad_button_down[AUI_GAMEPAD_BUTTON_COUNT];
+    bool gamepad_button_pressed[AUI_GAMEPAD_BUTTON_COUNT];
+    bool gamepad_button_released[AUI_GAMEPAD_BUTTON_COUNT];
+    float gamepad_axis_left_x;      /* Left stick X (-1 to 1) */
+    float gamepad_axis_left_y;      /* Left stick Y (-1 to 1) */
+    float gamepad_axis_right_x;     /* Right stick X (-1 to 1) */
+    float gamepad_axis_right_y;     /* Right stick Y (-1 to 1) */
 } AUI_Input;
 
 /* ============================================================================
@@ -201,8 +232,20 @@ typedef struct AUI_MultiSelectState {
     int last_clicked;           /* Last clicked index */
 } AUI_MultiSelectState;
 
+/* Keyboard shortcut modifiers */
+#define AUI_MOD_NONE   0
+#define AUI_MOD_CTRL   (1 << 0)
+#define AUI_MOD_SHIFT  (1 << 1)
+#define AUI_MOD_ALT    (1 << 2)
+
+/* Maximum number of registered shortcuts */
+#define AUI_MAX_SHORTCUTS 64
+
+/* Shortcut callback type */
+typedef void (*AUI_ShortcutCallback)(AUI_Context *ctx, void *userdata);
+
 /* Main UI context */
-typedef struct AUI_Context {
+struct AUI_Context {
     /* GPU resources */
     SDL_GPUDevice *gpu;
     SDL_GPUGraphicsPipeline *pipeline;           /* Bitmap/solid pipeline */
@@ -246,6 +289,21 @@ typedef struct AUI_Context {
     AUI_Id last_focusable;          /* Last focusable widget this frame */
     AUI_Id prev_focusable;          /* Widget before currently focused one */
     bool focus_found_this_frame;    /* Whether focused widget was seen */
+
+    /* Gamepad/spatial focus navigation */
+    bool gamepad_mode;              /* True when using gamepad input */
+    bool focus_up_requested;        /* D-pad up - focus widget above */
+    bool focus_down_requested;      /* D-pad down - focus widget below */
+    bool focus_left_requested;      /* D-pad left - focus widget left */
+    bool focus_right_requested;     /* D-pad right - focus widget right */
+    SDL_JoystickID gamepad_id;      /* Connected gamepad ID (0 = none) */
+
+    /* Spatial focus tracking (positions of focusable widgets) */
+    struct {
+        AUI_Id id;
+        float center_x, center_y;   /* Center position for distance calc */
+    } focusable_widgets[128];       /* Track widget positions this frame */
+    int focusable_widget_count;
 
     /* Persistent state hash table */
     AUI_StateEntry *state_table[256];
@@ -358,7 +416,18 @@ typedef struct AUI_Context {
     /* Layer system for z-ordering */
     int layer_stack[16];            /* Stack of pushed layers */
     int layer_stack_depth;
-} AUI_Context;
+
+    /* Keyboard shortcut system */
+    struct {
+        SDL_Keycode key;            /* Key code (e.g., SDLK_S) */
+        uint8_t modifiers;          /* Modifier flags (AUI_MOD_*) */
+        AUI_ShortcutCallback callback;
+        void *userdata;
+        char name[32];              /* Optional name for display */
+        bool active;                /* Whether this slot is in use */
+    } shortcuts[AUI_MAX_SHORTCUTS];
+    int shortcut_count;
+};
 
 /* Panel flags */
 #define AUI_PANEL_MOVABLE       (1 << 0)
@@ -483,6 +552,11 @@ void aui_pop_id(AUI_Context *ctx);
  * Returns true if this widget should grab focus this frame. */
 bool aui_focus_register(AUI_Context *ctx, AUI_Id id);
 
+/* Register a widget as focusable with spatial position for gamepad navigation.
+ * The rect is used for D-pad directional navigation.
+ * Returns true if this widget should grab focus this frame. */
+bool aui_focus_register_rect(AUI_Context *ctx, AUI_Id id, AUI_Rect rect);
+
 /* Check if widget currently has focus */
 bool aui_has_focus(AUI_Context *ctx, AUI_Id id);
 
@@ -491,6 +565,62 @@ void aui_set_focus(AUI_Context *ctx, AUI_Id id);
 
 /* Clear focus (unfocus all widgets) */
 void aui_clear_focus(AUI_Context *ctx);
+
+/* ============================================================================
+ * Gamepad Navigation
+ * ============================================================================ */
+
+/* Check if gamepad mode is active (vs keyboard/mouse mode) */
+bool aui_is_gamepad_mode(AUI_Context *ctx);
+
+/* Manually enable/disable gamepad mode.
+ * Normally this is automatic based on last input type. */
+void aui_set_gamepad_mode(AUI_Context *ctx, bool enabled);
+
+/* Get currently connected gamepad ID (0 if none) */
+SDL_JoystickID aui_get_gamepad_id(AUI_Context *ctx);
+
+/* Check if a gamepad button is currently held */
+bool aui_gamepad_button_down(AUI_Context *ctx, int button);
+
+/* Check if a gamepad button was just pressed this frame */
+bool aui_gamepad_button_pressed(AUI_Context *ctx, int button);
+
+/* Check if a gamepad button was just released this frame */
+bool aui_gamepad_button_released(AUI_Context *ctx, int button);
+
+/* Get gamepad axis value (-1.0 to 1.0) */
+float aui_gamepad_axis(AUI_Context *ctx, int axis);
+
+/* ============================================================================
+ * Keyboard Shortcuts
+ * ============================================================================ */
+
+/* Register a keyboard shortcut.
+ * key: SDL keycode (e.g., SDLK_S)
+ * modifiers: Combination of AUI_MOD_CTRL, AUI_MOD_SHIFT, AUI_MOD_ALT
+ * name: Optional display name (can be NULL)
+ * callback: Function called when shortcut is triggered
+ * userdata: User data passed to callback
+ * Returns: Shortcut ID (>= 0) on success, -1 on failure (table full) */
+int aui_shortcut_register(AUI_Context *ctx, SDL_Keycode key, uint8_t modifiers,
+                          const char *name, AUI_ShortcutCallback callback,
+                          void *userdata);
+
+/* Unregister a shortcut by ID */
+void aui_shortcut_unregister(AUI_Context *ctx, int id);
+
+/* Unregister all shortcuts */
+void aui_shortcuts_clear(AUI_Context *ctx);
+
+/* Process shortcuts (called automatically by aui_process_event, but can be
+ * called manually if needed). Returns true if a shortcut was triggered. */
+bool aui_shortcuts_process(AUI_Context *ctx);
+
+/* Get shortcut display string (e.g., "Ctrl+S"). Buffer must be at least 32 chars.
+ * Returns pointer to buffer on success, NULL on invalid ID. */
+const char *aui_shortcut_get_display(AUI_Context *ctx, int id, char *buffer,
+                                      int buffer_size);
 
 /* ============================================================================
  * Layout Functions
