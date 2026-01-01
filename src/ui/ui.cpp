@@ -297,6 +297,12 @@ void aui_begin_frame(AUI_Context *ctx, float delta_time)
     /* Clear hot widget (will be set during widget processing) */
     ctx->hot = AUI_ID_NONE;
 
+    /* Reset focus navigation state for this frame */
+    ctx->first_focusable = AUI_ID_NONE;
+    ctx->last_focusable = AUI_ID_NONE;
+    ctx->prev_focusable = AUI_ID_NONE;
+    ctx->focus_found_this_frame = false;
+
     /* Garbage collect old state entries every 60 frames */
     if (ctx->frame_count % 60 == 0) {
         aui_state_gc(ctx, 300);  /* Remove entries not used for 5 seconds */
@@ -316,6 +322,22 @@ void aui_end_frame(AUI_Context *ctx)
     /* Store previous mouse position */
     ctx->input.mouse_prev_x = ctx->input.mouse_x;
     ctx->input.mouse_prev_y = ctx->input.mouse_y;
+
+    /* Handle focus wrap-around for Tab navigation */
+    if (ctx->focus_next_requested) {
+        /* Tab was pressed but no widget grabbed focus - wrap to first */
+        if (ctx->first_focusable != AUI_ID_NONE) {
+            ctx->focused = ctx->first_focusable;
+        }
+        ctx->focus_next_requested = false;
+    }
+    if (ctx->focus_prev_requested) {
+        /* Shift+Tab was pressed but no widget grabbed focus - wrap to last */
+        if (ctx->last_focusable != AUI_ID_NONE) {
+            ctx->focused = ctx->last_focusable;
+        }
+        ctx->focus_prev_requested = false;
+    }
 
     /* Handle text input start/stop based on focus changes */
     if (ctx->focused != ctx->prev_focused) {
@@ -448,6 +470,17 @@ bool aui_process_event(AUI_Context *ctx, const SDL_Event *event)
         ctx->input.shift = (event->key.mod & SDL_KMOD_SHIFT) != 0;
         ctx->input.ctrl = (event->key.mod & SDL_KMOD_CTRL) != 0;
         ctx->input.alt = (event->key.mod & SDL_KMOD_ALT) != 0;
+
+        /* Handle Tab key for focus navigation */
+        if (event->key.scancode == SDL_SCANCODE_TAB) {
+            if (ctx->input.shift) {
+                ctx->focus_prev_requested = true;
+            } else {
+                ctx->focus_next_requested = true;
+            }
+            return true;  /* Consume Tab key */
+        }
+
         return ctx->focused != AUI_ID_NONE;
 
     case SDL_EVENT_KEY_UP:
@@ -576,4 +609,69 @@ AUI_Rect aui_rect_intersect(AUI_Rect a, AUI_Rect b)
     result.w = (x2 > x1) ? x2 - x1 : 0;
     result.h = (y2 > y1) ? y2 - y1 : 0;
     return result;
+}
+
+/* ============================================================================
+ * Focus Navigation
+ * ============================================================================ */
+
+bool aui_focus_register(AUI_Context *ctx, AUI_Id id)
+{
+    if (!ctx || id == AUI_ID_NONE) return false;
+
+    /* Track first focusable widget */
+    if (ctx->first_focusable == AUI_ID_NONE) {
+        ctx->first_focusable = id;
+    }
+
+    /* Track last focusable widget */
+    ctx->last_focusable = id;
+
+    bool should_focus = false;
+
+    /* Handle focus navigation */
+    if (ctx->focused == id) {
+        /* This widget is currently focused */
+        ctx->focus_found_this_frame = true;
+    } else if (ctx->focus_next_requested && ctx->focus_found_this_frame) {
+        /* Tab was pressed and we just passed the focused widget - grab focus */
+        ctx->focused = id;
+        ctx->focus_next_requested = false;
+        should_focus = true;
+    } else if (ctx->focus_prev_requested && !ctx->focus_found_this_frame &&
+               ctx->focused != AUI_ID_NONE) {
+        /* Shift+Tab: track the widget before focused one */
+        ctx->prev_focusable = id;
+    }
+
+    /* When we encounter the focused widget with Shift+Tab pending,
+       focus the previously tracked widget */
+    if (ctx->focus_prev_requested && ctx->focused == id &&
+        ctx->prev_focusable != AUI_ID_NONE) {
+        ctx->focused = ctx->prev_focusable;
+        ctx->focus_prev_requested = false;
+        /* The previously focused widget is now unfocused, but we need
+           to signal the newly focused one - it was already processed this frame.
+           The focus will take effect next frame. */
+    }
+
+    return should_focus;
+}
+
+bool aui_has_focus(AUI_Context *ctx, AUI_Id id)
+{
+    if (!ctx) return false;
+    return ctx->focused == id;
+}
+
+void aui_set_focus(AUI_Context *ctx, AUI_Id id)
+{
+    if (!ctx) return;
+    ctx->focused = id;
+}
+
+void aui_clear_focus(AUI_Context *ctx)
+{
+    if (!ctx) return;
+    ctx->focused = AUI_ID_NONE;
 }

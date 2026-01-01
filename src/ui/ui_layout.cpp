@@ -247,68 +247,160 @@ void aui_begin_scroll(AUI_Context *ctx, const char *id, float width, float heigh
     /* Allocate the scroll region rect */
     AUI_Rect outer = aui_allocate_rect(ctx, width, height);
 
+    /* Store scroll state for end_scroll */
+    ctx->scroll.id = scroll_id;
+    ctx->scroll.outer_rect = outer;
+    ctx->scroll.content_start_y = outer.y + ctx->theme.padding;
+
     /* Draw background */
     aui_draw_rect(ctx, outer.x, outer.y, outer.w, outer.h, ctx->theme.bg_panel);
 
-    /* Push clipping */
+    /* Push clipping (minus scrollbar width) */
     aui_push_scissor(ctx, outer.x, outer.y, outer.w - ctx->theme.scrollbar_width, outer.h);
 
     /* Push layout for content */
     AUI_LayoutFrame *frame = aui_push_layout(ctx);
     if (!frame) return;
 
+    float scroll_y = state ? state->scroll_y : 0;
+
     frame->bounds = outer;
     frame->bounds.w -= ctx->theme.scrollbar_width;  /* Reserve space for scrollbar */
     frame->cursor_x = outer.x + ctx->theme.padding;
-    frame->cursor_y = outer.y + ctx->theme.padding - (state ? state->scroll_y : 0);
+    frame->cursor_y = outer.y + ctx->theme.padding - scroll_y;
     frame->spacing = ctx->theme.spacing;
     frame->padding = ctx->theme.padding;
     frame->horizontal = false;
     frame->clip = outer;
     frame->has_clip = true;
 
-    /* Store scroll info for end_scroll */
     aui_push_id(ctx, id);
 }
 
 void aui_end_scroll(AUI_Context *ctx)
 {
     if (!ctx || ctx->layout_depth <= 1) return;
+    if (ctx->scroll.id == AUI_ID_NONE) return;
 
     AUI_LayoutFrame *frame = aui_current_layout(ctx);
     aui_pop_scissor(ctx);
 
-    /* Calculate content height */
-    float content_start = frame->bounds.y + frame->padding;
-    float content_height = frame->cursor_y - content_start +
-                           (frame->has_clip ? aui_get_state(ctx, 0)->scroll_y : 0);
-    float visible_height = frame->bounds.h - frame->padding * 2;
+    AUI_Id scroll_id = ctx->scroll.id;
+    AUI_WidgetState *state = aui_get_state(ctx, scroll_id);
+    AUI_Id scrollbar_id = scroll_id + 1;  /* Unique ID for scrollbar */
 
-    /* Get scroll state - we need to recover the ID */
-    aui_pop_id(ctx);
+    /* Calculate content height from how far cursor advanced */
+    float scroll_y = state ? state->scroll_y : 0;
+    float content_height = (frame->cursor_y + scroll_y) - ctx->scroll.content_start_y;
+    float visible_height = ctx->scroll.outer_rect.h - ctx->theme.padding * 2;
+    float max_scroll = content_height - visible_height;
+    if (max_scroll < 0) max_scroll = 0;
 
-    /* Draw scrollbar if needed */
-    if (content_height > visible_height) {
-        float scrollbar_x = frame->bounds.x + frame->bounds.w;
-        float scrollbar_h = frame->bounds.h;
-        float thumb_h = (visible_height / content_height) * scrollbar_h;
-        if (thumb_h < 20) thumb_h = 20;
-
-        /* Get scroll state for this region */
-        /* Note: Proper implementation would store the scroll ID */
-        float scroll_ratio = 0;  /* state->scroll_y / (content_height - visible_height) */
-        float thumb_y = frame->bounds.y + scroll_ratio * (scrollbar_h - thumb_h);
-
-        /* Draw track */
-        aui_draw_rect(ctx, scrollbar_x, frame->bounds.y,
-                      ctx->theme.scrollbar_width, scrollbar_h,
-                      ctx->theme.scrollbar);
-
-        /* Draw thumb */
-        aui_draw_rect(ctx, scrollbar_x + 2, thumb_y,
-                      ctx->theme.scrollbar_width - 4, thumb_h,
-                      ctx->theme.scrollbar_grab);
+    /* Clamp scroll */
+    if (state) {
+        if (state->scroll_y < 0) state->scroll_y = 0;
+        if (state->scroll_y > max_scroll) state->scroll_y = max_scroll;
+        scroll_y = state->scroll_y;
     }
 
+    /* Handle mouse wheel */
+    AUI_Rect outer = ctx->scroll.outer_rect;
+    bool hovered = aui_rect_contains(outer, ctx->input.mouse_x, ctx->input.mouse_y);
+    if (hovered) {
+        ctx->hot = scroll_id;
+        if (state && ctx->input.scroll_y != 0.0f && max_scroll > 0) {
+            float scroll_speed = ctx->theme.widget_height * 2.0f;
+            state->scroll_y -= ctx->input.scroll_y * scroll_speed;
+            if (state->scroll_y < 0) state->scroll_y = 0;
+            if (state->scroll_y > max_scroll) state->scroll_y = max_scroll;
+            scroll_y = state->scroll_y;
+        }
+    }
+
+    /* Draw scrollbar if content exceeds visible area */
+    bool needs_scrollbar = content_height > visible_height;
+    if (needs_scrollbar && state) {
+        float scrollbar_w = ctx->theme.scrollbar_width;
+        AUI_Rect scrollbar_rect = {
+            outer.x + outer.w - scrollbar_w,
+            outer.y,
+            scrollbar_w,
+            outer.h
+        };
+
+        /* Draw scrollbar track */
+        aui_draw_rect(ctx, scrollbar_rect.x, scrollbar_rect.y,
+                      scrollbar_rect.w, scrollbar_rect.h,
+                      ctx->theme.scrollbar);
+
+        /* Calculate thumb size and position */
+        float visible_ratio = visible_height / content_height;
+        float thumb_h = scrollbar_rect.h * visible_ratio;
+        if (thumb_h < 20.0f) thumb_h = 20.0f;  /* Minimum thumb size */
+
+        float thumb_travel = scrollbar_rect.h - thumb_h;
+        float scroll_ratio = (max_scroll > 0) ? (scroll_y / max_scroll) : 0;
+        float thumb_y = scrollbar_rect.y + thumb_travel * scroll_ratio;
+
+        AUI_Rect thumb_rect = {
+            scrollbar_rect.x + 2,
+            thumb_y,
+            scrollbar_rect.w - 4,
+            thumb_h
+        };
+
+        /* Handle scrollbar interaction */
+        bool thumb_hovered = aui_rect_contains(thumb_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+        bool track_hovered = aui_rect_contains(scrollbar_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+
+        if (thumb_hovered || track_hovered) {
+            ctx->hot = scrollbar_id;
+        }
+
+        /* Start dragging or clicking on scrollbar */
+        if (track_hovered && ctx->input.mouse_pressed[0]) {
+            ctx->active = scrollbar_id;
+            /* Store the offset from thumb center for smooth dragging */
+            if (thumb_hovered) {
+                /* Clicked on thumb - store offset from thumb top */
+                state->cursor_pos = (int)(ctx->input.mouse_y - thumb_y);
+            } else {
+                /* Clicked on track - center thumb on click position */
+                state->cursor_pos = (int)(thumb_h * 0.5f);
+            }
+        }
+
+        /* Handle active scrollbar (dragging) */
+        if (ctx->active == scrollbar_id) {
+            if (ctx->input.mouse_down[0]) {
+                /* Calculate scroll based on absolute mouse position */
+                float target_thumb_y = ctx->input.mouse_y - (float)state->cursor_pos;
+                float new_ratio = (target_thumb_y - scrollbar_rect.y) / thumb_travel;
+                if (new_ratio < 0) new_ratio = 0;
+                if (new_ratio > 1) new_ratio = 1;
+                state->scroll_y = new_ratio * max_scroll;
+                scroll_y = state->scroll_y;
+            } else {
+                ctx->active = AUI_ID_NONE;
+            }
+        }
+
+        /* Recalculate thumb position after potential scroll change */
+        scroll_ratio = (max_scroll > 0) ? (scroll_y / max_scroll) : 0;
+        thumb_y = scrollbar_rect.y + thumb_travel * scroll_ratio;
+        thumb_rect.y = thumb_y;
+
+        /* Draw thumb */
+        bool thumb_active = (ctx->active == scrollbar_id);
+        uint32_t thumb_color = thumb_active ? ctx->theme.accent :
+                               (thumb_hovered ? ctx->theme.bg_widget_hover : ctx->theme.scrollbar_grab);
+        aui_draw_rect_rounded(ctx, thumb_rect.x, thumb_rect.y, thumb_rect.w, thumb_rect.h,
+                              thumb_color, ctx->theme.corner_radius);
+    }
+
+    aui_pop_id(ctx);
     aui_pop_layout(ctx);
+
+    /* Clear scroll state */
+    ctx->scroll.id = AUI_ID_NONE;
 }

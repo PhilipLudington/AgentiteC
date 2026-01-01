@@ -239,6 +239,14 @@ typedef struct AUI_Context {
     AUI_Id focused;                 /* Keyboard focus */
     AUI_Id last_widget_id;          /* ID of last widget processed (for tooltip association) */
 
+    /* Focus navigation (Tab/Shift+Tab) */
+    bool focus_next_requested;      /* Tab pressed - focus next widget */
+    bool focus_prev_requested;      /* Shift+Tab pressed - focus previous widget */
+    AUI_Id first_focusable;         /* First focusable widget this frame */
+    AUI_Id last_focusable;          /* Last focusable widget this frame */
+    AUI_Id prev_focusable;          /* Widget before currently focused one */
+    bool focus_found_this_frame;    /* Whether focused widget was seen */
+
     /* Persistent state hash table */
     AUI_StateEntry *state_table[256];
 
@@ -318,6 +326,24 @@ typedef struct AUI_Context {
 
     /* Active multi-select state pointer (set during begin/end) */
     AUI_MultiSelectState *multi_select;
+
+    /* Tab bar state (active during begin/end) */
+    struct {
+        AUI_Id id;                  /* Tab bar ID */
+        int active_tab;             /* Currently selected tab index */
+        int tab_count;              /* Number of tabs processed */
+        float tab_x;                /* Current X position for next tab */
+        float bar_y;                /* Y position of tab bar */
+        float bar_height;           /* Height of tab bar */
+        AUI_Rect content_rect;      /* Rect for tab content area */
+    } tab_bar;
+
+    /* Scroll region state (active during begin/end) */
+    struct {
+        AUI_Id id;                  /* Scroll region ID */
+        AUI_Rect outer_rect;        /* Full scroll region rect */
+        float content_start_y;      /* Y position where content started */
+    } scroll;
 
     /* Pending tooltip for deferred rendering (on top of everything) */
     char pending_tooltip[512];      /* Tooltip text buffer */
@@ -444,6 +470,23 @@ void aui_push_id_int(AUI_Context *ctx, int n);
 void aui_pop_id(AUI_Context *ctx);
 
 /* ============================================================================
+ * Focus Navigation
+ * ============================================================================ */
+
+/* Register a widget as focusable (call from widget implementations).
+ * Returns true if this widget should grab focus this frame. */
+bool aui_focus_register(AUI_Context *ctx, AUI_Id id);
+
+/* Check if widget currently has focus */
+bool aui_has_focus(AUI_Context *ctx, AUI_Id id);
+
+/* Programmatically set focus to a widget */
+void aui_set_focus(AUI_Context *ctx, AUI_Id id);
+
+/* Clear focus (unfocus all widgets) */
+void aui_clear_focus(AUI_Context *ctx);
+
+/* ============================================================================
  * Layout Functions
  * ============================================================================ */
 
@@ -502,6 +545,12 @@ bool aui_slider_float(AUI_Context *ctx, const char *label, float *value,
 bool aui_slider_int(AUI_Context *ctx, const char *label, int *value,
                     int min, int max);
 
+/* Spinbox (numeric input with +/- buttons) */
+bool aui_spinbox_int(AUI_Context *ctx, const char *label, int *value,
+                     int min, int max, int step);
+bool aui_spinbox_float(AUI_Context *ctx, const char *label, float *value,
+                       float min, float max, float step);
+
 /* Text input */
 bool aui_textbox(AUI_Context *ctx, const char *label, char *buffer, int buffer_size);
 bool aui_textbox_ex(AUI_Context *ctx, const char *label, char *buffer,
@@ -555,6 +604,23 @@ bool aui_color_edit4(AUI_Context *ctx, const char *label, float *rgba);
 /* Color conversion utilities */
 void aui_rgb_to_hsv(float r, float g, float b, float *h, float *s, float *v);
 void aui_hsv_to_rgb(float h, float s, float v, float *r, float *g, float *b);
+
+/* Tab Container - tabbed content areas
+ *
+ * Usage:
+ *   if (aui_begin_tab_bar(ctx, "mytabs")) {
+ *       if (aui_tab(ctx, "Tab 1")) {
+ *           // Tab 1 content
+ *       }
+ *       if (aui_tab(ctx, "Tab 2")) {
+ *           // Tab 2 content
+ *       }
+ *       aui_end_tab_bar(ctx);
+ *   }
+ */
+bool aui_begin_tab_bar(AUI_Context *ctx, const char *id);
+bool aui_tab(AUI_Context *ctx, const char *label);
+void aui_end_tab_bar(AUI_Context *ctx);
 
 /* ============================================================================
  * Layer System (Z-Ordering)

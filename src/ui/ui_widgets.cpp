@@ -107,13 +107,35 @@ bool aui_button_ex(AUI_Context *ctx, const char *label, float width, float heigh
 
     AUI_Rect rect = aui_allocate_rect(ctx, btn_w, btn_h);
 
+    /* Register for Tab navigation */
+    aui_focus_register(ctx, id);
+
     /* Handle interaction */
     bool hovered, held;
     bool pressed = aui_widget_behavior(ctx, id, rect, &hovered, &held);
 
+    /* Handle keyboard activation when focused */
+    bool focused = (ctx->focused == id);
+    if (focused && (ctx->input.keys_pressed[SDL_SCANCODE_RETURN] ||
+                    ctx->input.keys_pressed[SDL_SCANCODE_SPACE])) {
+        pressed = true;
+    }
+
+    /* Focus on click */
+    if (pressed) {
+        ctx->focused = id;
+    }
+
     /* Draw button background */
     uint32_t bg = aui_widget_bg_color(ctx, hovered, held, false);
     aui_draw_rect_rounded(ctx, rect.x, rect.y, rect.w, rect.h, bg, ctx->theme.corner_radius);
+
+    /* Draw focus ring */
+    if (focused) {
+        aui_draw_rect_outline(ctx, rect.x - 2, rect.y - 2,
+                              rect.w + 4, rect.h + 4,
+                              ctx->theme.accent, 2.0f);
+    }
 
     /* Draw text centered */
     float text_x = rect.x + (rect.w - text_w) * 0.5f;
@@ -139,13 +161,35 @@ static bool aui_button_semantic(AUI_Context *ctx, const char *label,
 
     AUI_Rect rect = aui_allocate_rect(ctx, btn_w, btn_h);
 
+    /* Register for Tab navigation */
+    aui_focus_register(ctx, id);
+
     bool hovered, held;
     bool pressed = aui_widget_behavior(ctx, id, rect, &hovered, &held);
+
+    /* Handle keyboard activation when focused */
+    bool focused = (ctx->focused == id);
+    if (focused && (ctx->input.keys_pressed[SDL_SCANCODE_RETURN] ||
+                    ctx->input.keys_pressed[SDL_SCANCODE_SPACE])) {
+        pressed = true;
+    }
+
+    /* Focus on click */
+    if (pressed) {
+        ctx->focused = id;
+    }
 
     /* Use semantic color based on state */
     uint32_t bg = held ? aui_color_darken(color, 0.15f) :
                   (hovered ? color_hover : color);
     aui_draw_rect_rounded(ctx, rect.x, rect.y, rect.w, rect.h, bg, ctx->theme.corner_radius);
+
+    /* Draw focus ring */
+    if (focused) {
+        aui_draw_rect_outline(ctx, rect.x - 2, rect.y - 2,
+                              rect.w + 4, rect.h + 4,
+                              ctx->theme.text_highlight, 2.0f);
+    }
 
     /* Use highlight text for contrast on colored backgrounds */
     float text_x = rect.x + (rect.w - text_w) * 0.5f;
@@ -209,18 +253,36 @@ bool aui_checkbox(AUI_Context *ctx, const char *label, bool *value)
         box_size
     };
 
+    /* Register for Tab navigation */
+    aui_focus_register(ctx, id);
+
     /* Handle interaction */
     bool hovered, held;
     bool pressed = aui_widget_behavior(ctx, id, rect, &hovered, &held);
 
+    /* Handle keyboard activation when focused */
+    bool focused = (ctx->focused == id);
+    if (focused && (ctx->input.keys_pressed[SDL_SCANCODE_RETURN] ||
+                    ctx->input.keys_pressed[SDL_SCANCODE_SPACE])) {
+        pressed = true;
+    }
+
     if (pressed) {
         *value = !*value;
+        ctx->focused = id;
     }
 
     /* Draw checkbox box */
     uint32_t bg = aui_widget_bg_color(ctx, hovered, held, false);
     aui_draw_rect_rounded(ctx, box_rect.x, box_rect.y, box_rect.w, box_rect.h,
                           bg, ctx->theme.corner_radius);
+
+    /* Draw focus ring */
+    if (focused) {
+        aui_draw_rect_outline(ctx, box_rect.x - 2, box_rect.y - 2,
+                              box_rect.w + 4, box_rect.h + 4,
+                              ctx->theme.accent, 2.0f);
+    }
 
     /* Draw checkmark if checked */
     if (*value) {
@@ -257,17 +319,35 @@ bool aui_radio(AUI_Context *ctx, const char *label, int *value, int option)
         box_size
     };
 
+    /* Register for Tab navigation */
+    aui_focus_register(ctx, id);
+
     bool hovered, held;
     bool pressed = aui_widget_behavior(ctx, id, rect, &hovered, &held);
 
+    /* Handle keyboard activation when focused */
+    bool focused = (ctx->focused == id);
+    if (focused && (ctx->input.keys_pressed[SDL_SCANCODE_RETURN] ||
+                    ctx->input.keys_pressed[SDL_SCANCODE_SPACE])) {
+        pressed = true;
+    }
+
     if (pressed) {
         *value = option;
+        ctx->focused = id;
     }
 
     /* Draw radio circle (approximated with rect for now) */
     uint32_t bg = aui_widget_bg_color(ctx, hovered, held, false);
     aui_draw_rect_rounded(ctx, box_rect.x, box_rect.y, box_rect.w, box_rect.h,
                           bg, box_size * 0.5f);
+
+    /* Draw focus ring */
+    if (focused) {
+        aui_draw_rect_outline(ctx, box_rect.x - 2, box_rect.y - 2,
+                              box_rect.w + 4, box_rect.h + 4,
+                              ctx->theme.accent, 2.0f);
+    }
 
     /* Draw inner dot if selected */
     if (*value == option) {
@@ -389,6 +469,258 @@ bool aui_slider_int(AUI_Context *ctx, const char *label, int *value,
 }
 
 /* ============================================================================
+ * Spinbox
+ * ============================================================================ */
+
+bool aui_spinbox_float(AUI_Context *ctx, const char *label, float *value,
+                       float min, float max, float step)
+{
+    if (!ctx || !label || !value) return false;
+
+    AUI_Id id = aui_make_id(ctx, label);
+    AUI_Id dec_id = aui_make_id_int(ctx, label, -1);
+    AUI_Id inc_id = aui_make_id_int(ctx, label, 1);
+
+    float label_w = aui_text_width(ctx, label);
+    float button_w = ctx->theme.widget_height;  /* Square buttons */
+    float value_w = 80.0f;  /* Width for value display */
+    float total_w = label_w + ctx->theme.spacing + button_w + value_w + button_w;
+
+    AUI_Rect rect = aui_allocate_rect(ctx, total_w, ctx->theme.widget_height);
+
+    /* Calculate sub-rects */
+    float x = rect.x + label_w + ctx->theme.spacing;
+    AUI_Rect dec_rect = { x, rect.y, button_w, rect.h };
+    AUI_Rect val_rect = { x + button_w, rect.y, value_w, rect.h };
+    AUI_Rect inc_rect = { x + button_w + value_w, rect.y, button_w, rect.h };
+
+    /* Register for Tab navigation (value field is focusable) */
+    aui_focus_register(ctx, id);
+    bool focused = (ctx->focused == id);
+
+    bool changed = false;
+
+    /* Handle decrement button */
+    bool dec_hovered = aui_rect_contains(dec_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+    bool dec_held = false;
+    if (dec_hovered) ctx->hot = dec_id;
+    if (dec_hovered && ctx->input.mouse_pressed[0]) ctx->active = dec_id;
+    if (ctx->active == dec_id) {
+        dec_held = ctx->input.mouse_down[0];
+        if (ctx->input.mouse_released[0] && dec_hovered) {
+            *value -= step;
+            if (*value < min) *value = min;
+            changed = true;
+            ctx->active = AUI_ID_NONE;
+        } else if (!ctx->input.mouse_down[0]) {
+            ctx->active = AUI_ID_NONE;
+        }
+    }
+
+    /* Handle increment button */
+    bool inc_hovered = aui_rect_contains(inc_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+    bool inc_held = false;
+    if (inc_hovered) ctx->hot = inc_id;
+    if (inc_hovered && ctx->input.mouse_pressed[0]) ctx->active = inc_id;
+    if (ctx->active == inc_id) {
+        inc_held = ctx->input.mouse_down[0];
+        if (ctx->input.mouse_released[0] && inc_hovered) {
+            *value += step;
+            if (*value > max) *value = max;
+            changed = true;
+            ctx->active = AUI_ID_NONE;
+        } else if (!ctx->input.mouse_down[0]) {
+            ctx->active = AUI_ID_NONE;
+        }
+    }
+
+    /* Handle keyboard when focused */
+    if (focused) {
+        if (ctx->input.keys_pressed[SDL_SCANCODE_UP] ||
+            ctx->input.keys_pressed[SDL_SCANCODE_RIGHT]) {
+            *value += step;
+            if (*value > max) *value = max;
+            changed = true;
+        }
+        if (ctx->input.keys_pressed[SDL_SCANCODE_DOWN] ||
+            ctx->input.keys_pressed[SDL_SCANCODE_LEFT]) {
+            *value -= step;
+            if (*value < min) *value = min;
+            changed = true;
+        }
+    }
+
+    /* Click on value area to focus */
+    bool val_hovered = aui_rect_contains(val_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+    if (val_hovered) ctx->hot = id;
+    if (val_hovered && ctx->input.mouse_pressed[0]) {
+        ctx->focused = id;
+    }
+
+    /* Draw label */
+    float text_y = rect.y + (rect.h - aui_text_height(ctx)) * 0.5f;
+    aui_draw_text(ctx, label, rect.x, text_y, ctx->theme.text);
+
+    /* Draw decrement button */
+    uint32_t dec_bg = aui_widget_bg_color(ctx, dec_hovered, dec_held, false);
+    aui_draw_rect_rounded(ctx, dec_rect.x, dec_rect.y, dec_rect.w, dec_rect.h,
+                          dec_bg, ctx->theme.corner_radius);
+    float minus_x = dec_rect.x + (dec_rect.w - aui_text_width(ctx, "-")) * 0.5f;
+    aui_draw_text(ctx, "-", minus_x, text_y, ctx->theme.text);
+
+    /* Draw value area */
+    uint32_t val_bg = focused ? ctx->theme.bg_widget_active : ctx->theme.bg_widget;
+    aui_draw_rect(ctx, val_rect.x, val_rect.y, val_rect.w, val_rect.h, val_bg);
+
+    /* Draw focus ring around value area */
+    if (focused) {
+        aui_draw_rect_outline(ctx, val_rect.x - 1, val_rect.y - 1,
+                              val_rect.w + 2, val_rect.h + 2,
+                              ctx->theme.accent, 2.0f);
+    }
+
+    /* Draw value text (centered) */
+    char value_str[32];
+    snprintf(value_str, sizeof(value_str), "%.2f", *value);
+    float val_text_w = aui_text_width(ctx, value_str);
+    float val_text_x = val_rect.x + (val_rect.w - val_text_w) * 0.5f;
+    aui_draw_text(ctx, value_str, val_text_x, text_y, ctx->theme.text);
+
+    /* Draw increment button */
+    uint32_t inc_bg = aui_widget_bg_color(ctx, inc_hovered, inc_held, false);
+    aui_draw_rect_rounded(ctx, inc_rect.x, inc_rect.y, inc_rect.w, inc_rect.h,
+                          inc_bg, ctx->theme.corner_radius);
+    float plus_x = inc_rect.x + (inc_rect.w - aui_text_width(ctx, "+")) * 0.5f;
+    aui_draw_text(ctx, "+", plus_x, text_y, ctx->theme.text);
+
+    return changed;
+}
+
+bool aui_spinbox_int(AUI_Context *ctx, const char *label, int *value,
+                     int min, int max, int step)
+{
+    if (!ctx || !label || !value) return false;
+
+    AUI_Id id = aui_make_id(ctx, label);
+    AUI_Id dec_id = aui_make_id_int(ctx, label, -1);
+    AUI_Id inc_id = aui_make_id_int(ctx, label, 1);
+
+    float label_w = aui_text_width(ctx, label);
+    float button_w = ctx->theme.widget_height;  /* Square buttons */
+    float value_w = 60.0f;  /* Width for value display */
+    float total_w = label_w + ctx->theme.spacing + button_w + value_w + button_w;
+
+    AUI_Rect rect = aui_allocate_rect(ctx, total_w, ctx->theme.widget_height);
+
+    /* Calculate sub-rects */
+    float x = rect.x + label_w + ctx->theme.spacing;
+    AUI_Rect dec_rect = { x, rect.y, button_w, rect.h };
+    AUI_Rect val_rect = { x + button_w, rect.y, value_w, rect.h };
+    AUI_Rect inc_rect = { x + button_w + value_w, rect.y, button_w, rect.h };
+
+    /* Register for Tab navigation */
+    aui_focus_register(ctx, id);
+    bool focused = (ctx->focused == id);
+
+    bool changed = false;
+
+    /* Handle decrement button */
+    bool dec_hovered = aui_rect_contains(dec_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+    bool dec_held = false;
+    if (dec_hovered) ctx->hot = dec_id;
+    if (dec_hovered && ctx->input.mouse_pressed[0]) ctx->active = dec_id;
+    if (ctx->active == dec_id) {
+        dec_held = ctx->input.mouse_down[0];
+        if (ctx->input.mouse_released[0] && dec_hovered) {
+            *value -= step;
+            if (*value < min) *value = min;
+            changed = true;
+            ctx->active = AUI_ID_NONE;
+        } else if (!ctx->input.mouse_down[0]) {
+            ctx->active = AUI_ID_NONE;
+        }
+    }
+
+    /* Handle increment button */
+    bool inc_hovered = aui_rect_contains(inc_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+    bool inc_held = false;
+    if (inc_hovered) ctx->hot = inc_id;
+    if (inc_hovered && ctx->input.mouse_pressed[0]) ctx->active = inc_id;
+    if (ctx->active == inc_id) {
+        inc_held = ctx->input.mouse_down[0];
+        if (ctx->input.mouse_released[0] && inc_hovered) {
+            *value += step;
+            if (*value > max) *value = max;
+            changed = true;
+            ctx->active = AUI_ID_NONE;
+        } else if (!ctx->input.mouse_down[0]) {
+            ctx->active = AUI_ID_NONE;
+        }
+    }
+
+    /* Handle keyboard when focused */
+    if (focused) {
+        if (ctx->input.keys_pressed[SDL_SCANCODE_UP] ||
+            ctx->input.keys_pressed[SDL_SCANCODE_RIGHT]) {
+            *value += step;
+            if (*value > max) *value = max;
+            changed = true;
+        }
+        if (ctx->input.keys_pressed[SDL_SCANCODE_DOWN] ||
+            ctx->input.keys_pressed[SDL_SCANCODE_LEFT]) {
+            *value -= step;
+            if (*value < min) *value = min;
+            changed = true;
+        }
+    }
+
+    /* Click on value area to focus */
+    bool val_hovered = aui_rect_contains(val_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+    if (val_hovered) ctx->hot = id;
+    if (val_hovered && ctx->input.mouse_pressed[0]) {
+        ctx->focused = id;
+    }
+
+    /* Draw label */
+    float text_y = rect.y + (rect.h - aui_text_height(ctx)) * 0.5f;
+    aui_draw_text(ctx, label, rect.x, text_y, ctx->theme.text);
+
+    /* Draw decrement button */
+    uint32_t dec_bg = aui_widget_bg_color(ctx, dec_hovered, dec_held, false);
+    aui_draw_rect_rounded(ctx, dec_rect.x, dec_rect.y, dec_rect.w, dec_rect.h,
+                          dec_bg, ctx->theme.corner_radius);
+    float minus_x = dec_rect.x + (dec_rect.w - aui_text_width(ctx, "-")) * 0.5f;
+    aui_draw_text(ctx, "-", minus_x, text_y, ctx->theme.text);
+
+    /* Draw value area */
+    uint32_t val_bg = focused ? ctx->theme.bg_widget_active : ctx->theme.bg_widget;
+    aui_draw_rect(ctx, val_rect.x, val_rect.y, val_rect.w, val_rect.h, val_bg);
+
+    /* Draw focus ring around value area */
+    if (focused) {
+        aui_draw_rect_outline(ctx, val_rect.x - 1, val_rect.y - 1,
+                              val_rect.w + 2, val_rect.h + 2,
+                              ctx->theme.accent, 2.0f);
+    }
+
+    /* Draw value text (centered) */
+    char value_str[32];
+    snprintf(value_str, sizeof(value_str), "%d", *value);
+    float val_text_w = aui_text_width(ctx, value_str);
+    float val_text_x = val_rect.x + (val_rect.w - val_text_w) * 0.5f;
+    aui_draw_text(ctx, value_str, val_text_x, text_y, ctx->theme.text);
+
+    /* Draw increment button */
+    uint32_t inc_bg = aui_widget_bg_color(ctx, inc_hovered, inc_held, false);
+    aui_draw_rect_rounded(ctx, inc_rect.x, inc_rect.y, inc_rect.w, inc_rect.h,
+                          inc_bg, ctx->theme.corner_radius);
+    float plus_x = inc_rect.x + (inc_rect.w - aui_text_width(ctx, "+")) * 0.5f;
+    aui_draw_text(ctx, "+", plus_x, text_y, ctx->theme.text);
+
+    return changed;
+}
+
+/* ============================================================================
  * Progress Bar
  * ============================================================================ */
 
@@ -444,12 +776,62 @@ bool aui_textbox(AUI_Context *ctx, const char *label, char *buffer, int buffer_s
     return aui_textbox_ex(ctx, label, buffer, buffer_size, 0);
 }
 
+/* Helper: Get character index from X position in textbox */
+static int textbox_char_from_x(AUI_Context *ctx, const char *buffer, float text_x, float mouse_x)
+{
+    int len = (int)strlen(buffer);
+    if (len == 0) return 0;
+
+    for (int i = 0; i <= len; i++) {
+        char temp[256];
+        int copy_len = i < (int)sizeof(temp) - 1 ? i : (int)sizeof(temp) - 1;
+        memcpy(temp, buffer, copy_len);
+        temp[copy_len] = '\0';
+        float char_x = text_x + aui_text_width(ctx, temp);
+        if (mouse_x < char_x) {
+            return i > 0 ? i - 1 : 0;
+        }
+    }
+    return len;
+}
+
+/* Helper: Get X position from character index */
+static float textbox_x_from_char(AUI_Context *ctx, const char *buffer, int pos, float text_x)
+{
+    if (pos <= 0) return text_x;
+    int len = (int)strlen(buffer);
+    if (pos > len) pos = len;
+
+    char temp[256];
+    int copy_len = pos < (int)sizeof(temp) - 1 ? pos : (int)sizeof(temp) - 1;
+    memcpy(temp, buffer, copy_len);
+    temp[copy_len] = '\0';
+    return text_x + aui_text_width(ctx, temp);
+}
+
+/* Helper: Delete selection and return new cursor position */
+static int textbox_delete_selection(char *buffer, int sel_start, int sel_end)
+{
+    if (sel_start > sel_end) {
+        int tmp = sel_start;
+        sel_start = sel_end;
+        sel_end = tmp;
+    }
+    int len = (int)strlen(buffer);
+    if (sel_start >= len) return len;
+    if (sel_end > len) sel_end = len;
+
+    memmove(buffer + sel_start, buffer + sel_end, len - sel_end + 1);
+    return sel_start;
+}
+
 bool aui_textbox_ex(AUI_Context *ctx, const char *label, char *buffer,
                     int buffer_size, float width)
 {
     if (!ctx || !label || !buffer) return false;
 
     AUI_Id id = aui_make_id(ctx, label);
+    AUI_WidgetState *state = aui_get_state(ctx, id);
 
     float label_w = aui_text_width(ctx, label);
     float input_w = width > 0 ? width : 150.0f;
@@ -465,61 +847,237 @@ bool aui_textbox_ex(AUI_Context *ctx, const char *label, char *buffer,
         rect.h
     };
 
-    /* Available width for text (minus padding on both sides) */
-    float available_w = input_w - ctx->theme.padding * 2;
+    float text_x = input_rect.x + ctx->theme.padding;
+    int text_len = (int)strlen(buffer);
+
+    /* Initialize cursor state if needed */
+    if (state) {
+        if (state->cursor_pos < 0) state->cursor_pos = text_len;
+        if (state->cursor_pos > text_len) state->cursor_pos = text_len;
+        if (state->selection_start < -1) state->selection_start = -1;
+        if (state->selection_end < 0) state->selection_end = state->cursor_pos;
+    }
+
+    /* Register for Tab navigation */
+    aui_focus_register(ctx, id);
 
     /* Handle interaction */
     bool hovered = aui_rect_contains(input_rect, ctx->input.mouse_x, ctx->input.mouse_y);
     bool changed = false;
+    bool focused = (ctx->focused == id);
 
-    if (hovered && ctx->input.mouse_pressed[0]) {
+    /* Handle mouse click to position cursor / start selection */
+    if (hovered && ctx->input.mouse_pressed[0] && state) {
         ctx->focused = id;
+        focused = true;
+        int click_pos = textbox_char_from_x(ctx, buffer, text_x, ctx->input.mouse_x);
+
+        if (ctx->input.shift && state->selection_start >= 0) {
+            /* Extend selection */
+            state->selection_end = click_pos;
+            state->cursor_pos = click_pos;
+        } else {
+            /* Start new selection or just position cursor */
+            state->cursor_pos = click_pos;
+            state->selection_start = click_pos;
+            state->selection_end = click_pos;
+        }
     }
 
     /* Handle text input when focused */
-    if (ctx->focused == id) {
-        /* Append text input - check both buffer size and visual width */
+    if (focused && state) {
+        bool has_selection = (state->selection_start >= 0 &&
+                              state->selection_start != state->selection_end);
+
+        /* Handle text input */
         if (ctx->input.text_input_len > 0) {
-            int current_len = (int)strlen(buffer);
-            int space = buffer_size - current_len - 1;
-            if (space > 0) {
-                /* Try adding text and check if it fits visually */
-                char test_buffer[256];
-                int to_copy = ctx->input.text_input_len;
-                if (to_copy > space) to_copy = space;
-
-                /* Build test string */
-                int test_len = current_len + to_copy;
-                if (test_len < (int)sizeof(test_buffer) - 1) {
-                    memcpy(test_buffer, buffer, current_len);
-                    memcpy(test_buffer + current_len, ctx->input.text_input, to_copy);
-                    test_buffer[test_len] = '\0';
-
-                    /* Check if text fits visually */
-                    float new_text_w = aui_text_width(ctx, test_buffer);
-                    if (new_text_w <= available_w) {
-                        /* Text fits - apply the change */
-                        memcpy(buffer, test_buffer, test_len + 1);
-                        changed = true;
-                    }
-                    /* If text doesn't fit visually, don't add it */
-                }
+            /* Delete selection first if any */
+            if (has_selection) {
+                state->cursor_pos = textbox_delete_selection(buffer, state->selection_start, state->selection_end);
+                text_len = (int)strlen(buffer);
+                has_selection = false;
             }
+
+            /* Insert text at cursor */
+            int to_insert = ctx->input.text_input_len;
+            int space = buffer_size - text_len - 1;
+            if (to_insert > space) to_insert = space;
+            if (to_insert > 0) {
+                /* Make room */
+                memmove(buffer + state->cursor_pos + to_insert,
+                        buffer + state->cursor_pos,
+                        text_len - state->cursor_pos + 1);
+                memcpy(buffer + state->cursor_pos, ctx->input.text_input, to_insert);
+                state->cursor_pos += to_insert;
+                changed = true;
+            }
+            state->selection_start = -1;
         }
 
         /* Handle backspace */
         if (ctx->input.keys_pressed[SDL_SCANCODE_BACKSPACE]) {
-            int len = (int)strlen(buffer);
-            if (len > 0) {
-                buffer[len - 1] = '\0';
+            if (has_selection) {
+                state->cursor_pos = textbox_delete_selection(buffer, state->selection_start, state->selection_end);
+                changed = true;
+            } else if (state->cursor_pos > 0) {
+                memmove(buffer + state->cursor_pos - 1,
+                        buffer + state->cursor_pos,
+                        strlen(buffer + state->cursor_pos) + 1);
+                state->cursor_pos--;
                 changed = true;
             }
+            state->selection_start = -1;
+        }
+
+        /* Handle delete */
+        if (ctx->input.keys_pressed[SDL_SCANCODE_DELETE]) {
+            text_len = (int)strlen(buffer);
+            if (has_selection) {
+                state->cursor_pos = textbox_delete_selection(buffer, state->selection_start, state->selection_end);
+                changed = true;
+            } else if (state->cursor_pos < text_len) {
+                memmove(buffer + state->cursor_pos,
+                        buffer + state->cursor_pos + 1,
+                        strlen(buffer + state->cursor_pos));
+                changed = true;
+            }
+            state->selection_start = -1;
+        }
+
+        /* Handle arrow keys */
+        if (ctx->input.keys_pressed[SDL_SCANCODE_LEFT]) {
+            if (ctx->input.shift) {
+                if (state->selection_start < 0) {
+                    state->selection_start = state->cursor_pos;
+                    state->selection_end = state->cursor_pos;
+                }
+                if (state->cursor_pos > 0) state->cursor_pos--;
+                state->selection_end = state->cursor_pos;
+            } else {
+                if (has_selection) {
+                    state->cursor_pos = state->selection_start < state->selection_end ?
+                                        state->selection_start : state->selection_end;
+                } else if (state->cursor_pos > 0) {
+                    state->cursor_pos--;
+                }
+                state->selection_start = -1;
+            }
+        }
+
+        if (ctx->input.keys_pressed[SDL_SCANCODE_RIGHT]) {
+            text_len = (int)strlen(buffer);
+            if (ctx->input.shift) {
+                if (state->selection_start < 0) {
+                    state->selection_start = state->cursor_pos;
+                    state->selection_end = state->cursor_pos;
+                }
+                if (state->cursor_pos < text_len) state->cursor_pos++;
+                state->selection_end = state->cursor_pos;
+            } else {
+                if (has_selection) {
+                    state->cursor_pos = state->selection_start > state->selection_end ?
+                                        state->selection_start : state->selection_end;
+                } else if (state->cursor_pos < text_len) {
+                    state->cursor_pos++;
+                }
+                state->selection_start = -1;
+            }
+        }
+
+        /* Handle Home/End */
+        if (ctx->input.keys_pressed[SDL_SCANCODE_HOME]) {
+            if (ctx->input.shift) {
+                if (state->selection_start < 0) state->selection_start = state->cursor_pos;
+                state->cursor_pos = 0;
+                state->selection_end = 0;
+            } else {
+                state->cursor_pos = 0;
+                state->selection_start = -1;
+            }
+        }
+        if (ctx->input.keys_pressed[SDL_SCANCODE_END]) {
+            text_len = (int)strlen(buffer);
+            if (ctx->input.shift) {
+                if (state->selection_start < 0) state->selection_start = state->cursor_pos;
+                state->cursor_pos = text_len;
+                state->selection_end = text_len;
+            } else {
+                state->cursor_pos = text_len;
+                state->selection_start = -1;
+            }
+        }
+
+        /* Handle Ctrl+A (select all) */
+        if (ctx->input.ctrl && ctx->input.keys_pressed[SDL_SCANCODE_A]) {
+            text_len = (int)strlen(buffer);
+            state->selection_start = 0;
+            state->selection_end = text_len;
+            state->cursor_pos = text_len;
+        }
+
+        /* Handle Ctrl+C (copy) */
+        if (ctx->input.ctrl && ctx->input.keys_pressed[SDL_SCANCODE_C] && has_selection) {
+            int sel_min = state->selection_start < state->selection_end ?
+                          state->selection_start : state->selection_end;
+            int sel_max = state->selection_start > state->selection_end ?
+                          state->selection_start : state->selection_end;
+            char clipboard[256];
+            int copy_len = sel_max - sel_min;
+            if (copy_len > (int)sizeof(clipboard) - 1) copy_len = (int)sizeof(clipboard) - 1;
+            memcpy(clipboard, buffer + sel_min, copy_len);
+            clipboard[copy_len] = '\0';
+            SDL_SetClipboardText(clipboard);
+        }
+
+        /* Handle Ctrl+X (cut) */
+        if (ctx->input.ctrl && ctx->input.keys_pressed[SDL_SCANCODE_X] && has_selection) {
+            int sel_min = state->selection_start < state->selection_end ?
+                          state->selection_start : state->selection_end;
+            int sel_max = state->selection_start > state->selection_end ?
+                          state->selection_start : state->selection_end;
+            char clipboard[256];
+            int copy_len = sel_max - sel_min;
+            if (copy_len > (int)sizeof(clipboard) - 1) copy_len = (int)sizeof(clipboard) - 1;
+            memcpy(clipboard, buffer + sel_min, copy_len);
+            clipboard[copy_len] = '\0';
+            SDL_SetClipboardText(clipboard);
+
+            state->cursor_pos = textbox_delete_selection(buffer, state->selection_start, state->selection_end);
+            state->selection_start = -1;
+            changed = true;
+        }
+
+        /* Handle Ctrl+V (paste) */
+        if (ctx->input.ctrl && ctx->input.keys_pressed[SDL_SCANCODE_V]) {
+            char *clipboard = SDL_GetClipboardText();
+            if (clipboard && clipboard[0]) {
+                /* Delete selection first if any */
+                if (has_selection) {
+                    state->cursor_pos = textbox_delete_selection(buffer, state->selection_start, state->selection_end);
+                    state->selection_start = -1;
+                }
+
+                text_len = (int)strlen(buffer);
+                int paste_len = (int)strlen(clipboard);
+                int space = buffer_size - text_len - 1;
+                if (paste_len > space) paste_len = space;
+                if (paste_len > 0) {
+                    memmove(buffer + state->cursor_pos + paste_len,
+                            buffer + state->cursor_pos,
+                            text_len - state->cursor_pos + 1);
+                    memcpy(buffer + state->cursor_pos, clipboard, paste_len);
+                    state->cursor_pos += paste_len;
+                    changed = true;
+                }
+            }
+            SDL_free(clipboard);
         }
 
         /* Handle escape/enter to unfocus */
         if (ctx->input.keys_pressed[SDL_SCANCODE_ESCAPE] ||
             ctx->input.keys_pressed[SDL_SCANCODE_RETURN]) {
             ctx->focused = AUI_ID_NONE;
+            focused = false;
         }
     }
 
@@ -528,7 +1086,6 @@ bool aui_textbox_ex(AUI_Context *ctx, const char *label, char *buffer,
     aui_draw_text(ctx, label, rect.x, text_y, ctx->theme.text);
 
     /* Draw input background */
-    bool focused = (ctx->focused == id);
     uint32_t bg = focused ? ctx->theme.bg_widget_active :
                   (hovered ? ctx->theme.bg_widget_hover : ctx->theme.bg_widget);
     aui_draw_rect_rounded(ctx, input_rect.x, input_rect.y, input_rect.w, input_rect.h,
@@ -540,16 +1097,33 @@ bool aui_textbox_ex(AUI_Context *ctx, const char *label, char *buffer,
                               ctx->theme.accent, 2.0f);
     }
 
-    /* Draw text content (clipped to input area) */
-    float text_x = input_rect.x + ctx->theme.padding;
+    /* Push scissor for text area */
     aui_push_scissor(ctx, input_rect.x + ctx->theme.padding, input_rect.y,
                      input_rect.w - ctx->theme.padding * 2, input_rect.h);
+
+    /* Draw selection highlight */
+    if (focused && state && state->selection_start >= 0 &&
+        state->selection_start != state->selection_end) {
+        int sel_min = state->selection_start < state->selection_end ?
+                      state->selection_start : state->selection_end;
+        int sel_max = state->selection_start > state->selection_end ?
+                      state->selection_start : state->selection_end;
+
+        float sel_x1 = textbox_x_from_char(ctx, buffer, sel_min, text_x);
+        float sel_x2 = textbox_x_from_char(ctx, buffer, sel_max, text_x);
+
+        uint32_t sel_color = (ctx->theme.accent & 0x00FFFFFF) | 0x60000000;  /* Semi-transparent accent */
+        aui_draw_rect(ctx, sel_x1, input_rect.y + 2, sel_x2 - sel_x1, input_rect.h - 4, sel_color);
+    }
+
+    /* Draw text content */
     aui_draw_text(ctx, buffer, text_x, text_y, ctx->theme.text);
+
     aui_pop_scissor(ctx);
 
     /* Draw cursor when focused */
-    if (focused) {
-        float cursor_x = text_x + aui_text_width(ctx, buffer);
+    if (focused && state) {
+        float cursor_x = textbox_x_from_char(ctx, buffer, state->cursor_pos, text_x);
         /* Clamp cursor to visible area */
         float max_cursor_x = input_rect.x + input_rect.w - ctx->theme.padding;
         if (cursor_x > max_cursor_x) cursor_x = max_cursor_x;
@@ -585,9 +1159,19 @@ bool aui_dropdown(AUI_Context *ctx, const char *label, int *selected,
         rect.h
     };
 
+    /* Register for Tab navigation */
+    aui_focus_register(ctx, id);
+
     /* Handle interaction */
     bool hovered, held;
     bool pressed = aui_widget_behavior(ctx, id, btn_rect, &hovered, &held);
+
+    /* Handle keyboard activation when focused */
+    bool focused = (ctx->focused == id);
+    if (focused && (ctx->input.keys_pressed[SDL_SCANCODE_RETURN] ||
+                    ctx->input.keys_pressed[SDL_SCANCODE_SPACE])) {
+        pressed = true;
+    }
 
     /* Check if this dropdown's popup changed selection last frame */
     bool changed = false;
@@ -597,6 +1181,7 @@ bool aui_dropdown(AUI_Context *ctx, const char *label, int *selected,
     }
 
     if (pressed) {
+        ctx->focused = id;  /* Focus on activation */
         if (ctx->open_popup == id) {
             ctx->open_popup = AUI_ID_NONE;
             ctx->popup_items = NULL;
@@ -623,6 +1208,13 @@ bool aui_dropdown(AUI_Context *ctx, const char *label, int *selected,
     uint32_t bg = aui_widget_bg_color(ctx, hovered, held, false);
     aui_draw_rect_rounded(ctx, btn_rect.x, btn_rect.y, btn_rect.w, btn_rect.h,
                           bg, ctx->theme.corner_radius);
+
+    /* Draw focus ring */
+    if (focused) {
+        aui_draw_rect_outline(ctx, btn_rect.x - 2, btn_rect.y - 2,
+                              btn_rect.w + 4, btn_rect.h + 4,
+                              ctx->theme.accent, 2.0f);
+    }
 
     /* Draw selected item text */
     const char *selected_text = (*selected >= 0 && *selected < count) ?
@@ -1113,4 +1705,174 @@ void aui_multi_select_end(AUI_Context *ctx)
 {
     if (!ctx) return;
     ctx->multi_select = NULL;
+}
+
+/* ============================================================================
+ * Tab Bar
+ * ============================================================================ */
+
+bool aui_begin_tab_bar(AUI_Context *ctx, const char *id)
+{
+    if (!ctx || !id) return false;
+
+    AUI_Id bar_id = aui_make_id(ctx, id);
+
+    /* Get persistent state for active tab */
+    AUI_WidgetState *state = aui_get_state(ctx, bar_id);
+    int active_tab = state ? state->cursor_pos : 0;  /* Reuse cursor_pos for active tab */
+
+    /* Allocate space for tab bar + content */
+    AUI_Rect available = aui_get_available_rect(ctx);
+    float bar_height = ctx->theme.widget_height;
+
+    /* Store tab bar state */
+    ctx->tab_bar.id = bar_id;
+    ctx->tab_bar.active_tab = active_tab;
+    ctx->tab_bar.tab_count = 0;
+    ctx->tab_bar.tab_x = available.x;
+    ctx->tab_bar.bar_y = available.y;
+    ctx->tab_bar.bar_height = bar_height;
+
+    /* Draw tab bar background */
+    aui_draw_rect(ctx, available.x, available.y, available.w, bar_height,
+                  ctx->theme.bg_widget);
+
+    /* Calculate content area (below tab bar) */
+    ctx->tab_bar.content_rect.x = available.x;
+    ctx->tab_bar.content_rect.y = available.y + bar_height;
+    ctx->tab_bar.content_rect.w = available.w;
+    ctx->tab_bar.content_rect.h = available.h - bar_height;
+
+    /* Push ID for scoping */
+    aui_push_id(ctx, id);
+
+    return true;
+}
+
+bool aui_tab(AUI_Context *ctx, const char *label)
+{
+    if (!ctx || !label) return false;
+    if (ctx->tab_bar.id == AUI_ID_NONE) return false;  /* Not in a tab bar */
+
+    int tab_index = ctx->tab_bar.tab_count++;
+    AUI_Id tab_id = aui_make_id_int(ctx, label, tab_index);
+
+    /* Calculate tab button size */
+    float text_w = aui_text_width(ctx, label);
+    float tab_w = text_w + ctx->theme.padding * 2;
+    float tab_h = ctx->tab_bar.bar_height;
+
+    AUI_Rect tab_rect = {
+        ctx->tab_bar.tab_x,
+        ctx->tab_bar.bar_y,
+        tab_w,
+        tab_h
+    };
+
+    /* Advance for next tab */
+    ctx->tab_bar.tab_x += tab_w + 2.0f;  /* Small gap between tabs */
+
+    /* Register for Tab navigation */
+    aui_focus_register(ctx, tab_id);
+
+    /* Handle interaction */
+    bool hovered = aui_rect_contains(tab_rect, ctx->input.mouse_x, ctx->input.mouse_y);
+    bool is_active = (ctx->tab_bar.active_tab == tab_index);
+    bool focused = (ctx->focused == tab_id);
+
+    if (hovered) ctx->hot = tab_id;
+
+    bool clicked = false;
+    if (hovered && ctx->input.mouse_pressed[0]) {
+        clicked = true;
+    }
+    /* Keyboard activation */
+    if (focused && (ctx->input.keys_pressed[SDL_SCANCODE_RETURN] ||
+                    ctx->input.keys_pressed[SDL_SCANCODE_SPACE])) {
+        clicked = true;
+    }
+
+    if (clicked) {
+        ctx->tab_bar.active_tab = tab_index;
+        ctx->focused = tab_id;
+        /* Update persistent state */
+        AUI_WidgetState *state = aui_get_state(ctx, ctx->tab_bar.id);
+        if (state) state->cursor_pos = tab_index;
+    }
+
+    /* Draw tab button */
+    uint32_t bg;
+    if (is_active) {
+        bg = ctx->theme.bg_panel;  /* Active tab blends with content */
+    } else if (hovered) {
+        bg = ctx->theme.bg_widget_hover;
+    } else {
+        bg = ctx->theme.bg_widget_active;  /* Darker for inactive tabs */
+    }
+
+    aui_draw_rect(ctx, tab_rect.x, tab_rect.y, tab_rect.w, tab_rect.h, bg);
+
+    /* Draw focus ring */
+    if (focused) {
+        aui_draw_rect_outline(ctx, tab_rect.x, tab_rect.y,
+                              tab_rect.w, tab_rect.h,
+                              ctx->theme.accent, 2.0f);
+    }
+
+    /* Draw active tab indicator (bottom border) */
+    if (is_active) {
+        aui_draw_rect(ctx, tab_rect.x, tab_rect.y + tab_rect.h - 3,
+                      tab_rect.w, 3, ctx->theme.accent);
+    }
+
+    /* Draw label */
+    float text_x = tab_rect.x + (tab_rect.w - text_w) * 0.5f;
+    float text_y = tab_rect.y + (tab_rect.h - aui_text_height(ctx)) * 0.5f;
+    uint32_t text_color = is_active ? ctx->theme.text_highlight : ctx->theme.text;
+    aui_draw_text(ctx, label, text_x, text_y, text_color);
+
+    /* If this tab is active, set up layout for content */
+    if (is_active) {
+        /* Allocate the tab bar height in parent layout */
+        aui_allocate_rect(ctx, 0, ctx->tab_bar.bar_height);
+
+        /* Draw content background */
+        aui_draw_rect(ctx, ctx->tab_bar.content_rect.x, ctx->tab_bar.content_rect.y,
+                      ctx->tab_bar.content_rect.w, ctx->tab_bar.content_rect.h,
+                      ctx->theme.bg_panel);
+        aui_draw_rect_outline(ctx, ctx->tab_bar.content_rect.x, ctx->tab_bar.content_rect.y,
+                              ctx->tab_bar.content_rect.w, ctx->tab_bar.content_rect.h,
+                              ctx->theme.border, 1.0f);
+
+        /* Push layout for content area */
+        if (ctx->layout_depth < 32) {
+            AUI_LayoutFrame *frame = &ctx->layout_stack[ctx->layout_depth++];
+            frame->bounds = ctx->tab_bar.content_rect;
+            frame->cursor_x = ctx->tab_bar.content_rect.x + ctx->theme.padding;
+            frame->cursor_y = ctx->tab_bar.content_rect.y + ctx->theme.padding;
+            frame->spacing = ctx->theme.spacing;
+            frame->padding = ctx->theme.padding;
+            frame->horizontal = false;
+            frame->has_clip = false;
+        }
+
+        return true;  /* Render content for this tab */
+    }
+
+    return false;  /* Don't render content for inactive tabs */
+}
+
+void aui_end_tab_bar(AUI_Context *ctx)
+{
+    if (!ctx) return;
+
+    /* Pop the content layout if a tab was active */
+    if (ctx->layout_depth > 1) {
+        ctx->layout_depth--;
+    }
+
+    aui_pop_id(ctx);
+
+    /* Clear tab bar state */
+    ctx->tab_bar.id = AUI_ID_NONE;
 }
