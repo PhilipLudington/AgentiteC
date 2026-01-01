@@ -692,6 +692,9 @@ bool aui_textbox(AUI_Context *ctx, const char *label, char *buffer, int buffer_s
 bool aui_textbox_ex(AUI_Context *ctx, const char *label, char *buffer,
                     int buffer_size, float width);
 
+/* Selectable item (for lists, returns true if clicked) */
+bool aui_selectable(AUI_Context *ctx, const char *label, bool selected);
+
 /* Selection widgets */
 bool aui_dropdown(AUI_Context *ctx, const char *label, int *selected,
                   const char **items, int count);

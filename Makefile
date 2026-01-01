@@ -128,6 +128,7 @@ dirs:
 	@mkdir -p $(BUILD_DIR)/examples/richtext
 	@mkdir -p $(BUILD_DIR)/examples/pathfinding
 	@mkdir -p $(BUILD_DIR)/examples/ecs_custom_system
+	@mkdir -p $(BUILD_DIR)/examples/inspector
 
 # Link main executable (game template)
 $(BUILD_DIR)/$(EXECUTABLE): $(OBJS) $(FLECS_OBJ) $(TOML_OBJ)
@@ -238,6 +239,11 @@ example-pathfinding: dirs $(BUILD_DIR)/examples/pathfinding/main.o $(patsubst $(
 example-ecs: dirs $(BUILD_DIR)/examples/ecs_custom_system/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
 	$(CXX) $(BUILD_DIR)/examples/ecs_custom_system/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-ecs $(LDFLAGS)
 	./$(BUILD_DIR)/example-ecs
+
+# Build and run Entity Inspector demo
+example-inspector: dirs $(BUILD_DIR)/examples/inspector/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(GAME_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/inspector/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(GAME_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-inspector $(LDFLAGS)
+	./$(BUILD_DIR)/example-inspector
 
 #============================================================================
 # Test targets
@@ -386,6 +392,7 @@ help:
 	@echo "  make example-dialogs   - Modal dialogs and popups"
 	@echo "  make example-pathfinding - A* pathfinding demo"
 	@echo "  make example-ecs       - Custom ECS systems demo"
+	@echo "  make example-inspector - Entity inspector demo"
 	@echo ""
 	@echo "Utilities:"
 	@echo "  make clean        - Remove build files"
@@ -394,4 +401,4 @@ help:
 
 .PHONY: all dirs run run-demo clean install-deps-macos install-deps-linux info help test test-verbose
 .PHONY: check safety format format-check
-.PHONY: example-minimal example-sprites example-animation example-tilemap example-ui example-ui-node example-strategy example-strategy-sim example-msdf example-charts example-richtext example-dialogs example-pathfinding example-ecs
+.PHONY: example-minimal example-sprites example-animation example-tilemap example-ui example-ui-node example-strategy example-strategy-sim example-msdf example-charts example-richtext example-dialogs example-pathfinding example-ecs example-inspector

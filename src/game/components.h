@@ -146,6 +146,9 @@ typedef struct C_Animated {
  * Component Registration
  *============================================================================*/
 
+/* Forward declarations for reflection */
+struct Agentite_ReflectRegistry;
+
 /**
  * Register all game-specific components with the ECS world.
  * Call this during game_init().
@@ -153,6 +156,16 @@ typedef struct C_Animated {
  * @param world Flecs world
  */
 void game_components_register(ecs_world_t *world);
+
+/**
+ * Register reflection data for game components.
+ * Call this after game_components_register() to enable the inspector.
+ *
+ * @param world    Flecs world
+ * @param registry Reflection registry to populate
+ */
+void game_components_register_reflection(ecs_world_t *world,
+                                          struct Agentite_ReflectRegistry *registry);
 
 /*============================================================================
  * Component Declarations (for Flecs)

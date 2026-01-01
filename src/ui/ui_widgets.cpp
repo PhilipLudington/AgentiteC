@@ -248,6 +248,43 @@ bool aui_button_info(AUI_Context *ctx, const char *label)
 }
 
 /* ============================================================================
+ * Selectable (list item that can be selected)
+ * ============================================================================ */
+
+bool aui_selectable(AUI_Context *ctx, const char *label, bool selected)
+{
+    if (!ctx || !label) return false;
+
+    AUI_Id id = aui_make_id(ctx, label);
+
+    /* Full width selectable item */
+    float text_h = aui_text_height(ctx);
+    float item_h = ctx->theme.widget_height;
+
+    /* Get available width from current layout */
+    AUI_Rect rect = aui_allocate_rect(ctx, 0, item_h);  /* 0 width = full available */
+
+    /* Handle interaction */
+    bool hovered, held;
+    bool clicked = aui_widget_behavior(ctx, id, rect, &hovered, &held);
+
+    /* Draw background - selected, hovered, or nothing */
+    if (selected) {
+        aui_draw_rect(ctx, rect.x, rect.y, rect.w, rect.h, ctx->theme.accent);
+    } else if (hovered) {
+        aui_draw_rect(ctx, rect.x, rect.y, rect.w, rect.h, ctx->theme.bg_widget_hover);
+    }
+
+    /* Draw text */
+    float text_x = rect.x + ctx->theme.padding;
+    float text_y = rect.y + (rect.h - text_h) * 0.5f;
+    uint32_t text_color = selected ? ctx->theme.text_highlight : ctx->theme.text;
+    aui_draw_text(ctx, label, text_x, text_y, text_color);
+
+    return clicked;
+}
+
+/* ============================================================================
  * Checkbox
  * ============================================================================ */
 
