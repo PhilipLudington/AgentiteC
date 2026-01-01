@@ -144,7 +144,14 @@ typedef struct AUI_InputDialogConfig {
 /**
  * File dialog filter.
  * name: Display name (e.g., "Scene Files")
- * pattern: File pattern (e.g., "*.scene")
+ * pattern: Semicolon-separated list of extensions without "*." prefix
+ *          (e.g., "scene;json"). Use "*" for all files.
+ *
+ * Example:
+ *   AUI_FileFilter filters[] = {
+ *       {"Image Files", "png;jpg;jpeg"},
+ *       {"All Files", "*"},
+ *   };
  */
 typedef struct AUI_FileFilter {
     const char *name;
@@ -427,6 +434,13 @@ void aui_notify_clear_all(AUI_Context *ctx);
 
 /* Update dialogs and notifications (call each frame) */
 void aui_dialogs_update(AUI_Context *ctx, float dt);
+
+/**
+ * Process events for dialogs.
+ * Call this BEFORE aui_process_event to handle modal dialog input.
+ * Returns true if the event was consumed by a dialog.
+ */
+bool aui_dialogs_process_event(AUI_Context *ctx, const SDL_Event *event);
 
 /* Render dialogs and notifications (call each frame after UI) */
 void aui_dialogs_render(AUI_Context *ctx);

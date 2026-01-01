@@ -568,6 +568,14 @@ static void aui_dialog_add_button(AUI_Context *ctx, AUI_Node *button_row,
 {
     AUI_Node *btn = aui_button_create(ctx, name, label);
     if (btn) {
+        /* Apply button style from theme */
+        btn->style.background = aui_bg_solid(ctx->theme.bg_widget);
+        btn->style.background_hover = aui_bg_solid(ctx->theme.bg_widget_hover);
+        btn->style.background_active = aui_bg_solid(ctx->theme.bg_widget_active);
+        btn->style.text_color = ctx->theme.text;
+        btn->style.corner_radius = aui_corners_uniform(ctx->theme.corner_radius);
+        btn->style.padding = aui_edges(4, 12, 4, 12);  /* Minimal vertical padding */
+
         aui_node_set_h_size_flags(btn, AUI_SIZE_EXPAND);
         aui_node_connect(btn, AUI_SIGNAL_CLICKED, aui_dialog_button_clicked, entry);
         aui_node_add_child(button_row, btn);
@@ -673,7 +681,7 @@ AUI_Node *aui_dialog_create(AUI_Context *ctx, const AUI_DialogConfig *config)
         dialog_w = config->max_width;
     }
 
-    float dialog_h = 120;  /* Base height */
+    float dialog_h = 150;  /* Base height */
 
     /* Create dialog panel */
     AUI_Node *panel = aui_panel_create(ctx, "dialog", config->title);
@@ -696,30 +704,28 @@ AUI_Node *aui_dialog_create(AUI_Context *ctx, const AUI_DialogConfig *config)
     /* Set style */
     panel->style.background = aui_bg_solid(ctx->theme.bg_panel);
     panel->style.corner_radius = aui_corners_uniform(8);
-    panel->style.padding = aui_edges_uniform(16);
+    panel->style.padding = aui_edges_uniform(12);
 
     /* Add shadow */
     panel->style.shadows[0] = aui_shadow(0, 4, 16, 0x60000000);
     panel->style.shadow_count = 1;
 
-    /* Content layout */
-    AUI_Node *vbox = aui_vbox_create(ctx, "content");
-    aui_node_set_anchor_preset(vbox, AUI_ANCHOR_FULL_RECT);
-    aui_box_set_separation(vbox, 12);
-    aui_node_add_child(panel, vbox);
-
-    /* Message label */
+    /* Message label - anchored to top */
+    AUI_Node *label = NULL;
     if (config->message) {
-        AUI_Node *label = aui_label_create(ctx, "message", config->message);
-        aui_node_set_h_size_flags(label, AUI_SIZE_FILL);
-        aui_node_add_child(vbox, label);
+        label = aui_label_create(ctx, "message", config->message);
+        aui_node_set_anchor_preset(label, AUI_ANCHOR_TOP_WIDE);
+        aui_node_set_offsets(label, 0, 0, 0, 40);  /* Top with 40px height */
+        label->label.autowrap = true;
+        aui_node_add_child(panel, label);
     }
 
-    /* Button row */
+    /* Button row - anchored to bottom */
     AUI_Node *button_row = aui_hbox_create(ctx, "buttons");
     aui_box_set_separation(button_row, 8);
-    aui_node_set_v_size_flags(button_row, AUI_SIZE_SHRINK_END);
-    aui_node_add_child(vbox, button_row);
+    aui_node_set_anchor_preset(button_row, AUI_ANCHOR_BOTTOM_WIDE);
+    aui_node_set_offsets(button_row, 0, -36, 0, 0);  /* Bottom with 36px height */
+    aui_node_add_child(panel, button_row);
 
     /* Add buttons based on preset */
     switch (config->buttons) {
@@ -1088,6 +1094,15 @@ void aui_dialogs_update(AUI_Context *ctx, float dt)
     if (dm) {
         aui_dialog_manager_update(dm, ctx, dt);
     }
+}
+
+bool aui_dialogs_process_event(AUI_Context *ctx, const SDL_Event *event)
+{
+    AUI_DialogManager *dm = aui_get_dialog_manager(ctx);
+    if (dm) {
+        return aui_dialog_manager_process_event(dm, ctx, event);
+    }
+    return false;
 }
 
 void aui_dialogs_render(AUI_Context *ctx)

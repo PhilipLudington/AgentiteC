@@ -1398,6 +1398,7 @@ static bool aui_node_is_layout_container(AUI_Node *node)
         case AUI_NODE_HBOX:
         case AUI_NODE_GRID:
         case AUI_NODE_CENTER:
+        case AUI_NODE_PANEL:  /* Panels offset children for title bar */
             return true;
         default:
             return false;
@@ -1465,10 +1466,12 @@ static void aui_node_layout_children(AUI_Context *ctx, AUI_Node *node)
                     return;
                 }
 
-                /* Calculate content area (after title bar) */
+                /* Calculate content area (after title bar and padding) */
                 AUI_Rect content_rect = node->global_rect;
-                content_rect.y += title_offset;
-                content_rect.h -= title_offset;
+                content_rect.x += node->style.padding.left;
+                content_rect.y += title_offset + node->style.padding.top;
+                content_rect.w -= node->style.padding.left + node->style.padding.right;
+                content_rect.h -= title_offset + node->style.padding.top + node->style.padding.bottom;
 
                 for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
                     if (!child->visible) continue;

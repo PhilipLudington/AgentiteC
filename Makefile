@@ -224,6 +224,11 @@ example-richtext: dirs $(BUILD_DIR)/examples/richtext/main.o $(patsubst $(SRC_DI
 	$(CXX) $(BUILD_DIR)/examples/richtext/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-richtext $(LDFLAGS)
 	./$(BUILD_DIR)/example-richtext
 
+# Build and run dialogs demo
+example-dialogs: dirs $(BUILD_DIR)/examples/dialogs/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/dialogs/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-dialogs $(LDFLAGS)
+	./$(BUILD_DIR)/example-dialogs
+
 # Build and run pathfinding demo
 example-pathfinding: dirs $(BUILD_DIR)/examples/pathfinding/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
 	$(CXX) $(BUILD_DIR)/examples/pathfinding/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-pathfinding $(LDFLAGS)
@@ -378,6 +383,7 @@ help:
 	@echo "  make example-msdf      - MSDF text rendering demo"
 	@echo "  make example-charts    - Data visualization charts"
 	@echo "  make example-richtext  - BBCode rich text demo"
+	@echo "  make example-dialogs   - Modal dialogs and popups"
 	@echo "  make example-pathfinding - A* pathfinding demo"
 	@echo "  make example-ecs       - Custom ECS systems demo"
 	@echo ""
@@ -388,4 +394,4 @@ help:
 
 .PHONY: all dirs run run-demo clean install-deps-macos install-deps-linux info help test test-verbose
 .PHONY: check safety format format-check
-.PHONY: example-minimal example-sprites example-animation example-tilemap example-ui example-ui-node example-strategy example-strategy-sim example-msdf example-charts example-richtext example-pathfinding example-ecs
+.PHONY: example-minimal example-sprites example-animation example-tilemap example-ui example-ui-node example-strategy example-strategy-sim example-msdf example-charts example-richtext example-dialogs example-pathfinding example-ecs

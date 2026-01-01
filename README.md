@@ -136,6 +136,7 @@ make example-ui           # UI system demo (spinbox, tooltips, gamepad)
 make example-ui-node      # Retained-mode UI with tweens
 make example-charts       # Data visualization (line, bar, pie, real-time)
 make example-richtext     # BBCode formatted text with animations
+make example-dialogs      # Modal dialogs, file dialogs, notifications
 make example-strategy     # Strategy game patterns
 make example-strategy-sim # Strategy systems simulation
 make example-pathfinding  # A* pathfinding demo

@@ -1331,15 +1331,30 @@ bool aui_dropdown(AUI_Context *ctx, const char *label, int *selected,
 
     AUI_Id id = aui_make_id(ctx, label);
 
-    float label_w = aui_text_width(ctx, label);
+    /* Calculate visible label width (text before ## or empty if starts with ##) */
+    float label_w = 0;
+    if (label[0] != '#' || label[1] != '#') {
+        const char *hash = strstr(label, "##");
+        if (hash) {
+            char visible_label[256];
+            size_t len = (size_t)(hash - label);
+            if (len >= sizeof(visible_label)) len = sizeof(visible_label) - 1;
+            memcpy(visible_label, label, len);
+            visible_label[len] = '\0';
+            label_w = aui_text_width(ctx, visible_label);
+        } else {
+            label_w = aui_text_width(ctx, label);
+        }
+    }
+
     float dropdown_w = 150.0f;
-    float total_w = label_w + ctx->theme.spacing + dropdown_w;
+    float total_w = (label_w > 0 ? label_w + ctx->theme.spacing : 0) + dropdown_w;
 
     AUI_Rect rect = aui_allocate_rect(ctx, total_w, ctx->theme.widget_height);
 
     /* Dropdown button rect */
     AUI_Rect btn_rect = {
-        rect.x + label_w + ctx->theme.spacing,
+        rect.x + (label_w > 0 ? label_w + ctx->theme.spacing : 0),
         rect.y,
         dropdown_w,
         rect.h
@@ -1386,9 +1401,24 @@ bool aui_dropdown(AUI_Context *ctx, const char *label, int *selected,
         }
     }
 
-    /* Draw label */
+    /* Draw label (skip if starts with ## - hidden label for ID only) */
     float text_y = rect.y + (rect.h - aui_text_height(ctx)) * 0.5f;
-    aui_draw_text(ctx, label, rect.x, text_y, ctx->theme.text);
+    if (label[0] != '#' || label[1] != '#') {
+        /* Find ## in label and only draw text before it */
+        const char *hash = strstr(label, "##");
+        if (hash) {
+            /* Draw only the part before ## */
+            char visible_label[256];
+            size_t len = (size_t)(hash - label);
+            if (len >= sizeof(visible_label)) len = sizeof(visible_label) - 1;
+            memcpy(visible_label, label, len);
+            visible_label[len] = '\0';
+            aui_draw_text(ctx, visible_label, rect.x, text_y, ctx->theme.text);
+        } else {
+            /* No ## found, draw entire label */
+            aui_draw_text(ctx, label, rect.x, text_y, ctx->theme.text);
+        }
+    }
 
     /* Draw dropdown button */
     uint32_t bg = aui_widget_bg_color(ctx, hovered, held, false);
