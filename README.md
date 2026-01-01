@@ -132,8 +132,15 @@ make example-minimal      # Basic window setup
 make example-sprites      # Sprite rendering
 make example-animation    # Animation system
 make example-tilemap      # Tilemap rendering
-make example-ui           # UI system demo
+make example-ui           # UI system demo (spinbox, tooltips, gamepad)
+make example-ui-node      # Retained-mode UI with tweens
+make example-charts       # Data visualization (line, bar, pie, real-time)
+make example-richtext     # BBCode formatted text with animations
 make example-strategy     # Strategy game patterns
+make example-strategy-sim # Strategy systems simulation
+make example-pathfinding  # A* pathfinding demo
+make example-ecs          # Custom ECS systems
+make example-msdf         # Scalable text rendering
 ```
 
 ## Project Structure

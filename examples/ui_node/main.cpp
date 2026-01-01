@@ -7,6 +7,9 @@
  * - Signal-based event handling
  * - Tween animations
  * - Rich styling with gradients, shadows, rounded corners
+ * - Chart widgets (line, bar, pie)
+ * - Rich text with BBCode formatting
+ * - Gamepad/controller navigation
  */
 
 #include "agentite/agentite.h"
@@ -14,6 +17,8 @@
 #include "agentite/ui_node.h"
 #include "agentite/ui_style.h"
 #include "agentite/ui_tween.h"
+#include "agentite/ui_charts.h"
+#include "agentite/ui_richtext.h"
 #include "agentite/input.h"
 #include <stdio.h>
 #include <math.h>
@@ -133,7 +138,7 @@ static AUI_Node *create_main_menu(AUI_Context *ctx, AUI_TweenManager *tm)
     /* ========== Main menu panel - centered ========== */
     AUI_Node *menu_panel = aui_panel_create(ctx, "main_menu", "Main Menu");
     aui_node_set_anchor_preset(menu_panel, AUI_ANCHOR_CENTER);
-    aui_node_set_offsets(menu_panel, -150, -180, 150, 120);
+    aui_node_set_offsets(menu_panel, -150, -180, 150, 145);  /* Taller to fit title + buttons */
 
     /* Style the panel with solid background */
     AUI_Style panel_style = aui_style_default();
@@ -147,7 +152,7 @@ static AUI_Node *create_main_menu(AUI_Context *ctx, AUI_TweenManager *tm)
     /* VBox for menu buttons */
     AUI_Node *menu_vbox = aui_vbox_create(ctx, "menu_buttons");
     aui_node_set_anchor_preset(menu_vbox, AUI_ANCHOR_FULL_RECT);
-    aui_node_set_offsets(menu_vbox, 20, 20, -20, -20);  /* 20px padding all sides */
+    aui_node_set_offsets(menu_vbox, 20, 45, -20, -20);  /* 20px sides, 45px top for title bar */
     aui_box_set_separation(menu_vbox, 12.0f);
     aui_node_add_child(menu_panel, menu_vbox);
 
@@ -246,7 +251,7 @@ static AUI_Node *create_main_menu(AUI_Context *ctx, AUI_TweenManager *tm)
     /* ========== Info panel at bottom left ========== */
     AUI_Node *info_panel = aui_panel_create(ctx, "info_panel", "Controls");
     aui_node_set_anchor_preset(info_panel, AUI_ANCHOR_BOTTOM_LEFT);
-    aui_node_set_offsets(info_panel, 20, -140, 220, -20);
+    aui_node_set_offsets(info_panel, 20, -170, 220, -20);
 
     AUI_Style info_style = aui_style_default();
     info_style.background = aui_bg_solid(0x1A1A2AFF);
@@ -266,9 +271,11 @@ static AUI_Node *create_main_menu(AUI_Context *ctx, AUI_TweenManager *tm)
     const char *info_lines[] = {
         "ESC: Quit",
         "F1: Toggle Menu",
-        "F2: Animate Panel"
+        "F2: Animate Panel",
+        "F3: Toggle Charts",
+        "Gamepad: D-pad nav"
     };
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 5; i++) {
         AUI_Node *line = aui_label_create(ctx, NULL, info_lines[i]);
         line->label.color = 0xCCCCCCFF;
         aui_node_add_child(info_vbox, line);
@@ -291,6 +298,86 @@ static AUI_Node *create_main_menu(AUI_Context *ctx, AUI_TweenManager *tm)
     aui_node_set_offsets(fps_label, -80, -10, -10, 10);
     fps_label->label.color = 0x88FF88FF;
     aui_node_add_child(status_bar, fps_label);
+
+    /* ========== Gamepad mode indicator ========== */
+    AUI_Node *gamepad_label = aui_label_create(ctx, "gamepad_label", "Mode: Mouse");
+    aui_node_set_anchor_preset(gamepad_label, AUI_ANCHOR_CENTER_LEFT);
+    aui_node_set_offsets(gamepad_label, 10, -10, 120, 10);
+    gamepad_label->label.color = 0x88AAFFFF;
+    aui_node_add_child(status_bar, gamepad_label);
+
+    /* ========== Charts panel at bottom right ========== */
+    AUI_Node *charts_panel = aui_panel_create(ctx, "charts_panel", "Data Visualization");
+    aui_node_set_anchor_preset(charts_panel, AUI_ANCHOR_BOTTOM_RIGHT);
+    aui_node_set_offsets(charts_panel, -420, -250, -20, -20);
+    aui_node_set_visible(charts_panel, false);  /* Toggle with F3 */
+
+    AUI_Style charts_style = aui_style_default();
+    charts_style.background = aui_bg_solid(0x1A1A2AFF);
+    charts_style.border = aui_border(1.0f, 0x4A4A6AFF);
+    charts_style.corner_radius = aui_corners_uniform(8.0f);
+    charts_style.text_color = 0xFFFFFFFF;
+    aui_node_set_style(charts_panel, &charts_style);
+    aui_node_add_child(root, charts_panel);
+
+    /* Create line chart with sample data */
+    static float chart_data[] = {10.0f, 25.0f, 15.0f, 40.0f, 30.0f, 55.0f, 45.0f, 60.0f};
+    AUI_ChartSeries series = {
+        .label = "Performance",
+        .values = chart_data,
+        .value_count = 8,
+        .color = 0x4488FFFF,
+        .line_width = 2.0f,
+        .show_points = true,
+        .point_size = 4.0f,
+        .smooth = true,
+        .filled = true,
+        .fill_opacity = 0.3f,
+    };
+
+    AUI_ChartConfig chart_config = {
+        .type = AUI_CHART_LINE,
+        .title = "System Metrics",
+        .series = &series,
+        .series_count = 1,
+        .show_grid = true,
+        .show_legend = true,
+        .legend_position = AUI_LEGEND_BOTTOM,
+        .animated = true,
+        .animation_duration = 0.5f,
+        .grid_color = 0x333355FF,
+        .axis_color = 0x666688FF,
+        .text_color = 0xCCCCCCFF,
+    };
+
+    AUI_Node *chart = aui_chart_create(ctx, "perf_chart", &chart_config);
+    aui_node_set_anchor_preset(chart, AUI_ANCHOR_FULL_RECT);
+    aui_node_set_offsets(chart, 15, 35, -15, -15);
+    aui_node_add_child(charts_panel, chart);
+
+    /* ========== Rich text demo panel ========== */
+    AUI_Node *richtext_panel = aui_panel_create(ctx, "richtext_panel", "Rich Text Demo");
+    aui_node_set_anchor_preset(richtext_panel, AUI_ANCHOR_CENTER_LEFT);
+    aui_node_set_offsets(richtext_panel, 20, -100, 280, 100);
+
+    AUI_Style rt_style = aui_style_default();
+    rt_style.background = aui_bg_solid(0x252535FF);
+    rt_style.border = aui_border(1.0f, 0x4A4A6AFF);
+    rt_style.corner_radius = aui_corners_uniform(8.0f);
+    rt_style.text_color = 0xFFFFFFFF;
+    aui_node_set_style(richtext_panel, &rt_style);
+    aui_node_add_child(root, richtext_panel);
+
+    /* Create rich text node with BBCode */
+    AUI_Node *rich = aui_richtext_node_create(ctx, "rich_demo",
+        "[b]Welcome[/b] to [color=#FFD700]Agentite[/color]!\n\n"
+        "Supports [i]italic[/i], [u]underline[/u], and [s]strikethrough[/s].\n\n"
+        "[color=#FF6B6B]Red[/color] [color=#4ECDC4]Cyan[/color] [color=#95E1D3]Mint[/color]\n\n"
+        "[wave]Animated wave text![/wave]"
+    );
+    aui_node_set_anchor_preset(rich, AUI_ANCHOR_FULL_RECT);
+    aui_node_set_offsets(rich, 15, 35, -15, -15);
+    aui_node_add_child(richtext_panel, rich);
 
     return root;
 }
@@ -348,6 +435,7 @@ int main(int argc, char *argv[])
 
     /* Demo state */
     bool show_menu = true;
+    bool show_charts = false;
 
     SDL_Log("UI Node demo initialized");
     SDL_Log("  Root node: %s (id=%u)", ui_root->name, ui_root->id);
@@ -427,8 +515,34 @@ int main(int argc, char *argv[])
             }
         }
 
+        if (agentite_input_key_just_pressed(input, SDL_SCANCODE_F3)) {
+            /* Toggle charts panel visibility with animation */
+            AUI_Node *charts = aui_node_find(ui_root, "charts_panel");
+            if (charts) {
+                show_charts = !show_charts;
+                if (show_charts) {
+                    aui_node_set_visible(charts, true);
+                    charts->opacity = 0.0f;  /* Start from invisible */
+                    aui_tween_fade_in(tweens, charts, 0.3f);
+                    aui_tween_slide_in(tweens, charts, AUI_DIR_RIGHT, 0.3f);
+                    aui_chart_restart_animation(aui_node_find(charts, "perf_chart"));
+                } else {
+                    aui_tween_fade_out(tweens, charts, 0.2f);
+                    aui_tween_slide_out(tweens, charts, AUI_DIR_RIGHT, 0.2f);
+                }
+            }
+        }
+
         /* Update tweens */
         aui_tween_manager_update(tweens, dt);
+
+        /* Hide charts panel after fade-out completes */
+        if (!show_charts) {
+            AUI_Node *charts = aui_node_find(ui_root, "charts_panel");
+            if (charts && charts->opacity <= 0.01f) {
+                aui_node_set_visible(charts, false);
+            }
+        }
 
         /* Update the scene tree (processes layout, state, etc.) */
         aui_scene_update(ui, ui_root, dt);
@@ -439,6 +553,18 @@ int main(int argc, char *argv[])
             char fps_text[32];
             snprintf(fps_text, sizeof(fps_text), "FPS: %.0f", 1.0f / dt);
             aui_label_set_text(fps_label, fps_text);
+        }
+
+        /* Update gamepad mode indicator */
+        AUI_Node *gamepad_label = aui_node_find(ui_root, "gamepad_label");
+        if (gamepad_label && gamepad_label->type == AUI_NODE_LABEL) {
+            const char *mode_text = aui_is_gamepad_mode(ui)
+                ? "Mode: Gamepad"
+                : "Mode: Mouse";
+            aui_label_set_text(gamepad_label, mode_text);
+            gamepad_label->label.color = aui_is_gamepad_mode(ui)
+                ? 0x88FF88FF   /* Green for gamepad */
+                : 0x88AAFFFF;  /* Blue for mouse */
         }
 
         /* Begin immediate-mode frame for hybrid rendering */

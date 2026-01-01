@@ -124,6 +124,10 @@ dirs:
 	@mkdir -p $(BUILD_DIR)/examples/strategy
 	@mkdir -p $(BUILD_DIR)/examples/strategy-sim
 	@mkdir -p $(BUILD_DIR)/examples/msdf
+	@mkdir -p $(BUILD_DIR)/examples/charts
+	@mkdir -p $(BUILD_DIR)/examples/richtext
+	@mkdir -p $(BUILD_DIR)/examples/pathfinding
+	@mkdir -p $(BUILD_DIR)/examples/ecs_custom_system
 
 # Link main executable (game template)
 $(BUILD_DIR)/$(EXECUTABLE): $(OBJS) $(FLECS_OBJ) $(TOML_OBJ)
@@ -209,6 +213,26 @@ example-strategy-sim: dirs $(BUILD_DIR)/examples/strategy-sim/main.o $(patsubst 
 example-msdf: dirs $(BUILD_DIR)/examples/msdf/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
 	$(CXX) $(BUILD_DIR)/examples/msdf/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-msdf $(LDFLAGS)
 	./$(BUILD_DIR)/example-msdf
+
+# Build and run charts demo
+example-charts: dirs $(BUILD_DIR)/examples/charts/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/charts/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-charts $(LDFLAGS)
+	./$(BUILD_DIR)/example-charts
+
+# Build and run rich text demo
+example-richtext: dirs $(BUILD_DIR)/examples/richtext/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/richtext/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-richtext $(LDFLAGS)
+	./$(BUILD_DIR)/example-richtext
+
+# Build and run pathfinding demo
+example-pathfinding: dirs $(BUILD_DIR)/examples/pathfinding/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/pathfinding/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-pathfinding $(LDFLAGS)
+	./$(BUILD_DIR)/example-pathfinding
+
+# Build and run ECS custom system demo
+example-ecs: dirs $(BUILD_DIR)/examples/ecs_custom_system/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/ecs_custom_system/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-ecs $(LDFLAGS)
+	./$(BUILD_DIR)/example-ecs
 
 #============================================================================
 # Test targets
@@ -347,10 +371,15 @@ help:
 	@echo "  make example-sprites   - Sprite rendering demo"
 	@echo "  make example-animation - Animation system demo"
 	@echo "  make example-tilemap   - Tilemap rendering demo"
-	@echo "  make example-ui        - UI system demo"
+	@echo "  make example-ui        - UI system demo (immediate-mode)"
+	@echo "  make example-ui-node   - UI node demo (retained-mode)"
 	@echo "  make example-strategy  - Strategy game patterns"
 	@echo "  make example-strategy-sim - Strategy systems demo"
 	@echo "  make example-msdf      - MSDF text rendering demo"
+	@echo "  make example-charts    - Data visualization charts"
+	@echo "  make example-richtext  - BBCode rich text demo"
+	@echo "  make example-pathfinding - A* pathfinding demo"
+	@echo "  make example-ecs       - Custom ECS systems demo"
 	@echo ""
 	@echo "Utilities:"
 	@echo "  make clean        - Remove build files"
@@ -359,4 +388,4 @@ help:
 
 .PHONY: all dirs run run-demo clean install-deps-macos install-deps-linux info help test test-verbose
 .PHONY: check safety format format-check
-.PHONY: example-minimal example-sprites example-animation example-tilemap example-ui example-strategy example-strategy-sim example-msdf
+.PHONY: example-minimal example-sprites example-animation example-tilemap example-ui example-ui-node example-strategy example-strategy-sim example-msdf example-charts example-richtext example-pathfinding example-ecs

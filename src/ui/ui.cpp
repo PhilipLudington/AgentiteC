@@ -606,6 +606,13 @@ bool aui_process_event(AUI_Context *ctx, const SDL_Event *event)
             }
         }
 
+        /* Don't consume function keys (F1-F12) or ESC - let game handle them */
+        if ((event->key.scancode >= SDL_SCANCODE_F1 &&
+             event->key.scancode <= SDL_SCANCODE_F12) ||
+            event->key.scancode == SDL_SCANCODE_ESCAPE) {
+            return false;
+        }
+
         return ctx->focused != AUI_ID_NONE;
 
     case SDL_EVENT_KEY_UP:

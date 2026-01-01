@@ -1,7 +1,13 @@
 /**
  * Agentite Engine - UI Example
  *
- * Demonstrates the immediate-mode UI system.
+ * Demonstrates the immediate-mode UI system including:
+ * - Panels, buttons, checkboxes, sliders
+ * - Dropdowns, listboxes, textboxes
+ * - Spinbox widgets (integer and float)
+ * - Tooltips on hover
+ * - Separator lines
+ * - Gamepad mode detection
  */
 
 #include "agentite/agentite.h"
@@ -64,10 +70,16 @@ int main(int argc, char *argv[]) {
         "Paladin", "Necromancer", "Bard"
     };
 
+    /* Spinbox state */
+    int player_level = 1;
+    float player_speed = 5.0f;
+    int inventory_slots = 20;
+
     /* Panel visibility */
     bool show_settings = true;
     bool show_character = true;
     bool show_debug = false;
+    bool show_new_widgets = true;
 
     while (agentite_is_running(engine)) {
         agentite_begin_frame(engine);
@@ -94,6 +106,8 @@ int main(int argc, char *argv[]) {
             show_character = !show_character;
         if (agentite_input_key_just_pressed(input, SDL_SCANCODE_F3))
             show_debug = !show_debug;
+        if (agentite_input_key_just_pressed(input, SDL_SCANCODE_F4))
+            show_new_widgets = !show_new_widgets;
         if (agentite_input_key_just_pressed(input, SDL_SCANCODE_ESCAPE))
             agentite_quit(engine);
 
@@ -102,7 +116,7 @@ int main(int argc, char *argv[]) {
 
         /* Settings Panel */
         if (show_settings) {
-            if (aui_begin_panel(ui, "Settings", 50, 50, 300, 350,
+            if (aui_begin_panel(ui, "Settings", 50, 50, 300, 400,
                                AUI_PANEL_TITLE_BAR | AUI_PANEL_BORDER)) {
 
                 aui_label(ui, "Audio");
@@ -193,11 +207,59 @@ int main(int argc, char *argv[]) {
             }
         }
 
+        /* New Widgets Panel - demonstrates spinbox, tooltip, separator */
+        if (show_new_widgets) {
+            if (aui_begin_panel(ui, "New Widgets", 730, 220, 280, 300,
+                               AUI_PANEL_TITLE_BAR | AUI_PANEL_BORDER)) {
+
+                aui_label(ui, "Spinbox Widgets");
+                aui_separator(ui);
+
+                /* Integer spinbox for player level */
+                if (aui_spinbox_int(ui, "Level", &player_level, 1, 100, 1)) {
+                    SDL_Log("Player level changed to: %d", player_level);
+                }
+                aui_tooltip(ui, "Set the player's experience level (1-100)");
+
+                /* Float spinbox for movement speed */
+                if (aui_spinbox_float(ui, "Speed", &player_speed, 1.0f, 20.0f, 0.5f)) {
+                    SDL_Log("Player speed changed to: %.1f", player_speed);
+                }
+                aui_tooltip(ui, "Movement speed multiplier");
+
+                /* Integer spinbox for inventory */
+                if (aui_spinbox_int(ui, "Inventory", &inventory_slots, 10, 100, 5)) {
+                    SDL_Log("Inventory slots changed to: %d", inventory_slots);
+                }
+                aui_tooltip(ui, "Maximum inventory slot count");
+
+                aui_spacing(ui, 10);
+                aui_label(ui, "Gamepad Support");
+                aui_separator(ui);
+
+                char mode_text[64];
+                snprintf(mode_text, sizeof(mode_text), "Mode: %s",
+                         aui_is_gamepad_mode(ui) ? "Gamepad" : "Mouse/Keyboard");
+                aui_label(ui, mode_text);
+                aui_tooltip(ui, "Input mode switches automatically");
+
+                aui_spacing(ui, 10);
+
+                if (aui_button(ui, "Test Tooltip")) {
+                    SDL_Log("Button with tooltip clicked!");
+                }
+                aui_tooltip(ui, "Click me! This tooltip shows widget info on hover.");
+
+                aui_end_panel(ui);
+            }
+        }
+
         /* Help panel (always visible) */
-        if (aui_begin_panel(ui, "Controls", 50, 420, 200, 100, AUI_PANEL_BORDER)) {
+        if (aui_begin_panel(ui, "Controls", 50, 470, 200, 120, AUI_PANEL_BORDER)) {
             aui_label(ui, "F1: Toggle Settings");
             aui_label(ui, "F2: Toggle Character");
             aui_label(ui, "F3: Toggle Debug");
+            aui_label(ui, "F4: Toggle New Widgets");
             aui_label(ui, "ESC: Quit");
             aui_end_panel(ui);
         }

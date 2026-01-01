@@ -1,6 +1,6 @@
 # Retained-Mode UI Node System Demo
 
-This example demonstrates Carbon's Godot-inspired hybrid UI system, which provides a retained-mode scene tree on top of the immediate-mode UI.
+This example demonstrates Agentite's Godot-inspired hybrid UI system, which provides a retained-mode scene tree on top of the immediate-mode UI.
 
 ## Features Demonstrated
 
@@ -9,6 +9,9 @@ This example demonstrates Carbon's Godot-inspired hybrid UI system, which provid
 - **Signal System**: Connect callbacks to node events (clicked, value changed, etc.)
 - **Tween Animations**: Fade, slide, scale, and shake animations with easing
 - **Rich Styling**: Gradients, shadows, rounded corners, borders
+- **Chart Widgets**: Line charts with animations and hover tracking
+- **Rich Text**: BBCode-formatted text with animations
+- **Gamepad Navigation**: D-pad focus navigation with automatic mode switching
 
 ## Building
 
@@ -28,6 +31,9 @@ make examples/ui_node
 - **ESC**: Quit
 - **F1**: Toggle main menu with slide animation
 - **F2**: Shake the main menu panel
+- **F3**: Toggle charts panel
+- **D-pad / Arrow keys**: Navigate focusable widgets (in gamepad mode)
+- **A button / Enter**: Activate focused widget
 - **Click buttons**: See signal callbacks in console
 
 ## Key Concepts

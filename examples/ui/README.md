@@ -10,6 +10,9 @@ Demonstrates the immediate-mode UI system.
 - Text input (textbox)
 - Labels and separators
 - Progress bars
+- Spinbox widgets (integer and float)
+- Tooltips on hover
+- Gamepad mode detection
 - UI event handling
 
 ## Running
@@ -25,6 +28,7 @@ make example-ui
 | F1 | Toggle Settings panel |
 | F2 | Toggle Character panel |
 | F3 | Toggle Debug panel |
+| F4 | Toggle New Widgets panel |
 | Escape | Quit |
 
 ## Key Patterns
@@ -89,6 +93,17 @@ aui_dropdown(ui, "Quality", &selection, options, 3);
 // Text input
 char buffer[64] = "Default";
 aui_textbox(ui, "Name", buffer, sizeof(buffer));
+
+// Spinbox (integer)
+int level = 1;
+aui_spinbox_int(ui, "Level", &level, 1, 100, 1);
+
+// Spinbox (float)
+float speed = 5.0f;
+aui_spinbox_float(ui, "Speed", &speed, 1.0f, 20.0f, 0.5f);
+
+// Tooltip (attach to previous widget)
+aui_tooltip(ui, "This is a helpful tooltip");
 
 // Listbox
 int selected = 0;

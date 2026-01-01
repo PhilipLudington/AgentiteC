@@ -10,6 +10,10 @@
 #include <math.h>
 #include <ctype.h>
 
+/* Forward declarations */
+extern float aui_draw_text_scaled(AUI_Context *ctx, const char *text, float x, float y,
+                                   float scale, uint32_t color);
+
 /* ============================================================================
  * Constants
  * ============================================================================ */
@@ -745,34 +749,6 @@ void aui_richtext_draw_ex(AUI_Context *ctx, AUI_RichText *rt, float x, float y,
             lx += rt->total_width - line->width;
         }
 
-        /* Get active spans for this line */
-        uint32_t color = cfg.default_color;
-        bool bold = false, italic = false, underline = false, strikethrough = false;
-        bool wave = false, shake = false, rainbow = false;
-
-        for (int si = 0; si < rt->span_count; si++) {
-            AUI_RichSpan *span = &rt->spans[si];
-            if (span->end <= line->start_char) continue;
-            if (span->start >= line->end_char) break;
-
-            /* Apply span effects */
-            switch (span->type) {
-                case AUI_RTAG_BOLD: bold = true; break;
-                case AUI_RTAG_ITALIC: italic = true; break;
-                case AUI_RTAG_UNDERLINE: underline = true; break;
-                case AUI_RTAG_STRIKETHROUGH: strikethrough = true; break;
-                case AUI_RTAG_COLOR: color = span->color; break;
-                case AUI_RTAG_WAVE: wave = true; break;
-                case AUI_RTAG_SHAKE: shake = true; break;
-                case AUI_RTAG_RAINBOW: rainbow = true; break;
-                case AUI_RTAG_URL:
-                    if (cfg.meta_underlines) underline = true;
-                    color = ctx->theme.accent;
-                    break;
-                default: break;
-            }
-        }
-
         /* Draw characters - measure each for proper positioning */
         float cx = lx;
 
@@ -780,23 +756,56 @@ void aui_richtext_draw_ex(AUI_Context *ctx, AUI_RichText *rt, float x, float y,
             char ch = rt->plain[ci];
             float cy = ly;
 
-            /* Measure this character's width */
+            /* Check per-character span styles */
+            bool char_bold = false;
+            bool char_underline = false, char_strike = false;
+            bool char_wave = false, char_shake = false, char_rainbow = false, char_fade = false;
+            uint32_t char_color = cfg.default_color;
+            float char_size = cfg.default_size;
+
+            for (int si = 0; si < rt->span_count; si++) {
+                AUI_RichSpan *span = &rt->spans[si];
+                if (ci < span->start || ci >= span->end) continue;
+
+                switch (span->type) {
+                    case AUI_RTAG_BOLD: char_bold = true; break;
+                    case AUI_RTAG_ITALIC: /* Requires italic font variant */ break;
+                    case AUI_RTAG_UNDERLINE: char_underline = true; break;
+                    case AUI_RTAG_STRIKETHROUGH: char_strike = true; break;
+                    case AUI_RTAG_COLOR: char_color = span->color; break;
+                    case AUI_RTAG_SIZE: char_size = span->size; break;
+                    case AUI_RTAG_WAVE: char_wave = true; break;
+                    case AUI_RTAG_SHAKE: char_shake = true; break;
+                    case AUI_RTAG_RAINBOW: char_rainbow = true; break;
+                    case AUI_RTAG_FADE: char_fade = true; break;
+                    case AUI_RTAG_URL:
+                        if (cfg.meta_underlines) char_underline = true;
+                        char_color = ctx->theme.accent;
+                        break;
+                    default: break;
+                }
+            }
+
+            /* Calculate scale based on size */
+            float scale = char_size / cfg.default_size;
+
+            /* Measure this character's width (scaled) */
             char str[2] = {ch, '\0'};
-            float char_w = aui_text_width(ctx, str);
+            float char_w = aui_text_width(ctx, str) * scale;
 
             /* Apply animations */
             float draw_x = cx;
             float draw_y = cy;
-            if (wave) {
+            if (char_wave) {
                 draw_y += sinf(rt->anim_time * 5 + ci * 0.5f) * 3;
             }
-            if (shake) {
+            if (char_shake) {
                 draw_x += ((rand() % 100) / 100.0f - 0.5f) * 2;
                 draw_y += ((rand() % 100) / 100.0f - 0.5f) * 2;
             }
 
-            uint32_t draw_color = color;
-            if (rainbow) {
+            uint32_t draw_color = char_color;
+            if (char_rainbow) {
                 float hue = fmodf(rt->anim_time + ci * 0.1f, 1.0f);
                 /* HSV to RGB conversion - simplified */
                 int hi = (int)(hue * 6) % 6;
@@ -816,18 +825,33 @@ void aui_richtext_draw_ex(AUI_Context *ctx, AUI_RichText *rt, float x, float y,
                 }
                 draw_color = 0xFF000000 | (b << 16) | (g << 8) | r;
             }
+            if (char_fade) {
+                /* Fade alpha between 0.3 and 1.0 using sine wave */
+                float fade_t = (sinf(rt->anim_time * 2.0f + ci * 0.05f) + 1.0f) * 0.5f;
+                uint8_t alpha = (uint8_t)(76 + fade_t * 179);  /* 0.3*255=76, 0.7*255=179 */
+                draw_color = (draw_color & 0x00FFFFFF) | ((uint32_t)alpha << 24);
+            }
 
-            /* Draw character */
-            aui_draw_text(ctx, str, draw_x, draw_y, draw_color);
+            /* Draw character with style effects */
+            /* Note: True italic requires an italic font variant. */
+            /* Faux-bold works by overdrawing with horizontal offset. */
+            float scaled_height = font_height * scale;
+            if (char_bold) {
+                aui_draw_text_scaled(ctx, str, draw_x + 0.5f * scale, draw_y, scale, draw_color);
+                aui_draw_text_scaled(ctx, str, draw_x + 1.0f * scale, draw_y, scale, draw_color);
+            }
+            aui_draw_text_scaled(ctx, str, draw_x, draw_y, scale, draw_color);
 
             /* Draw underline */
-            if (underline) {
-                aui_draw_rect(ctx, cx, cy + font_height + 2, char_w, 1, draw_color);
+            if (char_underline) {
+                float underline_w = char_bold ? char_w + 1 : char_w;
+                aui_draw_rect(ctx, cx, cy + scaled_height + 2, underline_w, 1, draw_color);
             }
 
             /* Draw strikethrough */
-            if (strikethrough) {
-                aui_draw_rect(ctx, cx, cy + font_height / 2, char_w, 1, draw_color);
+            if (char_strike) {
+                float strike_w = char_bold ? char_w + 1 : char_w;
+                aui_draw_rect(ctx, cx, cy + scaled_height / 2, strike_w, 1, draw_color);
             }
 
             cx += char_w;

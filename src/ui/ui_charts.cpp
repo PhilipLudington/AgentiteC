@@ -122,11 +122,12 @@ static void aui_chart_compute_bounds(AUI_Context *ctx, AUI_Rect bounds,
         state->legend_area.w = legend_size - 10;
         state->legend_area.h = state->plot_area.h;
     } else if (config->legend_position == AUI_LEGEND_BOTTOM) {
+        float x_axis_space = (config->x_labels && config->x_label_count > 0) ? 25 : 0;
         state->plot_area.h -= legend_size;
         state->legend_area.x = state->plot_area.x;
-        state->legend_area.y = state->plot_area.y + state->plot_area.h + 10;
+        state->legend_area.y = state->plot_area.y + state->plot_area.h + x_axis_space + 10;
         state->legend_area.w = state->plot_area.w;
-        state->legend_area.h = legend_size - 10;
+        state->legend_area.h = legend_size - 10 - x_axis_space;
     }
     (void)ctx;
 }
@@ -475,20 +476,19 @@ static void aui_chart_draw_pie_internal(AUI_Context *ctx, AUI_ChartState *state,
             float x2 = cx + offset_x + cosf(a2) * radius;
             float y2 = cy + offset_y + sinf(a2) * radius;
 
-            /* Draw triangle from center to arc edge */
+            /* Draw filled triangle/quad from center to arc edge */
             if (inner_radius > 0) {
-                /* Donut - draw quad */
+                /* Donut - draw quad as two triangles */
                 float ix1 = cx + offset_x + cosf(a1) * inner_radius;
                 float iy1 = cy + offset_y + sinf(a1) * inner_radius;
                 float ix2 = cx + offset_x + cosf(a2) * inner_radius;
                 float iy2 = cy + offset_y + sinf(a2) * inner_radius;
 
-                aui_draw_line(ctx, x1, y1, x2, y2, color, 1);
-                aui_draw_line(ctx, ix1, iy1, ix2, iy2, color, 1);
+                aui_draw_triangle(ctx, x1, y1, x2, y2, ix1, iy1, color);
+                aui_draw_triangle(ctx, x2, y2, ix2, iy2, ix1, iy1, color);
             } else {
-                /* Pie - fill from center */
-                aui_draw_line(ctx, cx + offset_x, cy + offset_y, x1, y1, color, 1);
-                aui_draw_line(ctx, x1, y1, x2, y2, color, 1);
+                /* Pie - filled triangle from center */
+                aui_draw_triangle(ctx, cx + offset_x, cy + offset_y, x1, y1, x2, y2, color);
             }
         }
 
@@ -522,6 +522,124 @@ void aui_draw_chart(AUI_Context *ctx, AUI_Rect bounds,
     aui_draw_chart_ex(ctx, bounds, config, &state);
 }
 
+/* Helper to detect hover on data points */
+static void aui_chart_detect_hover(AUI_Context *ctx, AUI_ChartState *state,
+                                    const AUI_ChartConfig *config)
+{
+    if (!config->show_tooltips) return;
+
+    float mx = ctx->input.mouse_x;
+    float my = ctx->input.mouse_y;
+    AUI_Rect plot = state->plot_area;
+
+    state->hovered_series = -1;
+    state->hovered_index = -1;
+    state->tooltip_visible = false;
+    state->hover_x = mx;
+    state->hover_y = my;
+
+    /* Check if mouse is in plot area */
+    if (mx < plot.x || mx > plot.x + plot.w ||
+        my < plot.y || my > plot.y + plot.h) {
+        return;
+    }
+
+    float hover_radius = 15.0f;  /* Pixels to detect hover */
+
+    /* Line/Area charts - check points */
+    if (config->type == AUI_CHART_LINE || config->type == AUI_CHART_AREA) {
+        for (int s = 0; s < config->series_count; s++) {
+            const AUI_ChartSeries *series = &config->series[s];
+            int n = series->value_count;
+            if (n < 1) continue;
+
+            float slot_w = plot.w / (n > 1 ? n - 1 : 1);
+
+            for (int i = 0; i < n; i++) {
+                float px = plot.x + slot_w * i;
+                float py = plot.y + plot.h - (series->values[i] - state->y_offset) * state->y_scale;
+
+                float dx = mx - px;
+                float dy = my - py;
+                if (dx * dx + dy * dy < hover_radius * hover_radius) {
+                    state->hovered_series = s;
+                    state->hovered_index = i;
+                    state->tooltip_visible = true;
+                    return;
+                }
+            }
+        }
+    }
+
+    /* Bar charts - check bar rectangles */
+    if (config->type == AUI_CHART_BAR || config->type == AUI_CHART_STACKED_BAR) {
+        int categories = config->series_count > 0 ? config->series[0].value_count : 0;
+        if (categories < 1) return;
+
+        float slot_w = plot.w / categories;
+        float bar_w = slot_w * (config->bar_width > 0 ? config->bar_width : 0.8f);
+        float group_w = bar_w / config->series_count;
+
+        for (int i = 0; i < categories; i++) {
+            for (int s = 0; s < config->series_count; s++) {
+                const AUI_ChartSeries *series = &config->series[s];
+                if (i >= series->value_count) continue;
+
+                float bx = plot.x + slot_w * i + (slot_w - bar_w) / 2 + group_w * s;
+                float by = plot.y + plot.h - (series->values[i] - state->y_offset) * state->y_scale;
+                float bh = (series->values[i] - state->y_offset) * state->y_scale;
+
+                if (mx >= bx && mx <= bx + group_w && my >= by && my <= by + bh) {
+                    state->hovered_series = s;
+                    state->hovered_index = i;
+                    state->tooltip_visible = true;
+                    return;
+                }
+            }
+        }
+    }
+
+    /* Pie/Donut charts - check angle and radius */
+    if (config->type == AUI_CHART_PIE || config->type == AUI_CHART_DONUT) {
+        float cx = plot.x + plot.w / 2;
+        float cy = plot.y + plot.h / 2;
+        float radius = fminf(plot.w, plot.h) / 2 - 10;
+        float inner_radius = config->donut_inner_radius * radius;
+
+        float dx = mx - cx;
+        float dy = my - cy;
+        float dist = sqrtf(dx * dx + dy * dy);
+
+        if (dist >= inner_radius && dist <= radius) {
+            float angle = atan2f(dy, dx);
+            if (angle < 0) angle += 2 * (float)M_PI;
+
+            float total = 0;
+            for (int i = 0; i < config->slice_count; i++) {
+                total += config->slices[i].value;
+            }
+
+            float start = config->start_angle * (float)M_PI / 180.0f;
+            for (int i = 0; i < config->slice_count; i++) {
+                float sweep = (config->slices[i].value / total) * 2 * (float)M_PI;
+                float end = start + sweep;
+
+                /* Normalize angle for comparison */
+                float check_angle = angle;
+                if (check_angle < start) check_angle += 2 * (float)M_PI;
+
+                if (check_angle >= start && check_angle < end) {
+                    state->hovered_series = i;
+                    state->hovered_index = 0;
+                    state->tooltip_visible = true;
+                    return;
+                }
+                start = end;
+            }
+        }
+    }
+}
+
 void aui_draw_chart_ex(AUI_Context *ctx, AUI_Rect bounds,
                         const AUI_ChartConfig *config,
                         AUI_ChartState *state)
@@ -536,6 +654,9 @@ void aui_draw_chart_ex(AUI_Context *ctx, AUI_Rect bounds,
 
     /* Compute layout */
     aui_chart_compute_bounds(ctx, bounds, config, state);
+
+    /* Detect hover */
+    aui_chart_detect_hover(ctx, state, config);
 
     /* Draw based on type */
     switch (config->type) {
@@ -583,7 +704,64 @@ void aui_draw_chart_ex(AUI_Context *ctx, AUI_Rect bounds,
 
     /* Draw tooltip */
     if (state->tooltip_visible && state->hovered_series >= 0) {
-        /* TODO: Draw tooltip at hover position */
+        char tooltip_text[128];
+        float value = 0;
+        const char *label = NULL;
+
+        /* Get value and label based on chart type */
+        if (config->type == AUI_CHART_PIE || config->type == AUI_CHART_DONUT) {
+            if (state->hovered_series < config->slice_count) {
+                const AUI_PieSlice *slice = &config->slices[state->hovered_series];
+                value = slice->value;
+                label = slice->label;
+
+                float total = 0;
+                for (int i = 0; i < config->slice_count; i++) {
+                    total += config->slices[i].value;
+                }
+                float percent = (value / total) * 100;
+                snprintf(tooltip_text, sizeof(tooltip_text), "%s: %.1f (%.1f%%)",
+                         label ? label : "Value", value, percent);
+            }
+        } else {
+            if (state->hovered_series < config->series_count) {
+                const AUI_ChartSeries *series = &config->series[state->hovered_series];
+                if (state->hovered_index < series->value_count) {
+                    value = series->values[state->hovered_index];
+                    label = series->label;
+
+                    /* Include x-axis label if available */
+                    if (config->x_labels && state->hovered_index < config->x_label_count) {
+                        snprintf(tooltip_text, sizeof(tooltip_text), "%s\n%s: %.1f",
+                                 config->x_labels[state->hovered_index],
+                                 label ? label : "Value", value);
+                    } else {
+                        snprintf(tooltip_text, sizeof(tooltip_text), "%s: %.1f",
+                                 label ? label : "Value", value);
+                    }
+                }
+            }
+        }
+
+        /* Draw tooltip box */
+        float tw = aui_text_width(ctx, tooltip_text) + 16;
+        float th = 24;
+        float tx = state->hover_x + 10;
+        float ty = state->hover_y - th - 5;
+
+        /* Keep tooltip on screen */
+        if (tx + tw > bounds.x + bounds.w) tx = state->hover_x - tw - 10;
+        if (ty < bounds.y) ty = state->hover_y + 10;
+
+        /* Background */
+        aui_draw_rect(ctx, tx, ty, tw, th, 0xE0222233);
+        /* Border */
+        aui_draw_line(ctx, tx, ty, tx + tw, ty, 0xFF444466, 1);
+        aui_draw_line(ctx, tx, ty + th, tx + tw, ty + th, 0xFF444466, 1);
+        aui_draw_line(ctx, tx, ty, tx, ty + th, 0xFF444466, 1);
+        aui_draw_line(ctx, tx + tw, ty, tx + tw, ty + th, 0xFF444466, 1);
+        /* Text */
+        aui_draw_text(ctx, tooltip_text, tx + 8, ty + 5, 0xFFFFFFFF);
     }
 }
 
