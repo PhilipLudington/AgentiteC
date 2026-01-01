@@ -1097,3 +1097,164 @@ void aui_dialogs_render(AUI_Context *ctx)
         aui_dialog_manager_render(dm, ctx);
     }
 }
+
+/* ============================================================================
+ * File Dialogs (SDL3 native dialogs)
+ * ============================================================================ */
+
+/**
+ * Internal callback data for file dialog.
+ */
+typedef struct FileDialogCallbackData {
+    AUI_FileDialogCallback callback;
+    void *userdata;
+} FileDialogCallbackData;
+
+/**
+ * SDL3 file dialog callback adapter.
+ * Converts SDL's multi-file format to our single-file callback.
+ */
+static void sdl_file_dialog_callback(void *userdata, const char * const *filelist, int filter)
+{
+    (void)filter;
+    FileDialogCallbackData *data = (FileDialogCallbackData *)userdata;
+    if (!data) return;
+
+    const char *path = NULL;
+    if (filelist && filelist[0]) {
+        path = filelist[0];
+    }
+
+    if (data->callback) {
+        data->callback(path, data->userdata);
+    }
+
+    free(data);
+}
+
+/**
+ * Convert AUI_FileFilter array to SDL_DialogFileFilter array.
+ * Returns allocated array that must be freed by caller.
+ */
+static SDL_DialogFileFilter *convert_filters(const AUI_FileFilter *filters, int count)
+{
+    if (!filters || count <= 0) return NULL;
+
+    SDL_DialogFileFilter *sdl_filters = (SDL_DialogFileFilter *)calloc(
+        (size_t)count, sizeof(SDL_DialogFileFilter));
+    if (!sdl_filters) return NULL;
+
+    for (int i = 0; i < count; i++) {
+        sdl_filters[i].name = filters[i].name;
+        sdl_filters[i].pattern = filters[i].pattern;
+    }
+
+    return sdl_filters;
+}
+
+void aui_file_dialog_open(
+    AUI_Context *ctx,
+    const char *title,
+    const char *default_path,
+    const AUI_FileFilter *filters,
+    int filter_count,
+    AUI_FileDialogCallback callback,
+    void *userdata)
+{
+    (void)title;  /* SDL3 doesn't support custom title for file dialogs */
+
+    if (!ctx || !callback) return;
+
+    /* Allocate callback data */
+    FileDialogCallbackData *data = (FileDialogCallbackData *)malloc(sizeof(FileDialogCallbackData));
+    if (!data) {
+        callback(NULL, userdata);
+        return;
+    }
+    data->callback = callback;
+    data->userdata = userdata;
+
+    /* Convert filters */
+    SDL_DialogFileFilter *sdl_filters = convert_filters(filters, filter_count);
+
+    /* Show native dialog (async - callback will be called later) */
+    SDL_ShowOpenFileDialog(
+        sdl_file_dialog_callback,
+        data,
+        ctx->window,
+        sdl_filters,
+        filter_count,
+        default_path,
+        false  /* allow_many = false for single file */
+    );
+
+    free(sdl_filters);
+}
+
+void aui_file_dialog_save(
+    AUI_Context *ctx,
+    const char *title,
+    const char *default_path,
+    const AUI_FileFilter *filters,
+    int filter_count,
+    AUI_FileDialogCallback callback,
+    void *userdata)
+{
+    (void)title;  /* SDL3 doesn't support custom title for file dialogs */
+
+    if (!ctx || !callback) return;
+
+    /* Allocate callback data */
+    FileDialogCallbackData *data = (FileDialogCallbackData *)malloc(sizeof(FileDialogCallbackData));
+    if (!data) {
+        callback(NULL, userdata);
+        return;
+    }
+    data->callback = callback;
+    data->userdata = userdata;
+
+    /* Convert filters */
+    SDL_DialogFileFilter *sdl_filters = convert_filters(filters, filter_count);
+
+    /* Show native dialog */
+    SDL_ShowSaveFileDialog(
+        sdl_file_dialog_callback,
+        data,
+        ctx->window,
+        sdl_filters,
+        filter_count,
+        default_path
+    );
+
+    free(sdl_filters);
+}
+
+void aui_file_dialog_folder(
+    AUI_Context *ctx,
+    const char *title,
+    const char *default_path,
+    AUI_FileDialogCallback callback,
+    void *userdata)
+{
+    (void)title;  /* SDL3 doesn't support custom title for folder dialogs */
+
+    if (!ctx || !callback) return;
+
+    /* Allocate callback data */
+    FileDialogCallbackData *data = (FileDialogCallbackData *)malloc(sizeof(FileDialogCallbackData));
+    if (!data) {
+        callback(NULL, userdata);
+        return;
+    }
+    data->callback = callback;
+    data->userdata = userdata;
+
+    /* Show native folder dialog */
+    SDL_ShowOpenFolderDialog(
+        sdl_file_dialog_callback,
+        data,
+        ctx->window,
+        default_path,
+        false  /* allow_many = false for single folder */
+    );
+}

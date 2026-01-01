@@ -1683,7 +1683,8 @@ bool aui_scene_process_event(AUI_Context *ctx, AUI_Node *root, const SDL_Event *
             ctx->input.keys_pressed[event->key.scancode] = true;
         }
         ctx->input.shift = (event->key.mod & SDL_KMOD_SHIFT) != 0;
-        ctx->input.ctrl = (event->key.mod & SDL_KMOD_CTRL) != 0;
+        /* Treat Cmd (GUI) as Ctrl for shortcuts on macOS */
+        ctx->input.ctrl = (event->key.mod & (SDL_KMOD_CTRL | SDL_KMOD_GUI)) != 0;
         ctx->input.alt = (event->key.mod & SDL_KMOD_ALT) != 0;
     } else if (event->type == SDL_EVENT_KEY_UP) {
         if (event->key.scancode < 512) {
@@ -2249,8 +2250,8 @@ bool aui_scene_process_event(AUI_Context *ctx, AUI_Node *root, const SDL_Event *
     if (event->type == SDL_EVENT_KEY_DOWN) {
         bool textbox_focused = s_focused_node && s_focused_node->type == AUI_NODE_TEXTBOX;
 
-        /* Allow shortcuts with Ctrl/Alt modifiers even when textbox focused */
-        bool has_modifier = (event->key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT)) != 0;
+        /* Allow shortcuts with Ctrl/Cmd/Alt modifiers even when textbox focused */
+        bool has_modifier = (event->key.mod & (SDL_KMOD_CTRL | SDL_KMOD_GUI | SDL_KMOD_ALT)) != 0;
 
         if (!textbox_focused || has_modifier) {
             if (aui_shortcuts_process(ctx)) {

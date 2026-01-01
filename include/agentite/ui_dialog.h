@@ -138,27 +138,33 @@ typedef struct AUI_InputDialogConfig {
 } AUI_InputDialogConfig;
 
 /* ============================================================================
- * File Dialog (placeholder for future implementation)
+ * File Dialog
  * ============================================================================ */
 
-typedef enum AUI_FileDialogType {
-    AUI_FILE_DIALOG_OPEN,
-    AUI_FILE_DIALOG_SAVE,
-    AUI_FILE_DIALOG_SELECT_FOLDER,
-} AUI_FileDialogType;
+/**
+ * File dialog filter.
+ * name: Display name (e.g., "Scene Files")
+ * pattern: File pattern (e.g., "*.scene")
+ */
+typedef struct AUI_FileFilter {
+    const char *name;
+    const char *pattern;
+} AUI_FileFilter;
 
-typedef struct AUI_FileDialogConfig {
-    AUI_FileDialogType type;
-    const char *title;
-    const char *default_path;
-    const char **filters;      /* e.g., {"*.png", "*.jpg"} */
-    int filter_count;
-    const char *filter_description;
-    bool allow_multiple;
+/**
+ * Callback for file dialog result.
+ * path: Selected file path, or NULL if canceled
+ * userdata: User-provided context
+ */
+typedef void (*AUI_FileDialogCallback)(const char *path, void *userdata);
 
-    void (*on_result)(bool success, const char **paths, int count, void *userdata);
-    void *userdata;
-} AUI_FileDialogConfig;
+/**
+ * Callback for multi-file dialog result.
+ * paths: Array of selected file paths, or NULL if canceled
+ * count: Number of selected files
+ * userdata: User-provided context
+ */
+typedef void (*AUI_FileDialogMultiCallback)(const char **paths, int count, void *userdata);
 
 /* ============================================================================
  * Context Menu Item
@@ -256,6 +262,78 @@ AUI_Node *aui_dialog_create(AUI_Context *ctx, const AUI_DialogConfig *config);
 
 /* Close a dialog programmatically */
 void aui_dialog_close(AUI_Node *dialog, AUI_DialogResult result);
+
+/* ============================================================================
+ * File Dialogs (uses native OS dialogs via SDL3)
+ * ============================================================================ */
+
+/**
+ * Show a native file open dialog.
+ *
+ * This is an async operation - the result is delivered via callback.
+ * The callback receives NULL if the user canceled.
+ *
+ * @param ctx UI context
+ * @param title Dialog title (or NULL for default)
+ * @param default_path Starting directory/file (or NULL for current)
+ * @param filters File type filters (or NULL for all files)
+ * @param filter_count Number of filters
+ * @param callback Function called with result
+ * @param userdata User-provided context passed to callback
+ */
+void aui_file_dialog_open(
+    AUI_Context *ctx,
+    const char *title,
+    const char *default_path,
+    const AUI_FileFilter *filters,
+    int filter_count,
+    AUI_FileDialogCallback callback,
+    void *userdata
+);
+
+/**
+ * Show a native file save dialog.
+ *
+ * This is an async operation - the result is delivered via callback.
+ * The callback receives NULL if the user canceled.
+ *
+ * @param ctx UI context
+ * @param title Dialog title (or NULL for default)
+ * @param default_path Starting directory/file (or NULL for current)
+ * @param filters File type filters (or NULL for all files)
+ * @param filter_count Number of filters
+ * @param callback Function called with result
+ * @param userdata User-provided context passed to callback
+ */
+void aui_file_dialog_save(
+    AUI_Context *ctx,
+    const char *title,
+    const char *default_path,
+    const AUI_FileFilter *filters,
+    int filter_count,
+    AUI_FileDialogCallback callback,
+    void *userdata
+);
+
+/**
+ * Show a native folder select dialog.
+ *
+ * This is an async operation - the result is delivered via callback.
+ * The callback receives NULL if the user canceled.
+ *
+ * @param ctx UI context
+ * @param title Dialog title (or NULL for default)
+ * @param default_path Starting directory (or NULL for current)
+ * @param callback Function called with result
+ * @param userdata User-provided context passed to callback
+ */
+void aui_file_dialog_folder(
+    AUI_Context *ctx,
+    const char *title,
+    const char *default_path,
+    AUI_FileDialogCallback callback,
+    void *userdata
+);
 
 /* ============================================================================
  * Context Menus
