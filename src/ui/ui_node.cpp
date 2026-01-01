@@ -1231,6 +1231,7 @@ static bool aui_node_is_layout_container(AUI_Node *node)
         case AUI_NODE_VBOX:
         case AUI_NODE_HBOX:
         case AUI_NODE_GRID:
+        case AUI_NODE_CENTER:
             return true;
         default:
             return false;
@@ -1254,6 +1255,33 @@ static void aui_node_layout_children(AUI_Context *ctx, AUI_Node *node)
         case AUI_NODE_GRID:
             /* TODO: Implement grid layout */
             break;
+
+        case AUI_NODE_CENTER:
+            {
+                /* Center single child within this container */
+                AUI_Node *child = node->first_child;
+                if (!child || !child->visible) break;
+
+                /* Calculate child's minimum size */
+                float child_w = child->custom_min_size_x > 0 ? child->custom_min_size_x :
+                                child->min_size_x > 0 ? child->min_size_x : 100.0f;
+                float child_h = child->custom_min_size_y > 0 ? child->custom_min_size_y :
+                                child->min_size_y > 0 ? child->min_size_y : 100.0f;
+
+                /* Center the child */
+                float x = node->global_rect.x + (node->global_rect.w - child_w) * 0.5f;
+                float y = node->global_rect.y + (node->global_rect.h - child_h) * 0.5f;
+
+                child->rect.x = x - node->global_rect.x;
+                child->rect.y = y - node->global_rect.y;
+                child->rect.w = child_w;
+                child->rect.h = child_h;
+                child->global_rect.x = x;
+                child->global_rect.y = y;
+                child->global_rect.w = child_w;
+                child->global_rect.h = child_h;
+            }
+            return;
 
         case AUI_NODE_PANEL:
             {
@@ -1459,6 +1487,23 @@ void aui_scene_update(AUI_Context *ctx, AUI_Node *root, float delta_time)
     for (AUI_Node *child = root->first_child; child; child = child->next_sibling) {
         aui_scene_update(ctx, child, delta_time);
     }
+
+    /* Update tooltip hover time for retained-mode nodes */
+    if (ctx->hovered_node && ctx->hovered_node->tooltip_text[0] != '\0') {
+        ctx->tooltip_hover_time += delta_time;
+
+        /* Show tooltip after delay */
+        float delay = ctx->hovered_node->tooltip_delay > 0 ?
+                      ctx->hovered_node->tooltip_delay : 0.5f;
+        if (ctx->tooltip_hover_time >= delay && !ctx->pending_tooltip_active) {
+            strncpy(ctx->pending_tooltip, ctx->hovered_node->tooltip_text,
+                    sizeof(ctx->pending_tooltip) - 1);
+            ctx->pending_tooltip[sizeof(ctx->pending_tooltip) - 1] = '\0';
+            ctx->pending_tooltip_active = true;
+            ctx->pending_tooltip_x = ctx->input.mouse_x;
+            ctx->pending_tooltip_y = ctx->input.mouse_y;
+        }
+    }
 }
 
 bool aui_scene_process_event(AUI_Context *ctx, AUI_Node *root, const SDL_Event *event)
@@ -1490,6 +1535,11 @@ bool aui_scene_process_event(AUI_Context *ctx, AUI_Node *root, const SDL_Event *
                 aui_node_emit_simple(hit, AUI_SIGNAL_MOUSE_ENTERED);
             }
             s_last_hovered = hit;
+
+            /* Update context for tooltip tracking */
+            ctx->hovered_node = hit;
+            ctx->tooltip_hover_time = 0;
+            ctx->pending_tooltip_active = false;
         }
 
         /* Track which node is currently pressed (must be outside block scope) */
@@ -2438,6 +2488,86 @@ static void aui_node_render_recursive(AUI_Context *ctx, AUI_Node *node, float in
             }
             break;
 
+        case AUI_NODE_TEXTURE_RECT:
+            {
+                if (!node->texture_rect.texture) break;
+
+                float x = node->global_rect.x;
+                float y = node->global_rect.y;
+                float w = node->global_rect.w;
+                float h = node->global_rect.h;
+
+                /* Source region */
+                float src_x = node->texture_rect.src_x;
+                float src_y = node->texture_rect.src_y;
+                float src_w = node->texture_rect.src_w;
+                float src_h = node->texture_rect.src_h;
+
+                /* Maintain aspect ratio if not stretching */
+                if (!node->texture_rect.stretch && src_w > 0 && src_h > 0) {
+                    float src_aspect = src_w / src_h;
+                    float dst_aspect = w / h;
+                    if (src_aspect > dst_aspect) {
+                        float new_h = w / src_aspect;
+                        y += (h - new_h) * 0.5f;
+                        h = new_h;
+                    } else {
+                        float new_w = h * src_aspect;
+                        x += (w - new_w) * 0.5f;
+                        w = new_w;
+                    }
+                }
+
+                uint32_t tint = aui_apply_opacity(node->texture_rect.tint, effective_opacity);
+                aui_draw_textured_rect(ctx, node->texture_rect.texture,
+                                       x, y, w, h,
+                                       src_x, src_y, src_w, src_h,
+                                       tint,
+                                       node->texture_rect.flip_h,
+                                       node->texture_rect.flip_v);
+            }
+            break;
+
+        case AUI_NODE_ICON:
+            {
+                if (!node->icon.texture) break;
+
+                float size = node->icon.size > 0 ? node->icon.size : node->icon.icon_w;
+                float x = node->global_rect.x + (node->global_rect.w - size) * 0.5f;
+                float y = node->global_rect.y + (node->global_rect.h - size) * 0.5f;
+
+                uint32_t color = aui_apply_opacity(node->icon.color, effective_opacity);
+                aui_draw_textured_rect(ctx, node->icon.texture,
+                                       x, y, size, size,
+                                       node->icon.icon_x, node->icon.icon_y,
+                                       node->icon.icon_w, node->icon.icon_h,
+                                       color, false, false);
+            }
+            break;
+
+        case AUI_NODE_SEPARATOR:
+            {
+                uint32_t color = node->separator.color;
+                if (color == 0) {
+                    color = ctx->theme.border;
+                }
+                color = aui_apply_opacity(color, effective_opacity);
+
+                float thickness = node->separator.thickness > 0 ?
+                                  node->separator.thickness : 1.0f;
+
+                if (node->separator.vertical) {
+                    float x = node->global_rect.x + (node->global_rect.w - thickness) * 0.5f;
+                    aui_draw_rect(ctx, x, node->global_rect.y,
+                                  thickness, node->global_rect.h, color);
+                } else {
+                    float y = node->global_rect.y + (node->global_rect.h - thickness) * 0.5f;
+                    aui_draw_rect(ctx, node->global_rect.x, y,
+                                  node->global_rect.w, thickness, color);
+                }
+            }
+            break;
+
         default:
             break;
     }
@@ -2542,6 +2672,11 @@ AUI_Node *aui_grid_create(AUI_Context *ctx, const char *name, int columns)
 AUI_Node *aui_margin_create(AUI_Context *ctx, const char *name)
 {
     return aui_node_create(ctx, AUI_NODE_MARGIN, name);
+}
+
+AUI_Node *aui_center_create(AUI_Context *ctx, const char *name)
+{
+    return aui_node_create(ctx, AUI_NODE_CENTER, name);
 }
 
 AUI_Node *aui_scroll_create(AUI_Context *ctx, const char *name)
@@ -2985,6 +3120,143 @@ AUI_Node *aui_tree_create(AUI_Context *ctx, const char *name)
 {
     return aui_node_create(ctx, AUI_NODE_TREE, name);
 }
+
+/* ============================================================================
+ * Texture Rect Widget Functions
+ * ============================================================================ */
+
+AUI_Node *aui_texture_rect_create(AUI_Context *ctx, const char *name,
+                                   SDL_GPUTexture *texture)
+{
+    AUI_Node *node = aui_node_create(ctx, AUI_NODE_TEXTURE_RECT, name);
+    if (node) {
+        node->texture_rect.texture = texture;
+        node->texture_rect.src_x = 0;
+        node->texture_rect.src_y = 0;
+        node->texture_rect.src_w = 0;  /* 0 = use full texture */
+        node->texture_rect.src_h = 0;
+        node->texture_rect.tint = 0xFFFFFFFF;  /* No tint */
+        node->texture_rect.stretch = true;
+        node->texture_rect.flip_h = false;
+        node->texture_rect.flip_v = false;
+    }
+    return node;
+}
+
+void aui_texture_rect_set_region(AUI_Node *node, float x, float y, float w, float h)
+{
+    if (!node || node->type != AUI_NODE_TEXTURE_RECT) return;
+    node->texture_rect.src_x = x;
+    node->texture_rect.src_y = y;
+    node->texture_rect.src_w = w;
+    node->texture_rect.src_h = h;
+}
+
+void aui_texture_rect_set_tint(AUI_Node *node, uint32_t color)
+{
+    if (!node || node->type != AUI_NODE_TEXTURE_RECT) return;
+    node->texture_rect.tint = color;
+}
+
+void aui_texture_rect_set_stretch(AUI_Node *node, bool stretch)
+{
+    if (!node || node->type != AUI_NODE_TEXTURE_RECT) return;
+    node->texture_rect.stretch = stretch;
+}
+
+void aui_texture_rect_set_flip(AUI_Node *node, bool flip_h, bool flip_v)
+{
+    if (!node || node->type != AUI_NODE_TEXTURE_RECT) return;
+    node->texture_rect.flip_h = flip_h;
+    node->texture_rect.flip_v = flip_v;
+}
+
+/* ============================================================================
+ * Icon Widget Functions
+ * ============================================================================ */
+
+AUI_Node *aui_icon_create(AUI_Context *ctx, const char *name,
+                           SDL_GPUTexture *atlas, float x, float y, float w, float h)
+{
+    AUI_Node *node = aui_node_create(ctx, AUI_NODE_ICON, name);
+    if (node) {
+        node->icon.texture = atlas;
+        node->icon.icon_x = x;
+        node->icon.icon_y = y;
+        node->icon.icon_w = w;
+        node->icon.icon_h = h;
+        node->icon.color = 0xFFFFFFFF;  /* White/no tint */
+        node->icon.size = 0;  /* Use original size */
+
+        /* Set minimum size to icon size */
+        node->custom_min_size_x = w;
+        node->custom_min_size_y = h;
+    }
+    return node;
+}
+
+void aui_icon_set_color(AUI_Node *node, uint32_t color)
+{
+    if (!node || node->type != AUI_NODE_ICON) return;
+    node->icon.color = color;
+}
+
+void aui_icon_set_size(AUI_Node *node, float size)
+{
+    if (!node || node->type != AUI_NODE_ICON) return;
+    node->icon.size = size;
+    if (size > 0) {
+        node->custom_min_size_x = size;
+        node->custom_min_size_y = size;
+    }
+}
+
+/* ============================================================================
+ * Separator Widget Functions
+ * ============================================================================ */
+
+AUI_Node *aui_separator_create(AUI_Context *ctx, const char *name, bool vertical)
+{
+    AUI_Node *node = aui_node_create(ctx, AUI_NODE_SEPARATOR, name);
+    if (node) {
+        node->separator.vertical = vertical;
+        node->separator.color = 0;  /* 0 = use theme border color */
+        node->separator.thickness = 1.0f;
+
+        /* Set size flags for proper layout */
+        if (vertical) {
+            node->custom_min_size_x = 1.0f;
+            node->h_size_flags = AUI_SIZE_SHRINK_CENTER;
+            node->v_size_flags = AUI_SIZE_FILL;
+        } else {
+            node->custom_min_size_y = 1.0f;
+            node->h_size_flags = AUI_SIZE_FILL;
+            node->v_size_flags = AUI_SIZE_SHRINK_CENTER;
+        }
+    }
+    return node;
+}
+
+void aui_separator_set_color(AUI_Node *node, uint32_t color)
+{
+    if (!node || node->type != AUI_NODE_SEPARATOR) return;
+    node->separator.color = color;
+}
+
+void aui_separator_set_thickness(AUI_Node *node, float thickness)
+{
+    if (!node || node->type != AUI_NODE_SEPARATOR) return;
+    node->separator.thickness = thickness;
+    if (node->separator.vertical) {
+        node->custom_min_size_x = thickness;
+    } else {
+        node->custom_min_size_y = thickness;
+    }
+}
+
+/* ============================================================================
+ * Tree Item Functions
+ * ============================================================================ */
 
 static void aui_tree_item_free_recursive(AUI_TreeItem *item)
 {

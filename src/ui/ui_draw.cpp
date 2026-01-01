@@ -839,6 +839,44 @@ void aui_draw_rect(AUI_Context *ctx, float x, float y, float w, float h,
     aui_add_quad(ctx, x, y, x + w, y + h, 0.0f, 0.0f, 0.0f, 0.0f, color);
 }
 
+void aui_draw_textured_rect(AUI_Context *ctx, SDL_GPUTexture *texture,
+                             float x, float y, float w, float h,
+                             float src_x, float src_y, float src_w, float src_h,
+                             uint32_t tint, bool flip_h, bool flip_v)
+{
+    if (!ctx || !texture || w <= 0 || h <= 0) return;
+
+    /* Calculate UV coordinates - normalized if src_w/h are 0 */
+    float u0, v0, u1, v1;
+    if (src_w <= 0 || src_h <= 0) {
+        /* Use full texture (0-1 UVs) */
+        u0 = 0.0f;
+        v0 = 0.0f;
+        u1 = 1.0f;
+        v1 = 1.0f;
+    } else {
+        /* Assume normalized UVs are provided */
+        u0 = src_x;
+        v0 = src_y;
+        u1 = src_x + src_w;
+        v1 = src_y + src_h;
+    }
+
+    /* Apply flipping */
+    if (flip_h) {
+        float tmp = u0;
+        u0 = u1;
+        u1 = tmp;
+    }
+    if (flip_v) {
+        float tmp = v0;
+        v0 = v1;
+        v1 = tmp;
+    }
+
+    aui_add_quad_textured(ctx, texture, x, y, x + w, y + h, u0, v0, u1, v1, tint);
+}
+
 void aui_draw_rect_outline(AUI_Context *ctx, float x, float y, float w, float h,
                            uint32_t color, float thickness)
 {

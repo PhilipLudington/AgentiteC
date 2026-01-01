@@ -977,20 +977,32 @@ bool aui_popup_is_visible(AUI_Node *popup)
 
 void aui_node_set_tooltip(AUI_Node *node, const char *text)
 {
-    AUI_TooltipConfig config = {0};
-    config.text = text;
-    config.delay = 0.5f;
-    aui_node_set_tooltip_ex(node, &config);
+    if (!node) return;
+
+    if (text) {
+        strncpy(node->tooltip_text, text, sizeof(node->tooltip_text) - 1);
+        node->tooltip_text[sizeof(node->tooltip_text) - 1] = '\0';
+    } else {
+        node->tooltip_text[0] = '\0';
+    }
+
+    if (node->tooltip_delay == 0) {
+        node->tooltip_delay = 0.5f;  /* Default delay */
+    }
 }
 
 void aui_node_set_tooltip_ex(AUI_Node *node, const AUI_TooltipConfig *config)
 {
     if (!node || !config) return;
 
-    /* Store tooltip config in node (TODO: add to AUI_Node structure) */
-    /* For now, use a simple approach with the global dialog manager */
-    (void)node;
-    (void)config;
+    if (config->text) {
+        strncpy(node->tooltip_text, config->text, sizeof(node->tooltip_text) - 1);
+        node->tooltip_text[sizeof(node->tooltip_text) - 1] = '\0';
+    } else {
+        node->tooltip_text[0] = '\0';
+    }
+
+    node->tooltip_delay = config->delay > 0 ? config->delay : 0.5f;
 }
 
 void aui_tooltip_show(AUI_Context *ctx, float x, float y, const char *text)

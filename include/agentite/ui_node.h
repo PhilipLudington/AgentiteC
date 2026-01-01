@@ -389,6 +389,30 @@ typedef struct AUI_ProgressData {
     uint32_t fill_color;
 } AUI_ProgressData;
 
+/* Texture rect data - for displaying images/textures */
+typedef struct AUI_TextureRectData {
+    SDL_GPUTexture *texture;
+    float src_x, src_y, src_w, src_h;  /* Source rectangle (0 = use full texture) */
+    uint32_t tint;                      /* Color tint (0xFFFFFFFF = no tint) */
+    bool stretch;                       /* true = stretch to fill, false = maintain aspect */
+    bool flip_h, flip_v;                /* Horizontal/vertical flip */
+} AUI_TextureRectData;
+
+/* Icon data - for displaying small icons */
+typedef struct AUI_IconData {
+    SDL_GPUTexture *texture;
+    float icon_x, icon_y, icon_w, icon_h;  /* Icon region in atlas */
+    uint32_t color;                         /* Icon color/tint */
+    float size;                             /* Display size (0 = use icon_w/h) */
+} AUI_IconData;
+
+/* Separator data - horizontal or vertical line divider */
+typedef struct AUI_SeparatorData {
+    bool vertical;          /* true = vertical line, false = horizontal */
+    uint32_t color;         /* Line color (0 = use theme border color) */
+    float thickness;        /* Line thickness (0 = 1px default) */
+} AUI_SeparatorData;
+
 /* ============================================================================
  * Main Node Structure
  * ============================================================================ */
@@ -467,6 +491,10 @@ struct AUI_Node {
     AUI_Node *focus_next;
     AUI_Node *focus_prev;
 
+    /* Tooltip */
+    char tooltip_text[128];        /* Tooltip to show on hover */
+    float tooltip_delay;           /* Delay before showing (default 0.5s) */
+
     /* Signals/callbacks */
     AUI_Connection connections[AUI_MAX_CONNECTIONS];
     int connection_count;
@@ -487,6 +515,9 @@ struct AUI_Node {
         AUI_CollapsingHeaderData collapsing_header;
         AUI_SplitterData splitter;
         AUI_TreeData tree;
+        AUI_TextureRectData texture_rect;
+        AUI_IconData icon;
+        AUI_SeparatorData separator;
         void *custom_data;
     };
 
@@ -706,6 +737,9 @@ AUI_Node *aui_grid_create(AUI_Context *ctx, const char *name, int columns);
 /* Create margin container */
 AUI_Node *aui_margin_create(AUI_Context *ctx, const char *name);
 
+/* Create center container - centers its single child */
+AUI_Node *aui_center_create(AUI_Context *ctx, const char *name);
+
 /* Create scroll container */
 AUI_Node *aui_scroll_create(AUI_Context *ctx, const char *name);
 
@@ -733,6 +767,53 @@ AUI_Node *aui_splitter_create(AUI_Context *ctx, const char *name, bool horizonta
 
 /* Create tree widget */
 AUI_Node *aui_tree_create(AUI_Context *ctx, const char *name);
+
+/* Create texture rect - displays a texture/image */
+AUI_Node *aui_texture_rect_create(AUI_Context *ctx, const char *name,
+                                   SDL_GPUTexture *texture);
+
+/* Create icon - displays a small icon from an atlas */
+AUI_Node *aui_icon_create(AUI_Context *ctx, const char *name,
+                           SDL_GPUTexture *atlas, float x, float y, float w, float h);
+
+/* Create separator - horizontal or vertical line divider */
+AUI_Node *aui_separator_create(AUI_Context *ctx, const char *name, bool vertical);
+
+/* ============================================================================
+ * Texture Rect Functions
+ * ============================================================================ */
+
+/* Set texture rect source region */
+void aui_texture_rect_set_region(AUI_Node *node, float x, float y, float w, float h);
+
+/* Set texture rect tint color */
+void aui_texture_rect_set_tint(AUI_Node *node, uint32_t color);
+
+/* Set texture rect stretch mode */
+void aui_texture_rect_set_stretch(AUI_Node *node, bool stretch);
+
+/* Set texture rect flip */
+void aui_texture_rect_set_flip(AUI_Node *node, bool flip_h, bool flip_v);
+
+/* ============================================================================
+ * Icon Functions
+ * ============================================================================ */
+
+/* Set icon color */
+void aui_icon_set_color(AUI_Node *node, uint32_t color);
+
+/* Set icon display size */
+void aui_icon_set_size(AUI_Node *node, float size);
+
+/* ============================================================================
+ * Separator Functions
+ * ============================================================================ */
+
+/* Set separator color */
+void aui_separator_set_color(AUI_Node *node, uint32_t color);
+
+/* Set separator thickness */
+void aui_separator_set_thickness(AUI_Node *node, float thickness);
 
 /* ============================================================================
  * Tree Widget Functions

@@ -348,6 +348,12 @@ typedef struct AUI_Context {
     /* Pending tooltip for deferred rendering (on top of everything) */
     char pending_tooltip[512];      /* Tooltip text buffer */
     bool pending_tooltip_active;    /* Whether a tooltip should be drawn */
+    float pending_tooltip_x;        /* Tooltip position X */
+    float pending_tooltip_y;        /* Tooltip position Y */
+
+    /* Retained-mode node tooltip tracking */
+    struct AUI_Node *hovered_node;  /* Currently hovered node (for tooltips) */
+    float tooltip_hover_time;       /* Time hovering over current node */
 
     /* Layer system for z-ordering */
     int layer_stack[16];            /* Stack of pushed layers */
@@ -658,6 +664,12 @@ void aui_draw_rect(AUI_Context *ctx, float x, float y, float w, float h,
                    uint32_t color);
 void aui_draw_rect_rounded(AUI_Context *ctx, float x, float y, float w, float h,
                            uint32_t color, float radius);
+
+/* Textured rectangle - for images/icons */
+void aui_draw_textured_rect(AUI_Context *ctx, SDL_GPUTexture *texture,
+                             float x, float y, float w, float h,
+                             float src_x, float src_y, float src_w, float src_h,
+                             uint32_t tint, bool flip_h, bool flip_v);
 
 /* Outlined rectangles */
 void aui_draw_rect_outline(AUI_Context *ctx, float x, float y, float w, float h,
