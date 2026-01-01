@@ -4,6 +4,7 @@
 
 #include "agentite/ui_node.h"
 #include "agentite/ui.h"
+#include "agentite/ui_richtext.h"
 #include "agentite/ui_style.h"
 #include "agentite/ui_tween.h"
 #include <stdlib.h>
@@ -434,6 +435,12 @@ void aui_node_destroy(AUI_Node *node)
     /* Free tree items if this is a tree */
     if (node->type == AUI_NODE_TREE) {
         aui_tree_clear(node);
+    }
+
+    /* Free rich text data if this is a richtext node */
+    if (node->type == AUI_NODE_RICHTEXT && node->custom_data) {
+        aui_richtext_destroy((AUI_RichText *)node->custom_data);
+        node->custom_data = NULL;
     }
 
     free(node);
@@ -1169,6 +1176,21 @@ static void aui_node_get_content_min_size(AUI_Context *ctx, AUI_Node *node,
                     if (th + 10 > min_h) min_h = th + 10;
                 }
                 break;
+            case AUI_NODE_RICHTEXT:
+                {
+                    AUI_RichText *rt = (AUI_RichText *)node->custom_data;
+                    if (rt) {
+                        /* Layout with current node width if available, else 0 (no wrapping) */
+                        float layout_w = node->global_rect.w > 0 ?
+                            node->global_rect.w - node->style.padding.left - node->style.padding.right : 0;
+                        aui_richtext_layout_ctx(ctx, rt, layout_w);
+                        float rw, rh;
+                        aui_richtext_get_size(rt, &rw, &rh);
+                        if (rw > min_w) min_w = rw;
+                        if (rh > min_h) min_h = rh;
+                    }
+                }
+                break;
             default:
                 break;
         }
@@ -1737,6 +1759,29 @@ bool aui_scene_process_event(AUI_Context *ctx, AUI_Node *root, const SDL_Event *
                         sig.bool_change.old_value = old_expanded;
                         sig.bool_change.new_value = hit->collapsing_header.expanded;
                         aui_node_emit(hit, AUI_SIGNAL_TOGGLED, &sig);
+                    }
+
+                    /* Handle richtext link click */
+                    if (hit->type == AUI_NODE_RICHTEXT) {
+                        AUI_RichText *rt = (AUI_RichText *)hit->custom_data;
+                        if (rt) {
+                            AUI_Style style = aui_node_get_effective_style(hit);
+                            float content_x = hit->global_rect.x + style.padding.left;
+                            float content_y = hit->global_rect.y + style.padding.top;
+                            float rel_x = mx - content_x;
+                            float rel_y = my - content_y;
+
+                            const char *url = aui_richtext_get_link_at(rt, rel_x, rel_y);
+                            if (url) {
+                                /* Emit signal with URL for external handling */
+                                AUI_Signal sig;
+                                memset(&sig, 0, sizeof(sig));
+                                sig.type = AUI_SIGNAL_CLICKED;
+                                sig.source = hit;
+                                sig.text_change.new_text = url;
+                                aui_node_emit(hit, AUI_SIGNAL_CLICKED, &sig);
+                            }
+                        }
                     }
 
                     /* Handle tree item click */
@@ -2848,6 +2893,26 @@ static void aui_node_render_recursive(AUI_Context *ctx, AUI_Node *node, float in
                     float y = node->global_rect.y + (node->global_rect.h - thickness) * 0.5f;
                     aui_draw_rect(ctx, node->global_rect.x, y,
                                   node->global_rect.w, thickness, color);
+                }
+            }
+            break;
+
+        case AUI_NODE_RICHTEXT:
+            {
+                AUI_RichText *rt = (AUI_RichText *)node->custom_data;
+                if (rt) {
+                    float x = node->global_rect.x + style.padding.left;
+                    float y = node->global_rect.y + style.padding.top;
+                    float max_w = node->global_rect.w - style.padding.left - style.padding.right;
+
+                    /* Ensure layout is calculated with current width and font metrics */
+                    aui_richtext_layout_ctx(ctx, rt, max_w);
+
+                    /* Update animation if any animated tags */
+                    aui_richtext_update(rt, ctx->delta_time);
+
+                    /* Draw the rich text */
+                    aui_richtext_draw(ctx, rt, x, y);
                 }
             }
             break;

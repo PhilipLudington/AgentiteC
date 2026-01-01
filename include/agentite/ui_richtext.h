@@ -213,6 +213,9 @@ void aui_richtext_clear(AUI_RichText *rt);
 /* Calculate layout with max width (call after parse/modify) */
 void aui_richtext_layout(AUI_RichText *rt, float max_width);
 
+/* Calculate layout using font metrics from context (more accurate) */
+void aui_richtext_layout_ctx(AUI_Context *ctx, AUI_RichText *rt, float max_width);
+
 /* Get computed dimensions */
 void aui_richtext_get_size(const AUI_RichText *rt, float *width, float *height);
 

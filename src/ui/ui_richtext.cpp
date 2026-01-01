@@ -523,7 +523,8 @@ void aui_richtext_clear(AUI_RichText *rt)
  * Rich Text Layout
  * ============================================================================ */
 
-void aui_richtext_layout(AUI_RichText *rt, float max_width)
+/* Internal layout implementation with optional context for font metrics */
+static void aui_richtext_layout_internal(AUI_Context *ctx, AUI_RichText *rt, float max_width)
 {
     if (!rt) return;
 
@@ -538,11 +539,15 @@ void aui_richtext_layout(AUI_RichText *rt, float max_width)
         return;
     }
 
-    /* Simple line-breaking layout */
-    /* TODO: Use actual font metrics from AUI_Context */
-    float char_width = 8;   /* Placeholder */
-    float line_height = rt->config.default_size * rt->config.line_height_factor;
+    /* Get font metrics - use context if available, otherwise estimate */
+    float line_height;
+    if (ctx) {
+        line_height = aui_text_height(ctx) * rt->config.line_height_factor;
+    } else {
+        line_height = rt->config.default_size * rt->config.line_height_factor;
+    }
 
+    /* For text width, we need to measure actual strings */
     int line_start = 0;
     float line_width = 0;
     float y = 0;
@@ -555,28 +560,62 @@ void aui_richtext_layout(AUI_RichText *rt, float max_width)
             end_line = true;
         } else if (rt->plain[i] == '\n') {
             end_line = true;
-        } else if (max_width > 0 && line_width + char_width > max_width) {
-            /* Word wrap - find last space */
-            int wrap_at = i;
-            for (int j = i - 1; j > line_start; j--) {
-                if (rt->plain[j] == ' ') {
-                    wrap_at = j;
-                    break;
+        } else if (max_width > 0) {
+            /* Measure current line width to determine if we need to wrap */
+            char temp[MAX_PLAIN_TEXT];
+            int len = i - line_start + 1;
+            if (len > (int)sizeof(temp) - 1) len = sizeof(temp) - 1;
+            memcpy(temp, rt->plain + line_start, len);
+            temp[len] = '\0';
+
+            float measured_width;
+            if (ctx) {
+                measured_width = aui_text_width(ctx, temp);
+            } else {
+                /* Estimate: average 8 pixels per character */
+                measured_width = len * 8.0f;
+            }
+
+            if (measured_width > max_width) {
+                /* Word wrap - find last space */
+                int wrap_at = i;
+                for (int j = i - 1; j > line_start; j--) {
+                    if (rt->plain[j] == ' ') {
+                        wrap_at = j;
+                        break;
+                    }
                 }
+                if (wrap_at > line_start) {
+                    i = wrap_at;
+                }
+                end_line = true;
             }
-            if (wrap_at > line_start) {
-                i = wrap_at;
-            }
-            end_line = true;
         }
 
         if (end_line) {
+            /* Measure final line width */
+            char temp[MAX_PLAIN_TEXT];
+            int len = i - line_start;
+            if (len > (int)sizeof(temp) - 1) len = sizeof(temp) - 1;
+            if (len > 0) {
+                memcpy(temp, rt->plain + line_start, len);
+                temp[len] = '\0';
+
+                if (ctx) {
+                    line_width = aui_text_width(ctx, temp);
+                } else {
+                    line_width = len * 8.0f;
+                }
+            } else {
+                line_width = 0;
+            }
+
             AUI_RichLine *line = &rt->lines[rt->line_count++];
             line->start_char = line_start;
             line->end_char = i;
             line->width = line_width;
             line->height = line_height;
-            line->baseline = rt->config.default_size;
+            line->baseline = ctx ? aui_text_height(ctx) : rt->config.default_size;
             line->y_offset = y;
 
             if (line_width > rt->total_width) {
@@ -586,14 +625,12 @@ void aui_richtext_layout(AUI_RichText *rt, float max_width)
             y += line_height;
             line_start = (at_end) ? i : i + 1;
             line_width = 0;
-        } else {
-            line_width += char_width;
         }
     }
 
     rt->total_height = y;
 
-    /* Build hotspots for URLs */
+    /* Build hotspots for URLs - measure each segment */
     for (int i = 0; i < rt->span_count && rt->hotspot_count < MAX_HOTSPOTS; i++) {
         AUI_RichSpan *span = &rt->spans[i];
         if (span->type != AUI_RTAG_URL) continue;
@@ -604,14 +641,39 @@ void aui_richtext_layout(AUI_RichText *rt, float max_width)
             if (line->end_char <= span->start) continue;
             if (line->start_char >= span->end) break;
 
-            /* Calculate hotspot rect */
+            /* Calculate hotspot rect by measuring text positions */
             int start = (span->start > line->start_char) ? span->start : line->start_char;
             int end = (span->end < line->end_char) ? span->end : line->end_char;
 
+            float hs_x, hs_w;
+            char temp[MAX_PLAIN_TEXT];
+
+            /* Measure x offset (text before span on this line) */
+            int prefix_len = start - line->start_char;
+            if (prefix_len > 0) {
+                if (prefix_len > (int)sizeof(temp) - 1) prefix_len = sizeof(temp) - 1;
+                memcpy(temp, rt->plain + line->start_char, prefix_len);
+                temp[prefix_len] = '\0';
+                hs_x = ctx ? aui_text_width(ctx, temp) : prefix_len * 8.0f;
+            } else {
+                hs_x = 0;
+            }
+
+            /* Measure span width */
+            int span_len = end - start;
+            if (span_len > 0) {
+                if (span_len > (int)sizeof(temp) - 1) span_len = sizeof(temp) - 1;
+                memcpy(temp, rt->plain + start, span_len);
+                temp[span_len] = '\0';
+                hs_w = ctx ? aui_text_width(ctx, temp) : span_len * 8.0f;
+            } else {
+                hs_w = 0;
+            }
+
             AUI_RichHotspot *hs = &rt->hotspots[rt->hotspot_count++];
-            hs->x = (start - line->start_char) * char_width;
+            hs->x = hs_x;
             hs->y = line->y_offset;
-            hs->w = (end - start) * char_width;
+            hs->w = hs_w;
             hs->h = line->height;
             strncpy(hs->url, span->link.url, sizeof(hs->url) - 1);
             hs->span_index = i;
@@ -619,6 +681,16 @@ void aui_richtext_layout(AUI_RichText *rt, float max_width)
     }
 
     rt->layout_valid = true;
+}
+
+void aui_richtext_layout(AUI_RichText *rt, float max_width)
+{
+    aui_richtext_layout_internal(NULL, rt, max_width);
+}
+
+void aui_richtext_layout_ctx(AUI_Context *ctx, AUI_RichText *rt, float max_width)
+{
+    aui_richtext_layout_internal(ctx, rt, max_width);
 }
 
 void aui_richtext_get_size(const AUI_RichText *rt, float *width, float *height)
@@ -652,12 +724,13 @@ void aui_richtext_draw_ex(AUI_Context *ctx, AUI_RichText *rt, float x, float y,
 {
     if (!ctx || !rt || rt->plain_len == 0) return;
 
-    /* Ensure layout is valid */
+    /* Ensure layout is valid with font metrics */
     if (!rt->layout_valid) {
-        aui_richtext_layout(rt, rt->config.max_width);
+        aui_richtext_layout_ctx(ctx, rt, rt->config.max_width);
     }
 
     AUI_RichTextConfig cfg = config ? *config : rt->config;
+    float font_height = aui_text_height(ctx);
 
     /* For each line */
     for (int li = 0; li < rt->line_count; li++) {
@@ -700,22 +773,29 @@ void aui_richtext_draw_ex(AUI_Context *ctx, AUI_RichText *rt, float x, float y,
             }
         }
 
-        /* Draw characters */
-        float char_w = 8;  /* Placeholder - use actual font metrics */
+        /* Draw characters - measure each for proper positioning */
         float cx = lx;
 
         for (int ci = line->start_char; ci < line->end_char; ci++) {
             char ch = rt->plain[ci];
             float cy = ly;
 
+            /* Measure this character's width */
+            char str[2] = {ch, '\0'};
+            float char_w = aui_text_width(ctx, str);
+
             /* Apply animations */
+            float draw_x = cx;
+            float draw_y = cy;
             if (wave) {
-                cy += sinf(rt->anim_time * 5 + ci * 0.5f) * 3;
+                draw_y += sinf(rt->anim_time * 5 + ci * 0.5f) * 3;
             }
             if (shake) {
-                cx += ((rand() % 100) / 100.0f - 0.5f) * 2;
-                cy += ((rand() % 100) / 100.0f - 0.5f) * 2;
+                draw_x += ((rand() % 100) / 100.0f - 0.5f) * 2;
+                draw_y += ((rand() % 100) / 100.0f - 0.5f) * 2;
             }
+
+            uint32_t draw_color = color;
             if (rainbow) {
                 float hue = fmodf(rt->anim_time + ci * 0.1f, 1.0f);
                 /* HSV to RGB conversion - simplified */
@@ -734,21 +814,20 @@ void aui_richtext_draw_ex(AUI_Context *ctx, AUI_RichText *rt, float x, float y,
                     case 4: r = t; g = p; b = v; break;
                     default: r = v; g = p; b = q; break;
                 }
-                color = 0xFF000000 | (b << 16) | (g << 8) | r;
+                draw_color = 0xFF000000 | (b << 16) | (g << 8) | r;
             }
 
             /* Draw character */
-            char str[2] = {ch, '\0'};
-            aui_draw_text(ctx, str, cx, cy, color);
+            aui_draw_text(ctx, str, draw_x, draw_y, draw_color);
 
             /* Draw underline */
             if (underline) {
-                aui_draw_rect(ctx, cx, cy + cfg.default_size + 2, char_w, 1, color);
+                aui_draw_rect(ctx, cx, cy + font_height + 2, char_w, 1, draw_color);
             }
 
             /* Draw strikethrough */
             if (strikethrough) {
-                aui_draw_rect(ctx, cx, cy + cfg.default_size / 2, char_w, 1, color);
+                aui_draw_rect(ctx, cx, cy + font_height / 2, char_w, 1, draw_color);
             }
 
             cx += char_w;
@@ -762,8 +841,6 @@ void aui_richtext_draw_ex(AUI_Context *ctx, AUI_RichText *rt, float x, float y,
         int sel_end = rt->selection_start > rt->selection_end ?
                       rt->selection_start : rt->selection_end;
 
-        float char_w = 8;  /* Placeholder */
-
         for (int li = 0; li < rt->line_count; li++) {
             AUI_RichLine *line = &rt->lines[li];
             if (line->end_char <= sel_start) continue;
@@ -772,10 +849,29 @@ void aui_richtext_draw_ex(AUI_Context *ctx, AUI_RichText *rt, float x, float y,
             int start = (sel_start > line->start_char) ? sel_start : line->start_char;
             int end = (sel_end < line->end_char) ? sel_end : line->end_char;
 
-            float sx = x + (start - line->start_char) * char_w;
-            float sy = y + line->y_offset;
-            float sw = (end - start) * char_w;
+            /* Measure prefix width to find selection x position */
+            float sx = x;
+            if (start > line->start_char) {
+                char temp[MAX_PLAIN_TEXT];
+                int prefix_len = start - line->start_char;
+                if (prefix_len > (int)sizeof(temp) - 1) prefix_len = sizeof(temp) - 1;
+                memcpy(temp, rt->plain + line->start_char, prefix_len);
+                temp[prefix_len] = '\0';
+                sx += aui_text_width(ctx, temp);
+            }
 
+            /* Measure selection width */
+            float sw = 0;
+            if (end > start) {
+                char temp[MAX_PLAIN_TEXT];
+                int sel_len = end - start;
+                if (sel_len > (int)sizeof(temp) - 1) sel_len = sizeof(temp) - 1;
+                memcpy(temp, rt->plain + start, sel_len);
+                temp[sel_len] = '\0';
+                sw = aui_text_width(ctx, temp);
+            }
+
+            float sy = y + line->y_offset;
             aui_draw_rect(ctx, sx, sy, sw, line->height, ctx->theme.selection);
         }
     }
