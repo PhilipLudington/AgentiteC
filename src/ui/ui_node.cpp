@@ -10,6 +10,7 @@
 #include <string.h>
 #include <math.h>
 #include <cstdio>
+#include <functional>
 
 /* ============================================================================
  * Internal State
@@ -224,6 +225,37 @@ AUI_Node *aui_node_create(AUI_Context *ctx, AUI_NodeType type, const char *name)
             node->custom_min_size_y = 24;
             break;
 
+        case AUI_NODE_COLLAPSING_HEADER:
+            node->collapsing_header.expanded = true;
+            node->collapsing_header.show_arrow = true;
+            node->custom_min_size_y = 28;
+            node->focus_mode_click = true;
+            break;
+
+        case AUI_NODE_SPLITTER:
+            node->splitter.horizontal = true;
+            node->splitter.split_ratio = 0.5f;
+            node->splitter.min_size_first = 50.0f;
+            node->splitter.min_size_second = 50.0f;
+            node->splitter.splitter_width = 6.0f;
+            node->splitter.dragging = false;
+            break;
+
+        case AUI_NODE_TREE:
+            node->tree.root_items = NULL;
+            node->tree.selected_item = NULL;
+            node->tree.anchor_item = NULL;
+            node->tree.indent_width = 20.0f;
+            node->tree.item_height = 24.0f;
+            node->tree.scroll_offset = 0.0f;
+            node->tree.multi_select = false;
+            node->tree.hide_root = false;
+            node->tree.allow_reorder = false;
+            node->tree.next_item_id = 1;
+            node->clip_contents = true;
+            node->focus_mode_click = true;
+            break;
+
         default:
             break;
     }
@@ -264,6 +296,11 @@ void aui_node_destroy(AUI_Node *node)
     /* Free textbox buffer if allocated */
     if (node->type == AUI_NODE_TEXTBOX && node->textbox.buffer) {
         /* Buffer is user-provided, don't free */
+    }
+
+    /* Free tree items if this is a tree */
+    if (node->type == AUI_NODE_TREE) {
+        aui_tree_clear(node);
     }
 
     free(node);
@@ -1218,6 +1255,140 @@ static void aui_node_layout_children(AUI_Context *ctx, AUI_Node *node)
             /* TODO: Implement grid layout */
             break;
 
+        case AUI_NODE_PANEL:
+            {
+                /* Offset children by title bar height if title is set */
+                float title_offset = 0;
+                if (node->panel.title[0] != '\0' && ctx) {
+                    title_offset = ctx->theme.widget_height;
+                }
+
+                /* If collapsed, hide all children */
+                if (node->panel.collapsed) {
+                    for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
+                        child->visible = false;
+                    }
+                    return;
+                }
+
+                /* Calculate content area (after title bar) */
+                AUI_Rect content_rect = node->global_rect;
+                content_rect.y += title_offset;
+                content_rect.h -= title_offset;
+
+                for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
+                    if (!child->visible) continue;
+                    aui_node_calculate_rect(child, content_rect);
+                }
+            }
+            return;
+
+        case AUI_NODE_COLLAPSING_HEADER:
+            {
+                /* Header height */
+                float header_h = ctx ? ctx->theme.widget_height : 28.0f;
+
+                /* If collapsed, hide all children */
+                if (!node->collapsing_header.expanded) {
+                    for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
+                        child->visible = false;
+                    }
+                    return;
+                }
+
+                /* Content area (after header) */
+                AUI_Rect content_rect = node->global_rect;
+                content_rect.y += header_h;
+                content_rect.h -= header_h;
+
+                for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
+                    child->visible = true;
+                    aui_node_calculate_rect(child, content_rect);
+                }
+            }
+            return;
+
+        case AUI_NODE_SPLITTER:
+            {
+                /* Splitter expects exactly 2 children */
+                AUI_Node *first = node->first_child;
+                AUI_Node *second = first ? first->next_sibling : NULL;
+                if (!first || !second) return;
+
+                float total_size;
+                float splitter_w = node->splitter.splitter_width;
+                float ratio = node->splitter.split_ratio;
+
+                if (node->splitter.horizontal) {
+                    /* Left/right split */
+                    total_size = node->global_rect.w - splitter_w;
+                    float first_w = total_size * ratio;
+                    float second_w = total_size - first_w;
+
+                    /* Apply min sizes */
+                    if (first_w < node->splitter.min_size_first) {
+                        first_w = node->splitter.min_size_first;
+                        second_w = total_size - first_w;
+                    }
+                    if (second_w < node->splitter.min_size_second) {
+                        second_w = node->splitter.min_size_second;
+                        first_w = total_size - second_w;
+                    }
+
+                    AUI_Rect first_rect = {
+                        node->global_rect.x,
+                        node->global_rect.y,
+                        first_w,
+                        node->global_rect.h
+                    };
+                    AUI_Rect second_rect = {
+                        node->global_rect.x + first_w + splitter_w,
+                        node->global_rect.y,
+                        second_w,
+                        node->global_rect.h
+                    };
+
+                    first->global_rect = first_rect;
+                    first->rect = first_rect;
+                    second->global_rect = second_rect;
+                    second->rect = second_rect;
+                } else {
+                    /* Top/bottom split */
+                    total_size = node->global_rect.h - splitter_w;
+                    float first_h = total_size * ratio;
+                    float second_h = total_size - first_h;
+
+                    /* Apply min sizes */
+                    if (first_h < node->splitter.min_size_first) {
+                        first_h = node->splitter.min_size_first;
+                        second_h = total_size - first_h;
+                    }
+                    if (second_h < node->splitter.min_size_second) {
+                        second_h = node->splitter.min_size_second;
+                        first_h = total_size - second_h;
+                    }
+
+                    AUI_Rect first_rect = {
+                        node->global_rect.x,
+                        node->global_rect.y,
+                        node->global_rect.w,
+                        first_h
+                    };
+                    AUI_Rect second_rect = {
+                        node->global_rect.x,
+                        node->global_rect.y + first_h + splitter_w,
+                        node->global_rect.w,
+                        second_h
+                    };
+
+                    first->global_rect = first_rect;
+                    first->rect = first_rect;
+                    second->global_rect = second_rect;
+                    second->rect = second_rect;
+                }
+            }
+            return;
+
         default:
             break;
     }
@@ -1294,6 +1465,9 @@ bool aui_scene_process_event(AUI_Context *ctx, AUI_Node *root, const SDL_Event *
 {
     if (!ctx || !root || !event) return false;
 
+    /* Ensure layout is up-to-date before hit testing */
+    aui_scene_layout(ctx, root);
+
     /* Find node at mouse position for mouse events */
     if (event->type == SDL_EVENT_MOUSE_MOTION ||
         event->type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
@@ -1366,6 +1540,119 @@ bool aui_scene_process_event(AUI_Context *ctx, AUI_Node *root, const SDL_Event *
                         sig.bool_change.new_value = hit->checkbox.checked;
                         aui_node_emit(hit, AUI_SIGNAL_TOGGLED, &sig);
                     }
+
+                    /* Handle collapsing header toggle */
+                    if (hit->type == AUI_NODE_COLLAPSING_HEADER) {
+                        bool old_expanded = hit->collapsing_header.expanded;
+                        hit->collapsing_header.expanded = !hit->collapsing_header.expanded;
+                        hit->layout_dirty = true;
+
+                        AUI_Signal sig;
+                        memset(&sig, 0, sizeof(sig));
+                        sig.type = AUI_SIGNAL_TOGGLED;
+                        sig.source = hit;
+                        sig.bool_change.old_value = old_expanded;
+                        sig.bool_change.new_value = hit->collapsing_header.expanded;
+                        aui_node_emit(hit, AUI_SIGNAL_TOGGLED, &sig);
+                    }
+
+                    /* Handle tree item click */
+                    if (hit->type == AUI_NODE_TREE) {
+                        float item_h = hit->tree.item_height;
+                        float indent = hit->tree.indent_width;
+                        float tree_y = hit->global_rect.y;
+                        float click_y = my - tree_y + hit->tree.scroll_offset;
+                        float click_x = mx - hit->global_rect.x;
+
+                        /* Find clicked item */
+                        float current_y = 0;
+                        std::function<AUI_TreeItem*(AUI_TreeItem*, int)> find_item_at_y;
+                        find_item_at_y = [&](AUI_TreeItem *item, int depth) -> AUI_TreeItem* {
+                            while (item) {
+                                if (click_y >= current_y && click_y < current_y + item_h) {
+                                    /* Check if click is on expand arrow */
+                                    float item_x = depth * indent;
+                                    bool has_children = item->first_child != NULL;
+
+                                    if (has_children && click_x >= item_x && click_x < item_x + 24.0f) {
+                                        /* Toggle expand/collapse */
+                                        item->expanded = !item->expanded;
+                                        if (item->expanded) {
+                                            aui_node_emit_simple(hit, AUI_SIGNAL_ITEM_EXPANDED);
+                                        } else {
+                                            aui_node_emit_simple(hit, AUI_SIGNAL_ITEM_COLLAPSED);
+                                        }
+                                        return NULL;  /* Don't select */
+                                    }
+                                    return item;  /* Select this item */
+                                }
+                                current_y += item_h;
+
+                                if (item->expanded && item->first_child) {
+                                    AUI_TreeItem *found = find_item_at_y(item->first_child, depth + 1);
+                                    if (found) return found;
+                                }
+                                item = item->next_sibling;
+                            }
+                            return NULL;
+                        };
+
+                        AUI_TreeItem *clicked_item = find_item_at_y(hit->tree.root_items, 0);
+                        if (clicked_item) {
+                            /* Deselect previous */
+                            if (hit->tree.selected_item && !hit->tree.multi_select) {
+                                hit->tree.selected_item->selected = false;
+                            }
+
+                            /* Select new item */
+                            clicked_item->selected = true;
+                            hit->tree.selected_item = clicked_item;
+
+                            aui_node_emit_simple(hit, AUI_SIGNAL_ITEM_SELECTED);
+                        }
+                    }
+
+                    /* Handle panel title bar buttons */
+                    if (hit->type == AUI_NODE_PANEL && hit->panel.title[0] != '\0' && ctx) {
+                        float title_h = ctx->theme.widget_height;
+                        float btn_size = title_h - 8;
+                        float btn_padding = 4;
+                        float x = hit->global_rect.x;
+                        float y = hit->global_rect.y;
+                        float w = hit->global_rect.w;
+
+                        /* Check if click is in title bar area */
+                        if (my >= y && my < y + title_h) {
+                            float btn_x = x + w - btn_padding - btn_size;
+                            float btn_y = y + (title_h - btn_size) / 2;
+
+                            /* Check close button */
+                            if (hit->panel.closable &&
+                                mx >= btn_x && mx < btn_x + btn_size &&
+                                my >= btn_y && my < btn_y + btn_size) {
+                                hit->panel.closed = true;
+                                hit->visible = false;
+                                aui_node_emit_simple(hit, AUI_SIGNAL_VISIBILITY_CHANGED);
+                            } else {
+                                btn_x -= btn_size + btn_padding;
+
+                                /* Check collapse button */
+                                if (hit->panel.collapsible &&
+                                    mx >= btn_x && mx < btn_x + btn_size &&
+                                    my >= btn_y && my < btn_y + btn_size) {
+                                    hit->panel.collapsed = !hit->panel.collapsed;
+                                    hit->layout_dirty = true;
+                                    AUI_Signal sig;
+                                    memset(&sig, 0, sizeof(sig));
+                                    sig.type = AUI_SIGNAL_TOGGLED;
+                                    sig.source = hit;
+                                    sig.bool_change.old_value = !hit->panel.collapsed;
+                                    sig.bool_change.new_value = hit->panel.collapsed;
+                                    aui_node_emit(hit, AUI_SIGNAL_TOGGLED, &sig);
+                                }
+                            }
+                        }
+                    }
                 }
                 s_pressed_node = NULL;
             }
@@ -1431,11 +1718,147 @@ bool aui_scene_process_event(AUI_Context *ctx, AUI_Node *root, const SDL_Event *
             }
         }
 
+        /* Handle splitter dragging */
+        if (event->type == SDL_EVENT_MOUSE_MOTION && s_pressed_node &&
+            s_pressed_node->type == AUI_NODE_SPLITTER) {
+            AUI_Node *splitter = s_pressed_node;
+            splitter->splitter.dragging = true;
+
+            float total_size;
+            float rel_pos;
+
+            if (splitter->splitter.horizontal) {
+                total_size = splitter->global_rect.w - splitter->splitter.splitter_width;
+                rel_pos = mx - splitter->global_rect.x;
+            } else {
+                total_size = splitter->global_rect.h - splitter->splitter.splitter_width;
+                rel_pos = my - splitter->global_rect.y;
+            }
+
+            float new_ratio = rel_pos / total_size;
+            new_ratio = fmaxf(0.0f, fminf(1.0f, new_ratio));
+
+            /* Enforce min sizes */
+            float min_first_ratio = splitter->splitter.min_size_first / total_size;
+            float min_second_ratio = splitter->splitter.min_size_second / total_size;
+            new_ratio = fmaxf(min_first_ratio, fminf(1.0f - min_second_ratio, new_ratio));
+
+            if (new_ratio != splitter->splitter.split_ratio) {
+                float old_ratio = splitter->splitter.split_ratio;
+                splitter->splitter.split_ratio = new_ratio;
+                splitter->layout_dirty = true;
+
+                AUI_Signal sig;
+                memset(&sig, 0, sizeof(sig));
+                sig.type = AUI_SIGNAL_VALUE_CHANGED;
+                sig.source = splitter;
+                sig.float_change.old_value = old_ratio;
+                sig.float_change.new_value = new_ratio;
+                aui_node_emit(splitter, AUI_SIGNAL_VALUE_CHANGED, &sig);
+            }
+        }
+
+        /* Stop splitter dragging on mouse up */
+        if (event->type == SDL_EVENT_MOUSE_BUTTON_UP && s_pressed_node &&
+            s_pressed_node->type == AUI_NODE_SPLITTER) {
+            s_pressed_node->splitter.dragging = false;
+        }
+
         return hit != NULL && !hit->mouse_filter_ignore;
     }
 
     /* Keyboard events go to focused node */
     if (s_focused_node) {
+        /* Handle textbox input specially */
+        if (s_focused_node->type == AUI_NODE_TEXTBOX && s_focused_node->textbox.buffer) {
+            AUI_Node *tb = s_focused_node;
+
+            /* Text input event */
+            if (event->type == SDL_EVENT_TEXT_INPUT) {
+                const char *input = event->text.text;
+                int input_len = (int)strlen(input);
+                int buf_len = (int)strlen(tb->textbox.buffer);
+                int cursor = tb->textbox.cursor_pos;
+
+                /* Check if there's room for the new text */
+                if (buf_len + input_len < tb->textbox.buffer_size - 1) {
+                    /* Shift text after cursor to make room */
+                    memmove(tb->textbox.buffer + cursor + input_len,
+                            tb->textbox.buffer + cursor,
+                            buf_len - cursor + 1);
+                    /* Insert new text */
+                    memcpy(tb->textbox.buffer + cursor, input, input_len);
+                    tb->textbox.cursor_pos += input_len;
+
+                    aui_node_emit_simple(tb, AUI_SIGNAL_TEXT_CHANGED);
+                }
+                return true;
+            }
+
+            /* Key down events */
+            if (event->type == SDL_EVENT_KEY_DOWN) {
+                SDL_Keycode key = event->key.key;
+                int cursor = tb->textbox.cursor_pos;
+                int len = (int)strlen(tb->textbox.buffer);
+
+                /* Backspace - delete character before cursor */
+                if (key == SDLK_BACKSPACE && cursor > 0) {
+                    memmove(tb->textbox.buffer + cursor - 1,
+                            tb->textbox.buffer + cursor,
+                            len - cursor + 1);
+                    tb->textbox.cursor_pos--;
+                    aui_node_emit_simple(tb, AUI_SIGNAL_TEXT_CHANGED);
+                    return true;
+                }
+
+                /* Delete - delete character at cursor */
+                if (key == SDLK_DELETE && cursor < len) {
+                    memmove(tb->textbox.buffer + cursor,
+                            tb->textbox.buffer + cursor + 1,
+                            len - cursor);
+                    aui_node_emit_simple(tb, AUI_SIGNAL_TEXT_CHANGED);
+                    return true;
+                }
+
+                /* Left arrow - move cursor left */
+                if (key == SDLK_LEFT && cursor > 0) {
+                    tb->textbox.cursor_pos--;
+                    return true;
+                }
+
+                /* Right arrow - move cursor right */
+                if (key == SDLK_RIGHT && cursor < len) {
+                    tb->textbox.cursor_pos++;
+                    return true;
+                }
+
+                /* Home - move cursor to start */
+                if (key == SDLK_HOME) {
+                    tb->textbox.cursor_pos = 0;
+                    return true;
+                }
+
+                /* End - move cursor to end */
+                if (key == SDLK_END) {
+                    tb->textbox.cursor_pos = len;
+                    return true;
+                }
+
+                /* Enter - release focus */
+                if (key == SDLK_RETURN || key == SDLK_KP_ENTER) {
+                    aui_node_release_focus(tb);
+                    return true;
+                }
+
+                /* Escape - release focus */
+                if (key == SDLK_ESCAPE) {
+                    aui_node_release_focus(tb);
+                    return true;
+                }
+            }
+        }
+
+        /* Custom input handler for other focused nodes */
         if (s_focused_node->on_gui_input) {
             return s_focused_node->on_gui_input(s_focused_node, ctx, event);
         }
@@ -1670,6 +2093,351 @@ static void aui_node_render_recursive(AUI_Context *ctx, AUI_Node *node, float in
             }
             break;
 
+        case AUI_NODE_TEXTBOX:
+            {
+                float x = node->global_rect.x;
+                float y = node->global_rect.y;
+                float w = node->global_rect.w;
+                float h = node->global_rect.h;
+
+                /* Background - highlight when focused */
+                uint32_t bg = ctx->theme.bg_widget;
+                if (node->focused) {
+                    bg = ctx->theme.bg_widget_hover;
+                } else if (node->hovered) {
+                    bg = ctx->theme.bg_widget_hover;
+                }
+                aui_draw_rect_rounded(ctx, x, y, w, h,
+                                      aui_apply_opacity(bg, effective_opacity),
+                                      style.corner_radius.top_left);
+
+                /* Border - accent color when focused */
+                uint32_t border = node->focused ? ctx->theme.accent : ctx->theme.border;
+                aui_draw_rect_outline(ctx, x, y, w, h,
+                                      aui_apply_opacity(border, effective_opacity), 1.0f);
+
+                /* Text content area */
+                float padding = 6.0f;
+                float text_x = x + padding;
+                float text_y = y + (h - aui_text_height(ctx)) / 2;
+
+                /* Determine display text */
+                const char *display_text = node->textbox.buffer;
+                uint32_t text_color = style.text_color;
+
+                /* Show placeholder if empty and not focused */
+                bool show_placeholder = (!display_text || display_text[0] == '\0') && !node->focused;
+                if (show_placeholder && node->textbox.placeholder[0] != '\0') {
+                    display_text = node->textbox.placeholder;
+                    text_color = ctx->theme.text_disabled;
+                }
+
+                /* Clip text to widget bounds */
+                aui_push_scissor(ctx, x + padding, y, w - padding * 2, h);
+
+                if (display_text && display_text[0]) {
+                    aui_draw_text(ctx, display_text, text_x, text_y,
+                                  aui_apply_opacity(text_color, effective_opacity));
+                }
+
+                /* Draw cursor if focused */
+                if (node->focused && node->textbox.buffer) {
+                    int cursor_pos = node->textbox.cursor_pos;
+                    float cursor_x = text_x;
+
+                    if (cursor_pos > 0) {
+                        /* Calculate cursor position by measuring text up to cursor */
+                        char temp[256];
+                        int copy_len = cursor_pos < 255 ? cursor_pos : 255;
+                        strncpy(temp, node->textbox.buffer, copy_len);
+                        temp[copy_len] = '\0';
+                        cursor_x = text_x + aui_text_width(ctx, temp);
+                    }
+
+                    /* Draw cursor line */
+                    aui_draw_rect(ctx, cursor_x, y + 4, 2, h - 8,
+                                  aui_apply_opacity(style.text_color, effective_opacity));
+                }
+
+                aui_pop_scissor(ctx);
+            }
+            break;
+
+        case AUI_NODE_PANEL:
+            {
+                float x = node->global_rect.x;
+                float y = node->global_rect.y;
+                float w = node->global_rect.w;
+                float h = node->global_rect.h;
+                float title_h = ctx->theme.widget_height;
+                float btn_size = title_h - 8;
+                float btn_padding = 4;
+                bool has_title = node->panel.title[0] != '\0';
+
+                /* Panel background */
+                aui_draw_rect_rounded(ctx, x, y, w, h,
+                                      aui_apply_opacity(ctx->theme.bg_panel, effective_opacity),
+                                      style.corner_radius.top_left);
+
+                /* Title bar if title is set */
+                if (has_title) {
+                    /* Title bar background (slightly darker) */
+                    uint32_t title_bg = ctx->theme.bg_widget;
+                    aui_draw_rect_rounded(ctx, x, y, w, title_h,
+                                          aui_apply_opacity(title_bg, effective_opacity),
+                                          style.corner_radius.top_left);
+
+                    /* Title text */
+                    float text_x = x + ctx->theme.padding;
+                    float text_y = y + (title_h - aui_text_height(ctx)) / 2;
+                    aui_draw_text(ctx, node->panel.title, text_x, text_y,
+                                  aui_apply_opacity(ctx->theme.text, effective_opacity));
+
+                    /* Buttons on right side */
+                    float btn_x = x + w - btn_padding - btn_size;
+
+                    /* Close button (X) */
+                    if (node->panel.closable) {
+                        float btn_y = y + (title_h - btn_size) / 2;
+                        uint32_t btn_bg = ctx->theme.bg_widget_hover;
+                        aui_draw_rect_rounded(ctx, btn_x, btn_y, btn_size, btn_size,
+                                              aui_apply_opacity(btn_bg, effective_opacity), 3.0f);
+                        /* Draw X */
+                        float cx = btn_x + btn_size / 2;
+                        float cy = btn_y + btn_size / 2;
+                        float cross_size = btn_size * 0.3f;
+                        aui_draw_line(ctx, cx - cross_size, cy - cross_size,
+                                      cx + cross_size, cy + cross_size,
+                                      aui_apply_opacity(ctx->theme.text, effective_opacity), 2.0f);
+                        aui_draw_line(ctx, cx + cross_size, cy - cross_size,
+                                      cx - cross_size, cy + cross_size,
+                                      aui_apply_opacity(ctx->theme.text, effective_opacity), 2.0f);
+                        btn_x -= btn_size + btn_padding;
+                    }
+
+                    /* Collapse button (v or >) */
+                    if (node->panel.collapsible) {
+                        float btn_y = y + (title_h - btn_size) / 2;
+                        uint32_t btn_bg = ctx->theme.bg_widget_hover;
+                        aui_draw_rect_rounded(ctx, btn_x, btn_y, btn_size, btn_size,
+                                              aui_apply_opacity(btn_bg, effective_opacity), 3.0f);
+                        /* Draw arrow (v when expanded, > when collapsed) */
+                        float cx = btn_x + btn_size / 2;
+                        float cy = btn_y + btn_size / 2;
+                        float arrow_size = btn_size * 0.25f;
+                        if (node->panel.collapsed) {
+                            /* > arrow */
+                            aui_draw_line(ctx, cx - arrow_size, cy - arrow_size,
+                                          cx + arrow_size, cy,
+                                          aui_apply_opacity(ctx->theme.text, effective_opacity), 2.0f);
+                            aui_draw_line(ctx, cx + arrow_size, cy,
+                                          cx - arrow_size, cy + arrow_size,
+                                          aui_apply_opacity(ctx->theme.text, effective_opacity), 2.0f);
+                        } else {
+                            /* v arrow */
+                            aui_draw_line(ctx, cx - arrow_size, cy - arrow_size / 2,
+                                          cx, cy + arrow_size / 2,
+                                          aui_apply_opacity(ctx->theme.text, effective_opacity), 2.0f);
+                            aui_draw_line(ctx, cx, cy + arrow_size / 2,
+                                          cx + arrow_size, cy - arrow_size / 2,
+                                          aui_apply_opacity(ctx->theme.text, effective_opacity), 2.0f);
+                        }
+                    }
+
+                    /* Separator line below title */
+                    aui_draw_line(ctx, x, y + title_h, x + w, y + title_h,
+                                  aui_apply_opacity(ctx->theme.border, effective_opacity), 1.0f);
+                }
+
+                /* Draw border */
+                if (style.border.width.top > 0) {
+                    aui_draw_rect_outline(ctx, x, y, w, h,
+                                          aui_apply_opacity(style.border.color, effective_opacity),
+                                          style.border.width.top);
+                }
+            }
+            break;
+
+        case AUI_NODE_COLLAPSING_HEADER:
+            {
+                float x = node->global_rect.x;
+                float y = node->global_rect.y;
+                float w = node->global_rect.w;
+                float header_h = ctx->theme.widget_height;
+
+                /* Header background */
+                uint32_t bg = node->hovered ? ctx->theme.bg_widget_hover : ctx->theme.bg_widget;
+                aui_draw_rect_rounded(ctx, x, y, w, header_h,
+                                      aui_apply_opacity(bg, effective_opacity),
+                                      style.corner_radius.top_left);
+
+                /* Arrow indicator */
+                if (node->collapsing_header.show_arrow) {
+                    float arrow_size = 8.0f;
+                    float arrow_x = x + 12.0f;
+                    float arrow_y = y + header_h / 2;
+
+                    if (node->collapsing_header.expanded) {
+                        /* v arrow (expanded) */
+                        aui_draw_line(ctx, arrow_x - arrow_size/2, arrow_y - arrow_size/4,
+                                      arrow_x, arrow_y + arrow_size/4,
+                                      aui_apply_opacity(ctx->theme.text, effective_opacity), 2.0f);
+                        aui_draw_line(ctx, arrow_x, arrow_y + arrow_size/4,
+                                      arrow_x + arrow_size/2, arrow_y - arrow_size/4,
+                                      aui_apply_opacity(ctx->theme.text, effective_opacity), 2.0f);
+                    } else {
+                        /* > arrow (collapsed) */
+                        aui_draw_line(ctx, arrow_x - arrow_size/4, arrow_y - arrow_size/2,
+                                      arrow_x + arrow_size/4, arrow_y,
+                                      aui_apply_opacity(ctx->theme.text, effective_opacity), 2.0f);
+                        aui_draw_line(ctx, arrow_x + arrow_size/4, arrow_y,
+                                      arrow_x - arrow_size/4, arrow_y + arrow_size/2,
+                                      aui_apply_opacity(ctx->theme.text, effective_opacity), 2.0f);
+                    }
+                }
+
+                /* Header text */
+                float text_x = x + (node->collapsing_header.show_arrow ? 28.0f : ctx->theme.padding);
+                float text_y = y + (header_h - aui_text_height(ctx)) / 2;
+                aui_draw_text(ctx, node->collapsing_header.text, text_x, text_y,
+                              aui_apply_opacity(ctx->theme.text, effective_opacity));
+            }
+            break;
+
+        case AUI_NODE_SPLITTER:
+            {
+                /* Draw splitter bar between children */
+                AUI_Node *first = node->first_child;
+                if (!first) break;
+
+                float splitter_w = node->splitter.splitter_width;
+                uint32_t splitter_color = node->splitter.dragging ?
+                    ctx->theme.accent : ctx->theme.border;
+
+                if (node->splitter.horizontal) {
+                    float bar_x = first->global_rect.x + first->global_rect.w;
+                    float bar_y = node->global_rect.y;
+                    float bar_h = node->global_rect.h;
+
+                    aui_draw_rect(ctx, bar_x, bar_y, splitter_w, bar_h,
+                                  aui_apply_opacity(splitter_color, effective_opacity));
+
+                    /* Draw grab handle (3 dots) */
+                    float cx = bar_x + splitter_w / 2;
+                    float cy = bar_y + bar_h / 2;
+                    for (int i = -1; i <= 1; i++) {
+                        aui_draw_rect(ctx, cx - 1, cy + i * 8 - 1, 3, 3,
+                                      aui_apply_opacity(ctx->theme.text_disabled, effective_opacity));
+                    }
+                } else {
+                    float bar_x = node->global_rect.x;
+                    float bar_y = first->global_rect.y + first->global_rect.h;
+                    float bar_w = node->global_rect.w;
+
+                    aui_draw_rect(ctx, bar_x, bar_y, bar_w, splitter_w,
+                                  aui_apply_opacity(splitter_color, effective_opacity));
+
+                    /* Draw grab handle (3 dots) */
+                    float cx = bar_x + bar_w / 2;
+                    float cy = bar_y + splitter_w / 2;
+                    for (int i = -1; i <= 1; i++) {
+                        aui_draw_rect(ctx, cx + i * 8 - 1, cy - 1, 3, 3,
+                                      aui_apply_opacity(ctx->theme.text_disabled, effective_opacity));
+                    }
+                }
+            }
+            break;
+
+        case AUI_NODE_TREE:
+            {
+                float x = node->global_rect.x;
+                float y = node->global_rect.y;
+                float w = node->global_rect.w;
+                float h = node->global_rect.h;
+                float item_h = node->tree.item_height;
+                float indent = node->tree.indent_width;
+
+                /* Background */
+                aui_draw_rect_rounded(ctx, x, y, w, h,
+                                      aui_apply_opacity(ctx->theme.bg_widget, effective_opacity),
+                                      style.corner_radius.top_left);
+
+                /* Border */
+                aui_draw_rect_outline(ctx, x, y, w, h,
+                                      aui_apply_opacity(ctx->theme.border, effective_opacity), 1.0f);
+
+                /* Clip tree content */
+                aui_push_scissor(ctx, x, y, w, h);
+
+                /* Helper function to render tree items recursively */
+                float current_y = y - node->tree.scroll_offset;
+
+                /* Recursive lambda for rendering items */
+                std::function<void(AUI_TreeItem*, int)> render_item;
+                render_item = [&](AUI_TreeItem *item, int depth) {
+                    while (item) {
+                        /* Only render if visible */
+                        if (current_y + item_h > y && current_y < y + h) {
+                            float item_x = x + depth * indent;
+                            float arrow_size = 8.0f;
+                            float arrow_offset = 12.0f;
+
+                            /* Selection highlight */
+                            if (item->selected) {
+                                aui_draw_rect(ctx, x, current_y, w, item_h,
+                                              aui_apply_opacity(ctx->theme.accent, effective_opacity * 0.3f));
+                            }
+
+                            /* Draw expand/collapse arrow if has children */
+                            bool has_children = item->first_child != NULL;
+                            if (has_children) {
+                                float ax = item_x + arrow_offset;
+                                float ay = current_y + item_h / 2;
+
+                                if (item->expanded) {
+                                    /* v arrow */
+                                    aui_draw_line(ctx, ax - arrow_size/2, ay - arrow_size/4,
+                                                  ax, ay + arrow_size/4,
+                                                  aui_apply_opacity(ctx->theme.text, effective_opacity), 2.0f);
+                                    aui_draw_line(ctx, ax, ay + arrow_size/4,
+                                                  ax + arrow_size/2, ay - arrow_size/4,
+                                                  aui_apply_opacity(ctx->theme.text, effective_opacity), 2.0f);
+                                } else {
+                                    /* > arrow */
+                                    aui_draw_line(ctx, ax - arrow_size/4, ay - arrow_size/2,
+                                                  ax + arrow_size/4, ay,
+                                                  aui_apply_opacity(ctx->theme.text, effective_opacity), 2.0f);
+                                    aui_draw_line(ctx, ax + arrow_size/4, ay,
+                                                  ax - arrow_size/4, ay + arrow_size/2,
+                                                  aui_apply_opacity(ctx->theme.text, effective_opacity), 2.0f);
+                                }
+                            }
+
+                            /* Draw item text */
+                            float text_x = item_x + (has_children ? 28.0f : 8.0f);
+                            float text_y = current_y + (item_h - aui_text_height(ctx)) / 2;
+                            aui_draw_text(ctx, item->text, text_x, text_y,
+                                          aui_apply_opacity(ctx->theme.text, effective_opacity));
+                        }
+
+                        current_y += item_h;
+
+                        /* Render children if expanded */
+                        if (item->expanded && item->first_child) {
+                            render_item(item->first_child, depth + 1);
+                        }
+
+                        item = item->next_sibling;
+                    }
+                };
+
+                /* Start rendering from root items */
+                render_item(node->tree.root_items, 0);
+
+                aui_pop_scissor(ctx);
+            }
+            break;
+
         default:
             break;
     }
@@ -1789,6 +2557,70 @@ AUI_Node *aui_panel_create(AUI_Context *ctx, const char *name, const char *title
         if (title) {
             strncpy(node->panel.title, title, sizeof(node->panel.title) - 1);
         }
+    }
+    return node;
+}
+
+AUI_Node *aui_textbox_create(AUI_Context *ctx, const char *name,
+                              char *buffer, int buffer_size)
+{
+    AUI_Node *node = aui_node_create(ctx, AUI_NODE_TEXTBOX, name);
+    if (node) {
+        node->textbox.buffer = buffer;
+        node->textbox.buffer_size = buffer_size;
+        node->textbox.cursor_pos = buffer ? (int)strlen(buffer) : 0;
+        node->custom_min_size_x = 100;
+        node->custom_min_size_y = 28;
+    }
+    return node;
+}
+
+AUI_Node *aui_checkbox_create(AUI_Context *ctx, const char *name,
+                               const char *text, bool *value)
+{
+    AUI_Node *node = aui_node_create(ctx, AUI_NODE_CHECKBOX, name);
+    if (node) {
+        if (text) {
+            strncpy(node->checkbox.text, text, sizeof(node->checkbox.text) - 1);
+        }
+        if (value) {
+            node->checkbox.checked = *value;
+        }
+    }
+    return node;
+}
+
+AUI_Node *aui_slider_create(AUI_Context *ctx, const char *name,
+                             float min_val, float max_val, float *value)
+{
+    AUI_Node *node = aui_node_create(ctx, AUI_NODE_SLIDER, name);
+    if (node) {
+        node->slider.min_value = min_val;
+        node->slider.max_value = max_val;
+        if (value) {
+            node->slider.value = *value;
+        }
+    }
+    return node;
+}
+
+AUI_Node *aui_collapsing_header_create(AUI_Context *ctx, const char *name,
+                                        const char *text)
+{
+    AUI_Node *node = aui_node_create(ctx, AUI_NODE_COLLAPSING_HEADER, name);
+    if (node && text) {
+        strncpy(node->collapsing_header.text, text,
+                sizeof(node->collapsing_header.text) - 1);
+        node->collapsing_header.text[sizeof(node->collapsing_header.text) - 1] = '\0';
+    }
+    return node;
+}
+
+AUI_Node *aui_splitter_create(AUI_Context *ctx, const char *name, bool horizontal)
+{
+    AUI_Node *node = aui_node_create(ctx, AUI_NODE_SPLITTER, name);
+    if (node) {
+        node->splitter.horizontal = horizontal;
     }
     return node;
 }
@@ -2036,4 +2868,378 @@ void aui_progress_set_range(AUI_Node *node, float min, float max)
     node->progress.min_value = min;
     node->progress.max_value = max;
     node->progress.value = fmaxf(min, fminf(max, node->progress.value));
+}
+
+/* ============================================================================
+ * Panel Functions
+ * ============================================================================ */
+
+void aui_panel_set_title(AUI_Node *node, const char *title)
+{
+    if (!node || node->type != AUI_NODE_PANEL) return;
+    if (title) {
+        strncpy(node->panel.title, title, sizeof(node->panel.title) - 1);
+        node->panel.title[sizeof(node->panel.title) - 1] = '\0';
+    } else {
+        node->panel.title[0] = '\0';
+    }
+    node->layout_dirty = true;
+}
+
+void aui_panel_set_closable(AUI_Node *node, bool closable)
+{
+    if (!node || node->type != AUI_NODE_PANEL) return;
+    node->panel.closable = closable;
+}
+
+void aui_panel_set_collapsible(AUI_Node *node, bool collapsible)
+{
+    if (!node || node->type != AUI_NODE_PANEL) return;
+    node->panel.collapsible = collapsible;
+}
+
+bool aui_panel_is_collapsed(AUI_Node *node)
+{
+    if (!node || node->type != AUI_NODE_PANEL) return false;
+    return node->panel.collapsed;
+}
+
+void aui_panel_set_collapsed(AUI_Node *node, bool collapsed)
+{
+    if (!node || node->type != AUI_NODE_PANEL) return;
+    node->panel.collapsed = collapsed;
+    node->layout_dirty = true;
+}
+
+bool aui_panel_is_closed(AUI_Node *node)
+{
+    if (!node || node->type != AUI_NODE_PANEL) return false;
+    return node->panel.closed;
+}
+
+/* ============================================================================
+ * Collapsing Header Functions
+ * ============================================================================ */
+
+void aui_collapsing_header_set_text(AUI_Node *node, const char *text)
+{
+    if (!node || node->type != AUI_NODE_COLLAPSING_HEADER) return;
+    if (text) {
+        strncpy(node->collapsing_header.text, text,
+                sizeof(node->collapsing_header.text) - 1);
+        node->collapsing_header.text[sizeof(node->collapsing_header.text) - 1] = '\0';
+    } else {
+        node->collapsing_header.text[0] = '\0';
+    }
+}
+
+void aui_collapsing_header_set_expanded(AUI_Node *node, bool expanded)
+{
+    if (!node || node->type != AUI_NODE_COLLAPSING_HEADER) return;
+    node->collapsing_header.expanded = expanded;
+    node->layout_dirty = true;
+}
+
+bool aui_collapsing_header_is_expanded(AUI_Node *node)
+{
+    if (!node || node->type != AUI_NODE_COLLAPSING_HEADER) return false;
+    return node->collapsing_header.expanded;
+}
+
+/* ============================================================================
+ * Splitter Functions
+ * ============================================================================ */
+
+void aui_splitter_set_ratio(AUI_Node *node, float ratio)
+{
+    if (!node || node->type != AUI_NODE_SPLITTER) return;
+    node->splitter.split_ratio = fmaxf(0.0f, fminf(1.0f, ratio));
+    node->layout_dirty = true;
+}
+
+float aui_splitter_get_ratio(AUI_Node *node)
+{
+    if (!node || node->type != AUI_NODE_SPLITTER) return 0.5f;
+    return node->splitter.split_ratio;
+}
+
+void aui_splitter_set_min_sizes(AUI_Node *node, float first, float second)
+{
+    if (!node || node->type != AUI_NODE_SPLITTER) return;
+    node->splitter.min_size_first = fmaxf(0.0f, first);
+    node->splitter.min_size_second = fmaxf(0.0f, second);
+}
+
+void aui_splitter_set_width(AUI_Node *node, float width)
+{
+    if (!node || node->type != AUI_NODE_SPLITTER) return;
+    node->splitter.splitter_width = fmaxf(2.0f, width);
+    node->layout_dirty = true;
+}
+
+/* ============================================================================
+ * Tree Widget Functions
+ * ============================================================================ */
+
+AUI_Node *aui_tree_create(AUI_Context *ctx, const char *name)
+{
+    return aui_node_create(ctx, AUI_NODE_TREE, name);
+}
+
+static void aui_tree_item_free_recursive(AUI_TreeItem *item)
+{
+    while (item) {
+        AUI_TreeItem *next = item->next_sibling;
+        if (item->first_child) {
+            aui_tree_item_free_recursive(item->first_child);
+        }
+        free(item);
+        item = next;
+    }
+}
+
+AUI_TreeItem *aui_tree_add_item(AUI_Node *tree, const char *text, void *user_data)
+{
+    if (!tree || tree->type != AUI_NODE_TREE) return NULL;
+
+    AUI_TreeItem *item = (AUI_TreeItem*)calloc(1, sizeof(AUI_TreeItem));
+    if (!item) return NULL;
+
+    item->id = tree->tree.next_item_id++;
+    if (text) {
+        strncpy(item->text, text, sizeof(item->text) - 1);
+    }
+    item->user_data = user_data;
+    item->expanded = true;
+
+    /* Add to end of root items list */
+    if (!tree->tree.root_items) {
+        tree->tree.root_items = item;
+    } else {
+        AUI_TreeItem *last = tree->tree.root_items;
+        while (last->next_sibling) {
+            last = last->next_sibling;
+        }
+        last->next_sibling = item;
+        item->prev_sibling = last;
+    }
+
+    return item;
+}
+
+AUI_TreeItem *aui_tree_add_child(AUI_Node *tree, AUI_TreeItem *parent,
+                                  const char *text, void *user_data)
+{
+    if (!tree || tree->type != AUI_NODE_TREE || !parent) return NULL;
+
+    AUI_TreeItem *item = (AUI_TreeItem*)calloc(1, sizeof(AUI_TreeItem));
+    if (!item) return NULL;
+
+    item->id = tree->tree.next_item_id++;
+    if (text) {
+        strncpy(item->text, text, sizeof(item->text) - 1);
+    }
+    item->user_data = user_data;
+    item->expanded = true;
+    item->parent = parent;
+
+    /* Add to end of parent's children list */
+    if (!parent->first_child) {
+        parent->first_child = item;
+        parent->last_child = item;
+    } else {
+        parent->last_child->next_sibling = item;
+        item->prev_sibling = parent->last_child;
+        parent->last_child = item;
+    }
+
+    return item;
+}
+
+void aui_tree_remove_item(AUI_Node *tree, AUI_TreeItem *item)
+{
+    if (!tree || tree->type != AUI_NODE_TREE || !item) return;
+
+    /* Clear selection if this item is selected */
+    if (tree->tree.selected_item == item) {
+        tree->tree.selected_item = NULL;
+    }
+
+    /* Remove from parent's children list */
+    if (item->parent) {
+        if (item->prev_sibling) {
+            item->prev_sibling->next_sibling = item->next_sibling;
+        } else {
+            item->parent->first_child = item->next_sibling;
+        }
+        if (item->next_sibling) {
+            item->next_sibling->prev_sibling = item->prev_sibling;
+        } else {
+            item->parent->last_child = item->prev_sibling;
+        }
+    } else {
+        /* Root item */
+        if (item->prev_sibling) {
+            item->prev_sibling->next_sibling = item->next_sibling;
+        } else {
+            tree->tree.root_items = item->next_sibling;
+        }
+        if (item->next_sibling) {
+            item->next_sibling->prev_sibling = item->prev_sibling;
+        }
+    }
+
+    /* Free item and all children */
+    if (item->first_child) {
+        aui_tree_item_free_recursive(item->first_child);
+    }
+    free(item);
+}
+
+void aui_tree_clear(AUI_Node *tree)
+{
+    if (!tree || tree->type != AUI_NODE_TREE) return;
+
+    aui_tree_item_free_recursive(tree->tree.root_items);
+    tree->tree.root_items = NULL;
+    tree->tree.selected_item = NULL;
+    tree->tree.anchor_item = NULL;
+}
+
+AUI_TreeItem *aui_tree_get_selected(AUI_Node *tree)
+{
+    if (!tree || tree->type != AUI_NODE_TREE) return NULL;
+    return tree->tree.selected_item;
+}
+
+void aui_tree_set_selected(AUI_Node *tree, AUI_TreeItem *item)
+{
+    if (!tree || tree->type != AUI_NODE_TREE) return;
+
+    /* Deselect previous */
+    if (tree->tree.selected_item && !tree->tree.multi_select) {
+        tree->tree.selected_item->selected = false;
+    }
+
+    tree->tree.selected_item = item;
+    if (item) {
+        item->selected = true;
+    }
+}
+
+void aui_tree_set_expanded(AUI_Node *tree, AUI_TreeItem *item, bool expanded)
+{
+    if (!tree || tree->type != AUI_NODE_TREE || !item) return;
+    item->expanded = expanded;
+}
+
+static void aui_tree_set_expanded_recursive(AUI_TreeItem *item, bool expanded)
+{
+    while (item) {
+        item->expanded = expanded;
+        if (item->first_child) {
+            aui_tree_set_expanded_recursive(item->first_child, expanded);
+        }
+        item = item->next_sibling;
+    }
+}
+
+void aui_tree_expand_all(AUI_Node *tree)
+{
+    if (!tree || tree->type != AUI_NODE_TREE) return;
+    aui_tree_set_expanded_recursive(tree->tree.root_items, true);
+}
+
+void aui_tree_collapse_all(AUI_Node *tree)
+{
+    if (!tree || tree->type != AUI_NODE_TREE) return;
+    aui_tree_set_expanded_recursive(tree->tree.root_items, false);
+}
+
+void aui_tree_ensure_visible(AUI_Node *tree, AUI_TreeItem *item)
+{
+    if (!tree || tree->type != AUI_NODE_TREE || !item) return;
+
+    /* Expand all ancestors */
+    AUI_TreeItem *parent = item->parent;
+    while (parent) {
+        parent->expanded = true;
+        parent = parent->parent;
+    }
+
+    /* TODO: Scroll to make item visible */
+}
+
+static AUI_TreeItem *aui_tree_find_by_data_recursive(AUI_TreeItem *item, void *user_data)
+{
+    while (item) {
+        if (item->user_data == user_data) {
+            return item;
+        }
+        if (item->first_child) {
+            AUI_TreeItem *found = aui_tree_find_by_data_recursive(item->first_child, user_data);
+            if (found) return found;
+        }
+        item = item->next_sibling;
+    }
+    return NULL;
+}
+
+AUI_TreeItem *aui_tree_find_by_data(AUI_Node *tree, void *user_data)
+{
+    if (!tree || tree->type != AUI_NODE_TREE) return NULL;
+    return aui_tree_find_by_data_recursive(tree->tree.root_items, user_data);
+}
+
+void aui_tree_set_multi_select(AUI_Node *tree, bool multi)
+{
+    if (!tree || tree->type != AUI_NODE_TREE) return;
+    tree->tree.multi_select = multi;
+}
+
+void aui_tree_set_indent(AUI_Node *tree, float indent_width)
+{
+    if (!tree || tree->type != AUI_NODE_TREE) return;
+    tree->tree.indent_width = fmaxf(0.0f, indent_width);
+}
+
+void aui_tree_set_item_height(AUI_Node *tree, float height)
+{
+    if (!tree || tree->type != AUI_NODE_TREE) return;
+    tree->tree.item_height = fmaxf(16.0f, height);
+}
+
+void aui_tree_item_set_text(AUI_TreeItem *item, const char *text)
+{
+    if (!item) return;
+    if (text) {
+        strncpy(item->text, text, sizeof(item->text) - 1);
+        item->text[sizeof(item->text) - 1] = '\0';
+    } else {
+        item->text[0] = '\0';
+    }
+}
+
+void aui_tree_item_set_icon(AUI_TreeItem *item, void *icon)
+{
+    if (!item) return;
+    item->icon = icon;
+}
+
+int aui_tree_item_get_depth(AUI_TreeItem *item)
+{
+    if (!item) return 0;
+    int depth = 0;
+    AUI_TreeItem *parent = item->parent;
+    while (parent) {
+        depth++;
+        parent = parent->parent;
+    }
+    return depth;
+}
+
+bool aui_tree_item_has_children(AUI_TreeItem *item)
+{
+    if (!item) return false;
+    return item->first_child != NULL;
 }

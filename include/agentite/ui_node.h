@@ -80,6 +80,8 @@ typedef enum AUI_NodeType {
     AUI_NODE_TREE,
     AUI_NODE_RICHTEXT,
     AUI_NODE_CHART,
+    AUI_NODE_COLLAPSING_HEADER,
+    AUI_NODE_SPLITTER,
 
     /* Custom */
     AUI_NODE_CUSTOM,
@@ -171,11 +173,17 @@ typedef enum AUI_SignalType {
     AUI_SIGNAL_VISIBILITY_CHANGED,
     AUI_SIGNAL_MINIMUM_SIZE_CHANGED,
 
-    /* Tree signals */
+    /* Tree hierarchy signals */
     AUI_SIGNAL_CHILD_ADDED,
     AUI_SIGNAL_CHILD_REMOVED,
     AUI_SIGNAL_TREE_ENTERED,
     AUI_SIGNAL_TREE_EXITED,
+
+    /* Tree widget signals */
+    AUI_SIGNAL_ITEM_SELECTED,
+    AUI_SIGNAL_ITEM_ACTIVATED,
+    AUI_SIGNAL_ITEM_EXPANDED,
+    AUI_SIGNAL_ITEM_COLLAPSED,
 
     /* Custom signals (100+) */
     AUI_SIGNAL_CUSTOM = 100,
@@ -294,7 +302,61 @@ typedef struct AUI_PanelData {
     bool dragging;
     float drag_offset_x, drag_offset_y;
     bool closed;
+    bool collapsed;      /* Is content collapsed (only title bar shown) */
+    bool closable;       /* Show close button in title bar */
+    bool collapsible;    /* Show collapse button in title bar */
 } AUI_PanelData;
+
+/* Collapsing header data */
+typedef struct AUI_CollapsingHeaderData {
+    char text[256];
+    bool expanded;
+    bool show_arrow;
+} AUI_CollapsingHeaderData;
+
+/* Splitter data */
+typedef struct AUI_SplitterData {
+    bool horizontal;           /* true = left/right split */
+    float split_ratio;         /* 0.0-1.0 position of splitter */
+    float min_size_first;      /* min pixels for first child */
+    float min_size_second;     /* min pixels for second child */
+    float splitter_width;      /* drag bar width */
+    bool dragging;
+    float drag_start_ratio;
+} AUI_SplitterData;
+
+/* Tree item (forward declaration) */
+typedef struct AUI_TreeItem AUI_TreeItem;
+
+/* Tree item structure */
+struct AUI_TreeItem {
+    uint32_t id;                /* Unique item ID */
+    char text[256];             /* Display text */
+    bool expanded;              /* Is this item expanded */
+    bool selected;              /* Is this item selected */
+    void *user_data;            /* User data pointer */
+    void *icon;                 /* Optional icon (texture) */
+
+    AUI_TreeItem *parent;       /* Parent item (NULL for root) */
+    AUI_TreeItem *first_child;
+    AUI_TreeItem *last_child;
+    AUI_TreeItem *next_sibling;
+    AUI_TreeItem *prev_sibling;
+};
+
+/* Tree widget data */
+typedef struct AUI_TreeData {
+    AUI_TreeItem *root_items;       /* First root item (linked list) */
+    AUI_TreeItem *selected_item;    /* Currently selected item */
+    AUI_TreeItem *anchor_item;      /* For shift-click range selection */
+    float indent_width;             /* Pixels per indentation level */
+    float item_height;              /* Height of each item row */
+    float scroll_offset;            /* Vertical scroll offset */
+    bool multi_select;              /* Allow multiple selection */
+    bool hide_root;                 /* Hide root level items */
+    bool allow_reorder;             /* Allow drag to reorder */
+    uint32_t next_item_id;          /* Counter for unique IDs */
+} AUI_TreeData;
 
 /* VBox/HBox data */
 typedef struct AUI_BoxData {
@@ -422,6 +484,9 @@ struct AUI_Node {
         AUI_GridData grid;
         AUI_ScrollData scroll;
         AUI_ProgressData progress;
+        AUI_CollapsingHeaderData collapsing_header;
+        AUI_SplitterData splitter;
+        AUI_TreeData tree;
         void *custom_data;
     };
 
@@ -647,6 +712,63 @@ AUI_Node *aui_scroll_create(AUI_Context *ctx, const char *name);
 /* Create panel */
 AUI_Node *aui_panel_create(AUI_Context *ctx, const char *name, const char *title);
 
+/* Create textbox */
+AUI_Node *aui_textbox_create(AUI_Context *ctx, const char *name,
+                              char *buffer, int buffer_size);
+
+/* Create checkbox */
+AUI_Node *aui_checkbox_create(AUI_Context *ctx, const char *name,
+                               const char *text, bool *value);
+
+/* Create slider */
+AUI_Node *aui_slider_create(AUI_Context *ctx, const char *name,
+                             float min_val, float max_val, float *value);
+
+/* Create collapsing header */
+AUI_Node *aui_collapsing_header_create(AUI_Context *ctx, const char *name,
+                                        const char *text);
+
+/* Create splitter */
+AUI_Node *aui_splitter_create(AUI_Context *ctx, const char *name, bool horizontal);
+
+/* Create tree widget */
+AUI_Node *aui_tree_create(AUI_Context *ctx, const char *name);
+
+/* ============================================================================
+ * Tree Widget Functions
+ * ============================================================================ */
+
+/* Item management */
+AUI_TreeItem *aui_tree_add_item(AUI_Node *tree, const char *text, void *user_data);
+AUI_TreeItem *aui_tree_add_child(AUI_Node *tree, AUI_TreeItem *parent,
+                                  const char *text, void *user_data);
+void aui_tree_remove_item(AUI_Node *tree, AUI_TreeItem *item);
+void aui_tree_clear(AUI_Node *tree);
+
+/* Selection */
+AUI_TreeItem *aui_tree_get_selected(AUI_Node *tree);
+void aui_tree_set_selected(AUI_Node *tree, AUI_TreeItem *item);
+
+/* Expand/collapse */
+void aui_tree_set_expanded(AUI_Node *tree, AUI_TreeItem *item, bool expanded);
+void aui_tree_expand_all(AUI_Node *tree);
+void aui_tree_collapse_all(AUI_Node *tree);
+
+/* Navigation */
+void aui_tree_ensure_visible(AUI_Node *tree, AUI_TreeItem *item);
+AUI_TreeItem *aui_tree_find_by_data(AUI_Node *tree, void *user_data);
+
+/* Properties */
+void aui_tree_set_multi_select(AUI_Node *tree, bool multi);
+void aui_tree_set_indent(AUI_Node *tree, float indent_width);
+void aui_tree_set_item_height(AUI_Node *tree, float height);
+
+/* Item properties */
+void aui_tree_item_set_text(AUI_TreeItem *item, const char *text);
+void aui_tree_item_set_icon(AUI_TreeItem *item, void *icon);
+int aui_tree_item_get_depth(AUI_TreeItem *item);
+bool aui_tree_item_has_children(AUI_TreeItem *item);
+
 /* ============================================================================
  * Container-Specific Functions
  * ============================================================================ */
@@ -707,6 +829,25 @@ int aui_dropdown_get_selected(AUI_Node *node);
 /* Progress bar */
 void aui_progress_set_value(AUI_Node *node, float value);
 void aui_progress_set_range(AUI_Node *node, float min, float max);
+
+/* Panel */
+void aui_panel_set_title(AUI_Node *node, const char *title);
+void aui_panel_set_closable(AUI_Node *node, bool closable);
+void aui_panel_set_collapsible(AUI_Node *node, bool collapsible);
+bool aui_panel_is_collapsed(AUI_Node *node);
+void aui_panel_set_collapsed(AUI_Node *node, bool collapsed);
+bool aui_panel_is_closed(AUI_Node *node);
+
+/* Collapsing Header */
+void aui_collapsing_header_set_text(AUI_Node *node, const char *text);
+void aui_collapsing_header_set_expanded(AUI_Node *node, bool expanded);
+bool aui_collapsing_header_is_expanded(AUI_Node *node);
+
+/* Splitter */
+void aui_splitter_set_ratio(AUI_Node *node, float ratio);
+float aui_splitter_get_ratio(AUI_Node *node);
+void aui_splitter_set_min_sizes(AUI_Node *node, float first, float second);
+void aui_splitter_set_width(AUI_Node *node, float width);
 
 #ifdef __cplusplus
 }
