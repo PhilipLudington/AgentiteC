@@ -4,6 +4,7 @@
 
 #include "agentite/ui_node.h"
 #include "agentite/ui.h"
+#include "agentite/ui_charts.h"
 #include "agentite/ui_richtext.h"
 #include "agentite/ui_style.h"
 #include "agentite/ui_tween.h"
@@ -440,6 +441,16 @@ void aui_node_destroy(AUI_Node *node)
     /* Free rich text data if this is a richtext node */
     if (node->type == AUI_NODE_RICHTEXT && node->custom_data) {
         aui_richtext_destroy((AUI_RichText *)node->custom_data);
+        node->custom_data = NULL;
+    }
+
+    /* Free chart data if this is a chart node */
+    if (node->type == AUI_NODE_CHART && node->custom_data) {
+        AUI_ChartNodeData *chart_data = (AUI_ChartNodeData *)node->custom_data;
+        free(chart_data->series_storage);
+        free(chart_data->slice_storage);
+        free(chart_data->value_storage);
+        free(chart_data);
         node->custom_data = NULL;
     }
 
@@ -2913,6 +2924,44 @@ static void aui_node_render_recursive(AUI_Context *ctx, AUI_Node *node, float in
 
                     /* Draw the rich text */
                     aui_richtext_draw(ctx, rt, x, y);
+                }
+            }
+            break;
+
+        case AUI_NODE_CHART:
+            {
+                AUI_ChartNodeData *chart_data = (AUI_ChartNodeData *)node->custom_data;
+                if (chart_data) {
+                    /* Update animation progress */
+                    if (chart_data->config.animated && chart_data->state.anim_progress < 1.0f) {
+                        float duration = chart_data->config.animation_duration > 0 ?
+                                         chart_data->config.animation_duration : 0.5f;
+                        chart_data->state.anim_progress += ctx->delta_time / duration;
+                        if (chart_data->state.anim_progress > 1.0f) {
+                            chart_data->state.anim_progress = 1.0f;
+                        }
+                    }
+
+                    /* Update hover state */
+                    if (node->hovered) {
+                        chart_data->state.hover_x = ctx->input.mouse_x;
+                        chart_data->state.hover_y = ctx->input.mouse_y;
+                        chart_data->state.tooltip_visible = true;
+                        /* TODO: Hit test to find hovered_series and hovered_index */
+                    } else {
+                        chart_data->state.tooltip_visible = false;
+                        chart_data->state.hovered_series = -1;
+                        chart_data->state.hovered_index = -1;
+                    }
+
+                    /* Draw the chart */
+                    AUI_Rect bounds = {
+                        node->global_rect.x,
+                        node->global_rect.y,
+                        node->global_rect.w,
+                        node->global_rect.h
+                    };
+                    aui_draw_chart_ex(ctx, bounds, &chart_data->config, &chart_data->state);
                 }
             }
             break;

@@ -171,6 +171,21 @@ typedef struct AUI_ChartState {
 } AUI_ChartState;
 
 /* ============================================================================
+ * Chart Node Data (internal storage for chart nodes)
+ * ============================================================================ */
+
+typedef struct AUI_ChartNodeData {
+    AUI_ChartConfig config;
+    AUI_ChartState state;
+    AUI_ChartSeries *series_storage;
+    int series_capacity;
+    AUI_PieSlice *slice_storage;
+    int slice_capacity;
+    float *value_storage;
+    int value_capacity;
+} AUI_ChartNodeData;
+
+/* ============================================================================
  * Immediate Mode Chart Drawing
  * ============================================================================ */
 
