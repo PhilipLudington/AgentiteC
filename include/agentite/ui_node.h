@@ -245,7 +245,7 @@ typedef struct AUI_Connection {
 
 /* Label data */
 typedef struct AUI_LabelData {
-    char text[256];
+    char text[1024];  /* Larger buffer for multiline text */
     uint32_t color;
     bool autowrap;
     int max_lines;

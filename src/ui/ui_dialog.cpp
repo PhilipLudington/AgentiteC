@@ -225,11 +225,13 @@ void aui_dialog_manager_render(AUI_DialogManager *dm, AUI_Context *ctx)
         aui_draw_rect(ctx, 0, 0, (float)ctx->width, (float)ctx->height, 0x80000000);
     }
 
-    /* Render dialogs */
+    /* Layout and render dialogs */
     for (int i = 0; i < dm->dialog_count; i++) {
         AUI_DialogEntry *entry = &dm->dialogs[i];
         if (!entry->active || !entry->node) continue;
 
+        /* Layout dialog before rendering */
+        aui_scene_layout(ctx, entry->node);
         aui_scene_render(ctx, entry->node);
     }
 
@@ -681,7 +683,7 @@ AUI_Node *aui_dialog_create(AUI_Context *ctx, const AUI_DialogConfig *config)
         dialog_w = config->max_width;
     }
 
-    float dialog_h = 150;  /* Base height */
+    float dialog_h = config->height > 0 ? config->height : 150;  /* Use height or default */
 
     /* Create dialog panel */
     AUI_Node *panel = aui_panel_create(ctx, "dialog", config->title);
@@ -1111,6 +1113,15 @@ void aui_dialogs_render(AUI_Context *ctx)
     if (dm) {
         aui_dialog_manager_render(dm, ctx);
     }
+}
+
+bool aui_dialogs_process_event(AUI_Context *ctx, const SDL_Event *event)
+{
+    AUI_DialogManager *dm = aui_get_dialog_manager(ctx);
+    if (dm) {
+        return aui_dialog_manager_process_event(dm, ctx, event);
+    }
+    return false;
 }
 
 /* ============================================================================

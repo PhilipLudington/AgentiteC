@@ -98,7 +98,8 @@ typedef struct AUI_DialogConfig {
     int cancel_button;         /* Index of cancel button (Escape key) */
 
     /* Appearance */
-    float width;               /* 0 = auto */
+    float width;               /* 0 = auto (default 350) */
+    float height;              /* 0 = auto (default 120) */
     float min_width;
     float max_width;
     bool show_close_button;
