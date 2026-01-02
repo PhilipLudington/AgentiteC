@@ -67,7 +67,8 @@ ENGINE_SRCS := $(wildcard $(SRC_DIR)/core/*.cpp) \
                $(wildcard $(SRC_DIR)/ui/*.cpp) \
                $(wildcard $(SRC_DIR)/ecs/*.cpp) \
                $(wildcard $(SRC_DIR)/ai/*.cpp) \
-               $(wildcard $(SRC_DIR)/strategy/*.cpp)
+               $(wildcard $(SRC_DIR)/strategy/*.cpp) \
+               $(wildcard $(SRC_DIR)/scene/*.cpp)
 
 # Game template source files
 GAME_SRCS := $(wildcard $(SRC_DIR)/game/*.cpp) \
@@ -110,6 +111,7 @@ dirs:
 	@mkdir -p $(BUILD_DIR)/ecs
 	@mkdir -p $(BUILD_DIR)/ai
 	@mkdir -p $(BUILD_DIR)/strategy
+	@mkdir -p $(BUILD_DIR)/scene
 	@mkdir -p $(BUILD_DIR)/game
 	@mkdir -p $(BUILD_DIR)/game/systems
 	@mkdir -p $(BUILD_DIR)/game/states
@@ -130,6 +132,9 @@ dirs:
 	@mkdir -p $(BUILD_DIR)/examples/ecs_custom_system
 	@mkdir -p $(BUILD_DIR)/examples/inspector
 	@mkdir -p $(BUILD_DIR)/examples/gizmos
+	@mkdir -p $(BUILD_DIR)/examples/async
+	@mkdir -p $(BUILD_DIR)/examples/prefab
+	@mkdir -p $(BUILD_DIR)/examples/scene
 
 # Link main executable (game template)
 $(BUILD_DIR)/$(EXECUTABLE): $(OBJS) $(FLECS_OBJ) $(TOML_OBJ)
@@ -251,6 +256,21 @@ example-gizmos: dirs $(BUILD_DIR)/examples/gizmos/main.o $(patsubst $(SRC_DIR)/%
 	$(CXX) $(BUILD_DIR)/examples/gizmos/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-gizmos $(LDFLAGS)
 	./$(BUILD_DIR)/example-gizmos
 
+# Build and run Async Loading demo
+example-async: dirs $(BUILD_DIR)/examples/async/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/async/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-async $(LDFLAGS)
+	./$(BUILD_DIR)/example-async
+
+# Build and run Prefab demo
+example-prefab: dirs $(BUILD_DIR)/examples/prefab/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/prefab/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-prefab $(LDFLAGS)
+	./$(BUILD_DIR)/example-prefab
+
+# Build and run Scene demo
+example-scene: dirs $(BUILD_DIR)/examples/scene/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/scene/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-scene $(LDFLAGS)
+	./$(BUILD_DIR)/example-scene
+
 #============================================================================
 # Test targets
 #============================================================================
@@ -261,7 +281,9 @@ TESTS_DIR := tests
 TEST_SRCS := $(wildcard $(TESTS_DIR)/core/*.cpp) \
              $(wildcard $(TESTS_DIR)/strategy/*.cpp) \
              $(wildcard $(TESTS_DIR)/ai/*.cpp) \
-             $(wildcard $(TESTS_DIR)/graphics/*.cpp)
+             $(wildcard $(TESTS_DIR)/graphics/*.cpp) \
+             $(wildcard $(TESTS_DIR)/ecs/*.cpp) \
+             $(wildcard $(TESTS_DIR)/scene/*.cpp)
 
 # Test objects (engine + test files + catch2)
 TEST_OBJS := $(patsubst $(TESTS_DIR)/%.cpp,$(BUILD_DIR)/tests/%.o,$(TEST_SRCS)) \
@@ -400,6 +422,9 @@ help:
 	@echo "  make example-ecs       - Custom ECS systems demo"
 	@echo "  make example-inspector - Entity inspector demo"
 	@echo "  make example-gizmos    - Gizmos and debug drawing demo"
+	@echo "  make example-async     - Async asset loading demo"
+	@echo "  make example-prefab    - Prefab spawning demo"
+	@echo "  make example-scene     - Scene loading and switching demo"
 	@echo ""
 	@echo "Utilities:"
 	@echo "  make clean        - Remove build files"
@@ -408,4 +433,4 @@ help:
 
 .PHONY: all dirs run run-demo clean install-deps-macos install-deps-linux info help test test-verbose
 .PHONY: check safety format format-check
-.PHONY: example-minimal example-sprites example-animation example-tilemap example-ui example-ui-node example-strategy example-strategy-sim example-msdf example-charts example-richtext example-dialogs example-pathfinding example-ecs example-inspector example-gizmos
+.PHONY: example-minimal example-sprites example-animation example-tilemap example-ui example-ui-node example-strategy example-strategy-sim example-msdf example-charts example-richtext example-dialogs example-pathfinding example-ecs example-inspector example-gizmos example-async example-prefab example-scene
