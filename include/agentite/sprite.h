@@ -223,6 +223,52 @@ void agentite_sprite_prepare_fullscreen_quad(Agentite_SpriteRenderer *sr);
 /* Upload fullscreen quad to GPU (call before render pass) */
 void agentite_sprite_upload_fullscreen_quad(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd);
 
+/* ============================================================================
+ * Asset Handle Integration
+ * ============================================================================ */
+
+/* Forward declaration */
+typedef struct Agentite_AssetRegistry Agentite_AssetRegistry;
+typedef struct Agentite_AssetHandle Agentite_AssetHandle;
+
+/**
+ * Load texture and register with asset registry.
+ * The texture is automatically registered with the given path and can be
+ * looked up later via agentite_asset_lookup(). The registry manages lifetime
+ * via reference counting.
+ *
+ * @param sr       Sprite renderer
+ * @param registry Asset registry (must not be NULL)
+ * @param path     File path (also used as asset ID)
+ * @return Asset handle, or AGENTITE_INVALID_ASSET_HANDLE on failure
+ */
+Agentite_AssetHandle agentite_texture_load_asset(Agentite_SpriteRenderer *sr,
+                                                  Agentite_AssetRegistry *registry,
+                                                  const char *path);
+
+/**
+ * Get texture pointer from asset handle.
+ * Returns the raw texture pointer for use with sprite functions.
+ *
+ * @param registry Asset registry
+ * @param handle   Asset handle from agentite_texture_load_asset()
+ * @return Texture pointer, or NULL if handle is invalid
+ */
+Agentite_Texture *agentite_texture_from_handle(Agentite_AssetRegistry *registry,
+                                                Agentite_AssetHandle handle);
+
+/**
+ * Texture destructor callback for asset registry.
+ * Pass this to agentite_asset_set_destructor() with SpriteRenderer as userdata.
+ *
+ * Example:
+ *   agentite_asset_set_destructor(registry, agentite_texture_asset_destructor, sprite_renderer);
+ *
+ * Note: This only handles textures. For mixed asset types (textures + audio),
+ * create a custom destructor that dispatches by type.
+ */
+void agentite_texture_asset_destructor(void *data, int type, void *userdata);
+
 #ifdef __cplusplus
 }
 #endif

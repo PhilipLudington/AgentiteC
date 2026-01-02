@@ -1546,3 +1546,69 @@ void agentite_sprite_upload_fullscreen_quad(Agentite_SpriteRenderer *sr, SDL_GPU
 
     SDL_ReleaseGPUTransferBuffer(sr->gpu, transfer);
 }
+
+/* ============================================================================
+ * Asset Handle Integration
+ * ============================================================================ */
+
+#include "agentite/asset.h"
+
+Agentite_AssetHandle agentite_texture_load_asset(Agentite_SpriteRenderer *sr,
+                                                  Agentite_AssetRegistry *registry,
+                                                  const char *path)
+{
+    if (!sr || !registry || !path) {
+        return AGENTITE_INVALID_ASSET_HANDLE;
+    }
+
+    /* Check if already loaded */
+    Agentite_AssetHandle existing = agentite_asset_lookup(registry, path);
+    if (agentite_asset_is_valid(existing)) {
+        /* Already loaded - add reference and return */
+        agentite_asset_addref(registry, existing);
+        return existing;
+    }
+
+    /* Load the texture */
+    Agentite_Texture *texture = agentite_texture_load(sr, path);
+    if (!texture) {
+        return AGENTITE_INVALID_ASSET_HANDLE;
+    }
+
+    /* Register with asset system */
+    Agentite_AssetHandle handle = agentite_asset_register(
+        registry, path, AGENTITE_ASSET_TEXTURE, texture);
+
+    if (!agentite_asset_is_valid(handle)) {
+        /* Registration failed - clean up texture */
+        agentite_texture_destroy(sr, texture);
+        return AGENTITE_INVALID_ASSET_HANDLE;
+    }
+
+    return handle;
+}
+
+Agentite_Texture *agentite_texture_from_handle(Agentite_AssetRegistry *registry,
+                                                Agentite_AssetHandle handle)
+{
+    if (!registry) return NULL;
+
+    /* Verify it's a texture type */
+    if (agentite_asset_get_type(registry, handle) != AGENTITE_ASSET_TEXTURE) {
+        return NULL;
+    }
+
+    return (Agentite_Texture *)agentite_asset_get_data(registry, handle);
+}
+
+void agentite_texture_asset_destructor(void *data, Agentite_AssetType type, void *userdata)
+{
+    if (type != AGENTITE_ASSET_TEXTURE) return;
+
+    Agentite_SpriteRenderer *sr = (Agentite_SpriteRenderer *)userdata;
+    Agentite_Texture *texture = (Agentite_Texture *)data;
+
+    if (sr && texture) {
+        agentite_texture_destroy(sr, texture);
+    }
+}
