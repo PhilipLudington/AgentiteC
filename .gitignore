@@ -61,9 +61,6 @@ build/
 # Test artifacts
 test_saves/
 
-# Planning files
-PLAN.md
-
 # Claude Code local settings (but track commands, rules, and agents)
 .claude/*
 !.claude/commands/
