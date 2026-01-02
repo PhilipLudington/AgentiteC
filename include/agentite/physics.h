@@ -6,8 +6,27 @@
  * collision response, and trigger volumes. Designed for simple gameplay physics
  * without requiring a full physics engine.
  *
- * For more advanced physics needs (joints, continuous collision, etc.), see the
- * Chipmunk2D integration.
+ * ## When to Use This (Simple Physics) vs Chipmunk2D (physics2d.h)
+ *
+ * Use THIS system (agentite_physics_*) for:
+ * - Platformers with simple movement
+ * - Top-down games with basic movement
+ * - Games needing only AABB/circle collision response
+ * - Arcade-style physics (not realistic)
+ * - When you want full control over movement behavior
+ * - Lower CPU overhead for many simple objects
+ *
+ * Use CHIPMUNK2D (agentite_physics2d_*) for:
+ * - Realistic rigid body physics (rotation, momentum)
+ * - Games requiring joints/constraints (ragdolls, chains, vehicles)
+ * - Physics puzzles (Angry Birds, Cut the Rope style)
+ * - Complex shapes (convex polygons)
+ * - Stacking/piling objects realistically
+ * - Continuous collision detection (fast-moving objects)
+ * - When objects need to interact physically with each other
+ *
+ * Both systems can coexist - use simple physics for player/enemies
+ * and Chipmunk2D for physics-based puzzle elements.
  *
  * Features:
  * - Kinematic bodies with velocity and acceleration

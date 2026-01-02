@@ -48,16 +48,16 @@ Research indicates [Chipmunk2D](https://github.com/slembcke/Chipmunk2D) is the b
 - Features: rigid bodies, joints, collision filtering, raycasting, sleeping objects
 - Easier API than Box2D, well-documented
 
-- [ ] Add Chipmunk2D to lib/ directory
-- [ ] Create wrapper API (`agentite_physics2d_*`)
-- [ ] Implement space management (create, step, destroy)
-- [ ] Add body creation helpers (static, dynamic, kinematic)
-- [ ] Add shape creation (circle, box, polygon, segment)
-- [ ] Implement constraint/joint wrappers
-- [ ] Add collision callbacks and filtering
-- [ ] Integrate with ECS transform system
-- [ ] Add debug draw integration with gizmos
-- [ ] Document when to use simple physics vs Chipmunk2D
+- [x] Add Chipmunk2D to lib/ directory
+- [x] Create wrapper API (`agentite_physics2d_*`)
+- [x] Implement space management (create, step, destroy)
+- [x] Add body creation helpers (static, dynamic, kinematic)
+- [x] Add shape creation (circle, box, polygon, segment)
+- [x] Implement constraint/joint wrappers
+- [x] Add collision callbacks and filtering
+- [x] Integrate with ECS transform system
+- [x] Add debug draw integration with gizmos
+- [x] Document when to use simple physics vs Chipmunk2D
 
 ## Phase 2: Procedural & Visual Polish
 

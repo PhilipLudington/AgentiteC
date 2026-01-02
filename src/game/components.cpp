@@ -6,6 +6,7 @@ ECS_COMPONENT_DECLARE(C_Player);
 ECS_COMPONENT_DECLARE(C_PlayerInput);
 ECS_COMPONENT_DECLARE(C_Speed);
 ECS_COMPONENT_DECLARE(C_Collider);
+ECS_COMPONENT_DECLARE(C_Physics2DBody);
 ECS_COMPONENT_DECLARE(C_Enemy);
 ECS_COMPONENT_DECLARE(C_Damage);
 ECS_COMPONENT_DECLARE(C_Projectile);
@@ -24,6 +25,7 @@ void game_components_register(ecs_world_t *world) {
     /* Register movement/physics components */
     ECS_COMPONENT_DEFINE(world, C_Speed);
     ECS_COMPONENT_DEFINE(world, C_Collider);
+    ECS_COMPONENT_DEFINE(world, C_Physics2DBody);
 
     /* Register combat components */
     ECS_COMPONENT_DEFINE(world, C_Enemy);
@@ -109,6 +111,11 @@ void game_components_register_reflection(ecs_world_t *world,
         AGENTITE_FIELD(C_Collider, height, AGENTITE_FIELD_FLOAT),
         AGENTITE_FIELD(C_Collider, solid, AGENTITE_FIELD_BOOL),
         AGENTITE_FIELD(C_Collider, trigger, AGENTITE_FIELD_BOOL)
+    );
+
+    AGENTITE_REFLECT_COMPONENT(registry, world, C_Physics2DBody,
+        AGENTITE_FIELD(C_Physics2DBody, sync_to_transform, AGENTITE_FIELD_BOOL),
+        AGENTITE_FIELD(C_Physics2DBody, sync_from_transform, AGENTITE_FIELD_BOOL)
     );
 
     AGENTITE_REFLECT_COMPONENT(registry, world, C_Enemy,

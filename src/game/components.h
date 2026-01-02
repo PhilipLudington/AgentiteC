@@ -66,6 +66,16 @@ typedef struct C_Collider {
     bool trigger;           /* Triggers events but doesn't block */
 } C_Collider;
 
+/**
+ * Physics2D body component (Chipmunk2D integration).
+ * Links an entity to a physics2d body for full rigid body simulation.
+ */
+typedef struct C_Physics2DBody {
+    struct Agentite_Physics2DBody *body;   /* Physics2D body handle */
+    bool sync_to_transform;                 /* Update C_Position from physics */
+    bool sync_from_transform;               /* Update physics from C_Position */
+} C_Physics2DBody;
+
 /*============================================================================
  * Combat Components
  *============================================================================*/
@@ -177,6 +187,7 @@ extern ECS_COMPONENT_DECLARE(C_Player);
 extern ECS_COMPONENT_DECLARE(C_PlayerInput);
 extern ECS_COMPONENT_DECLARE(C_Speed);
 extern ECS_COMPONENT_DECLARE(C_Collider);
+extern ECS_COMPONENT_DECLARE(C_Physics2DBody);
 extern ECS_COMPONENT_DECLARE(C_Enemy);
 extern ECS_COMPONENT_DECLARE(C_Damage);
 extern ECS_COMPONENT_DECLARE(C_Projectile);

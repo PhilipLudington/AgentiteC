@@ -15,8 +15,8 @@ UNAME_S := $(shell uname -s)
 # Compiler settings
 CXX := g++
 CC := gcc
-CXXFLAGS := -Wall -Wextra -std=c++17 -I$(INCLUDE_DIR) -I$(LIB_DIR) -I$(LIB_DIR)/cglm/include -I$(SRC_DIR)
-CFLAGS := -Wall -Wextra -std=c11 -I$(INCLUDE_DIR) -I$(LIB_DIR) -I$(LIB_DIR)/cglm/include -I$(SRC_DIR)
+CXXFLAGS := -Wall -Wextra -std=c++17 -I$(INCLUDE_DIR) -I$(LIB_DIR) -I$(LIB_DIR)/cglm/include -I$(LIB_DIR)/chipmunk2d/include -I$(SRC_DIR)
+CFLAGS := -Wall -Wextra -std=c11 -I$(INCLUDE_DIR) -I$(LIB_DIR) -I$(LIB_DIR)/cglm/include -I$(LIB_DIR)/chipmunk2d/include -I$(SRC_DIR)
 LDFLAGS :=
 
 # Debug/Release builds
@@ -90,6 +90,11 @@ FLECS_OBJ := $(BUILD_DIR)/flecs.o
 TOML_SRC := $(LIB_DIR)/toml.c
 TOML_OBJ := $(BUILD_DIR)/toml.o
 
+# Chipmunk2D physics library (compiled as separate objects)
+CHIPMUNK_DIR := $(LIB_DIR)/chipmunk2d
+CHIPMUNK_SRCS := $(wildcard $(CHIPMUNK_DIR)/src/*.c)
+CHIPMUNK_OBJS := $(patsubst $(CHIPMUNK_DIR)/src/%.c,$(BUILD_DIR)/chipmunk/%.o,$(CHIPMUNK_SRCS))
+
 # Object files
 OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SRCS))
 
@@ -112,6 +117,7 @@ dirs:
 	@mkdir -p $(BUILD_DIR)/ai
 	@mkdir -p $(BUILD_DIR)/strategy
 	@mkdir -p $(BUILD_DIR)/scene
+	@mkdir -p $(BUILD_DIR)/chipmunk
 	@mkdir -p $(BUILD_DIR)/game
 	@mkdir -p $(BUILD_DIR)/game/systems
 	@mkdir -p $(BUILD_DIR)/game/states
@@ -137,12 +143,12 @@ dirs:
 	@mkdir -p $(BUILD_DIR)/examples/scene
 
 # Link main executable (game template)
-$(BUILD_DIR)/$(EXECUTABLE): $(OBJS) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(OBJS) $(FLECS_OBJ) $(TOML_OBJ) -o $@ $(LDFLAGS)
+$(BUILD_DIR)/$(EXECUTABLE): $(OBJS) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS)
+	$(CXX) $(OBJS) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $@ $(LDFLAGS)
 
 # Link demo executable
-$(BUILD_DIR)/demo: $(DEMO_OBJS) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(DEMO_OBJS) $(FLECS_OBJ) $(TOML_OBJ) -o $@ $(LDFLAGS)
+$(BUILD_DIR)/demo: $(DEMO_OBJS) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS)
+	$(CXX) $(DEMO_OBJS) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $@ $(LDFLAGS)
 
 # Compile Flecs (with relaxed warnings due to third-party code)
 $(FLECS_OBJ): $(FLECS_SRC)
@@ -151,6 +157,10 @@ $(FLECS_OBJ): $(FLECS_SRC)
 # Compile TOML parser (with relaxed warnings due to third-party code)
 $(TOML_OBJ): $(TOML_SRC)
 	$(CC) -std=c11 -O2 -I$(LIB_DIR) -c $< -o $@
+
+# Compile Chipmunk2D (with relaxed warnings due to third-party code)
+$(BUILD_DIR)/chipmunk/%.o: $(CHIPMUNK_DIR)/src/%.c
+	$(CC) -std=c99 -O2 -I$(CHIPMUNK_DIR)/include -c $< -o $@
 
 # Compile source files
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
@@ -178,97 +188,97 @@ run-demo: dirs $(BUILD_DIR)/demo
 
 # Build and run minimal example
 example-minimal: dirs $(BUILD_DIR)/examples/minimal/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(BUILD_DIR)/examples/minimal/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-minimal $(LDFLAGS)
+	$(CXX) $(BUILD_DIR)/examples/minimal/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-minimal $(LDFLAGS)
 	./$(BUILD_DIR)/example-minimal
 
 # Build and run sprites example
 example-sprites: dirs $(BUILD_DIR)/examples/sprites/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(BUILD_DIR)/examples/sprites/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-sprites $(LDFLAGS)
+	$(CXX) $(BUILD_DIR)/examples/sprites/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-sprites $(LDFLAGS)
 	./$(BUILD_DIR)/example-sprites
 
 # Build and run animation example
 example-animation: dirs $(BUILD_DIR)/examples/animation/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(BUILD_DIR)/examples/animation/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-animation $(LDFLAGS)
+	$(CXX) $(BUILD_DIR)/examples/animation/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-animation $(LDFLAGS)
 	./$(BUILD_DIR)/example-animation
 
 # Build and run tilemap example
 example-tilemap: dirs $(BUILD_DIR)/examples/tilemap/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(BUILD_DIR)/examples/tilemap/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-tilemap $(LDFLAGS)
+	$(CXX) $(BUILD_DIR)/examples/tilemap/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-tilemap $(LDFLAGS)
 	./$(BUILD_DIR)/example-tilemap
 
 # Build and run UI example
 example-ui: dirs $(BUILD_DIR)/examples/ui/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(BUILD_DIR)/examples/ui/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-ui $(LDFLAGS)
+	$(CXX) $(BUILD_DIR)/examples/ui/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-ui $(LDFLAGS)
 	./$(BUILD_DIR)/example-ui
 
 # Build and run UI node (retained-mode) example
 example-ui-node: dirs $(BUILD_DIR)/examples/ui_node/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(BUILD_DIR)/examples/ui_node/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-ui-node $(LDFLAGS)
+	$(CXX) $(BUILD_DIR)/examples/ui_node/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-ui-node $(LDFLAGS)
 	./$(BUILD_DIR)/example-ui-node
 
 # Build and run strategy example
 example-strategy: dirs $(BUILD_DIR)/examples/strategy/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(BUILD_DIR)/examples/strategy/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-strategy $(LDFLAGS)
+	$(CXX) $(BUILD_DIR)/examples/strategy/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-strategy $(LDFLAGS)
 	./$(BUILD_DIR)/example-strategy
 
 # Build and run strategy-sim example (demonstrates new strategy systems)
 example-strategy-sim: dirs $(BUILD_DIR)/examples/strategy-sim/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(BUILD_DIR)/examples/strategy-sim/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-strategy-sim $(LDFLAGS)
+	$(CXX) $(BUILD_DIR)/examples/strategy-sim/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-strategy-sim $(LDFLAGS)
 	./$(BUILD_DIR)/example-strategy-sim
 
 # Build and run MSDF text rendering demo
 example-msdf: dirs $(BUILD_DIR)/examples/msdf/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(BUILD_DIR)/examples/msdf/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-msdf $(LDFLAGS)
+	$(CXX) $(BUILD_DIR)/examples/msdf/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-msdf $(LDFLAGS)
 	./$(BUILD_DIR)/example-msdf
 
 # Build and run charts demo
 example-charts: dirs $(BUILD_DIR)/examples/charts/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(BUILD_DIR)/examples/charts/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-charts $(LDFLAGS)
+	$(CXX) $(BUILD_DIR)/examples/charts/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-charts $(LDFLAGS)
 	./$(BUILD_DIR)/example-charts
 
 # Build and run rich text demo
 example-richtext: dirs $(BUILD_DIR)/examples/richtext/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(BUILD_DIR)/examples/richtext/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-richtext $(LDFLAGS)
+	$(CXX) $(BUILD_DIR)/examples/richtext/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-richtext $(LDFLAGS)
 	./$(BUILD_DIR)/example-richtext
 
 # Build and run dialogs demo
 example-dialogs: dirs $(BUILD_DIR)/examples/dialogs/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(BUILD_DIR)/examples/dialogs/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-dialogs $(LDFLAGS)
+	$(CXX) $(BUILD_DIR)/examples/dialogs/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-dialogs $(LDFLAGS)
 	./$(BUILD_DIR)/example-dialogs
 
 # Build and run pathfinding demo
 example-pathfinding: dirs $(BUILD_DIR)/examples/pathfinding/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(BUILD_DIR)/examples/pathfinding/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-pathfinding $(LDFLAGS)
+	$(CXX) $(BUILD_DIR)/examples/pathfinding/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-pathfinding $(LDFLAGS)
 	./$(BUILD_DIR)/example-pathfinding
 
 # Build and run ECS custom system demo
 example-ecs: dirs $(BUILD_DIR)/examples/ecs_custom_system/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(BUILD_DIR)/examples/ecs_custom_system/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-ecs $(LDFLAGS)
+	$(CXX) $(BUILD_DIR)/examples/ecs_custom_system/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-ecs $(LDFLAGS)
 	./$(BUILD_DIR)/example-ecs
 
 # Build and run Entity Inspector demo
 example-inspector: dirs $(BUILD_DIR)/examples/inspector/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(GAME_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(BUILD_DIR)/examples/inspector/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(GAME_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-inspector $(LDFLAGS)
+	$(CXX) $(BUILD_DIR)/examples/inspector/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(GAME_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-inspector $(LDFLAGS)
 	./$(BUILD_DIR)/example-inspector
 
 # Build and run Gizmos demo
 example-gizmos: dirs $(BUILD_DIR)/examples/gizmos/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(BUILD_DIR)/examples/gizmos/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-gizmos $(LDFLAGS)
+	$(CXX) $(BUILD_DIR)/examples/gizmos/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-gizmos $(LDFLAGS)
 	./$(BUILD_DIR)/example-gizmos
 
 # Build and run Async Loading demo
 example-async: dirs $(BUILD_DIR)/examples/async/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(BUILD_DIR)/examples/async/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-async $(LDFLAGS)
+	$(CXX) $(BUILD_DIR)/examples/async/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-async $(LDFLAGS)
 	./$(BUILD_DIR)/example-async
 
 # Build and run Prefab demo
 example-prefab: dirs $(BUILD_DIR)/examples/prefab/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(BUILD_DIR)/examples/prefab/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-prefab $(LDFLAGS)
+	$(CXX) $(BUILD_DIR)/examples/prefab/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-prefab $(LDFLAGS)
 	./$(BUILD_DIR)/example-prefab
 
 # Build and run Scene demo
 example-scene: dirs $(BUILD_DIR)/examples/scene/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(BUILD_DIR)/examples/scene/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) -o $(BUILD_DIR)/example-scene $(LDFLAGS)
+	$(CXX) $(BUILD_DIR)/examples/scene/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-scene $(LDFLAGS)
 	./$(BUILD_DIR)/example-scene
 
 #============================================================================
@@ -308,7 +318,7 @@ $(BUILD_DIR)/tests/%.o: $(TESTS_DIR)/%.cpp
 
 # Build test executable
 $(BUILD_DIR)/test_runner: $(TEST_OBJS) $(FLECS_OBJ) $(TOML_OBJ)
-	$(CXX) $(TEST_OBJS) $(FLECS_OBJ) $(TOML_OBJ) -o $@ $(LDFLAGS)
+	$(CXX) $(TEST_OBJS) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $@ $(LDFLAGS)
 
 # Run tests
 test: dirs $(BUILD_DIR)/test_runner
