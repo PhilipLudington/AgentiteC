@@ -122,6 +122,7 @@ file(GLOB_RECURSE AGENTITE_ENGINE_SOURCES
     src/ecs/*.cpp
     src/ai/*.cpp
     src/strategy/*.cpp
+    src/scene/*.cpp
 )
 
 # Create the engine library
