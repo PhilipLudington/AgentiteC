@@ -1399,6 +1399,7 @@ static bool aui_node_is_layout_container(AUI_Node *node)
         case AUI_NODE_GRID:
         case AUI_NODE_CENTER:
         case AUI_NODE_PANEL:  /* Panels offset children for title bar */
+        case AUI_NODE_SCROLL: /* Scroll manages children to allow overflow */
             return true;
         default:
             return false;
@@ -1586,6 +1587,105 @@ static void aui_node_layout_children(AUI_Context *ctx, AUI_Node *node)
             }
             return;
 
+        case AUI_NODE_SCROLL:
+            {
+                /* Scroll container: calculate content size and position children
+                 * Children are allowed to overflow the visible area. */
+                float scrollbar_w = ctx ? ctx->theme.scrollbar_width : 8.0f;
+                float padding_left = node->style.padding.left;
+                float padding_top = node->style.padding.top;
+                float padding_right = node->style.padding.right;
+
+                /* Available width (accounting for potential scrollbar + gap) */
+                float available_w = node->global_rect.w - padding_left - padding_right;
+                if (node->scroll.v_scroll_enabled) {
+                    available_w -= scrollbar_w + 2.0f;  /* 2px gap between content and scrollbar */
+                }
+
+                /* Calculate total content height from children's minimum sizes */
+                float total_content_h = 0;
+                for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
+                    if (!child->visible) continue;
+
+                    /* Get child's minimum size - this is its natural/desired size */
+                    float child_min_w, child_min_h;
+                    aui_node_get_content_min_size(ctx, child, &child_min_w, &child_min_h);
+
+                    /* If child is a VBox/HBox, recursively calculate its content height */
+                    if (child->type == AUI_NODE_VBOX && child->first_child) {
+                        /* For VBox children, sum up their children's heights */
+                        float vbox_content_h = 0;
+                        float sep = child->box.separation;
+                        int visible_count = 0;
+                        for (AUI_Node *gc = child->first_child; gc; gc = gc->next_sibling) {
+                            if (!gc->visible) continue;
+                            float gc_min_w, gc_min_h;
+                            aui_node_get_content_min_size(ctx, gc, &gc_min_w, &gc_min_h);
+                            vbox_content_h += gc_min_h;
+                            visible_count++;
+                        }
+                        if (visible_count > 1) {
+                            vbox_content_h += sep * (visible_count - 1);
+                        }
+                        /* Add VBox padding */
+                        vbox_content_h += child->style.padding.top + child->style.padding.bottom;
+                        if (vbox_content_h > child_min_h) {
+                            child_min_h = vbox_content_h;
+                        }
+                    }
+
+                    total_content_h += child_min_h;
+                }
+
+                /* Store content dimensions */
+                node->scroll.content_width = available_w;
+                node->scroll.content_height = total_content_h;
+
+                /* Position children at top of scroll area, full width, natural height */
+                float y = padding_top;
+                for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
+                    if (!child->visible) continue;
+
+                    float child_min_w, child_min_h;
+                    aui_node_get_content_min_size(ctx, child, &child_min_w, &child_min_h);
+
+                    /* For VBox, recalculate its content height */
+                    if (child->type == AUI_NODE_VBOX && child->first_child) {
+                        float vbox_content_h = 0;
+                        float sep = child->box.separation;
+                        int visible_count = 0;
+                        for (AUI_Node *gc = child->first_child; gc; gc = gc->next_sibling) {
+                            if (!gc->visible) continue;
+                            float gc_min_w, gc_min_h;
+                            aui_node_get_content_min_size(ctx, gc, &gc_min_w, &gc_min_h);
+                            vbox_content_h += gc_min_h;
+                            visible_count++;
+                        }
+                        if (visible_count > 1) {
+                            vbox_content_h += sep * (visible_count - 1);
+                        }
+                        vbox_content_h += child->style.padding.top + child->style.padding.bottom;
+                        if (vbox_content_h > child_min_h) {
+                            child_min_h = vbox_content_h;
+                        }
+                    }
+
+                    /* Child fills available width, uses natural height */
+                    child->rect.x = padding_left;
+                    child->rect.y = y;
+                    child->rect.w = available_w;
+                    child->rect.h = child_min_h;
+
+                    child->global_rect.x = node->global_rect.x + padding_left;
+                    child->global_rect.y = node->global_rect.y + y;
+                    child->global_rect.w = available_w;
+                    child->global_rect.h = child_min_h;
+
+                    y += child_min_h;
+                }
+            }
+            return;
+
         default:
             break;
     }
@@ -1707,6 +1807,109 @@ bool aui_scene_process_event(AUI_Context *ctx, AUI_Node *root, const SDL_Event *
         float my = event->motion.y;
 
         AUI_Node *hit = aui_node_hit_test(root, mx, my);
+
+        /* Scrollbar thumb dragging - track which scroll node is being dragged */
+        static AUI_Node *s_dragging_scroll = NULL;
+        static float s_drag_start_scroll_y = 0;
+        static float s_drag_start_mouse_y = 0;
+
+        /* Check for scrollbar click BEFORE regular click handling */
+        if (event->type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+            /* Find scroll container whose scrollbar track contains the click */
+            std::function<AUI_Node*(AUI_Node*)> find_scroll_with_track;
+            find_scroll_with_track = [&](AUI_Node *node) -> AUI_Node* {
+                if (!node || !node->visible) return NULL;
+                if (!aui_rect_contains(node->global_rect, mx, my)) return NULL;
+
+                /* Check children first */
+                for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
+                    AUI_Node *found = find_scroll_with_track(child);
+                    if (found) return found;
+                }
+
+                /* Check if this is a scroll container and click is on scrollbar */
+                if (node->type == AUI_NODE_SCROLL && node->scroll.v_scroll_enabled) {
+                    float content_h = node->scroll.content_height;
+                    float visible_h = node->global_rect.h;
+                    if (content_h > visible_h) {
+                        float scrollbar_w = ctx->theme.scrollbar_width;
+                        float track_x = node->global_rect.x + node->global_rect.w - scrollbar_w;
+                        if (mx >= track_x && mx < track_x + scrollbar_w) {
+                            return node;
+                        }
+                    }
+                }
+                return NULL;
+            };
+
+            AUI_Node *scroll_with_track = find_scroll_with_track(root);
+            if (scroll_with_track) {
+                AUI_Node *scroll = scroll_with_track;
+                float content_h = scroll->scroll.content_height;
+                float visible_h = scroll->global_rect.h;
+                float max_scroll = content_h - visible_h;
+                float scrollbar_w = ctx->theme.scrollbar_width;
+
+                /* Calculate thumb position and size */
+                float visible_ratio = visible_h / content_h;
+                float thumb_h = visible_h * visible_ratio;
+                if (thumb_h < 20.0f) thumb_h = 20.0f;
+                float thumb_travel = visible_h - thumb_h;
+                float scroll_ratio = (max_scroll > 0) ? scroll->scroll.scroll_y / max_scroll : 0;
+                float thumb_y = scroll->global_rect.y + thumb_travel * scroll_ratio;
+
+                /* Check if click is on thumb or on track */
+                if (my >= thumb_y && my < thumb_y + thumb_h) {
+                    /* Click on thumb - start drag */
+                    s_dragging_scroll = scroll_with_track;
+                    s_drag_start_scroll_y = scroll_with_track->scroll.scroll_y;
+                    s_drag_start_mouse_y = my;
+                    scroll_with_track->scroll.dragging_v = true;
+                } else {
+                    /* Click on track - page up or page down */
+                    float page_amount = visible_h * 0.9f;  /* Scroll 90% of visible height */
+                    if (my < thumb_y) {
+                        /* Click above thumb - page up */
+                        scroll->scroll.scroll_y -= page_amount;
+                    } else {
+                        /* Click below thumb - page down */
+                        scroll->scroll.scroll_y += page_amount;
+                    }
+                    /* Clamp scroll position */
+                    if (scroll->scroll.scroll_y < 0) scroll->scroll.scroll_y = 0;
+                    if (scroll->scroll.scroll_y > max_scroll) scroll->scroll.scroll_y = max_scroll;
+                }
+                return true;  /* Consume event - skip regular click handling */
+            }
+        }
+
+        /* Update scroll during drag */
+        if (event->type == SDL_EVENT_MOUSE_MOTION && s_dragging_scroll) {
+            AUI_Node *scroll = s_dragging_scroll;
+            float content_h = scroll->scroll.content_height;
+            float visible_h = scroll->global_rect.h;
+            float max_scroll = content_h - visible_h;
+
+            /* Calculate thumb parameters */
+            float visible_ratio = visible_h / content_h;
+            float thumb_h = visible_h * visible_ratio;
+            if (thumb_h < 20.0f) thumb_h = 20.0f;
+            float thumb_travel = visible_h - thumb_h;
+
+            /* Convert mouse delta to scroll delta */
+            float mouse_delta = my - s_drag_start_mouse_y;
+            float scroll_delta = (thumb_travel > 0) ? (mouse_delta / thumb_travel) * max_scroll : 0;
+
+            scroll->scroll.scroll_y = s_drag_start_scroll_y + scroll_delta;
+            if (scroll->scroll.scroll_y < 0) scroll->scroll.scroll_y = 0;
+            if (scroll->scroll.scroll_y > max_scroll) scroll->scroll.scroll_y = max_scroll;
+        }
+
+        /* Stop scrollbar drag on mouse up */
+        if (event->type == SDL_EVENT_MOUSE_BUTTON_UP && s_dragging_scroll) {
+            s_dragging_scroll->scroll.dragging_v = false;
+            s_dragging_scroll = NULL;
+        }
 
         /* Handle hover state changes */
         static AUI_Node *s_last_hovered = NULL;
@@ -2260,6 +2463,52 @@ bool aui_scene_process_event(AUI_Context *ctx, AUI_Node *root, const SDL_Event *
             if (aui_shortcuts_process(ctx)) {
                 return true;
             }
+        }
+    }
+
+    /* Handle mouse wheel for scroll containers */
+    if (event->type == SDL_EVENT_MOUSE_WHEEL) {
+        float mx = event->wheel.mouse_x;
+        float my = event->wheel.mouse_y;
+
+        /* Find scroll container at mouse position by traversing tree */
+        std::function<AUI_Node*(AUI_Node*)> find_scroll_at;
+        find_scroll_at = [&](AUI_Node *node) -> AUI_Node* {
+            if (!node || !node->visible) return NULL;
+
+            /* Check if mouse is within this node */
+            if (!aui_rect_contains(node->global_rect, mx, my)) return NULL;
+
+            /* Check children first (they're on top) */
+            for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
+                AUI_Node *found = find_scroll_at(child);
+                if (found) return found;
+            }
+
+            /* If this is a scroll container with scrolling enabled, return it */
+            if (node->type == AUI_NODE_SCROLL && node->scroll.v_scroll_enabled) {
+                float content_h = node->scroll.content_height;
+                float visible_h = node->global_rect.h;
+                if (content_h > visible_h) {
+                    return node;
+                }
+            }
+
+            return NULL;
+        };
+
+        AUI_Node *scroll_node = find_scroll_at(root);
+        if (scroll_node) {
+            float scroll_speed = 30.0f;
+            float content_h = scroll_node->scroll.content_height;
+            float visible_h = scroll_node->global_rect.h;
+            float max_scroll = content_h - visible_h;
+
+            scroll_node->scroll.scroll_y -= event->wheel.y * scroll_speed;
+            if (scroll_node->scroll.scroll_y < 0) scroll_node->scroll.scroll_y = 0;
+            if (scroll_node->scroll.scroll_y > max_scroll) scroll_node->scroll.scroll_y = max_scroll;
+
+            return true;  /* Consume the event */
         }
     }
 
@@ -3010,6 +3259,86 @@ static void aui_node_render_recursive(AUI_Context *ctx, AUI_Node *node, float in
                 }
             }
             break;
+
+        case AUI_NODE_SCROLL:
+            /* Scroll container with scrollbar rendering */
+            {
+                float x = node->global_rect.x;
+                float y = node->global_rect.y;
+                float w = node->global_rect.w;
+                float h = node->global_rect.h;
+                float scrollbar_w = ctx->theme.scrollbar_width;
+
+                /* Use content_height calculated during layout */
+                float content_h = node->scroll.content_height;
+
+                bool needs_scrollbar = node->scroll.v_scroll_enabled && content_h > h;
+
+                if (needs_scrollbar) {
+                    /* Draw scrollbar track */
+                    float track_x = x + w - scrollbar_w;
+                    aui_draw_rect(ctx, track_x, y, scrollbar_w, h,
+                                  aui_apply_opacity(ctx->theme.scrollbar, effective_opacity));
+
+                    /* Draw scrollbar thumb */
+                    float visible_ratio = h / content_h;
+                    float thumb_h = h * visible_ratio;
+                    if (thumb_h < 20.0f) thumb_h = 20.0f;
+
+                    float max_scroll = content_h - h;
+                    float scroll_ratio = (max_scroll > 0) ? node->scroll.scroll_y / max_scroll : 0;
+                    float thumb_travel = h - thumb_h;
+                    float thumb_y = y + thumb_travel * scroll_ratio;
+
+                    /* Highlight thumb when dragging (brighten by 20%) */
+                    uint32_t thumb_color = ctx->theme.scrollbar_grab;
+                    if (node->scroll.dragging_v) {
+                        uint8_t r = (thumb_color >> 24) & 0xFF;
+                        uint8_t g = (thumb_color >> 16) & 0xFF;
+                        uint8_t b = (thumb_color >> 8) & 0xFF;
+                        uint8_t a = thumb_color & 0xFF;
+                        r = (uint8_t)fminf(255, r * 1.2f);
+                        g = (uint8_t)fminf(255, g * 1.2f);
+                        b = (uint8_t)fminf(255, b * 1.2f);
+                        thumb_color = (r << 24) | (g << 16) | (b << 8) | a;
+                    }
+
+                    aui_draw_rect_rounded(ctx, track_x + 2, thumb_y, scrollbar_w - 4, thumb_h,
+                                          aui_apply_opacity(thumb_color, effective_opacity),
+                                          (scrollbar_w - 4) / 2);
+                }
+
+                /* Render children with scroll offset (handled via clip + translate) */
+                float clip_w = needs_scrollbar ? (w - scrollbar_w - 2.0f) : w;  /* 2px gap between content and scrollbar */
+                aui_push_scissor(ctx, x, y, clip_w, h);
+
+                /* Helper to recursively offset all descendants */
+                float scroll_offset = node->scroll.scroll_y;
+                std::function<void(AUI_Node*, float)> offset_tree;
+                offset_tree = [&offset_tree](AUI_Node *n, float offset) {
+                    n->global_rect.y -= offset;
+                    for (AUI_Node *c = n->first_child; c; c = c->next_sibling) {
+                        offset_tree(c, offset);
+                    }
+                };
+                std::function<void(AUI_Node*, float)> restore_tree;
+                restore_tree = [&restore_tree](AUI_Node *n, float offset) {
+                    n->global_rect.y += offset;
+                    for (AUI_Node *c = n->first_child; c; c = c->next_sibling) {
+                        restore_tree(c, offset);
+                    }
+                };
+
+                /* Apply scroll offset to entire subtree, render, then restore */
+                for (AUI_Node *child = node->first_child; child; child = child->next_sibling) {
+                    offset_tree(child, scroll_offset);
+                    aui_node_render_recursive(ctx, child, effective_opacity);
+                    restore_tree(child, scroll_offset);
+                }
+
+                aui_pop_scissor(ctx);
+            }
+            return;  /* Skip default child rendering since we handled it */
 
         default:
             break;
