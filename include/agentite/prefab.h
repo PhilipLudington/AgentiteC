@@ -4,17 +4,22 @@
  * Prefabs are entity templates loaded from data files. They define component
  * configurations that can be spawned as ECS entities at runtime.
  *
- * DSL Format:
- *   Entity @(x, y) {
+ * DSL Format (AI-friendly, no "Entity" keyword required):
+ *   # Comments start with hash or double-slash
+ *   EntityName @(x, y) {
  *       ComponentName: value
  *       ComponentName: "string value"
  *       ComponentName: (x, y)
  *
- *       // Nested child entity
- *       Entity ChildName @(local_x, local_y) {
+ *       # Nested child entity
+ *       ChildName @(local_x, local_y) {
  *           ...
  *       }
  *   }
+ *
+ * The "Entity" keyword is optional for backward compatibility:
+ *   Entity OldStyle @(x, y) { ... }  // Still works
+ *   NewStyle @(x, y) { ... }         // Preferred
  *
  * Usage:
  *   Agentite_PrefabRegistry *prefabs = agentite_prefab_registry_create();

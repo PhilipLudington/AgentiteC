@@ -5,19 +5,24 @@
  * (which are templates spawned multiple times), scenes are instantiated once
  * and manage the lifetime of their entities.
  *
- * DSL Format (same as prefabs, but can contain multiple root entities):
- *   Entity Player @(400, 300) {
+ * DSL Format (AI-friendly, no "Entity" keyword required):
+ *   # Player entity with child weapon
+ *   Player @(400, 300) {
  *       Sprite: "player.png"
  *       Health: 100
  *
- *       Entity Weapon @(20, 0) {
+ *       Weapon @(20, 0) {
  *           Sprite: "sword.png"
  *       }
  *   }
  *
- *   Entity Enemy @(600, 300) {
+ *   # Enemy using prefab reference
+ *   Enemy @(600, 300) {
  *       prefab: "enemies/goblin"
  *   }
+ *
+ * Comments: Both # and // are supported.
+ * The "Entity" keyword is optional for backward compatibility.
  *
  * Usage:
  *   // Create scene manager

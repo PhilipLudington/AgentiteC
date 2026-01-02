@@ -1,9 +1,9 @@
-// Level 1 - Forest Clearing
-// A simple introductory level with player, enemies, and items
-// Note: Positions are halved due to coordinate scaling in spawn
+# Level 1 - Forest Clearing
+# A simple introductory level with player, enemies, and items
+# Note: Positions are halved due to coordinate scaling in spawn
 
-// Player starting position (center-left)
-Entity Player @(150, 180) {
+# Player starting position (center-left)
+Player @(150, 180) {
     C_Health: {
         health: 100
         max_health: 100
@@ -15,8 +15,8 @@ Entity Player @(150, 180) {
     }
 }
 
-// Enemy patrol - Goblin 1
-Entity Goblin1 @(350, 150) {
+# Enemy patrol - Goblin 1
+Goblin1 @(350, 150) {
     C_Health: {
         health: 30
         max_health: 30
@@ -33,8 +33,8 @@ Entity Goblin1 @(350, 150) {
     }
 }
 
-// Enemy patrol - Goblin 2
-Entity Goblin2 @(450, 225) {
+# Enemy patrol - Goblin 2
+Goblin2 @(450, 225) {
     C_Health: {
         health: 30
         max_health: 30
@@ -51,8 +51,8 @@ Entity Goblin2 @(450, 225) {
     }
 }
 
-// Treasure chest
-Entity Chest @(550, 180) {
+# Treasure chest
+Chest @(550, 180) {
     C_Item: {
         item_id: 10
         value: 100
@@ -65,8 +65,8 @@ Entity Chest @(550, 180) {
     }
 }
 
-// Health potion 1
-Entity HealthPotion1 @(250, 100) {
+# Health potion 1
+HealthPotion1 @(250, 100) {
     C_Item: {
         item_id: 1
         value: 25
@@ -79,8 +79,8 @@ Entity HealthPotion1 @(250, 100) {
     }
 }
 
-// Health potion 2
-Entity HealthPotion2 @(300, 250) {
+# Health potion 2
+HealthPotion2 @(300, 250) {
     C_Item: {
         item_id: 1
         value: 25
@@ -93,22 +93,22 @@ Entity HealthPotion2 @(300, 250) {
     }
 }
 
-// Platform elements (bottom of screen)
-Entity Platform1 @(200, 320) {
+# Platform elements (bottom of screen)
+Platform1 @(200, 320) {
     C_SpriteRef: {
         texture_id: 3
         scale: 2.0
     }
 }
 
-Entity Platform2 @(400, 320) {
+Platform2 @(400, 320) {
     C_SpriteRef: {
         texture_id: 3
         scale: 2.0
     }
 }
 
-Entity Platform3 @(550, 320) {
+Platform3 @(550, 320) {
     C_SpriteRef: {
         texture_id: 3
         scale: 2.0

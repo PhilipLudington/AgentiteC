@@ -4,13 +4,15 @@
  * Parses scene/prefab DSL tokens into prefab structures.
  *
  * Grammar:
- *   prefab      = "Entity" [name] ["@" position] "{" body "}"
+ *   prefab      = [name] ["@" position] "{" body "}"
  *   position    = "(" number "," number ")"
  *   body        = (component | child)*
  *   component   = identifier ":" value
  *   child       = prefab
  *   value       = string | number | identifier | vector
  *   vector      = "(" number ("," number)* ")"
+ *
+ * Note: The "Entity" keyword is optional for backward compatibility.
  */
 
 #include "scene_internal.h"
@@ -366,26 +368,51 @@ static bool parse_body(Agentite_Parser *p, Agentite_Prefab *prefab) {
         if (p->has_error) return false;
 
         if (!parser_check(p, TOK_IDENTIFIER)) {
-            parser_error(p, "Expected component name or 'Entity'");
+            parser_error(p, "Expected component name or entity name");
             return false;
         }
 
         char *name = parser_copy_token(&p->current);
         parser_advance(p);
 
-        if (strcmp(name, "Entity") == 0) {
+        /* Check if this is the optional "Entity" keyword (for backward compat) */
+        bool is_entity_keyword = (strcmp(name, "Entity") == 0);
+        if (is_entity_keyword) {
             free(name);
-            /* Nested entity/child */
+            name = NULL;
+        }
+
+        /* Determine if this is a child entity or a component by looking at next token:
+         * - Child entity: @ (position) or { (body) or identifier (name before @ or {)
+         * - Component: : (colon before value)
+         * - Base prefab reference: identifier "prefab" followed by :
+         */
+        if (is_entity_keyword ||
+            parser_check(p, TOK_AT) ||
+            parser_check(p, TOK_LBRACE)) {
+            /* Nested entity/child - "Entity" keyword already consumed, or name is the entity name */
             if (prefab->child_count >= AGENTITE_PREFAB_MAX_CHILDREN) {
                 parser_error(p, "Too many child entities");
+                free(name);
                 return false;
             }
 
+            /* If we consumed a name (not "Entity"), we need to pass it to parse_entity */
             Agentite_Prefab *child = parse_entity(p);
-            if (!child) return false;
+            if (!child) {
+                free(name);
+                return false;
+            }
+
+            /* If name was consumed (wasn't "Entity" keyword), set it as child name */
+            if (name) {
+                free(child->name);
+                child->name = name;
+                name = NULL;
+            }
 
             prefab->children[prefab->child_count++] = child;
-        } else if (strcmp(name, "prefab") == 0) {
+        } else if (name && strcmp(name, "prefab") == 0) {
             free(name);
             /* Reference to base prefab: prefab: "path/to/prefab" */
             if (!parser_consume(p, TOK_COLON, "Expected ':' after 'prefab'")) {
@@ -399,7 +426,7 @@ static bool parse_body(Agentite_Parser *p, Agentite_Prefab *prefab) {
 
             prefab->base_prefab_name = parser_copy_token(&p->current);
             parser_advance(p);
-        } else {
+        } else if (name) {
             /* Component configuration */
             if (prefab->component_count >= AGENTITE_PREFAB_MAX_COMPONENTS) {
                 parser_error(p, "Too many components");
@@ -418,6 +445,9 @@ static bool parse_body(Agentite_Parser *p, Agentite_Prefab *prefab) {
                 return false;
             }
             prefab->component_count++;
+        } else {
+            parser_error(p, "Expected component or entity definition");
+            return false;
         }
     }
 
@@ -487,20 +517,21 @@ Agentite_Prefab *agentite_prefab_load_string(const char *source,
     /* Prime the parser */
     parser_advance(&parser);
 
-    /* Must start with "Entity" */
+    /* Must start with identifier (entity name or optional "Entity" keyword) */
     if (!parser_check(&parser, TOK_IDENTIFIER)) {
-        parser_error(&parser, "Expected 'Entity' keyword");
+        parser_error(&parser, "Expected entity name or 'Entity' keyword");
         return NULL;
     }
 
+    /* Skip optional "Entity" keyword for backward compatibility */
     char *keyword = parser_copy_token(&parser.current);
-    if (strcmp(keyword, "Entity") != 0) {
+    if (strcmp(keyword, "Entity") == 0) {
         free(keyword);
-        parser_error(&parser, "Expected 'Entity' keyword");
-        return NULL;
+        parser_advance(&parser);
+    } else {
+        free(keyword);
+        /* First identifier is the entity name - will be parsed by parse_entity */
     }
-    free(keyword);
-    parser_advance(&parser);
 
     Agentite_Prefab *prefab = parse_entity(&parser);
 

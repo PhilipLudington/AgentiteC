@@ -65,6 +65,12 @@ static void skip_whitespace(Agentite_Lexer *lexer) {
                     return;
                 }
                 break;
+            case '#':
+                /* Line comment # (AI-friendly format) */
+                while (peek(lexer) != '\n' && !is_at_end(lexer)) {
+                    advance(lexer);
+                }
+                break;
             default:
                 return;
         }

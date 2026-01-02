@@ -235,6 +235,127 @@ TEST_CASE("Scene parsing - error handling", "[scene][parse]") {
 }
 
 /* ============================================================================
+ * New DSL Format Tests (AI-friendly format without Entity keyword)
+ * ============================================================================ */
+
+TEST_CASE("Scene parsing - new format without Entity keyword", "[scene][parse][newformat]") {
+    const char *source = R"(
+        Player @(100, 200) {
+            TestHealth: { current: 50, max: 100 }
+        }
+    )";
+
+    Agentite_SceneLoadContext ctx = AGENTITE_SCENE_LOAD_CONTEXT_DEFAULT;
+    Agentite_Scene *scene = agentite_scene_load_string(source, 0, "test", &ctx);
+    REQUIRE(scene != nullptr);
+    REQUIRE(agentite_scene_get_root_count(scene) == 1);
+
+    agentite_scene_destroy(scene);
+}
+
+TEST_CASE("Scene parsing - new format with hash comments", "[scene][parse][newformat]") {
+    const char *source = R"(
+        # This is a comment using hash
+        # Another comment line
+        Player @(100, 200) {
+            # Component comment
+            TestHealth: { current: 50, max: 100 }
+        }
+    )";
+
+    Agentite_SceneLoadContext ctx = AGENTITE_SCENE_LOAD_CONTEXT_DEFAULT;
+    Agentite_Scene *scene = agentite_scene_load_string(source, 0, "test", &ctx);
+    REQUIRE(scene != nullptr);
+    REQUIRE(agentite_scene_get_root_count(scene) == 1);
+
+    agentite_scene_destroy(scene);
+}
+
+TEST_CASE("Scene parsing - new format multiple entities", "[scene][parse][newformat]") {
+    const char *source = R"(
+        # Player entity
+        Player @(100, 100) {
+            TestHealth: { current: 100, max: 100 }
+        }
+
+        # Enemy entity
+        Enemy @(300, 100) {
+            TestHealth: { current: 50, max: 50 }
+        }
+
+        # Pickup item
+        Pickup @(200, 200) {
+            TestSprite: "items/health.png"
+        }
+    )";
+
+    Agentite_SceneLoadContext ctx = AGENTITE_SCENE_LOAD_CONTEXT_DEFAULT;
+    Agentite_Scene *scene = agentite_scene_load_string(source, 0, "test", &ctx);
+    REQUIRE(scene != nullptr);
+    REQUIRE(agentite_scene_get_root_count(scene) == 3);
+
+    agentite_scene_destroy(scene);
+}
+
+TEST_CASE("Scene parsing - new format nested entities", "[scene][parse][newformat]") {
+    const char *source = R"(
+        Player @(100, 100) {
+            TestHealth: 100
+
+            Weapon @(20, 0) {
+                TestSprite: "weapons/sword.png"
+            }
+        }
+    )";
+
+    Agentite_SceneLoadContext ctx = AGENTITE_SCENE_LOAD_CONTEXT_DEFAULT;
+    Agentite_Scene *scene = agentite_scene_load_string(source, 0, "test", &ctx);
+    REQUIRE(scene != nullptr);
+    REQUIRE(agentite_scene_get_root_count(scene) == 1);
+
+    agentite_scene_destroy(scene);
+}
+
+TEST_CASE("Scene parsing - backward compatibility with Entity keyword", "[scene][parse][compat]") {
+    /* Old format should still work */
+    const char *source = R"(
+        Entity Player @(100, 200) {
+            TestHealth: { current: 50, max: 100 }
+
+            Entity Child @(10, 0) {
+                TestSprite: "child.png"
+            }
+        }
+    )";
+
+    Agentite_SceneLoadContext ctx = AGENTITE_SCENE_LOAD_CONTEXT_DEFAULT;
+    Agentite_Scene *scene = agentite_scene_load_string(source, 0, "test", &ctx);
+    REQUIRE(scene != nullptr);
+    REQUIRE(agentite_scene_get_root_count(scene) == 1);
+
+    agentite_scene_destroy(scene);
+}
+
+TEST_CASE("Scene parsing - mixed comment styles", "[scene][parse][newformat]") {
+    const char *source = R"(
+        // C-style comment
+        # Hash comment
+        Player @(100, 200) {
+            // Another C-style
+            TestHealth: 100
+            # And a hash
+        }
+    )";
+
+    Agentite_SceneLoadContext ctx = AGENTITE_SCENE_LOAD_CONTEXT_DEFAULT;
+    Agentite_Scene *scene = agentite_scene_load_string(source, 0, "test", &ctx);
+    REQUIRE(scene != nullptr);
+    REQUIRE(agentite_scene_get_root_count(scene) == 1);
+
+    agentite_scene_destroy(scene);
+}
+
+/* ============================================================================
  * Scene Instantiation Tests
  * ============================================================================ */
 
@@ -475,8 +596,7 @@ TEST_CASE("Scene write string", "[scene][write]") {
     char *output = agentite_scene_write_string(scene);
     REQUIRE(output != nullptr);
 
-    /* Output should contain key elements */
-    REQUIRE(strstr(output, "Entity") != nullptr);
+    /* Output should contain key elements (new format without "Entity" keyword) */
     REQUIRE(strstr(output, "Player") != nullptr);
     REQUIRE(strstr(output, "TestHealth") != nullptr);
 

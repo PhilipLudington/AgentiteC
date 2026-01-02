@@ -5,14 +5,16 @@
  * Inverse of scene_parser.cpp.
  *
  * Output Format:
- *   Entity Name @(x, y) {
+ *   Name @(x, y) {
  *       ComponentName: value
  *       ComponentName: { field: value, field: value }
  *
- *       Entity Child @(local_x, local_y) {
+ *       ChildName @(local_x, local_y) {
  *           ...
  *       }
  *   }
+ *
+ * Note: The "Entity" keyword is not output (AI-friendly format).
  */
 
 #include "scene_internal.h"
@@ -275,14 +277,14 @@ static bool write_prefab_internal(StringBuilder *sb,
                                    int indent) {
     if (!prefab) return false;
 
-    /* Entity header */
+    /* Entity header - name is required in new format (no "Entity" keyword) */
     if (!sb_append_indent(sb, indent)) return false;
-    if (!sb_append(sb, "Entity")) return false;
 
-    /* Optional name */
+    /* Entity name (required, use "Unnamed" if not set) */
     if (prefab->name && prefab->name[0]) {
-        if (!sb_append_char(sb, ' ')) return false;
         if (!sb_append(sb, prefab->name)) return false;
+    } else {
+        if (!sb_append(sb, "Unnamed")) return false;
     }
 
     /* Position if non-zero */
@@ -564,20 +566,21 @@ static bool write_ecs_entity(StringBuilder *sb,
                               ecs_entity_t entity,
                               const Agentite_ReflectRegistry *reflect,
                               int indent) {
-    /* Entity header */
+    /* Entity header - name is required in new format (no "Entity" keyword) */
     if (!sb_append_indent(sb, indent)) return false;
-    if (!sb_append(sb, "Entity")) return false;
 
-    /* Entity name if it has one */
+    /* Entity name (required, use entity ID if not named) */
     const char *name = ecs_get_name(world, entity);
     if (name && name[0]) {
-        if (!sb_append_char(sb, ' ')) return false;
         if (is_valid_identifier(name)) {
             if (!sb_append(sb, name)) return false;
         } else {
             /* Quote non-identifier names */
             if (!write_escaped_string(sb, name)) return false;
         }
+    } else {
+        /* Use entity ID as fallback name */
+        if (!sb_appendf(sb, "Entity_%llu", (unsigned long long)entity)) return false;
     }
 
     /* Check for position component */
