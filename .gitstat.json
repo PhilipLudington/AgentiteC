@@ -1,0 +1,21 @@
+{
+  "tests": [
+    {
+      "name": "Unit Tests",
+      "resultsFile": ".test-results.json",
+      "command": "./scripts/run-tests.sh"
+    }
+  ],
+  "builds": [
+    {
+      "name": "Release Build",
+      "resultsFile": ".build-results.json",
+      "command": "./scripts/run-build.sh"
+    },
+    {
+      "name": "Debug Build",
+      "resultsFile": ".debug-build-results.json",
+      "command": "./scripts/run-build.sh debug"
+    }
+  ]
+}
