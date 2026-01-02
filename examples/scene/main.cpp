@@ -13,6 +13,7 @@
 
 #include "agentite/agentite.h"
 #include "agentite/sprite.h"
+#include "agentite/text.h"
 #include "agentite/camera.h"
 #include "agentite/input.h"
 #include "agentite/ecs.h"
@@ -217,6 +218,18 @@ int main(int argc, char *argv[]) {
         agentite_get_window(engine)
     );
 
+    /* Initialize text renderer */
+    Agentite_TextRenderer *text = agentite_text_init(
+        agentite_get_gpu_device(engine),
+        agentite_get_window(engine)
+    );
+
+    /* Load font */
+    Agentite_Font *font = agentite_font_load(text, "assets/fonts/Roboto-Regular.ttf", 16);
+    if (!font) {
+        font = agentite_font_load(text, "assets/fonts/NotoSans-Regular.ttf", 16);
+    }
+
     /* Initialize camera - center it so world coords match screen coords */
     Agentite_Camera *camera = agentite_camera_create(1280.0f, 720.0f);
     agentite_sprite_set_camera(sprites, camera);
@@ -260,6 +273,10 @@ int main(int argc, char *argv[]) {
     Agentite_Sprite sprite_enemy = agentite_sprite_from_texture(tex_enemy);
     Agentite_Sprite sprite_item = agentite_sprite_from_texture(tex_item);
     Agentite_Sprite sprite_platform = agentite_sprite_from_texture(tex_platform);
+
+    /* Info message display (shown for a few seconds after F/I press) */
+    char info_message[256] = {0};
+    float info_timer = 0.0f;
 
     /* Load initial scene */
     printf("Loading initial scene...\n");
@@ -331,20 +348,43 @@ int main(int argc, char *argv[]) {
                 ecs_entity_t player = agentite_scene_find_entity(current_scene, "Player");
                 if (player != 0) {
                     const C_Position *pos = ecs_get(world, player, C_Position);
-                    printf("Found Player entity %llu", (unsigned long long)player);
                     if (pos) {
-                        printf(" at (%.0f, %.0f)", pos->x, pos->y);
+                        snprintf(info_message, sizeof(info_message),
+                                 "Found Player at (%.0f, %.0f)", pos->x, pos->y);
+                    } else {
+                        snprintf(info_message, sizeof(info_message),
+                                 "Found Player (no position)");
                     }
-                    printf("\n");
                 } else {
-                    printf("Player entity not found in current scene\n");
+                    snprintf(info_message, sizeof(info_message),
+                             "Player not found in scene");
                 }
+            } else {
+                snprintf(info_message, sizeof(info_message), "No scene loaded");
             }
+            info_timer = 3.0f;
         }
 
         /* Show scene info */
         if (agentite_input_key_just_pressed(input, SDL_SCANCODE_I)) {
-            print_scene_info(current_scene, world);
+            if (current_scene) {
+                snprintf(info_message, sizeof(info_message),
+                         "Scene '%s': %zu entities, %zu roots",
+                         agentite_scene_get_name(current_scene),
+                         agentite_scene_get_entity_count(current_scene),
+                         agentite_scene_get_root_count(current_scene));
+            } else {
+                snprintf(info_message, sizeof(info_message), "No scene loaded");
+            }
+            info_timer = 3.0f;
+        }
+
+        /* Update info timer */
+        if (info_timer > 0.0f) {
+            info_timer -= agentite_get_delta_time(engine);
+            if (info_timer <= 0.0f) {
+                info_message[0] = '\0';
+            }
         }
 
         if (agentite_input_key_just_pressed(input, SDL_SCANCODE_ESCAPE)) {
@@ -393,9 +433,40 @@ int main(int argc, char *argv[]) {
         if (cmd) {
             agentite_sprite_upload(sprites, cmd);
 
+            /* Build text batch for HUD */
+            if (font) {
+                agentite_text_begin(text);
+
+                const char *scene_name = current_scene ?
+                    agentite_scene_get_name(current_scene) : "None";
+                size_t ent_count = current_scene ?
+                    agentite_scene_get_entity_count(current_scene) : 0;
+
+                char buf[128];
+                snprintf(buf, sizeof(buf), "Scene: %s  |  Entities: %zu",
+                         scene_name, ent_count);
+                agentite_text_draw_colored(text, font, buf, 10, 10, 1.0f, 1.0f, 1.0f, 1.0f);
+
+                agentite_text_draw_colored(text, font,
+                    "1/2: Load Scene | F: Find Player | I: Scene Info | ESC: Quit",
+                    10, 30, 0.7f, 0.7f, 0.7f, 1.0f);
+
+                /* Show info message if active */
+                if (info_message[0] != '\0') {
+                    agentite_text_draw_colored(text, font, info_message,
+                        10, 60, 0.3f, 1.0f, 0.3f, 1.0f);
+                }
+
+                agentite_text_end(text);
+                agentite_text_upload(text, cmd);
+            }
+
             if (agentite_begin_render_pass(engine, 0.08f, 0.08f, 0.12f, 1.0f)) {
                 SDL_GPURenderPass *pass = agentite_get_render_pass(engine);
                 agentite_sprite_render(sprites, cmd, pass);
+                if (font) {
+                    agentite_text_render(text, cmd, pass);
+                }
                 agentite_end_render_pass(engine);
             }
         }
@@ -410,6 +481,8 @@ int main(int argc, char *argv[]) {
     agentite_texture_destroy(sprites, tex_item);
     agentite_texture_destroy(sprites, tex_platform);
 
+    if (font) agentite_font_destroy(text, font);
+    agentite_text_shutdown(text);
     agentite_scene_manager_destroy(scenes);
     agentite_prefab_registry_destroy(prefabs);
     agentite_reflect_destroy(reflect);

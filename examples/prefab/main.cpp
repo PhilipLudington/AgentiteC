@@ -8,6 +8,7 @@
 
 #include "agentite/agentite.h"
 #include "agentite/sprite.h"
+#include "agentite/text.h"
 #include "agentite/camera.h"
 #include "agentite/input.h"
 #include "agentite/ecs.h"
@@ -165,6 +166,18 @@ int main(int argc, char *argv[]) {
         agentite_get_window(engine)
     );
 
+    /* Initialize text renderer */
+    Agentite_TextRenderer *text = agentite_text_init(
+        agentite_get_gpu_device(engine),
+        agentite_get_window(engine)
+    );
+
+    /* Load font */
+    Agentite_Font *font = agentite_font_load(text, "assets/fonts/Roboto-Regular.ttf", 16);
+    if (!font) {
+        font = agentite_font_load(text, "assets/fonts/NotoSans-Regular.ttf", 16);
+    }
+
     /* Initialize camera */
     Agentite_Camera *camera = agentite_camera_create(1280.0f, 720.0f);
     agentite_sprite_set_camera(sprites, camera);
@@ -320,9 +333,29 @@ int main(int argc, char *argv[]) {
             }
             agentite_sprite_upload(sprites, cmd);
 
+            /* Build text batch for HUD */
+            if (font) {
+                agentite_text_begin(text);
+
+                char buf[128];
+                snprintf(buf, sizeof(buf), "Selected: %s  |  Entities: %d",
+                         prefab_short[selected_prefab], entity_count);
+                agentite_text_draw_colored(text, font, buf, 10, 10, 1.0f, 1.0f, 1.0f, 1.0f);
+
+                agentite_text_draw_colored(text, font,
+                    "Click: Spawn | 1/2/3: Select Enemy/Item/Player | C: Clear | ESC: Quit",
+                    10, 30, 0.7f, 0.7f, 0.7f, 1.0f);
+
+                agentite_text_end(text);
+                agentite_text_upload(text, cmd);
+            }
+
             /* Render pass */
             if (agentite_begin_render_pass(engine, 0.1f, 0.1f, 0.15f, 1.0f)) {
                 agentite_sprite_render(sprites, cmd, agentite_get_render_pass(engine));
+                if (font) {
+                    agentite_text_render(text, cmd, agentite_get_render_pass(engine));
+                }
                 agentite_end_render_pass(engine);
             }
         }
@@ -335,6 +368,8 @@ int main(int argc, char *argv[]) {
     agentite_texture_destroy(sprites, tex_item);
     agentite_texture_destroy(sprites, tex_player);
 
+    if (font) agentite_font_destroy(text, font);
+    agentite_text_shutdown(text);
     agentite_prefab_registry_destroy(prefabs);
     agentite_reflect_destroy(reflect);
     agentite_ecs_shutdown(ecs_world);
