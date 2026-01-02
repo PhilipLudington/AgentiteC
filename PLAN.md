@@ -3,19 +3,19 @@
 ## Phase 1: Core Visual & Gameplay Systems
 
 ### Particle System
-- [ ] Design particle emitter API (`agentite_particle_*`)
-- [ ] Implement particle pool with configurable max particles (default 10,000)
-- [ ] Add emitter types: point, line, circle, rectangle
-- [ ] Implement particle properties: lifetime, velocity, acceleration, gravity
-- [ ] Add color interpolation (start/end color with easing)
-- [ ] Add size interpolation (start/end size)
-- [ ] Implement rotation and angular velocity
-- [ ] Add texture/sprite support with UV animation
-- [ ] Implement blend modes: additive, alpha, multiply
-- [ ] Add emission patterns: burst, continuous, timed
-- [ ] Integrate with sprite renderer batch system
-- [ ] Add world-space vs local-space modes
-- [ ] Create preset particles: explosion, smoke, fire, sparks, rain, snow
+- [x] Design particle emitter API (`agentite_particle_*`)
+- [x] Implement particle pool with configurable max particles (default 10,000)
+- [x] Add emitter types: point, line, circle, rectangle
+- [x] Implement particle properties: lifetime, velocity, acceleration, gravity
+- [x] Add color interpolation (start/end color with easing)
+- [x] Add size interpolation (start/end size)
+- [x] Implement rotation and angular velocity
+- [x] Add texture/sprite support with UV animation
+- [x] Implement blend modes: additive, alpha, multiply
+- [x] Add emission patterns: burst, continuous, timed
+- [x] Integrate with sprite renderer batch system
+- [x] Add world-space vs local-space modes
+- [x] Create preset particles: explosion, smoke, fire, sparks, rain, snow
 
 ### Collision Detection System
 - [ ] Design collision API (`agentite_collision_*`)
