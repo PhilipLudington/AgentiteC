@@ -99,27 +99,6 @@ static uint32_t aui_float_rgba_to_u32(float r, float g, float b, float a)
  * Internal Drawing Helpers
  * ============================================================================ */
 
-/* Draw a filled circle (approximated with triangles) */
-static void aui_draw_circle(AUI_Context *ctx, float cx, float cy, float radius,
-                            uint32_t color, int segments)
-{
-    if (segments < 6) segments = 6;
-    if (segments > 64) segments = 64;
-
-    float angle_step = 2.0f * 3.14159265f / segments;
-    float prev_x = cx + radius;
-    float prev_y = cy;
-
-    for (int i = 1; i <= segments; i++) {
-        float angle = angle_step * i;
-        float x = cx + cosf(angle) * radius;
-        float y = cy + sinf(angle) * radius;
-        aui_draw_triangle(ctx, cx, cy, prev_x, prev_y, x, y, color);
-        prev_x = x;
-        prev_y = y;
-    }
-}
-
 /* Draw a ring (circle outline with thickness) */
 static void aui_draw_ring(AUI_Context *ctx, float cx, float cy, float radius,
                           uint32_t color, float thickness, int segments)

@@ -137,15 +137,6 @@ static char *sb_detach(StringBuilder *sb) {
  * Value Writing
  * ============================================================================ */
 
-static bool needs_escape(const char *str) {
-    for (const char *p = str; *p; p++) {
-        if (*p == '"' || *p == '\\' || *p == '\n' || *p == '\r' || *p == '\t') {
-            return true;
-        }
-    }
-    return false;
-}
-
 static bool write_escaped_string(StringBuilder *sb, const char *str) {
     if (!sb_append_char(sb, '"')) return false;
 

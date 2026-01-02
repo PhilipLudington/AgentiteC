@@ -283,7 +283,7 @@ float agentite_vres_unscale_size(const Agentite_VirtualResolution *vr, float scr
  *============================================================================*/
 
 Agentite_Viewport agentite_vres_get_viewport(const Agentite_VirtualResolution *vr) {
-    Agentite_Viewport empty = {0};
+    Agentite_Viewport empty = {};
     AGENTITE_VALIDATE_PTR_RET(vr, empty);
     return vr->viewport;
 }

@@ -43,10 +43,6 @@ struct Agentite_Noise {
  * Internal Helpers
  * ============================================================================ */
 
-static float noise_floor(float x) {
-    return floorf(x);
-}
-
 static int noise_fastfloor(float x) {
     int xi = (int)x;
     return x < xi ? xi - 1 : xi;

@@ -15,8 +15,8 @@ UNAME_S := $(shell uname -s)
 # Compiler settings
 CXX := g++
 CC := gcc
-CXXFLAGS := -Wall -Wextra -std=c++17 -I$(INCLUDE_DIR) -I$(LIB_DIR) -I$(LIB_DIR)/cglm/include -I$(LIB_DIR)/chipmunk2d/include -I$(SRC_DIR)
-CFLAGS := -Wall -Wextra -std=c11 -I$(INCLUDE_DIR) -I$(LIB_DIR) -I$(LIB_DIR)/cglm/include -I$(LIB_DIR)/chipmunk2d/include -I$(SRC_DIR)
+CXXFLAGS := -Wall -Wextra -Wno-missing-field-initializers -Wno-missing-braces -std=c++17 -I$(INCLUDE_DIR) -I$(LIB_DIR) -I$(LIB_DIR)/cglm/include -I$(LIB_DIR)/chipmunk2d/include -I$(SRC_DIR)
+CFLAGS := -Wall -Wextra -Wno-missing-field-initializers -Wno-missing-braces -std=c11 -I$(INCLUDE_DIR) -I$(LIB_DIR) -I$(LIB_DIR)/cglm/include -I$(LIB_DIR)/chipmunk2d/include -I$(SRC_DIR)
 LDFLAGS :=
 
 # Debug/Release builds

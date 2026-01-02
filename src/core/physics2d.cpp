@@ -60,6 +60,7 @@ static inline void from_cpv(cpVect v, float *x, float *y) {
 
 /* Collision callback wrappers */
 static cpBool collision_begin_wrapper(cpArbiter *arb, cpSpace *space, cpDataPointer data) {
+    (void)data;
     Agentite_Physics2DSpace *p2d_space = (Agentite_Physics2DSpace *)cpSpaceGetUserData(space);
     if (!p2d_space || !p2d_space->has_default_handler || !p2d_space->default_handler.begin) {
         return cpTrue;
@@ -98,6 +99,7 @@ static cpBool collision_begin_wrapper(cpArbiter *arb, cpSpace *space, cpDataPoin
 }
 
 static cpBool collision_pre_solve_wrapper(cpArbiter *arb, cpSpace *space, cpDataPointer data) {
+    (void)data;
     Agentite_Physics2DSpace *p2d_space = (Agentite_Physics2DSpace *)cpSpaceGetUserData(space);
     if (!p2d_space || !p2d_space->has_default_handler || !p2d_space->default_handler.pre_solve) {
         return cpTrue;
@@ -129,6 +131,7 @@ static cpBool collision_pre_solve_wrapper(cpArbiter *arb, cpSpace *space, cpData
 }
 
 static void collision_post_solve_wrapper(cpArbiter *arb, cpSpace *space, cpDataPointer data) {
+    (void)data;
     Agentite_Physics2DSpace *p2d_space = (Agentite_Physics2DSpace *)cpSpaceGetUserData(space);
     if (!p2d_space || !p2d_space->has_default_handler || !p2d_space->default_handler.post_solve) {
         return;
@@ -160,6 +163,7 @@ static void collision_post_solve_wrapper(cpArbiter *arb, cpSpace *space, cpDataP
 }
 
 static void collision_separate_wrapper(cpArbiter *arb, cpSpace *space, cpDataPointer data) {
+    (void)data;
     Agentite_Physics2DSpace *p2d_space = (Agentite_Physics2DSpace *)cpSpaceGetUserData(space);
     if (!p2d_space || !p2d_space->has_default_handler || !p2d_space->default_handler.separate) {
         return;
@@ -221,6 +225,7 @@ Agentite_Physics2DSpace *agentite_physics2d_space_create(
 
 /* Free shape iterator callback */
 static void free_shape_callback(cpBody *body, cpShape *shape, void *data) {
+    (void)body; (void)data;
     Agentite_Physics2DShape *p2d_shape = (Agentite_Physics2DShape *)cpShapeGetUserData(shape);
     if (p2d_shape) {
         free(p2d_shape);
@@ -229,6 +234,7 @@ static void free_shape_callback(cpBody *body, cpShape *shape, void *data) {
 
 /* Free constraint iterator callback */
 static void free_constraint_callback(cpBody *body, cpConstraint *constraint, void *data) {
+    (void)body; (void)data;
     Agentite_Physics2DConstraint *p2d_constraint =
         (Agentite_Physics2DConstraint *)cpConstraintGetUserData(constraint);
     if (p2d_constraint) {
@@ -238,6 +244,7 @@ static void free_constraint_callback(cpBody *body, cpConstraint *constraint, voi
 
 /* Body iterator for cleanup */
 static void cleanup_body_callback(cpBody *body, void *data) {
+    (void)data;
     cpBodyEachShape(body, free_shape_callback, NULL);
     cpBodyEachConstraint(body, free_constraint_callback, NULL);
 
@@ -1370,18 +1377,21 @@ Agentite_Physics2DShape *agentite_physics2d_space_segment_query_first(
 
 /* Body counter callback */
 static void count_body_callback(cpBody *body, void *data) {
+    (void)body;
     int *count = (int *)data;
     (*count)++;
 }
 
 /* Shape counter callback */
 static void count_shape_callback(cpShape *shape, void *data) {
+    (void)shape;
     int *count = (int *)data;
     (*count)++;
 }
 
 /* Constraint counter callback */
 static void count_constraint_callback(cpConstraint *constraint, void *data) {
+    (void)constraint;
     int *count = (int *)data;
     (*count)++;
 }

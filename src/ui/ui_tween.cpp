@@ -450,6 +450,7 @@ static void aui_tween_set_property_value(AUI_Node *node, AUI_TweenProperty prop,
 
 static void aui_tween_update_one(AUI_TweenManager *tm, AUI_PropertyTween *tween,
                                   float dt) {
+    (void)tm;
     if (tween->state != AUI_TWEEN_RUNNING) return;
 
     /* Handle delay */

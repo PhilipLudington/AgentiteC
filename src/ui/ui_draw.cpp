@@ -1325,7 +1325,6 @@ void aui_render(AUI_Context *ctx, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *
     /* Track current state */
     SDL_GPUGraphicsPipeline *current_pipeline = NULL;
     SDL_GPUTexture *current_texture = NULL;
-    AUI_DrawCmdType current_type = AUI_DRAW_CMD_SOLID;
 
     /* Render each draw command */
     for (uint32_t i = 0; i < ctx->draw_cmd_count; i++) {
@@ -1380,8 +1379,6 @@ void aui_render(AUI_Context *ctx, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *
             SDL_DrawGPUIndexedPrimitives(pass, draw_cmd->index_count, 1,
                                           draw_cmd->index_offset, 0, 0);
         }
-
-        current_type = draw_cmd->type;
     }
 }
 

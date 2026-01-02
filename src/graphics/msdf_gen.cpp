@@ -36,17 +36,6 @@ static uint64_t msdf_rand(void)
     return msdf_rand_state;
 }
 
-/* Get end point of edge segment */
-static MSDF_Vector2 edge_end_point(const MSDF_EdgeSegment *edge)
-{
-    switch (edge->type) {
-        case MSDF_EDGE_LINEAR:    return edge->p[1];
-        case MSDF_EDGE_QUADRATIC: return edge->p[2];
-        case MSDF_EDGE_CUBIC:     return edge->p[3];
-    }
-    return edge->p[0];
-}
-
 /* Check if vertex between two edges is a corner */
 static bool is_corner(const MSDF_EdgeSegment *prev, const MSDF_EdgeSegment *next,
                       double angle_threshold)
@@ -374,13 +363,6 @@ static void shape_multi_distance_culled(const MSDF_Shape *shape, MSDF_Vector2 po
     }
 }
 
-/* Calculate per-channel signed distances for MSDF (no culling - for compatibility) */
-static void shape_multi_distance(const MSDF_Shape *shape, MSDF_Vector2 point,
-                                  double *out_r, double *out_g, double *out_b)
-{
-    shape_multi_distance_culled(shape, point, NULL, 0, out_r, out_g, out_b);
-}
-
 /* Pre-compute bounding boxes for all edges in a shape */
 static MSDF_Bounds *precompute_edge_bounds(const MSDF_Shape *shape, int *out_count)
 {
@@ -660,64 +642,6 @@ static float median3(float a, float b, float c)
         if (a < c) return a;
         return (b < c) ? c : b;
     }
-}
-
-/* Check if a pixel is "equalized" (all channels approximately equal) */
-static bool is_pixel_equalized(const float *pixel, float threshold)
-{
-    float r = pixel[0], g = pixel[1], b = pixel[2];
-    float max_val = fmaxf(fmaxf(r, g), b);
-    float min_val = fminf(fminf(r, g), b);
-    return (max_val - min_val) <= threshold;
-}
-
-/* Compute the deviation of a pixel (how much channels disagree) */
-static float pixel_deviation(const float *pixel)
-{
-    float r = pixel[0], g = pixel[1], b = pixel[2];
-    float med = median3(r, g, b);
-    float dev_r = fabsf(r - med);
-    float dev_g = fabsf(g - med);
-    float dev_b = fabsf(b - med);
-    return fmaxf(fmaxf(dev_r, dev_g), dev_b);
-}
-
-/* Detect if there's a "clash" between a pixel and its neighbor.
- * A clash indicates an artifact that needs correction.
- *
- * Returns true if the current pixel appears to be an artifact based on
- * comparison with the neighbor pixel. */
-static bool detect_clash(const float *pixel, const float *neighbor, float threshold)
-{
-    if (!pixel || !neighbor) return false;
-
-    float pixel_dev = pixel_deviation(pixel);
-    float neighbor_dev = pixel_deviation(neighbor);
-
-    /* If the current pixel has high deviation but the neighbor doesn't,
-     * the current pixel is likely an artifact */
-    if (pixel_dev > threshold && neighbor_dev < threshold * 0.5f) {
-        return true;
-    }
-
-    /* Also check for sign conflicts: if channels are on opposite sides of 0.5
-     * in the two pixels, there might be an artifact */
-    float pixel_med = median3(pixel[0], pixel[1], pixel[2]);
-    float neighbor_med = median3(neighbor[0], neighbor[1], neighbor[2]);
-
-    /* Both pixels should agree on inside (>0.5) or outside (<0.5) */
-    bool pixel_inside = (pixel_med > 0.5f);
-    bool neighbor_inside = (neighbor_med > 0.5f);
-
-    if (pixel_inside != neighbor_inside) {
-        /* Sign conflict - check if it's an artifact or a genuine edge */
-        /* If the pixel has high deviation, it's likely an artifact */
-        if (pixel_dev > threshold) {
-            return true;
-        }
-    }
-
-    return false;
 }
 
 /* Equalize a pixel by setting all channels to the median */

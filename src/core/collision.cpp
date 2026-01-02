@@ -157,10 +157,6 @@ static inline Agentite_CollisionVec2 vec2_perp(Agentite_CollisionVec2 v) {
     return (Agentite_CollisionVec2){-v.y, v.x};
 }
 
-static inline float vec2_cross(Agentite_CollisionVec2 a, Agentite_CollisionVec2 b) {
-    return a.x * b.y - a.y * b.x;
-}
-
 static inline float clampf(float v, float min_v, float max_v) {
     if (v < min_v) return min_v;
     if (v > max_v) return max_v;
@@ -1071,43 +1067,6 @@ static bool test_capsule_capsule(
     return test_circle_circle(closest1.x, closest1.y, r1, closest2.x, closest2.y, r2, out);
 }
 
-/* SAT helper: project shape onto axis */
-static void project_polygon_onto_axis(
-    const PolygonData *poly, float px, float py, float cos_r, float sin_r,
-    Agentite_CollisionVec2 axis, float *min_out, float *max_out)
-{
-    *min_out = FLT_MAX;
-    *max_out = -FLT_MAX;
-
-    for (int i = 0; i < poly->count; i++) {
-        Agentite_CollisionVec2 v = vec2_rotate(poly->vertices[i], cos_r, sin_r);
-        v.x += px;
-        v.y += py;
-        float proj = vec2_dot(v, axis);
-        *min_out = minf(*min_out, proj);
-        *max_out = maxf(*max_out, proj);
-    }
-}
-
-static void project_aabb_onto_axis(
-    float x, float y, float hw, float hh,
-    Agentite_CollisionVec2 axis, float *min_out, float *max_out)
-{
-    Agentite_CollisionVec2 corners[4] = {
-        {x - hw, y - hh}, {x + hw, y - hh},
-        {x + hw, y + hh}, {x - hw, y + hh}
-    };
-
-    *min_out = FLT_MAX;
-    *max_out = -FLT_MAX;
-
-    for (int i = 0; i < 4; i++) {
-        float proj = vec2_dot(corners[i], axis);
-        *min_out = minf(*min_out, proj);
-        *max_out = maxf(*max_out, proj);
-    }
-}
-
 /* OBB vs OBB using SAT */
 static bool test_obb_obb(
     float x1, float y1, float hw1, float hh1, float rot1,
@@ -1128,8 +1087,6 @@ static bool test_obb_obb(
 
     /* Get corners for both OBBs */
     Agentite_CollisionVec2 corners1[4], corners2[4];
-    Agentite_CollisionVec2 half1[2] = {{hw1, 0}, {0, hh1}};
-    Agentite_CollisionVec2 half2[2] = {{hw2, 0}, {0, hh2}};
 
     for (int i = 0; i < 4; i++) {
         float sx = (i & 1) ? 1 : -1;

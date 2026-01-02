@@ -122,20 +122,6 @@ static uint32_t aui_notification_color(AUI_NotificationType type)
     }
 }
 
-static const char *aui_button_label(AUI_DialogResult result)
-{
-    switch (result) {
-        case AUI_DIALOG_OK:     return "OK";
-        case AUI_DIALOG_CANCEL: return "Cancel";
-        case AUI_DIALOG_YES:    return "Yes";
-        case AUI_DIALOG_NO:     return "No";
-        case AUI_DIALOG_ABORT:  return "Abort";
-        case AUI_DIALOG_RETRY:  return "Retry";
-        case AUI_DIALOG_IGNORE: return "Ignore";
-        default:                return "OK";
-    }
-}
-
 /* ============================================================================
  * Dialog Update and Render
  * ============================================================================ */

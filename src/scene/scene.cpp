@@ -897,6 +897,7 @@ bool agentite_scene_write_file(const Agentite_Scene *scene, const char *path) {
 Agentite_Scene *agentite_scene_from_world(ecs_world_t *world,
                                            const Agentite_ReflectRegistry *reflect,
                                            const char *name) {
+    (void)world; (void)reflect; (void)name;
     /* This is a more complex operation - for now return NULL */
     /* A full implementation would query all entities with a C_SceneEntity tag */
     set_scene_error("scene: agentite_scene_from_world not yet implemented");

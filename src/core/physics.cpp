@@ -94,9 +94,6 @@ static inline float clampf(float v, float min_v, float max_v) {
     return v;
 }
 
-static inline float minf(float a, float b) { return a < b ? a : b; }
-static inline float maxf(float a, float b) { return a > b ? a : b; }
-
 /* ============================================================================
  * Physics World Lifecycle
  * ============================================================================ */

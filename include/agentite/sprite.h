@@ -227,9 +227,8 @@ void agentite_sprite_upload_fullscreen_quad(Agentite_SpriteRenderer *sr, SDL_GPU
  * Asset Handle Integration
  * ============================================================================ */
 
-/* Forward declaration */
-typedef struct Agentite_AssetRegistry Agentite_AssetRegistry;
-typedef struct Agentite_AssetHandle Agentite_AssetHandle;
+/* Asset system integration */
+#include "agentite/asset.h"
 
 /**
  * Load texture and register with asset registry.

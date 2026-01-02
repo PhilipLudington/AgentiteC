@@ -518,9 +518,6 @@ void aui_draw_gradient(AUI_Context *ctx, float x, float y, float w, float h,
             float t0 = (float)i / strips;
             float t1 = (float)(i + 1) / strips;
 
-            uint32_t c0 = aui_color_at_position(gradient, t0);
-            uint32_t c1 = aui_color_at_position(gradient, t1);
-
             /* For horizontal gradient (angle = 0) */
             if (fabsf(cos_a) > fabsf(sin_a)) {
                 float x0 = x + w * t0;
@@ -1037,6 +1034,7 @@ static int aui_wrap_text(AUI_Context *ctx, const char *text, float max_width,
                           float letter_spacing, float word_spacing,
                           AUI_TextLine *lines, int max_lines_count)
 {
+    (void)word_spacing;
     if (!ctx || !text || !lines || max_width <= 0) return 0;
 
     int line_count = 0;
@@ -1180,7 +1178,6 @@ float aui_draw_styled_text(AUI_Context *ctx, const char *text,
     /* Build list of lines */
     AUI_TextLine lines[AUI_MAX_WRAP_LINES];
     int line_count = 1;
-    char single_line_buf[512];
 
     if (should_wrap && max_width > 0) {
         line_count = aui_wrap_text(ctx, text, max_width,

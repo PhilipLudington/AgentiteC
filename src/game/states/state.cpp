@@ -22,13 +22,13 @@ void game_state_machine_destroy(GameStateMachine *sm) {
 
 void game_state_machine_register(GameStateMachine *sm, GameStateID id,
                                   const GameState *state) {
-    if (!sm || id < 0 || id >= GAME_MAX_STATES || !state) return;
+    if (!sm || (int)id < 0 || (int)id >= GAME_MAX_STATES || !state) return;
     sm->states[id] = *state;
 }
 
 void game_state_machine_change(GameStateMachine *sm, GameStateID id,
                                 Agentite_GameContext *ctx) {
-    if (!sm || id < 0 || id >= GAME_MAX_STATES) return;
+    if (!sm || (int)id < 0 || (int)id >= GAME_MAX_STATES) return;
 
     /* Exit current state */
     if (sm->current != GAME_STATE_NONE && sm->states[sm->current].exit) {

@@ -882,6 +882,7 @@ Agentite_GizmoResult agentite_gizmo_rotate(Agentite_Gizmos *gizmos,
                                             vec3 position,
                                             mat4 *orientation)
 {
+    (void)orientation;
     Agentite_GizmoResult result = {};
     glm_vec3_zero(result.delta);
 
@@ -911,6 +912,7 @@ Agentite_GizmoResult agentite_gizmo_scale(Agentite_Gizmos *gizmos,
                                            vec3 position,
                                            mat4 *orientation)
 {
+    (void)orientation;
     Agentite_GizmoResult result = {};
     glm_vec3_zero(result.delta);
 

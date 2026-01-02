@@ -38,13 +38,6 @@ static char peek_next(Agentite_Lexer *lexer) {
     return lexer->current[1];
 }
 
-static bool match(Agentite_Lexer *lexer, char expected) {
-    if (is_at_end(lexer)) return false;
-    if (*lexer->current != expected) return false;
-    advance(lexer);
-    return true;
-}
-
 static void skip_whitespace(Agentite_Lexer *lexer) {
     for (;;) {
         char c = peek(lexer);
