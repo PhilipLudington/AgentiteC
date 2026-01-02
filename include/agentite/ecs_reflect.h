@@ -157,7 +157,19 @@ int agentite_reflect_get_all(const Agentite_ReflectRegistry *registry,
 /**
  * Get the number of registered components.
  */
-int agentite_reflect_count(const Agentite_ReflectRegistry *registry);
+size_t agentite_reflect_count(const Agentite_ReflectRegistry *registry);
+
+/**
+ * Get component metadata by index (0 to count-1).
+ * Useful for iterating all registered components.
+ *
+ * @param registry The reflection registry
+ * @param index    Index from 0 to agentite_reflect_count()-1
+ * @return Component metadata, or NULL if index is out of range
+ */
+const Agentite_ComponentMeta *agentite_reflect_get_by_index(
+    const Agentite_ReflectRegistry *registry,
+    size_t index);
 
 /* ============================================================================
  * Convenience Macros

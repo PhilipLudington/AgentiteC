@@ -153,10 +153,19 @@ int agentite_reflect_get_all(const Agentite_ReflectRegistry *registry,
     return count;
 }
 
-int agentite_reflect_count(const Agentite_ReflectRegistry *registry)
+size_t agentite_reflect_count(const Agentite_ReflectRegistry *registry)
 {
     if (!registry) return 0;
-    return registry->component_count;
+    return (size_t)registry->component_count;
+}
+
+const Agentite_ComponentMeta *agentite_reflect_get_by_index(
+    const Agentite_ReflectRegistry *registry,
+    size_t index)
+{
+    if (!registry) return NULL;
+    if (index >= (size_t)registry->component_count) return NULL;
+    return &registry->components[index];
 }
 
 /* ============================================================================
