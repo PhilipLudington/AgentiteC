@@ -18,27 +18,27 @@
 - [x] Create preset particles: explosion, smoke, fire, sparks, rain, snow
 
 ### Collision Detection System
-- [ ] Design collision API (`agentite_collision_*`)
-- [ ] Implement shape primitives: AABB, Circle, OBB, Capsule
-- [ ] Add shape-vs-shape tests for all primitive combinations
-- [ ] Implement collision result struct (normal, depth, contact points)
-- [ ] Add broad-phase using existing spatial hash
-- [ ] Implement collision layers and masks
-- [ ] Add raycast queries against shapes
-- [ ] Add point-in-shape queries
-- [ ] Add shape sweep/cast tests
-- [ ] Integrate with ECS as optional C_Collider component
-- [ ] Add debug visualization via gizmos
+- [x] Design collision API (`agentite_collision_*`)
+- [x] Implement shape primitives: AABB, Circle, OBB, Capsule
+- [x] Add shape-vs-shape tests for all primitive combinations
+- [x] Implement collision result struct (normal, depth, contact points)
+- [x] Add broad-phase using existing spatial hash
+- [x] Implement collision layers and masks
+- [x] Add raycast queries against shapes
+- [x] Add point-in-shape queries
+- [x] Add shape sweep/cast tests
+- [x] Integrate with ECS as optional C_Collider component
+- [x] Add debug visualization via gizmos
 
 ### Simple Kinematic Physics
-- [ ] Design physics API (`agentite_physics_*`)
-- [ ] Implement kinematic body (position, velocity, acceleration)
-- [ ] Add gravity support (global and per-body)
-- [ ] Implement drag/friction coefficients
-- [ ] Add collision response (bounce, slide, stop)
-- [ ] Implement trigger volumes (non-solid collision detection)
-- [ ] Add physics step with fixed timestep accumulator
-- [ ] Integrate with ECS as C_PhysicsBody component
+- [x] Design physics API (`agentite_physics_*`)
+- [x] Implement kinematic body (position, velocity, acceleration)
+- [x] Add gravity support (global and per-body)
+- [x] Implement drag/friction coefficients
+- [x] Add collision response (bounce, slide, stop)
+- [x] Implement trigger volumes (non-solid collision detection)
+- [x] Add physics step with fixed timestep accumulator
+- [x] Integrate with ECS as C_PhysicsBody component
 
 ### Chipmunk2D Integration (Optional Full Physics)
 Research indicates [Chipmunk2D](https://github.com/slembcke/Chipmunk2D) is the best fit:
