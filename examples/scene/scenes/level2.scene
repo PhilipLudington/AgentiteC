@@ -1,0 +1,181 @@
+// Level 2 - Dark Dungeon
+// A more challenging level with tougher enemies and better loot
+// Note: Positions are halved due to coordinate scaling in spawn
+
+// Player starting position (left side)
+Entity Player @(75, 180) {
+    C_Health: {
+        health: 100
+        max_health: 100
+    }
+
+    C_SpriteRef: {
+        texture_id: 0
+        scale: 1.0
+    }
+}
+
+// Skeleton Guardian 1 (stronger enemy)
+Entity Skeleton1 @(200, 125) {
+    C_Health: {
+        health: 60
+        max_health: 60
+    }
+
+    C_EnemyType: {
+        type_id: 2
+        aggro_range: 180.0
+    }
+
+    C_SpriteRef: {
+        texture_id: 1
+        scale: 1.2
+    }
+}
+
+// Skeleton Guardian 2
+Entity Skeleton2 @(200, 235) {
+    C_Health: {
+        health: 60
+        max_health: 60
+    }
+
+    C_EnemyType: {
+        type_id: 2
+        aggro_range: 180.0
+    }
+
+    C_SpriteRef: {
+        texture_id: 1
+        scale: 1.2
+    }
+}
+
+// Boss - Dark Knight
+Entity DarkKnight @(500, 180) {
+    C_Health: {
+        health: 200
+        max_health: 200
+    }
+
+    C_EnemyType: {
+        type_id: 3
+        aggro_range: 250.0
+    }
+
+    C_SpriteRef: {
+        texture_id: 1
+        scale: 2.0
+    }
+}
+
+// Skeleton Guard 3 - protecting treasure
+Entity Skeleton3 @(350, 180) {
+    C_Health: {
+        health: 45
+        max_health: 45
+    }
+
+    C_EnemyType: {
+        type_id: 2
+        aggro_range: 150.0
+    }
+
+    C_SpriteRef: {
+        texture_id: 1
+        scale: 1.0
+    }
+}
+
+// Boss Treasure (epic loot)
+Entity BossTreasure @(580, 180) {
+    C_Item: {
+        item_id: 100
+        value: 500
+        can_pickup: true
+    }
+
+    C_SpriteRef: {
+        texture_id: 2
+        scale: 2.0
+    }
+}
+
+// Healing fountain
+Entity HealingFountain @(125, 180) {
+    C_Item: {
+        item_id: 5
+        value: 50
+        can_pickup: true
+    }
+
+    C_SpriteRef: {
+        texture_id: 2
+        scale: 1.2
+    }
+}
+
+// Gold pile 1
+Entity Gold1 @(275, 90) {
+    C_Item: {
+        item_id: 2
+        value: 75
+        can_pickup: true
+    }
+
+    C_SpriteRef: {
+        texture_id: 2
+        scale: 0.9
+    }
+}
+
+// Gold pile 2
+Entity Gold2 @(275, 270) {
+    C_Item: {
+        item_id: 2
+        value: 75
+        can_pickup: true
+    }
+
+    C_SpriteRef: {
+        texture_id: 2
+        scale: 0.9
+    }
+}
+
+// Dungeon floor tiles (platforms at bottom)
+Entity Floor1 @(150, 320) {
+    C_SpriteRef: {
+        texture_id: 3
+        scale: 2.0
+    }
+}
+
+Entity Floor2 @(300, 320) {
+    C_SpriteRef: {
+        texture_id: 3
+        scale: 2.0
+    }
+}
+
+Entity Floor3 @(450, 320) {
+    C_SpriteRef: {
+        texture_id: 3
+        scale: 2.0
+    }
+}
+
+// Wall segments (top and bottom)
+Entity Wall1 @(320, 25) {
+    C_SpriteRef: {
+        texture_id: 3
+        scale: 1.5
+    }
+}
+
+Entity Wall2 @(320, 335) {
+    C_SpriteRef: {
+        texture_id: 3
+        scale: 1.5
+    }
+}
