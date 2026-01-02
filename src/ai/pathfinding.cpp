@@ -541,9 +541,9 @@ Agentite_Path *agentite_pathfinder_find_ex(Agentite_Pathfinder *pf,
             return reconstruct_path(pf, start_x, start_y, end_x, end_y);
         }
 
-        /* Check neighbors */
-        int num_dirs = opts.allow_diagonal ? 8 : 4;
-        for (int d = 0; d < num_dirs; d++) {
+        /* Check neighbors - always iterate all 8 directions, skip diagonals if disabled
+         * (Cardinals are at indices 0,2,4,6 so we can't just use num_dirs=4) */
+        for (int d = 0; d < 8; d++) {
             /* Skip diagonals if disabled */
             if (!opts.allow_diagonal && DIR_DIAG[d]) continue;
 

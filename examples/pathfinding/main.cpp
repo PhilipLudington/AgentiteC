@@ -98,6 +98,19 @@ static bool screen_to_grid(AppState *app, float screen_x, float screen_y, int *g
     return false;
 }
 
+/* Setup initial obstacles */
+static void setup_initial_walls(AppState *app)
+{
+    /* Add some initial obstacles for interest */
+    for (int y = 8; y < 16; y++) {
+        agentite_pathfinder_set_walkable(app->pathfinder, 10, y, false);
+        agentite_pathfinder_set_walkable(app->pathfinder, 20, y, false);
+    }
+    for (int x = 10; x <= 20; x++) {
+        agentite_pathfinder_set_walkable(app->pathfinder, x, 8, false);
+    }
+}
+
 /* Find a new path from agent to goal */
 static void find_path(AppState *app)
 {
@@ -207,6 +220,9 @@ static void handle_input(AppState *app, float dt)
     /* R: Reset grid */
     if (agentite_input_key_just_pressed(app->input, SDL_SCANCODE_R)) {
         agentite_pathfinder_clear(app->pathfinder);
+        setup_initial_walls(app);
+        app->agent_x = 2;
+        app->agent_y = 2;
         app->has_goal = false;
         if (app->path) {
             agentite_path_destroy(app->path);
@@ -335,9 +351,9 @@ int main(int argc, char *argv[])
     }
 
     /* Load font - try common locations */
-    app.font = agentite_font_load(app.text, "assets/fonts/NotoSans-Regular.ttf", 16);
+    app.font = agentite_font_load(app.text, "assets/fonts/Roboto-Regular.ttf", 16);
     if (!app.font) {
-        app.font = agentite_font_load(app.text, "/System/Library/Fonts/Helvetica.ttc", 16);
+        app.font = agentite_font_load(app.text, "assets/fonts/NotoSans-Regular.ttf", 16);
     }
     if (!app.font) {
         fprintf(stderr, "Warning: Could not load font, HUD text will not display\n");
@@ -355,14 +371,8 @@ int main(int argc, char *argv[])
                                 GRID_WIDTH * TILE_SIZE / 2.0f,
                                 GRID_HEIGHT * TILE_SIZE / 2.0f);
 
-    /* Add some initial obstacles for interest */
-    for (int y = 8; y < 16; y++) {
-        agentite_pathfinder_set_walkable(app.pathfinder, 10, y, false);
-        agentite_pathfinder_set_walkable(app.pathfinder, 20, y, false);
-    }
-    for (int x = 10; x <= 20; x++) {
-        agentite_pathfinder_set_walkable(app.pathfinder, x, 8, false);
-    }
+    /* Add initial obstacles */
+    setup_initial_walls(&app);
 
     printf("Pathfinding Example\n");
     printf("===================\n");
@@ -407,6 +417,7 @@ int main(int argc, char *argv[])
         if (app.font) {
             agentite_text_begin(app.text);
             render_hud(&app);
+            agentite_text_end(app.text);
             agentite_text_upload(app.text, cmd);
         }
 
