@@ -38,7 +38,7 @@ AUI_Theme aui_theme_dark(void)
     theme.text              = 0xFFE0E0E0;  /* Light gray */
     theme.text_dim          = 0xFF808080;  /* Dim gray */
     theme.text_highlight    = 0xFFFFFFFF;  /* White */
-    theme.text_disabled     = 0xFF505050;  /* Dark gray */
+    theme.text_disabled     = 0xFF707070;  /* Medium-dark gray (readable on dark bg) */
 
     /* Accent color (copper/orange) */
     theme.accent            = 0xFFEF9A4D;  /* Copper (ABGR) */

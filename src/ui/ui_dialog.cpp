@@ -239,13 +239,15 @@ void aui_dialog_manager_render(AUI_DialogManager *dm, AUI_Context *ctx)
     if (dm->context_menu.active) {
         AUI_ContextMenuState *cm = &dm->context_menu;
 
-        /* Background */
+        /* Background - use a lighter, opaque color for better readability */
+        uint32_t menu_bg = 0xFF2A2A3A;  /* Slightly lighter than bg_panel, fully opaque */
+        uint32_t menu_border = 0xFF4A4A5A;  /* Visible border */
         aui_draw_rect_rounded(ctx, cm->bounds.x, cm->bounds.y,
                                cm->bounds.w, cm->bounds.h,
-                               ctx->theme.bg_panel, ctx->theme.corner_radius);
+                               menu_bg, ctx->theme.corner_radius);
         aui_draw_rect_outline(ctx, cm->bounds.x, cm->bounds.y,
                                cm->bounds.w, cm->bounds.h,
-                               ctx->theme.border, 1);
+                               menu_border, 1);
 
         /* Items */
         float y = cm->bounds.y + 4;
