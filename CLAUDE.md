@@ -39,6 +39,23 @@ make clean        # Clean build
 make info         # Show build configuration
 ```
 
+## Running Tests
+
+Always use the GitStat wrapper script to run tests:
+```bash
+./scripts/run-tests.sh
+```
+Do NOT run `make test` directly - use the wrapper script to preserve GitStat integration and result tracking.
+
+## Building (with GitStat)
+
+For builds that update GitStat status, use the wrapper scripts:
+```bash
+./scripts/run-build.sh          # Release build
+./scripts/run-build.sh debug    # Debug build
+```
+Do NOT run `make` directly when you need GitStat status updates - use the wrapper scripts.
+
 ## Architecture
 
 ```
