@@ -286,9 +286,9 @@ int main(int argc, char *argv[])
     Agentite_TextRenderer *text = agentite_text_init(gpu, window);
 
     /* Try to load a font for HUD */
-    Agentite_Font *font = agentite_font_load(text, "assets/fonts/NotoSans-Regular.ttf", 16);
+    Agentite_Font *font = agentite_font_load(text, "assets/fonts/Roboto-Regular.ttf", 16);
     if (!font) {
-        font = agentite_font_load(text, "/System/Library/Fonts/Helvetica.ttc", 16);
+        font = agentite_font_load(text, "assets/fonts/NotoSans-Regular.ttf", 16);
     }
 
     /* Create particle texture */
@@ -386,6 +386,7 @@ int main(int argc, char *argv[])
             agentite_text_draw_colored(text, font,
                 "Systems: Emitter -> Physics -> Gravity -> Lifetime (automatic via ecs_progress)",
                 10, 30, 0.7f, 0.7f, 0.7f, 1.0f);
+            agentite_text_end(text);
             agentite_text_upload(text, cmd);
         }
 
