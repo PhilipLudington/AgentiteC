@@ -62,17 +62,17 @@ Research indicates [Chipmunk2D](https://github.com/slembcke/Chipmunk2D) is the b
 ## Phase 2: Procedural & Visual Polish
 
 ### Procedural Noise System
-- [ ] Design noise API (`agentite_noise_*`)
-- [ ] Implement Perlin noise 2D/3D
-- [ ] Implement Simplex noise 2D/3D
-- [ ] Add Worley/cellular noise
-- [ ] Implement fractal Brownian motion (fBm)
-- [ ] Add ridged multifractal noise
-- [ ] Add turbulence function
-- [ ] Implement domain warping helpers
-- [ ] Add noise-to-tilemap generation utility
-- [ ] Create heightmap generation helpers
-- [ ] Add resource/biome distribution helpers for strategy maps
+- [x] Design noise API (`agentite_noise_*`)
+- [x] Implement Perlin noise 2D/3D
+- [x] Implement Simplex noise 2D/3D
+- [x] Add Worley/cellular noise
+- [x] Implement fractal Brownian motion (fBm)
+- [x] Add ridged multifractal noise
+- [x] Add turbulence function
+- [x] Implement domain warping helpers
+- [x] Add noise-to-tilemap generation utility
+- [x] Create heightmap generation helpers
+- [x] Add resource/biome distribution helpers for strategy maps
 
 ### Shader System
 - [ ] Design shader API (`agentite_shader_*`)
