@@ -1115,15 +1115,6 @@ void aui_dialogs_render(AUI_Context *ctx)
     }
 }
 
-bool aui_dialogs_process_event(AUI_Context *ctx, const SDL_Event *event)
-{
-    AUI_DialogManager *dm = aui_get_dialog_manager(ctx);
-    if (dm) {
-        return aui_dialog_manager_process_event(dm, ctx, event);
-    }
-    return false;
-}
-
 /* ============================================================================
  * File Dialogs (SDL3 native dialogs)
  * ============================================================================ */
