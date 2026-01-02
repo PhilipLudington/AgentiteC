@@ -142,6 +142,7 @@ make example-strategy-sim # Strategy systems simulation
 make example-pathfinding  # A* pathfinding demo
 make example-ecs          # Custom ECS systems
 make example-msdf         # Scalable text rendering
+make example-gizmos       # Transform gizmos and debug drawing
 ```
 
 ## Project Structure

@@ -342,4 +342,7 @@ void agentite_get_drawable_size(Agentite_Engine *engine, int *w, int *h);
 // UI utilities
 #include "agentite/notification.h"
 
+// Graphics
+#include "agentite/gizmos.h"
+
 #endif // AGENTITE_H
