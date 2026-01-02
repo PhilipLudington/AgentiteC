@@ -600,3 +600,123 @@ void agentite_audio_update(Agentite_Audio *audio) {
     // Future: could be used for streaming music from disk
     (void)audio;
 }
+
+/* ============================================================================
+ * Asset Handle Integration
+ * ============================================================================ */
+
+#include "agentite/asset.h"
+
+Agentite_AssetHandle agentite_sound_load_asset(Agentite_Audio *audio,
+                                                Agentite_AssetRegistry *registry,
+                                                const char *path)
+{
+    if (!audio || !registry || !path) {
+        return AGENTITE_INVALID_ASSET_HANDLE;
+    }
+
+    /* Check if already loaded */
+    Agentite_AssetHandle existing = agentite_asset_lookup(registry, path);
+    if (agentite_asset_is_valid(existing)) {
+        /* Already loaded - add reference and return */
+        agentite_asset_addref(registry, existing);
+        return existing;
+    }
+
+    /* Load the sound */
+    Agentite_Sound *sound = agentite_sound_load(audio, path);
+    if (!sound) {
+        return AGENTITE_INVALID_ASSET_HANDLE;
+    }
+
+    /* Register with asset system */
+    Agentite_AssetHandle handle = agentite_asset_register(
+        registry, path, AGENTITE_ASSET_SOUND, sound);
+
+    if (!agentite_asset_is_valid(handle)) {
+        /* Registration failed - clean up sound */
+        agentite_sound_destroy(audio, sound);
+        return AGENTITE_INVALID_ASSET_HANDLE;
+    }
+
+    return handle;
+}
+
+Agentite_AssetHandle agentite_music_load_asset(Agentite_Audio *audio,
+                                                Agentite_AssetRegistry *registry,
+                                                const char *path)
+{
+    if (!audio || !registry || !path) {
+        return AGENTITE_INVALID_ASSET_HANDLE;
+    }
+
+    /* Check if already loaded */
+    Agentite_AssetHandle existing = agentite_asset_lookup(registry, path);
+    if (agentite_asset_is_valid(existing)) {
+        /* Already loaded - add reference and return */
+        agentite_asset_addref(registry, existing);
+        return existing;
+    }
+
+    /* Load the music */
+    Agentite_Music *music = agentite_music_load(audio, path);
+    if (!music) {
+        return AGENTITE_INVALID_ASSET_HANDLE;
+    }
+
+    /* Register with asset system */
+    Agentite_AssetHandle handle = agentite_asset_register(
+        registry, path, AGENTITE_ASSET_MUSIC, music);
+
+    if (!agentite_asset_is_valid(handle)) {
+        /* Registration failed - clean up music */
+        agentite_music_destroy(audio, music);
+        return AGENTITE_INVALID_ASSET_HANDLE;
+    }
+
+    return handle;
+}
+
+Agentite_Sound *agentite_sound_from_handle(Agentite_AssetRegistry *registry,
+                                            Agentite_AssetHandle handle)
+{
+    if (!registry) return NULL;
+
+    /* Verify it's a sound type */
+    if (agentite_asset_get_type(registry, handle) != AGENTITE_ASSET_SOUND) {
+        return NULL;
+    }
+
+    return (Agentite_Sound *)agentite_asset_get_data(registry, handle);
+}
+
+Agentite_Music *agentite_music_from_handle(Agentite_AssetRegistry *registry,
+                                            Agentite_AssetHandle handle)
+{
+    if (!registry) return NULL;
+
+    /* Verify it's a music type */
+    if (agentite_asset_get_type(registry, handle) != AGENTITE_ASSET_MUSIC) {
+        return NULL;
+    }
+
+    return (Agentite_Music *)agentite_asset_get_data(registry, handle);
+}
+
+void agentite_audio_asset_destructor(void *data, Agentite_AssetType type, void *userdata)
+{
+    Agentite_Audio *audio = (Agentite_Audio *)userdata;
+    if (!audio || !data) return;
+
+    switch (type) {
+        case AGENTITE_ASSET_SOUND:
+            agentite_sound_destroy(audio, (Agentite_Sound *)data);
+            break;
+        case AGENTITE_ASSET_MUSIC:
+            agentite_music_destroy(audio, (Agentite_Music *)data);
+            break;
+        default:
+            /* Not an audio asset - ignore */
+            break;
+    }
+}

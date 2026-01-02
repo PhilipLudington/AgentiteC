@@ -68,4 +68,68 @@ float agentite_audio_get_music_volume(Agentite_Audio *audio);
 // Update (call once per frame for streaming music)
 void agentite_audio_update(Agentite_Audio *audio);
 
+/* ============================================================================
+ * Asset Handle Integration
+ * ============================================================================ */
+
+/* Forward declaration */
+typedef struct Agentite_AssetRegistry Agentite_AssetRegistry;
+typedef struct Agentite_AssetHandle Agentite_AssetHandle;
+
+/**
+ * Load sound and register with asset registry.
+ * The sound is automatically registered with the given path and can be
+ * looked up later via agentite_asset_lookup().
+ *
+ * @param audio    Audio system
+ * @param registry Asset registry (must not be NULL)
+ * @param path     File path (also used as asset ID)
+ * @return Asset handle, or AGENTITE_INVALID_ASSET_HANDLE on failure
+ */
+Agentite_AssetHandle agentite_sound_load_asset(Agentite_Audio *audio,
+                                                Agentite_AssetRegistry *registry,
+                                                const char *path);
+
+/**
+ * Load music and register with asset registry.
+ *
+ * @param audio    Audio system
+ * @param registry Asset registry (must not be NULL)
+ * @param path     File path (also used as asset ID)
+ * @return Asset handle, or AGENTITE_INVALID_ASSET_HANDLE on failure
+ */
+Agentite_AssetHandle agentite_music_load_asset(Agentite_Audio *audio,
+                                                Agentite_AssetRegistry *registry,
+                                                const char *path);
+
+/**
+ * Get sound pointer from asset handle.
+ *
+ * @param registry Asset registry
+ * @param handle   Asset handle from agentite_sound_load_asset()
+ * @return Sound pointer, or NULL if handle is invalid
+ */
+Agentite_Sound *agentite_sound_from_handle(Agentite_AssetRegistry *registry,
+                                            Agentite_AssetHandle handle);
+
+/**
+ * Get music pointer from asset handle.
+ *
+ * @param registry Asset registry
+ * @param handle   Asset handle from agentite_music_load_asset()
+ * @return Music pointer, or NULL if handle is invalid
+ */
+Agentite_Music *agentite_music_from_handle(Agentite_AssetRegistry *registry,
+                                            Agentite_AssetHandle handle);
+
+/**
+ * Audio asset destructor callback for asset registry.
+ * Handles both AGENTITE_ASSET_SOUND and AGENTITE_ASSET_MUSIC types.
+ * Pass the Audio system as userdata when calling agentite_asset_set_destructor().
+ *
+ * Example:
+ *   agentite_asset_set_destructor(registry, agentite_audio_asset_destructor, audio);
+ */
+void agentite_audio_asset_destructor(void *data, int type, void *userdata);
+
 #endif // AGENTITE_AUDIO_H
