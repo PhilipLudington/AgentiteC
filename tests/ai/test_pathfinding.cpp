@@ -306,9 +306,11 @@ TEST_CASE("Weighted pathfinding", "[pathfinding][weighted]") {
     }
 
     SECTION("Total cost reflects path weights") {
-        // Set specific costs
-        agentite_pathfinder_set_cost(pf, 1, 0, 2.0f);
-        agentite_pathfinder_set_cost(pf, 2, 0, 3.0f);
+        // Set specific costs - keep them low enough that straight path is still cheapest
+        // Straight: 1.2 + 1.3 + 1.0 = 3.5
+        // Around (5 tiles at 1.0): 5.0
+        agentite_pathfinder_set_cost(pf, 1, 0, 1.2f);
+        agentite_pathfinder_set_cost(pf, 2, 0, 1.3f);
 
         Agentite_PathOptions opts = AGENTITE_PATH_OPTIONS_DEFAULT;
         opts.allow_diagonal = false;  // Keep it simple
@@ -317,8 +319,8 @@ TEST_CASE("Weighted pathfinding", "[pathfinding][weighted]") {
         REQUIRE(path != nullptr);
         REQUIRE(path->length == 4);
 
-        // Cost should be: start(free) + 2.0 + 3.0 + 1.0 = 6.0
-        REQUIRE(path->total_cost == Catch::Approx(6.0f));
+        // Cost should be: start(free) + 1.2 + 1.3 + 1.0 = 3.5
+        REQUIRE(path->total_cost == Catch::Approx(3.5f));
 
         agentite_path_destroy(path);
     }

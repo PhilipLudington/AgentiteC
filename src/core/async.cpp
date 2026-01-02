@@ -699,12 +699,16 @@ Agentite_AsyncLoader *agentite_async_loader_create(const Agentite_AsyncLoaderCon
 void agentite_async_loader_destroy(Agentite_AsyncLoader *loader) {
     if (!loader) return;
 
-    /* Signal shutdown */
-    loader->shutdown.store(true);
-
-    /* Wake all worker threads */
-    if (loader->work_cond) {
-        SDL_BroadcastCondition(loader->work_cond);
+    /* Signal shutdown while holding mutex to prevent race with worker wait */
+    if (loader->work_mutex) {
+        SDL_LockMutex(loader->work_mutex);
+        loader->shutdown.store(true);
+        if (loader->work_cond) {
+            SDL_BroadcastCondition(loader->work_cond);
+        }
+        SDL_UnlockMutex(loader->work_mutex);
+    } else {
+        loader->shutdown.store(true);
     }
 
     /* Wait for worker threads */
