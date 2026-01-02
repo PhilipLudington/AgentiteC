@@ -1,0 +1,19 @@
+// Item Prefab - Spawns a collectible item
+// Can be picked up by the player
+
+Entity Item @(0, 0) {
+    // Item data
+    C_Item: {
+        item_id: 1
+        value: 25
+        can_pickup: true
+    }
+
+    // Golden color for loot
+    C_Color: {
+        r: 1.0
+        g: 0.84
+        b: 0.0
+        a: 1.0
+    }
+}

@@ -1,0 +1,24 @@
+// Enemy Prefab - Spawns a basic enemy entity
+// Position is set at spawn time via agentite_prefab_spawn_at()
+
+Entity Enemy @(0, 0) {
+    // Health component
+    C_Health: {
+        health: 50
+        max_health: 50
+    }
+
+    // Enemy-specific data
+    C_EnemyType: {
+        type_id: 0
+        aggro_range: 150.0
+    }
+
+    // Visual color (red tint)
+    C_Color: {
+        r: 1.0
+        g: 0.3
+        b: 0.3
+        a: 1.0
+    }
+}

@@ -1,0 +1,18 @@
+// Player Prefab - The controllable player entity
+// Has more health than enemies
+
+Entity Player @(0, 0) {
+    // Player has more health
+    C_Health: {
+        health: 100
+        max_health: 100
+    }
+
+    // Blue tint for player
+    C_Color: {
+        r: 0.3
+        g: 0.6
+        b: 1.0
+        a: 1.0
+    }
+}
