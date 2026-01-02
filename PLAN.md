@@ -75,15 +75,15 @@ Research indicates [Chipmunk2D](https://github.com/slembcke/Chipmunk2D) is the b
 - [x] Add resource/biome distribution helpers for strategy maps
 
 ### Shader System
-- [ ] Design shader API (`agentite_shader_*`)
-- [ ] Implement shader loading from SPIR-V files
-- [ ] Add runtime shader compilation (optional, platform-dependent)
-- [ ] Create shader parameter binding API
-- [ ] Implement uniform buffer management
-- [ ] Add built-in shader library: grayscale, blur, glow, outline
-- [ ] Implement post-processing pipeline
-- [ ] Add fullscreen quad rendering helper
-- [ ] Document shader authoring workflow
+- [x] Design shader API (`agentite_shader_*`)
+- [x] Implement shader loading from SPIR-V files
+- [x] Add runtime shader compilation (optional, platform-dependent)
+- [x] Create shader parameter binding API
+- [x] Implement uniform buffer management
+- [x] Add built-in shader library: grayscale, blur, glow, outline
+- [x] Implement post-processing pipeline
+- [x] Add fullscreen quad rendering helper
+- [x] Document shader authoring workflow
 
 ### Screen Transitions
 - [ ] Design transition API (`agentite_transition_*`)

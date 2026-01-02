@@ -11,6 +11,7 @@
 | [Camera](api/camera.md) | 2D/3D camera control | `agentite/camera.h`, `camera3d.h` |
 | [Tilemap](api/tilemap.md) | Chunk-based tile rendering | `agentite/tilemap.h` |
 | [Text](api/text.md) | Bitmap and SDF text | `agentite/text.h` |
+| [Shader](api/shader.md) | Shader system & post-processing | `agentite/shader.h` |
 | [Input](api/input.md) | Action-based input | `agentite/input.h` |
 | [Audio](api/audio.md) | Sound and music | `agentite/audio.h` |
 | [ECS](api/ecs.md) | Entity Component System | `agentite/ecs.h` |
