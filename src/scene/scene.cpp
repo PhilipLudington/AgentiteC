@@ -279,20 +279,13 @@ static bool parse_scene_source(Agentite_Scene *scene,
         }
 
         if (tok.type != TOK_IDENTIFIER) {
-            set_scene_error("scene: Expected 'Entity' keyword in '%s' at line %d",
+            set_scene_error("scene: Expected entity name or 'Entity' keyword in '%s' at line %d",
                            name, tok.line);
             return false;
         }
 
-        /* Check for "Entity" keyword */
-        char *keyword = agentite_token_to_string(&tok);
-        if (strcmp(keyword, "Entity") != 0) {
-            free(keyword);
-            set_scene_error("scene: Expected 'Entity' keyword in '%s' at line %d",
-                           name, tok.line);
-            return false;
-        }
-        free(keyword);
+        /* Identifier can be "Entity" keyword (old format) or entity name (new format).
+         * The prefab parser handles both cases. */
 
         /* Parse entity using prefab parser */
         /* Calculate remaining source */
