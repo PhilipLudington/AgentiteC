@@ -9,15 +9,14 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 cd "$PROJECT_DIR"
 
-# Determine build type
+# Determine build type (always write to same results file)
 BUILD_TYPE="${1:-release}"
+RESULTS_FILE="$PROJECT_DIR/.build-results.json"
 
 if [ "$BUILD_TYPE" = "debug" ]; then
-    RESULTS_FILE="$PROJECT_DIR/.debug-build-results.json"
     BUILD_CMD="make DEBUG=1"
     echo "Running debug build..."
 else
-    RESULTS_FILE="$PROJECT_DIR/.build-results.json"
     BUILD_CMD="make"
     echo "Running release build..."
 fi

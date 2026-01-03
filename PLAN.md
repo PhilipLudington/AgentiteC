@@ -86,13 +86,13 @@ Research indicates [Chipmunk2D](https://github.com/slembcke/Chipmunk2D) is the b
 - [x] Document shader authoring workflow
 
 ### Screen Transitions
-- [ ] Design transition API (`agentite_transition_*`)
-- [ ] Implement fade (in/out, to color)
-- [ ] Add wipe transitions (directional)
-- [ ] Add dissolve/pixelate transitions
-- [ ] Implement crossfade between render targets
-- [ ] Add transition callbacks (on_start, on_complete)
-- [ ] Integrate with scene system for automatic transitions
+- [x] Design transition API (`agentite_transition_*`)
+- [x] Implement fade (in/out, to color)
+- [x] Add wipe transitions (directional)
+- [x] Add dissolve/pixelate transitions
+- [x] Implement crossfade between render targets
+- [x] Add transition callbacks (on_start, on_complete)
+- [x] Integrate with scene system for automatic transitions
 
 ### Basic 2D Lighting
 - [ ] Design lighting API (`agentite_light_*`)

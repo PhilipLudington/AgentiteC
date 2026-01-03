@@ -12,6 +12,7 @@
 | [Tilemap](api/tilemap.md) | Chunk-based tile rendering | `agentite/tilemap.h` |
 | [Text](api/text.md) | Bitmap and SDF text | `agentite/text.h` |
 | [Shader](api/shader.md) | Shader system & post-processing | `agentite/shader.h` |
+| [Transition](api/transition.md) | Screen transitions & effects | `agentite/transition.h` |
 | [Input](api/input.md) | Action-based input | `agentite/input.h` |
 | [Audio](api/audio.md) | Sound and music | `agentite/audio.h` |
 | [ECS](api/ecs.md) | Entity Component System | `agentite/ecs.h` |

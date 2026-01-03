@@ -8,14 +8,9 @@
   ],
   "builds": [
     {
-      "name": "Release Build",
+      "name": "Build",
       "resultsFile": ".build-results.json",
       "command": "./scripts/run-build.sh"
-    },
-    {
-      "name": "Debug Build",
-      "resultsFile": ".debug-build-results.json",
-      "command": "./scripts/run-build.sh debug"
     }
   ]
 }
