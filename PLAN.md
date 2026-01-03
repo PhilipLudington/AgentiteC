@@ -95,14 +95,14 @@ Research indicates [Chipmunk2D](https://github.com/slembcke/Chipmunk2D) is the b
 - [x] Integrate with scene system for automatic transitions
 
 ### Basic 2D Lighting
-- [ ] Design lighting API (`agentite_light_*`)
-- [ ] Implement point lights with radius and falloff
-- [ ] Add ambient light layer
-- [ ] Implement light occlusion/shadows (raycast-based)
-- [ ] Add light color and intensity
-- [ ] Implement light blending with sprites
-- [ ] Add day/night cycle helper
-- [ ] Create shadow casting for tilemaps
+- [x] Design lighting API (`agentite_light_*`)
+- [x] Implement point lights with radius and falloff
+- [x] Add ambient light layer
+- [x] Implement light occlusion/shadows (raycast-based)
+- [x] Add light color and intensity
+- [x] Implement light blending with sprites
+- [x] Add day/night cycle helper
+- [x] Create shadow casting for tilemaps
 
 ## Phase 3: Developer Experience
 
