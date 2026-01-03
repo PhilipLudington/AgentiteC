@@ -345,4 +345,7 @@ void agentite_get_drawable_size(Agentite_Engine *engine, int *w, int *h);
 // Graphics
 #include "agentite/gizmos.h"
 
+// Developer tools
+#include "agentite/profiler.h"
+
 #endif // AGENTITE_H

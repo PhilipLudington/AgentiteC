@@ -50,6 +50,12 @@
 | [Virtual Resolution](api/virtual_resolution.md) | Resolution-independent rendering | `agentite/virtual_resolution.h` |
 | [Other Systems](api/strategy/other.md) | Rate, Network, Dialog, etc. | Various |
 
+### Developer Tools
+
+| System | Description | Header |
+|--------|-------------|--------|
+| [Profiler](api/profiler.md) | Performance profiling | `agentite/profiler.h` |
+
 ### Utilities
 
 | System | Description | Header |

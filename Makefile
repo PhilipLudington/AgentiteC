@@ -141,6 +141,7 @@ dirs:
 	@mkdir -p $(BUILD_DIR)/examples/async
 	@mkdir -p $(BUILD_DIR)/examples/prefab
 	@mkdir -p $(BUILD_DIR)/examples/scene
+	@mkdir -p $(BUILD_DIR)/examples/profiler
 
 # Link main executable (game template)
 $(BUILD_DIR)/$(EXECUTABLE): $(OBJS) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS)
@@ -280,6 +281,11 @@ example-prefab: dirs $(BUILD_DIR)/examples/prefab/main.o $(patsubst $(SRC_DIR)/%
 example-scene: dirs $(BUILD_DIR)/examples/scene/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
 	$(CXX) $(BUILD_DIR)/examples/scene/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-scene $(LDFLAGS)
 	./$(BUILD_DIR)/example-scene
+
+# Build and run Profiler demo
+example-profiler: dirs $(BUILD_DIR)/examples/profiler/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/profiler/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-profiler $(LDFLAGS)
+	./$(BUILD_DIR)/example-profiler
 
 #============================================================================
 # Test targets

@@ -107,17 +107,17 @@ Research indicates [Chipmunk2D](https://github.com/slembcke/Chipmunk2D) is the b
 ## Phase 3: Developer Experience
 
 ### Performance Profiler
-- [ ] Design profiler API (`agentite_profiler_*`)
-- [ ] Implement frame time tracking (update, render, present)
-- [ ] Add draw call counter
-- [ ] Track batch count and vertex count
-- [ ] Add entity count monitoring
-- [ ] Implement memory allocation tracking
-- [ ] Create profiler overlay UI widget
-- [ ] Add frame time graph (rolling history)
-- [ ] Implement scope-based profiling (`AGENTITE_PROFILE_SCOPE`)
-- [ ] Add CSV/JSON export for external analysis
-- [ ] Track system-specific timings (AI, physics, rendering)
+- [x] Design profiler API (`agentite_profiler_*`)
+- [x] Implement frame time tracking (update, render, present)
+- [x] Add draw call counter
+- [x] Track batch count and vertex count
+- [x] Add entity count monitoring
+- [x] Implement memory allocation tracking
+- [x] Create profiler overlay UI widget
+- [x] Add frame time graph (rolling history)
+- [x] Implement scope-based profiling (`AGENTITE_PROFILE_SCOPE`)
+- [x] Add CSV/JSON export for external analysis
+- [x] Track system-specific timings (AI, physics, rendering)
 
 ### Localization System
 - [ ] Design localization API (`agentite_loc_*`)
