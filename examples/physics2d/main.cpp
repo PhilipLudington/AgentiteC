@@ -13,10 +13,8 @@
  *   1          - Spawn circle
  *   2          - Spawn box
  *   3          - Spawn polygon (hexagon)
- *   4          - Spawn ragdoll chain
  *   Space      - Add explosion impulse at mouse
  *   R          - Reset simulation
- *   TAB        - Toggle debug draw
  *   ESC        - Quit
  */
 
@@ -49,7 +47,6 @@ typedef struct AppState {
     Agentite_Font *font;
 
     Agentite_Physics2DSpace *space;
-    bool show_debug;
     int body_count;
 } AppState;
 
@@ -136,41 +133,6 @@ static void spawn_polygon(AppState *app, float x, float y) {
     app->body_count++;
 }
 
-/* Create a chain of connected bodies */
-static void spawn_chain(AppState *app, float x, float y) {
-    Agentite_Physics2DBody *prev = NULL;
-    int segments = 5;
-    float segment_length = 30.0f;
-    float radius = 8.0f;
-
-    for (int i = 0; i < segments; i++) {
-        float mass = 0.5f;
-        float moment = agentite_physics2d_moment_for_circle(mass, 0, radius, 0, 0);
-
-        Agentite_Physics2DBody *body = agentite_physics2d_body_create_dynamic(app->space, mass, moment);
-        agentite_physics2d_body_set_position(body, x, y + i * segment_length);
-
-        Agentite_Physics2DShape *shape = agentite_physics2d_shape_circle(body, radius, 0, 0);
-        agentite_physics2d_shape_set_elasticity(shape, 0.3f);
-        agentite_physics2d_shape_set_friction(shape, 0.5f);
-
-        if (i == 0) {
-            /* Pin first body to static anchor */
-            Agentite_Physics2DBody *anchor = agentite_physics2d_body_create_static(app->space);
-            agentite_physics2d_body_set_position(anchor, x, y);
-            agentite_physics2d_pin_joint_create(anchor, body,
-                0, 0, 0, -segment_length/2);
-        } else {
-            /* Connect to previous body with pin joint */
-            agentite_physics2d_pin_joint_create(prev, body,
-                0, segment_length/2, 0, -segment_length/2);
-        }
-
-        prev = body;
-        app->body_count++;
-    }
-}
-
 /* Apply explosion impulse - query bodies near point and apply impulse */
 static void apply_explosion(AppState *app, float x, float y) {
     /* Note: In a full implementation, you would query all bodies near the
@@ -188,7 +150,6 @@ int main(int argc, char *argv[]) {
     (void)argv;
 
     AppState app = {0};
-    app.show_debug = true;
 
     Agentite_Config config = {
         .window_title = "Agentite - Chipmunk2D Physics Example",
@@ -229,10 +190,8 @@ int main(int argc, char *argv[]) {
     printf("==========================\n");
     printf("Click  - Drop random shape\n");
     printf("1/2/3  - Circle/Box/Polygon\n");
-    printf("4      - Chain\n");
     printf("Space  - Explosion at mouse\n");
     printf("R      - Reset\n");
-    printf("TAB    - Toggle debug\n");
 
     /* Main loop */
     while (agentite_is_running(app.engine)) {
@@ -267,8 +226,6 @@ int main(int argc, char *argv[]) {
             spawn_box(&app, mx, my);
         if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_3))
             spawn_polygon(&app, mx, my);
-        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_4))
-            spawn_chain(&app, mx, my);
 
         if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_SPACE))
             apply_explosion(&app, mx, my);
@@ -279,9 +236,6 @@ int main(int argc, char *argv[]) {
             create_static_bodies(&app);
             app.body_count = 0;
         }
-
-        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_TAB))
-            app.show_debug = !app.show_debug;
 
         if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_ESCAPE))
             agentite_quit(app.engine);
@@ -296,9 +250,7 @@ int main(int argc, char *argv[]) {
             agentite_sprite_upload(app.sprites, cmd);
 
             agentite_gizmos_begin(app.gizmos, NULL);
-            if (app.show_debug) {
-                agentite_physics2d_debug_draw(app.space, app.gizmos);
-            }
+            agentite_physics2d_debug_draw(app.space, app.gizmos);
             agentite_gizmos_end(app.gizmos);
             agentite_gizmos_upload(app.gizmos, cmd);
 
@@ -311,15 +263,15 @@ int main(int argc, char *argv[]) {
                     info, 10, 10, 1.0f, 1.0f, 1.0f, 0.9f);
 
                 agentite_text_draw_colored(app.text, app.font,
-                    "1/2/3: Circle/Box/Polygon  4: Chain  R: Reset  TAB: Toggle debug  ESC: Quit",
+                    "1/2/3: Circle/Box/Polygon  R: Reset  ESC: Quit",
                     10, 30, 0.7f, 0.7f, 0.7f, 0.9f);
 
                 /* Bottom instructions */
                 agentite_text_draw_colored(app.text, app.font,
-                    "Chipmunk2D provides full rigid body physics: circles, boxes, polygons, and constraints.",
+                    "Chipmunk2D provides full rigid body physics: circles, boxes, and polygons.",
                     10, WINDOW_HEIGHT - 40, 0.6f, 0.8f, 0.6f, 0.8f);
                 agentite_text_draw_colored(app.text, app.font,
-                    "Shapes have mass, elasticity, and friction. Chains use pin joints to connect bodies.",
+                    "Shapes have mass, elasticity, and friction. Click or press 1/2/3 to spawn shapes.",
                     10, WINDOW_HEIGHT - 20, 0.6f, 0.6f, 0.8f, 0.8f);
 
                 agentite_text_end(app.text);

@@ -168,8 +168,9 @@ $(TOML_OBJ): $(TOML_SRC)
 	$(CC) -std=c11 -O2 -I$(LIB_DIR) -c $< -o $@
 
 # Compile Chipmunk2D (with relaxed warnings due to third-party code)
+# Use NDEBUG to disable debug assertions that abort() on soft errors
 $(BUILD_DIR)/chipmunk/%.o: $(CHIPMUNK_DIR)/src/%.c
-	$(CC) -std=c99 -O2 -I$(CHIPMUNK_DIR)/include -c $< -o $@
+	$(CC) -std=c99 -O2 -DNDEBUG -I$(CHIPMUNK_DIR)/include -c $< -o $@
 
 # Compile source files
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
