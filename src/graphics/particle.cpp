@@ -1080,12 +1080,12 @@ Agentite_ParticleEmitter *agentite_particle_preset_rain(
     cfg.particle.direction_min = 80.0f;  /* Mostly down with slight angle */
     cfg.particle.direction_max = 100.0f;
     cfg.particle.gravity = 200.0f;
-    cfg.particle.start_size_min = 2.0f;
-    cfg.particle.start_size_max = 3.0f;
-    cfg.particle.end_size_min = 2.0f;
-    cfg.particle.end_size_max = 3.0f;
-    cfg.particle.start_color = (Agentite_Color){0.7f, 0.7f, 0.9f, 0.6f};
-    cfg.particle.end_color = (Agentite_Color){0.7f, 0.7f, 0.9f, 0.3f};
+    cfg.particle.start_size_min = 4.0f;
+    cfg.particle.start_size_max = 6.0f;
+    cfg.particle.end_size_min = 3.0f;
+    cfg.particle.end_size_max = 5.0f;
+    cfg.particle.start_color = (Agentite_Color){0.6f, 0.7f, 1.0f, 0.9f};
+    cfg.particle.end_color = (Agentite_Color){0.6f, 0.7f, 1.0f, 0.5f};
 
     Agentite_ParticleEmitter *emitter = agentite_particle_emitter_create(ps, &cfg);
     if (emitter) {

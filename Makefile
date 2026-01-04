@@ -142,6 +142,14 @@ dirs:
 	@mkdir -p $(BUILD_DIR)/examples/prefab
 	@mkdir -p $(BUILD_DIR)/examples/scene
 	@mkdir -p $(BUILD_DIR)/examples/profiler
+	@mkdir -p $(BUILD_DIR)/examples/particles
+	@mkdir -p $(BUILD_DIR)/examples/collision
+	@mkdir -p $(BUILD_DIR)/examples/physics
+	@mkdir -p $(BUILD_DIR)/examples/physics2d
+	@mkdir -p $(BUILD_DIR)/examples/noise
+	@mkdir -p $(BUILD_DIR)/examples/shaders
+	@mkdir -p $(BUILD_DIR)/examples/transitions
+	@mkdir -p $(BUILD_DIR)/examples/lighting
 
 # Link main executable (game template)
 $(BUILD_DIR)/$(EXECUTABLE): $(OBJS) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS)
@@ -286,6 +294,46 @@ example-scene: dirs $(BUILD_DIR)/examples/scene/main.o $(patsubst $(SRC_DIR)/%.c
 example-profiler: dirs $(BUILD_DIR)/examples/profiler/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
 	$(CXX) $(BUILD_DIR)/examples/profiler/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-profiler $(LDFLAGS)
 	./$(BUILD_DIR)/example-profiler
+
+# Build and run Particles demo
+example-particles: dirs $(BUILD_DIR)/examples/particles/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/particles/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-particles $(LDFLAGS)
+	./$(BUILD_DIR)/example-particles
+
+# Build and run Collision demo
+example-collision: dirs $(BUILD_DIR)/examples/collision/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/collision/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-collision $(LDFLAGS)
+	./$(BUILD_DIR)/example-collision
+
+# Build and run Physics demo
+example-physics: dirs $(BUILD_DIR)/examples/physics/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/physics/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-physics $(LDFLAGS)
+	./$(BUILD_DIR)/example-physics
+
+# Build and run Physics2D (Chipmunk) demo
+example-physics2d: dirs $(BUILD_DIR)/examples/physics2d/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/physics2d/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-physics2d $(LDFLAGS)
+	./$(BUILD_DIR)/example-physics2d
+
+# Build and run Noise demo
+example-noise: dirs $(BUILD_DIR)/examples/noise/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/noise/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-noise $(LDFLAGS)
+	./$(BUILD_DIR)/example-noise
+
+# Build and run Shaders demo
+example-shaders: dirs $(BUILD_DIR)/examples/shaders/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/shaders/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-shaders $(LDFLAGS)
+	./$(BUILD_DIR)/example-shaders
+
+# Build and run Transitions demo
+example-transitions: dirs $(BUILD_DIR)/examples/transitions/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/transitions/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-transitions $(LDFLAGS)
+	./$(BUILD_DIR)/example-transitions
+
+# Build and run Lighting demo
+example-lighting: dirs $(BUILD_DIR)/examples/lighting/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/lighting/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-lighting $(LDFLAGS)
+	./$(BUILD_DIR)/example-lighting
 
 #============================================================================
 # Test targets
