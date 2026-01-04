@@ -683,8 +683,9 @@ static void resolve_collision(
     float rel_vy = body_a->vy - body_b->vy;
     float rel_vel_normal = rel_vx * nx + rel_vy * ny;
 
-    /* Moving apart? Skip impulse */
-    if (rel_vel_normal > 0) return;
+    /* Moving apart? Skip impulse
+     * Normal points from A toward B, so rel_vel_normal < 0 means separating */
+    if (rel_vel_normal < 0) return;
 
     /* Calculate impulse scalar */
     float j = -(1.0f + bounce) * rel_vel_normal;

@@ -212,7 +212,7 @@ int main(int argc, char *argv[]) {
 
     app.text = agentite_text_init(gpu, window);
     if (app.text) {
-        app.font = agentite_font_load(app.text, "assets/fonts/ProggyClean.ttf", 16);
+        app.font = agentite_font_load(app.text, "assets/fonts/Roboto-Regular.ttf", 16);
     }
 
     agentite_gizmos_set_screen_size(app.gizmos, WINDOW_WIDTH, WINDOW_HEIGHT);
@@ -309,6 +309,20 @@ int main(int argc, char *argv[]) {
                     app.body_count);
                 agentite_text_draw_colored(app.text, app.font,
                     info, 10, 10, 1.0f, 1.0f, 1.0f, 0.9f);
+
+                agentite_text_draw_colored(app.text, app.font,
+                    "1/2/3: Circle/Box/Polygon  4: Chain  R: Reset  TAB: Toggle debug  ESC: Quit",
+                    10, 30, 0.7f, 0.7f, 0.7f, 0.9f);
+
+                /* Bottom instructions */
+                agentite_text_draw_colored(app.text, app.font,
+                    "Chipmunk2D provides full rigid body physics: circles, boxes, polygons, and constraints.",
+                    10, WINDOW_HEIGHT - 40, 0.6f, 0.8f, 0.6f, 0.8f);
+                agentite_text_draw_colored(app.text, app.font,
+                    "Shapes have mass, elasticity, and friction. Chains use pin joints to connect bodies.",
+                    10, WINDOW_HEIGHT - 20, 0.6f, 0.6f, 0.8f, 0.8f);
+
+                agentite_text_end(app.text);
                 agentite_text_upload(app.text, cmd);
             }
 

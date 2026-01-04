@@ -317,7 +317,7 @@ int main(int argc, char *argv[]) {
 
     app.text = agentite_text_init(gpu, window);
     if (app.text) {
-        app.font = agentite_font_load(app.text, "assets/fonts/ProggyClean.ttf", 16);
+        app.font = agentite_font_load(app.text, "assets/fonts/Roboto-Regular.ttf", 16);
     }
 
     agentite_gizmos_set_screen_size(app.gizmos, WINDOW_WIDTH, WINDOW_HEIGHT);
@@ -329,6 +329,8 @@ int main(int argc, char *argv[]) {
     /* Create physics world */
     Agentite_PhysicsWorldConfig phys_cfg = AGENTITE_PHYSICS_WORLD_DEFAULT;
     phys_cfg.max_bodies = 256;
+    phys_cfg.fixed_timestep = 1.0f / 120.0f;  /* Smaller timestep for more accurate physics */
+    phys_cfg.max_substeps = 16;               /* More substeps to handle high gravity */
     app.physics = agentite_physics_world_create(&phys_cfg);
     agentite_physics_set_collision_world(app.physics, app.collision);
     agentite_physics_set_trigger_callback(app.physics, on_trigger, &app);
@@ -508,8 +510,16 @@ int main(int argc, char *argv[]) {
                     info, 10, 10, 1.0f, 1.0f, 1.0f, 0.9f);
 
                 agentite_text_draw_colored(app.text, app.font,
-                    "Click: Spawn  1/2/3: Response  Space: Flip  G: Gravity  D: Drag  R: Reset",
+                    "Click: Spawn  1/2/3: Response  Space: Flip  G: Gravity  D: Drag  R: Reset  TAB: Debug",
                     10, 30, 0.7f, 0.7f, 0.7f, 0.9f);
+
+                /* Bottom instructions */
+                agentite_text_draw_colored(app.text, app.font,
+                    "BOUNCE: Ball bounces off walls with energy loss | SLIDE: Ball slides along walls | STOP: Ball stops on contact",
+                    10, WINDOW_HEIGHT - 40, 0.6f, 0.8f, 0.6f, 0.8f);
+                agentite_text_draw_colored(app.text, app.font,
+                    "Yellow circles are trigger zones - balls flash white when entering. Gravity arrow shows current direction.",
+                    10, WINDOW_HEIGHT - 20, 0.6f, 0.6f, 0.8f, 0.8f);
 
                 /* Show trigger counts */
                 for (int i = 0; i < app.trigger_count; i++) {
@@ -521,6 +531,7 @@ int main(int argc, char *argv[]) {
                     }
                 }
 
+                agentite_text_end(app.text);
                 agentite_text_upload(app.text, cmd);
             }
 
