@@ -104,6 +104,66 @@ Research indicates [Chipmunk2D](https://github.com/slembcke/Chipmunk2D) is the b
 - [x] Add day/night cycle helper
 - [x] Create shadow casting for tilemaps
 
+## Phase 2.5: Missing Examples
+
+These features have been implemented but need dedicated example programs to demonstrate usage.
+
+### Particle System Example
+- [x] Create `examples/particles/main.cpp`
+- [x] Demonstrate emitter types (point, circle, line, rectangle)
+- [x] Show particle properties (lifetime, velocity, color interpolation)
+- [x] Add interactive controls to spawn different effects
+- [x] Include presets: explosion, smoke, fire, sparks, rain, snow
+
+### Collision Detection Example
+- [x] Create `examples/collision/main.cpp`
+- [x] Demonstrate shape primitives (AABB, Circle, OBB, Capsule)
+- [x] Show collision detection between moving shapes
+- [x] Add debug visualization with gizmos
+- [x] Include raycast and point-in-shape queries
+
+### Kinematic Physics Example
+- [x] Create `examples/physics/main.cpp`
+- [x] Demonstrate kinematic bodies with velocity/acceleration
+- [x] Show gravity and drag effects
+- [x] Add collision response (bounce, slide, stop)
+- [x] Include trigger volumes demo
+
+### Chipmunk2D Physics Example
+- [x] Create `examples/physics2d/main.cpp`
+- [x] Demonstrate rigid body simulation
+- [x] Show various shape types and joints
+- [x] Add collision callbacks and filtering
+- [x] Include debug draw visualization
+
+### Procedural Noise Example
+- [x] Create `examples/noise/main.cpp`
+- [x] Demonstrate Perlin, Simplex, and Worley noise
+- [x] Show fBm, ridged multifractal, and turbulence
+- [x] Visualize noise as height/color maps
+- [x] Add real-time parameter adjustment
+
+### Shader System Example
+- [x] Create `examples/shaders/main.cpp`
+- [x] Demonstrate post-processing pipeline
+- [x] Show built-in effects (grayscale, blur, glow, outline)
+- [x] Add effect toggling and parameter adjustment
+- [x] Include custom shader loading example
+
+### Screen Transitions Example
+- [x] Create `examples/transitions/main.cpp`
+- [x] Demonstrate fade, wipe, dissolve effects
+- [x] Show crossfade between scenes
+- [x] Add interactive transition controls
+- [x] Include callback usage example
+
+### 2D Lighting Example
+- [x] Create `examples/lighting/main.cpp`
+- [x] Demonstrate point lights with radius and falloff
+- [x] Show spot lights and ambient lighting
+- [x] Add light occlusion/shadow casting
+- [x] Include day/night cycle demo
+
 ## Phase 3: Developer Experience
 
 ### Performance Profiler

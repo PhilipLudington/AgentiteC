@@ -151,7 +151,7 @@ int main(int argc, char *argv[]) {
     app.input = agentite_input_init();
     app.text = agentite_text_init(gpu, window);
     if (app.text) {
-        app.font = agentite_font_load(app.text, "assets/fonts/ProggyClean.ttf", 16);
+        app.font = agentite_font_load(app.text, "assets/fonts/Roboto-Regular.ttf", 16);
     }
 
     /* Create shader system for transitions */

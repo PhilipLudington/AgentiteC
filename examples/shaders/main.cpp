@@ -34,8 +34,6 @@ typedef struct AppState {
     Agentite_PostProcess *postprocess;
     Agentite_Texture *scene_texture;
 
-    /* Active effects */
-    Agentite_BuiltinShader current_effect;
     float time;
 } AppState;
 
@@ -78,26 +76,12 @@ static Agentite_Texture *create_test_scene(Agentite_SpriteRenderer *sr) {
     return tex;
 }
 
-static const char *get_effect_name(Agentite_BuiltinShader effect) {
-    switch (effect) {
-        case AGENTITE_SHADER_NONE: return "None";
-        case AGENTITE_SHADER_GRAYSCALE: return "Grayscale";
-        case AGENTITE_SHADER_SEPIA: return "Sepia";
-        case AGENTITE_SHADER_VIGNETTE: return "Vignette";
-        case AGENTITE_SHADER_BLUR_BOX: return "Box Blur";
-        case AGENTITE_SHADER_SCANLINES: return "Scanlines";
-        case AGENTITE_SHADER_INVERT: return "Invert";
-        case AGENTITE_SHADER_PIXELATE: return "Pixelate";
-        default: return "Unknown";
-    }
-}
 
 int main(int argc, char *argv[]) {
     (void)argc;
     (void)argv;
 
     AppState app = {0};
-    app.current_effect = AGENTITE_SHADER_VIGNETTE;
 
     Agentite_Config config = {
         .window_title = "Agentite - Shader System Example",
@@ -116,23 +100,37 @@ int main(int argc, char *argv[]) {
     app.input = agentite_input_init();
     app.text = agentite_text_init(gpu, window);
     if (app.text) {
-        app.font = agentite_font_load(app.text, "assets/fonts/ProggyClean.ttf", 16);
+        app.font = agentite_font_load(app.text, "assets/fonts/Roboto-Regular.ttf", 16);
     }
 
-    /* Create shader system and post-process pipeline */
+    /* Create shader system */
     app.shaders = agentite_shader_system_create(gpu);
-    Agentite_PostProcessConfig pp_cfg = AGENTITE_POSTPROCESS_CONFIG_DEFAULT;
-    pp_cfg.width = WINDOW_WIDTH;
-    pp_cfg.height = WINDOW_HEIGHT;
-    app.postprocess = agentite_postprocess_create(app.shaders, window, &pp_cfg);
+    if (!app.shaders) {
+        printf("ERROR: Failed to create shader system: %s\n", agentite_get_last_error());
+        agentite_shutdown(app.engine);
+        return 1;
+    }
+
+    /* TODO: Postprocess pipeline creation works, but effects can't be applied
+     * until the engine supports rendering to custom target textures.
+     * Uncomment when that API is available:
+     *
+     * Agentite_PostProcessConfig pp_cfg = AGENTITE_POSTPROCESS_CONFIG_DEFAULT;
+     * pp_cfg.width = WINDOW_WIDTH;
+     * pp_cfg.height = WINDOW_HEIGHT;
+     * app.postprocess = agentite_postprocess_create(app.shaders, window, &pp_cfg);
+     */
+    app.postprocess = NULL;
 
     /* Create test scene */
     app.scene_texture = create_test_scene(app.sprites);
 
     printf("Shader System Example\n");
     printf("=====================\n");
-    printf("1: Grayscale  2: Sepia  3: Vignette  4: Blur  5: Scanlines\n");
-    printf("6: Invert     7: Pixelate  0: None\n");
+    printf("Shader system initialized successfully.\n");
+    printf("NOTE: Post-processing effects are not yet functional.\n");
+    printf("      Requires engine API to render to custom targets.\n");
+    printf("ESC: Quit\n");
 
     while (agentite_is_running(app.engine)) {
         agentite_begin_frame(app.engine);
@@ -146,16 +144,6 @@ int main(int argc, char *argv[]) {
             if (event.type == SDL_EVENT_QUIT) agentite_quit(app.engine);
         }
         agentite_input_update(app.input);
-
-        /* Select effect */
-        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_0)) app.current_effect = AGENTITE_SHADER_NONE;
-        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_1)) app.current_effect = AGENTITE_SHADER_GRAYSCALE;
-        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_2)) app.current_effect = AGENTITE_SHADER_SEPIA;
-        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_3)) app.current_effect = AGENTITE_SHADER_VIGNETTE;
-        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_4)) app.current_effect = AGENTITE_SHADER_BLUR_BOX;
-        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_5)) app.current_effect = AGENTITE_SHADER_SCANLINES;
-        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_6)) app.current_effect = AGENTITE_SHADER_INVERT;
-        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_7)) app.current_effect = AGENTITE_SHADER_PIXELATE;
 
         if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_ESCAPE))
             agentite_quit(app.engine);
@@ -173,46 +161,39 @@ int main(int argc, char *argv[]) {
                     1.0f, 1.0f);
             }
 
+            /* Prepare UI text */
+            if (app.text && app.font) {
+                agentite_text_begin(app.text);
+                agentite_text_draw_colored(app.text, app.font,
+                    "Shader System Example", 10, 10, 1, 1, 1, 0.9f);
+                agentite_text_draw_colored(app.text, app.font,
+                    "Shader system initialized - postprocess effects pending",
+                    10, 30, 0.7f, 0.7f, 0.7f, 0.9f);
+                agentite_text_draw_colored(app.text, app.font,
+                    "ESC: Quit",
+                    10, WINDOW_HEIGHT - 30, 0.5f, 0.5f, 0.5f, 0.9f);
+                agentite_text_end(app.text);
+            }
+
+            /* Upload all batched data BEFORE any render pass */
             agentite_sprite_upload(app.sprites, cmd);
+            if (app.text) agentite_text_upload(app.text, cmd);
 
-            /* Get render target for post-processing */
-            SDL_GPUTexture *target = agentite_postprocess_get_target(app.postprocess);
-
-            /* Render scene to post-process target */
+            /* Render scene to screen */
             if (agentite_begin_render_pass(app.engine, 0.1f, 0.1f, 0.15f, 1.0f)) {
                 SDL_GPURenderPass *pass = agentite_get_render_pass(app.engine);
                 agentite_sprite_render(app.sprites, cmd, pass);
+                if (app.text) agentite_text_render(app.text, cmd, pass);
                 agentite_end_render_pass(app.engine);
             }
 
-            /* Apply post-processing if effect is selected */
-            if (app.current_effect != AGENTITE_SHADER_NONE && target) {
-                Agentite_Shader *shader = agentite_shader_get_builtin(app.shaders, app.current_effect);
-                if (shader) {
-                    agentite_postprocess_begin(app.postprocess, cmd, target);
-                    agentite_postprocess_apply(app.postprocess, cmd, NULL, shader, NULL);
-                    agentite_postprocess_end(app.postprocess, cmd, NULL);
-                }
-            }
-
-            /* Draw UI */
-            if (app.text && app.font) {
-                agentite_text_begin(app.text);
-                char info[128];
-                snprintf(info, sizeof(info), "Effect: %s", get_effect_name(app.current_effect));
-                agentite_text_draw_colored(app.text, app.font, info, 10, 10, 1, 1, 1, 0.9f);
-                agentite_text_draw_colored(app.text, app.font,
-                    "0-7: Select effect",
-                    10, 30, 0.7f, 0.7f, 0.7f, 0.9f);
-                agentite_text_upload(app.text, cmd);
-
-                /* Render UI in a separate pass or inline */
-                if (agentite_begin_render_pass(app.engine, -1, -1, -1, -1)) {
-                    SDL_GPURenderPass *pass = agentite_get_render_pass(app.engine);
-                    agentite_text_render(app.text, cmd, pass);
-                    agentite_end_render_pass(app.engine);
-                }
-            }
+            /* TODO: Post-processing effects require rendering to offscreen target first.
+             * The current engine API (agentite_begin_render_pass) always targets swapchain.
+             * To enable postprocess effects:
+             * 1. Add API to render to custom target texture
+             * 2. Render scene to postprocess target
+             * 3. Apply postprocess shader to render processed result to swapchain
+             */
 
             agentite_sprite_end(app.sprites, NULL, NULL);
         }

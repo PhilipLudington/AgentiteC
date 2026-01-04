@@ -1220,16 +1220,8 @@ vertex VertexOut fullscreen_vertex(VertexIn in [[stage_in]]) {
 }
 )";
 
-/* Built-in shader sources - fragment shaders */
+/* Built-in shader sources - fragment shaders (no VertexOut - defined in vertex shader) */
 static const char *builtin_grayscale_msl = R"(
-#include <metal_stdlib>
-using namespace metal;
-
-struct VertexOut {
-    float4 position [[position]];
-    float2 texcoord;
-};
-
 fragment float4 grayscale_fragment(
     VertexOut in [[stage_in]],
     texture2d<float> tex [[texture(0)]],
@@ -1242,14 +1234,6 @@ fragment float4 grayscale_fragment(
 )";
 
 static const char *builtin_sepia_msl = R"(
-#include <metal_stdlib>
-using namespace metal;
-
-struct VertexOut {
-    float4 position [[position]];
-    float2 texcoord;
-};
-
 fragment float4 sepia_fragment(
     VertexOut in [[stage_in]],
     texture2d<float> tex [[texture(0)]],
@@ -1265,14 +1249,6 @@ fragment float4 sepia_fragment(
 )";
 
 static const char *builtin_invert_msl = R"(
-#include <metal_stdlib>
-using namespace metal;
-
-struct VertexOut {
-    float4 position [[position]];
-    float2 texcoord;
-};
-
 fragment float4 invert_fragment(
     VertexOut in [[stage_in]],
     texture2d<float> tex [[texture(0)]],
@@ -1284,14 +1260,6 @@ fragment float4 invert_fragment(
 )";
 
 static const char *builtin_vignette_msl = R"(
-#include <metal_stdlib>
-using namespace metal;
-
-struct VertexOut {
-    float4 position [[position]];
-    float2 texcoord;
-};
-
 struct Params {
     float intensity;
     float softness;
@@ -1315,14 +1283,6 @@ fragment float4 vignette_fragment(
 )";
 
 static const char *builtin_pixelate_msl = R"(
-#include <metal_stdlib>
-using namespace metal;
-
-struct VertexOut {
-    float4 position [[position]];
-    float2 texcoord;
-};
-
 struct Params {
     float pixel_size;
     float3 _pad;
