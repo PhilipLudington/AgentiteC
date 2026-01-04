@@ -64,10 +64,6 @@ static void update_preview(AppState *app) {
     unsigned char *pixels = (unsigned char *)malloc(PREVIEW_SIZE * PREVIEW_SIZE * 4);
     if (!pixels) return;
 
-    Agentite_NoiseFractalConfig fractal = AGENTITE_NOISE_FRACTAL_DEFAULT;
-    fractal.octaves = app->octaves;
-    fractal.type = app->use_ridged ? AGENTITE_FRACTAL_RIDGED : AGENTITE_FRACTAL_FBM;
-
     Agentite_NoiseDomainWarpConfig warp = AGENTITE_NOISE_DOMAIN_WARP_DEFAULT;
     warp.amplitude = 30.0f;
     warp.frequency = 0.02f;
@@ -82,26 +78,44 @@ static void update_preview(AppState *app) {
                 agentite_noise_domain_warp2d(app->noise, &nx, &ny, &warp);
             }
 
-            float value;
-            if (app->use_fractal) {
-                /* Use fBm for fractal noise */
-                value = agentite_noise_fbm2d(app->noise, nx, ny, &fractal);
-            } else {
+            float value = 0.0f;
+            float amplitude = 1.0f;
+            float frequency = 1.0f;
+            float max_amplitude = 0.0f;
+            int num_octaves = app->use_fractal ? app->octaves : 1;
+
+            for (int oct = 0; oct < num_octaves; oct++) {
+                float sample_x = nx * frequency;
+                float sample_y = ny * frequency;
+                float noise_val;
+
                 switch (app->noise_type) {
                     case AGENTITE_NOISE_PERLIN:
-                        value = agentite_noise_perlin2d(app->noise, nx, ny);
+                        noise_val = agentite_noise_perlin2d(app->noise, sample_x, sample_y);
                         break;
                     case AGENTITE_NOISE_SIMPLEX:
-                        value = agentite_noise_simplex2d(app->noise, nx, ny);
+                        noise_val = agentite_noise_simplex2d(app->noise, sample_x, sample_y);
                         break;
                     case AGENTITE_NOISE_WORLEY:
-                        value = agentite_noise_worley2d(app->noise, nx * 10, ny * 10);
+                        noise_val = agentite_noise_worley2d(app->noise, sample_x * 10, sample_y * 10);
                         break;
                     default:
-                        value = agentite_noise_value2d(app->noise, nx, ny);
+                        noise_val = agentite_noise_value2d(app->noise, sample_x, sample_y);
                         break;
                 }
+
+                if (app->use_ridged) {
+                    noise_val = 1.0f - fabsf(noise_val);
+                    noise_val = noise_val * noise_val;
+                }
+
+                value += noise_val * amplitude;
+                max_amplitude += amplitude;
+                amplitude *= 0.5f;  /* persistence */
+                frequency *= 2.0f;  /* lacunarity */
             }
+
+            value = value / max_amplitude;
 
             /* Normalize to 0-1 range */
             value = (value + 1.0f) * 0.5f;
@@ -191,7 +205,7 @@ int main(int argc, char *argv[]) {
     app.input = agentite_input_init();
     app.text = agentite_text_init(gpu, window);
     if (app.text) {
-        app.font = agentite_font_load(app.text, "assets/fonts/ProggyClean.ttf", 16);
+        app.font = agentite_font_load(app.text, "assets/fonts/Roboto-Regular.ttf", 16);
     }
 
     app.noise = agentite_noise_create(app.seed);
@@ -289,11 +303,11 @@ int main(int argc, char *argv[]) {
         if (cmd) {
             agentite_sprite_begin(app.sprites, NULL);
 
-            /* Draw preview centered */
+            /* Draw preview centered (offset down for text) */
             if (app.preview_texture) {
                 Agentite_Sprite sprite = agentite_sprite_from_texture(app.preview_texture);
                 float px = (WINDOW_WIDTH - PREVIEW_SIZE) / 2.0f;
-                float py = (WINDOW_HEIGHT - PREVIEW_SIZE) / 2.0f;
+                float py = (WINDOW_HEIGHT - PREVIEW_SIZE) / 2.0f + 50.0f;
                 agentite_sprite_draw(app.sprites, &sprite, px, py);
             }
 
@@ -310,8 +324,12 @@ int main(int argc, char *argv[]) {
                     app.octaves);
                 agentite_text_draw_colored(app.text, app.font, info, 10, 10, 1, 1, 1, 0.9f);
                 agentite_text_draw_colored(app.text, app.font,
-                    "1-4: Type  F: Fractal  R: Ridged  W: Warp  +/-: Octaves  Arrows: Pan",
+                    "1-4: Type  F: Fractal  R: Ridged  W: Warp  +/-: Octaves",
                     10, 30, 0.7f, 0.7f, 0.7f, 0.9f);
+                agentite_text_draw_colored(app.text, app.font,
+                    "Arrows: Pan  Scroll: Zoom  Space: New Seed",
+                    10, 50, 0.7f, 0.7f, 0.7f, 0.9f);
+                agentite_text_end(app.text);
                 agentite_text_upload(app.text, cmd);
             }
 
