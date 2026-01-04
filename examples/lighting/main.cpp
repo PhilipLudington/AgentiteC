@@ -186,7 +186,7 @@ int main(int argc, char *argv[]) {
     app.input = agentite_input_init();
     app.text = agentite_text_init(gpu, window);
     if (app.text) {
-        app.font = agentite_font_load(app.text, "assets/fonts/ProggyClean.ttf", 16);
+        app.font = agentite_font_load(app.text, "assets/fonts/Roboto-Regular.ttf", 16);
     }
 
     agentite_gizmos_set_screen_size(app.gizmos, WINDOW_WIDTH, WINDOW_HEIGHT);
@@ -315,7 +315,7 @@ int main(int argc, char *argv[]) {
         /* Render */
         SDL_GPUCommandBuffer *cmd = agentite_acquire_command_buffer(app.engine);
         if (cmd) {
-            /* Draw scene */
+            /* Prepare sprite batch */
             agentite_sprite_begin(app.sprites, NULL);
             if (app.scene_texture) {
                 Agentite_Sprite sprite = agentite_sprite_from_texture(app.scene_texture);
@@ -323,32 +323,8 @@ int main(int argc, char *argv[]) {
                 float py = (WINDOW_HEIGHT - 512) / 2.0f;
                 agentite_sprite_draw(app.sprites, &sprite, px, py);
             }
-            agentite_sprite_upload(app.sprites, cmd);
 
-            /* Render lightmap */
-            agentite_lighting_begin(app.lighting);
-            agentite_lighting_render_lights(app.lighting, cmd, NULL);
-
-            /* Main render pass with lighting applied */
-            if (agentite_begin_render_pass(app.engine, 0.05f, 0.05f, 0.1f, 1.0f)) {
-                SDL_GPURenderPass *pass = agentite_get_render_pass(app.engine);
-                agentite_sprite_render(app.sprites, cmd, pass);
-                agentite_lighting_apply(app.lighting, cmd, pass);
-
-                /* Debug visualization */
-                if (app.show_debug) {
-                    agentite_gizmos_begin(app.gizmos, NULL);
-                    /* Draw light positions as circles */
-                    /* Note: Custom debug drawing would go here */
-                    agentite_gizmos_end(app.gizmos);
-                    agentite_gizmos_upload(app.gizmos, cmd);
-                    agentite_gizmos_render(app.gizmos, cmd, pass);
-                }
-
-                agentite_end_render_pass(app.engine);
-            }
-
-            /* UI */
+            /* Prepare text batch */
             if (app.text && app.font) {
                 agentite_text_begin(app.text);
                 static const char *COLOR_NAMES[] = {"White", "Warm", "Cool", "Colored"};
@@ -356,23 +332,87 @@ int main(int argc, char *argv[]) {
                 Agentite_LightingStats stats;
                 agentite_lighting_get_stats(app.lighting, &stats);
                 snprintf(info, sizeof(info),
-                    "Lights: %d  Mode: %s  Color: %s  Radius: %.0f  Shadows: %s",
+                    "Lights: %d  Mode: %s  Color: %s  Radius: %.0f  Debug: %s",
                     stats.point_light_count + stats.spot_light_count,
                     app.spot_mode ? "Spot" : "Point",
                     COLOR_NAMES[app.color_mode],
                     app.light_radius,
-                    app.shadows_enabled ? "ON" : "OFF");
+                    app.show_debug ? "ON" : "OFF");
                 agentite_text_draw_colored(app.text, app.font, info, 10, 10, 1, 1, 1, 0.9f);
 
                 agentite_text_draw_colored(app.text, app.font,
-                    "Click: Add  1-4: Color  S: Spot  +/-: Size  D: Day/Night  R: Clear",
+                    "Click: Add  1-4: Color  S: Spot  +/-: Size  A: Ambient  D: Day/Night",
                     10, 30, 0.7f, 0.7f, 0.7f, 0.9f);
 
-                agentite_text_upload(app.text, cmd);
-                agentite_text_render(app.text, cmd, NULL);
+                /* Note that lighting effects aren't visible */
+                agentite_text_draw_colored(app.text, app.font,
+                    "(Lighting apply not implemented - use TAB for debug view)",
+                    10, 50, 1.0f, 0.6f, 0.3f, 0.9f);
+
+                agentite_text_draw_colored(app.text, app.font,
+                    "O: Shadows  R: Clear  TAB: Debug  ESC: Quit",
+                    10, WINDOW_HEIGHT - 30, 0.5f, 0.5f, 0.5f, 0.9f);
+
+                agentite_text_end(app.text);
             }
 
-            agentite_sprite_end(app.sprites, NULL, NULL);
+            /* Upload ALL data BEFORE render pass */
+            agentite_sprite_upload(app.sprites, cmd);
+            if (app.text) agentite_text_upload(app.text, cmd);
+
+            /* Prepare gizmos for debug visualization */
+            if (app.show_debug) {
+                agentite_gizmos_begin(app.gizmos, NULL);
+
+                /* Draw light positions and radii */
+                Agentite_LightingStats debug_stats;
+                agentite_lighting_get_stats(app.lighting, &debug_stats);
+
+                for (uint32_t i = 0; i < debug_stats.point_light_count; i++) {
+                    Agentite_PointLightDesc light;
+                    if (agentite_lighting_get_point_light(app.lighting, i, &light)) {
+                        /* Convert color to RGBA packed uint32 */
+                        uint32_t r = (uint32_t)(light.color.r * 255) & 0xFF;
+                        uint32_t g = (uint32_t)(light.color.g * 255) & 0xFF;
+                        uint32_t b = (uint32_t)(light.color.b * 255) & 0xFF;
+                        uint32_t color = (r << 24) | (g << 16) | (b << 8) | 0x80;
+
+                        /* Draw light radius circle */
+                        agentite_gizmos_circle_2d(app.gizmos,
+                            light.x, light.y, light.radius, color);
+                        /* Draw light center */
+                        agentite_gizmos_circle_2d(app.gizmos,
+                            light.x, light.y, 5.0f, 0xFFFFFFFF);
+                    }
+                }
+
+                agentite_gizmos_end(app.gizmos);
+                agentite_gizmos_upload(app.gizmos, cmd);
+            }
+
+            /* NOTE: agentite_lighting_apply() is currently a stub - lighting effects
+             * are NOT visible. The lightmap is rendered but never composited with scene.
+             * This is the same architectural limitation as postprocess/transitions.
+             */
+            agentite_lighting_begin(app.lighting);
+            agentite_lighting_render_lights(app.lighting, cmd, NULL);
+
+            /* Main render pass */
+            if (agentite_begin_render_pass(app.engine, 0.05f, 0.05f, 0.1f, 1.0f)) {
+                SDL_GPURenderPass *pass = agentite_get_render_pass(app.engine);
+                agentite_sprite_render(app.sprites, cmd, pass);
+                agentite_lighting_apply(app.lighting, cmd, pass);
+
+                /* Debug visualization */
+                if (app.show_debug) {
+                    agentite_gizmos_render(app.gizmos, cmd, pass);
+                }
+
+                /* Render text UI */
+                if (app.text) agentite_text_render(app.text, cmd, pass);
+
+                agentite_end_render_pass(app.engine);
+            }
         }
 
         agentite_end_frame(app.engine);

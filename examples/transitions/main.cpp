@@ -1,25 +1,19 @@
 /**
  * Agentite Engine - Screen Transitions Example
  *
- * Demonstrates various screen transition effects:
- * - Fade through color
- * - Crossfade between scenes
- * - Wipe (directional)
- * - Dissolve
- * - Slide/Push
- * - Circle open/close (iris)
+ * Demonstrates scene management with colored test scenes.
+ *
+ * NOTE: Transition effects are currently disabled pending engine API updates.
+ * The transition system requires the ability to render to custom target textures,
+ * which is the same architectural limitation as the postprocess system.
  *
  * Controls:
- *   1-9    - Trigger different transition types
- *   Space  - Toggle auto-transition demo
- *   +/-    - Adjust transition duration
+ *   1-3    - Switch to scene 1/2/3
  *   ESC    - Quit
  */
 
 #include "agentite/agentite.h"
 #include "agentite/sprite.h"
-#include "agentite/transition.h"
-#include "agentite/shader.h"
 #include "agentite/input.h"
 #include "agentite/text.h"
 #include <stdio.h>
@@ -36,14 +30,8 @@ typedef struct AppState {
     Agentite_TextRenderer *text;
     Agentite_Font *font;
 
-    Agentite_ShaderSystem *shaders;
-    Agentite_Transition *transition;
-
     Agentite_Texture *scene_textures[3];
     int current_scene;
-    float duration;
-    bool auto_demo;
-    float auto_timer;
 } AppState;
 
 /* Create colored scene textures */
@@ -54,12 +42,14 @@ static Agentite_Texture *create_scene(Agentite_SpriteRenderer *sr, int scene_id)
 
     /* Different color schemes for each scene */
     float base_r, base_g, base_b;
+    const char *name;
     switch (scene_id) {
-        case 0: base_r = 0.2f; base_g = 0.4f; base_b = 0.8f; break;  /* Blue */
-        case 1: base_r = 0.8f; base_g = 0.3f; base_b = 0.2f; break;  /* Red */
-        case 2: base_r = 0.2f; base_g = 0.7f; base_b = 0.3f; break;  /* Green */
-        default: base_r = 0.5f; base_g = 0.5f; base_b = 0.5f; break;
+        case 0: base_r = 0.2f; base_g = 0.4f; base_b = 0.8f; name = "Blue"; break;
+        case 1: base_r = 0.8f; base_g = 0.3f; base_b = 0.2f; name = "Red"; break;
+        case 2: base_r = 0.2f; base_g = 0.7f; base_b = 0.3f; name = "Green"; break;
+        default: base_r = 0.5f; base_g = 0.5f; base_b = 0.5f; name = "Gray"; break;
     }
+    (void)name;
 
     for (int y = 0; y < size; y++) {
         for (int x = 0; x < size; x++) {
@@ -78,7 +68,7 @@ static Agentite_Texture *create_scene(Agentite_SpriteRenderer *sr, int scene_id)
             pixels[idx + 2] = (unsigned char)((base_b * pattern * gradient) * 255);
             pixels[idx + 3] = 255;
 
-            /* Draw scene number indicator */
+            /* Draw scene number indicator (white circle in center) */
             float cx = size / 2.0f;
             float cy = size / 2.0f;
             float dx = x - cx;
@@ -96,43 +86,11 @@ static Agentite_Texture *create_scene(Agentite_SpriteRenderer *sr, int scene_id)
     return tex;
 }
 
-/* Start a transition to the next scene */
-static void start_transition(AppState *app, Agentite_TransitionEffect effect) {
-    agentite_transition_set_effect(app->transition, effect);
-    agentite_transition_set_duration(app->transition, app->duration);
-
-    /* Customize fade color for fade transitions */
-    if (effect == AGENTITE_TRANSITION_FADE) {
-        agentite_transition_set_fade_color(app->transition, 0.0f, 0.0f, 0.0f, 1.0f);
-    }
-
-    agentite_transition_start(app->transition);
-
-    /* Change to next scene at midpoint */
-    app->current_scene = (app->current_scene + 1) % 3;
-}
-
-static const char *get_effect_name(Agentite_TransitionEffect e) {
-    switch (e) {
-        case AGENTITE_TRANSITION_FADE: return "Fade";
-        case AGENTITE_TRANSITION_CROSSFADE: return "Crossfade";
-        case AGENTITE_TRANSITION_WIPE_LEFT: return "Wipe Left";
-        case AGENTITE_TRANSITION_WIPE_RIGHT: return "Wipe Right";
-        case AGENTITE_TRANSITION_WIPE_DOWN: return "Wipe Down";
-        case AGENTITE_TRANSITION_DISSOLVE: return "Dissolve";
-        case AGENTITE_TRANSITION_SLIDE_LEFT: return "Slide Left";
-        case AGENTITE_TRANSITION_PUSH_LEFT: return "Push Left";
-        case AGENTITE_TRANSITION_CIRCLE_CLOSE: return "Circle Close";
-        default: return "Unknown";
-    }
-}
-
 int main(int argc, char *argv[]) {
     (void)argc;
     (void)argv;
 
     AppState app = {0};
-    app.duration = 0.5f;
 
     Agentite_Config config = {
         .window_title = "Agentite - Screen Transitions Example",
@@ -154,14 +112,16 @@ int main(int argc, char *argv[]) {
         app.font = agentite_font_load(app.text, "assets/fonts/Roboto-Regular.ttf", 16);
     }
 
-    /* Create shader system for transitions */
-    app.shaders = agentite_shader_system_create(gpu);
-
-    /* Create transition system */
-    Agentite_TransitionConfig trans_cfg = AGENTITE_TRANSITION_CONFIG_DEFAULT;
-    trans_cfg.width = WINDOW_WIDTH;
-    trans_cfg.height = WINDOW_HEIGHT;
-    app.transition = agentite_transition_create(app.shaders, window, &trans_cfg);
+    /* TODO: Transition system creation works, but effects can't be applied
+     * until the engine supports rendering to custom target textures.
+     * This is the same architectural limitation as the postprocess system.
+     *
+     * Agentite_ShaderSystem *shaders = agentite_shader_system_create(gpu);
+     * Agentite_TransitionConfig trans_cfg = AGENTITE_TRANSITION_CONFIG_DEFAULT;
+     * trans_cfg.width = WINDOW_WIDTH;
+     * trans_cfg.height = WINDOW_HEIGHT;
+     * Agentite_Transition *transition = agentite_transition_create(shaders, window, &trans_cfg);
+     */
 
     /* Create scene textures */
     for (int i = 0; i < 3; i++) {
@@ -170,14 +130,12 @@ int main(int argc, char *argv[]) {
 
     printf("Screen Transitions Example\n");
     printf("==========================\n");
-    printf("1: Fade        2: Crossfade  3: Wipe Left\n");
-    printf("4: Wipe Right  5: Wipe Down  6: Dissolve\n");
-    printf("7: Slide       8: Push       9: Circle\n");
-    printf("+/-: Duration  Space: Auto demo\n");
+    printf("1-3: Switch scenes\n");
+    printf("NOTE: Transition effects pending engine API updates.\n");
+    printf("ESC: Quit\n");
 
     while (agentite_is_running(app.engine)) {
         agentite_begin_frame(app.engine);
-        float dt = agentite_get_delta_time(app.engine);
 
         agentite_input_begin_frame(app.input);
         SDL_Event event;
@@ -187,63 +145,21 @@ int main(int argc, char *argv[]) {
         }
         agentite_input_update(app.input);
 
-        /* Trigger transitions */
-        if (!agentite_transition_is_active(app.transition)) {
-            if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_1))
-                start_transition(&app, AGENTITE_TRANSITION_FADE);
-            if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_2))
-                start_transition(&app, AGENTITE_TRANSITION_CROSSFADE);
-            if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_3))
-                start_transition(&app, AGENTITE_TRANSITION_WIPE_LEFT);
-            if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_4))
-                start_transition(&app, AGENTITE_TRANSITION_WIPE_RIGHT);
-            if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_5))
-                start_transition(&app, AGENTITE_TRANSITION_WIPE_DOWN);
-            if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_6))
-                start_transition(&app, AGENTITE_TRANSITION_DISSOLVE);
-            if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_7))
-                start_transition(&app, AGENTITE_TRANSITION_SLIDE_LEFT);
-            if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_8))
-                start_transition(&app, AGENTITE_TRANSITION_PUSH_LEFT);
-            if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_9))
-                start_transition(&app, AGENTITE_TRANSITION_CIRCLE_CLOSE);
-        }
-
-        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_SPACE))
-            app.auto_demo = !app.auto_demo;
-
-        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_EQUALS))
-            app.duration = fminf(2.0f, app.duration + 0.1f);
-        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_MINUS))
-            app.duration = fmaxf(0.1f, app.duration - 0.1f);
+        /* Switch scenes with number keys */
+        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_1))
+            app.current_scene = 0;
+        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_2))
+            app.current_scene = 1;
+        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_3))
+            app.current_scene = 2;
 
         if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_ESCAPE))
             agentite_quit(app.engine);
 
-        /* Auto demo mode */
-        if (app.auto_demo && !agentite_transition_is_active(app.transition)) {
-            app.auto_timer += dt;
-            if (app.auto_timer > 2.0f) {
-                app.auto_timer = 0;
-                static int effect_idx = 0;
-                Agentite_TransitionEffect effects[] = {
-                    AGENTITE_TRANSITION_FADE,
-                    AGENTITE_TRANSITION_CROSSFADE,
-                    AGENTITE_TRANSITION_WIPE_LEFT,
-                    AGENTITE_TRANSITION_DISSOLVE,
-                    AGENTITE_TRANSITION_CIRCLE_CLOSE
-                };
-                start_transition(&app, effects[effect_idx % 5]);
-                effect_idx++;
-            }
-        }
-
-        /* Update transition */
-        agentite_transition_update(app.transition, dt);
-
         /* Render */
         SDL_GPUCommandBuffer *cmd = agentite_acquire_command_buffer(app.engine);
         if (cmd) {
+            /* Prepare sprite batch */
             agentite_sprite_begin(app.sprites, NULL);
 
             /* Draw current scene */
@@ -254,47 +170,37 @@ int main(int argc, char *argv[]) {
                 agentite_sprite_draw(app.sprites, &sprite, px, py);
             }
 
-            agentite_sprite_upload(app.sprites, cmd);
-
-            /* Build text batch before render pass */
+            /* Prepare text batch */
             if (app.text && app.font) {
                 agentite_text_begin(app.text);
+
                 char info[128];
-                snprintf(info, sizeof(info), "Scene: %d  Duration: %.1fs  Auto: %s",
-                    app.current_scene + 1, app.duration, app.auto_demo ? "ON" : "OFF");
+                snprintf(info, sizeof(info), "Scene: %d (Blue=1, Red=2, Green=3)",
+                    app.current_scene + 1);
                 agentite_text_draw_colored(app.text, app.font, info, 10, 10, 1, 1, 1, 0.9f);
 
-                if (agentite_transition_is_active(app.transition)) {
-                    agentite_text_draw_colored(app.text, app.font,
-                        "Transitioning...", 10, 30, 1.0f, 1.0f, 0.3f, 1.0f);
-                } else {
-                    agentite_text_draw_colored(app.text, app.font,
-                        "1-9: Transitions  Space: Auto  +/-: Duration",
-                        10, 30, 0.7f, 0.7f, 0.7f, 0.9f);
-                }
+                agentite_text_draw_colored(app.text, app.font,
+                    "Transition effects pending - requires render-to-texture API",
+                    10, 30, 0.7f, 0.7f, 0.7f, 0.9f);
+
+                agentite_text_draw_colored(app.text, app.font,
+                    "1-3: Switch scenes | ESC: Quit",
+                    10, WINDOW_HEIGHT - 30, 0.5f, 0.5f, 0.5f, 0.9f);
 
                 agentite_text_end(app.text);
-                agentite_text_upload(app.text, cmd);
             }
 
+            /* Upload ALL data BEFORE render pass */
+            agentite_sprite_upload(app.sprites, cmd);
+            if (app.text) agentite_text_upload(app.text, cmd);
+
+            /* Render pass */
             if (agentite_begin_render_pass(app.engine, 0.1f, 0.1f, 0.15f, 1.0f)) {
                 SDL_GPURenderPass *pass = agentite_get_render_pass(app.engine);
                 agentite_sprite_render(app.sprites, cmd, pass);
-
-                /* Render transition overlay if active */
-                if (agentite_transition_is_active(app.transition)) {
-                    agentite_transition_render(app.transition, cmd, pass, NULL);
-                }
-
-                /* Render text UI */
-                if (app.text && app.font) {
-                    agentite_text_render(app.text, cmd, pass);
-                }
-
+                if (app.text) agentite_text_render(app.text, cmd, pass);
                 agentite_end_render_pass(app.engine);
             }
-
-            agentite_sprite_end(app.sprites, NULL, NULL);
         }
 
         agentite_end_frame(app.engine);
@@ -303,8 +209,6 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < 3; i++) {
         if (app.scene_textures[i]) agentite_texture_destroy(app.sprites, app.scene_textures[i]);
     }
-    agentite_transition_destroy(app.transition);
-    agentite_shader_system_destroy(app.shaders);
     if (app.font) agentite_font_destroy(app.text, app.font);
     if (app.text) agentite_text_shutdown(app.text);
     agentite_input_shutdown(app.input);
