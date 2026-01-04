@@ -910,20 +910,21 @@ static bool test_circle_aabb(
         float dist = sqrtf(dist_sq);
 
         if (dist > COLLISION_EPSILON) {
-            out->normal.x = dx / dist;
-            out->normal.y = dy / dist;
+            /* Normal points from circle (A) toward AABB (B) */
+            out->normal.x = -dx / dist;
+            out->normal.y = -dy / dist;
             out->depth = radius - dist;
         } else {
-            /* Circle center is inside AABB */
+            /* Circle center is inside AABB - normal points toward AABB center */
             float pen_x = hw - absf(cx - bx);
             float pen_y = hh - absf(cy - by);
             if (pen_x < pen_y) {
-                out->normal.x = (cx > bx) ? 1.0f : -1.0f;
+                out->normal.x = (cx > bx) ? -1.0f : 1.0f;
                 out->normal.y = 0;
                 out->depth = pen_x + radius;
             } else {
                 out->normal.x = 0;
-                out->normal.y = (cy > by) ? 1.0f : -1.0f;
+                out->normal.y = (cy > by) ? -1.0f : 1.0f;
                 out->depth = pen_y + radius;
             }
         }
