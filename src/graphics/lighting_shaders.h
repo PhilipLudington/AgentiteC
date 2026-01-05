@@ -219,6 +219,153 @@ fragment float4 point_light_shadow_fragment(
 )";
 
 /* ============================================================================
+ * Spot Light Shadow Shader (Vertex + Fragment)
+ *
+ * Renders a cone-shaped light with shadow map sampling for occluder shadows.
+ * The shadow map stores distances from the light center to the nearest occluder
+ * for rays within the cone. Rays are mapped from cone angle space to 0-1 UV range.
+ * ============================================================================ */
+
+static const char *spot_light_shadow_msl = R"(
+#include <metal_stdlib>
+using namespace metal;
+
+struct VertexInput {
+    float2 position [[attribute(0)]];
+    float2 texcoord [[attribute(1)]];
+};
+
+struct VertexOutput {
+    float4 position [[position]];
+    float2 texcoord;
+};
+
+struct SpotLightShadowParams {
+    float2 light_center;    // Light center in UV space (0-1)
+    float2 direction;       // Normalized direction vector
+    float radius;           // Max distance in UV space
+    float inner_angle;      // Cosine of inner cone angle
+    float outer_angle;      // Cosine of outer cone angle
+    float intensity;        // Light intensity multiplier
+    float4 color;           // RGBA color
+    float falloff_type;     // Falloff curve type
+    float shadow_softness;  // Shadow edge softness (world units)
+    float2 aspect;          // Aspect ratio correction
+    float2 lightmap_size;   // Lightmap dimensions for UV to world conversion
+    float radius_world;     // Light radius in world units
+    float shadow_row;       // Which row in shadow atlas (0-7)
+    float atlas_height;     // Total atlas height (8.0)
+    float cone_angle_rad;   // Outer cone angle in radians
+    float2 _pad;
+};
+
+vertex VertexOutput lighting_vertex(VertexInput in [[stage_in]]) {
+    VertexOutput out;
+    float2 clip_pos = in.position * 2.0 - 1.0;
+    clip_pos.y = -clip_pos.y;
+    out.position = float4(clip_pos, 0.0, 1.0);
+    out.texcoord = in.texcoord;
+    return out;
+}
+
+float apply_falloff_spot_shadow(float dist, float falloff_type) {
+    if (falloff_type < 0.5) {
+        return 1.0 - dist;
+    } else if (falloff_type < 1.5) {
+        return 1.0 / (1.0 + dist * dist * 4.0);
+    } else if (falloff_type < 2.5) {
+        return 1.0 - dist * dist * (3.0 - 2.0 * dist);
+    } else {
+        return 1.0;
+    }
+}
+
+fragment float4 spot_light_shadow_fragment(
+    VertexOutput in [[stage_in]],
+    texture2d<float> shadow_map [[texture(0)]],
+    sampler shadow_sampler [[sampler(0)]],
+    constant SpotLightShadowParams& params [[buffer(0)]]
+) {
+    // Calculate delta in UV space
+    float2 delta_uv = in.texcoord - params.light_center;
+
+    // Convert to world coordinates for shadow map comparison
+    float2 delta_world = delta_uv * params.lightmap_size;
+    float dist_world = length(delta_world);
+
+    // Calculate distance WITH aspect correction (for circular falloff display)
+    float2 delta_aspect = delta_uv * params.aspect;
+    float dist_uv = length(delta_aspect);
+    float dist_normalized = dist_uv / params.radius;
+
+    // Outside radius = no contribution
+    if (dist_normalized >= 1.0) {
+        return float4(0.0);
+    }
+
+    // Check cone angle (use aspect-corrected direction for visual consistency)
+    float2 to_frag = normalize(delta_aspect);
+    float angle_cos = dot(to_frag, params.direction);
+
+    // Outside outer cone = no light
+    if (angle_cos < params.outer_angle) {
+        return float4(0.0);
+    }
+
+    // Calculate cone attenuation (smooth between inner and outer)
+    float cone_atten = 1.0;
+    if (angle_cos < params.inner_angle) {
+        cone_atten = (angle_cos - params.outer_angle) / (params.inner_angle - params.outer_angle);
+        cone_atten = smoothstep(0.0, 1.0, cone_atten);
+    }
+
+    // Calculate angle relative to spot light direction for shadow map lookup
+    // The shadow map stores distances for rays within the cone
+    // We need to map the fragment's angle to the 0-1 range of the shadow map
+
+    // Get the angle of the fragment relative to the light direction
+    // atan2 gives angle from +X axis, we need angle from light direction
+    float frag_angle = atan2(delta_world.y, delta_world.x);
+    float dir_angle = atan2(params.direction.y, params.direction.x);
+    float rel_angle = frag_angle - dir_angle;
+
+    // Normalize to [-PI, PI]
+    if (rel_angle > M_PI_F) rel_angle -= 2.0 * M_PI_F;
+    if (rel_angle < -M_PI_F) rel_angle += 2.0 * M_PI_F;
+
+    // Map from [-cone_angle, +cone_angle] to [0, 1]
+    // cone_angle_rad is the outer cone angle in radians
+    float angle_normalized = (rel_angle / params.cone_angle_rad + 1.0) * 0.5;
+    angle_normalized = clamp(angle_normalized, 0.001, 0.999);
+
+    // Sample shadow map atlas at this angle and the correct row for this light
+    float v = (params.shadow_row + 0.5) / params.atlas_height;
+    float shadow_dist = shadow_map.sample(shadow_sampler, float2(angle_normalized, v)).r;
+
+    // Shadow test with soft edge
+    float shadow_softness = params.shadow_softness;
+    if (shadow_softness < 0.001) shadow_softness = 4.0;
+
+    float shadow = smoothstep(shadow_dist - shadow_softness,
+                              shadow_dist + shadow_softness,
+                              dist_world);
+
+    // Apply distance falloff
+    float dist_atten = apply_falloff_spot_shadow(dist_normalized, params.falloff_type);
+
+    // Combined attenuation
+    float attenuation = cone_atten * dist_atten * (1.0 - shadow);
+
+    // Final color with intensity
+    float4 result = params.color;
+    result.rgb *= attenuation * params.intensity;
+    result.a = attenuation * params.intensity;
+
+    return result;
+}
+)";
+
+/* ============================================================================
  * Spot Light Shader (Vertex + Fragment)
  *
  * Renders a cone-shaped light with direction, inner/outer angles, and falloff.

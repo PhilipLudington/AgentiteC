@@ -114,7 +114,12 @@ struct Agentite_LightingSystem {
 
     /* Multi-light shadow tracking */
     int shadow_light_indices[MAX_SHADOW_CASTING_LIGHTS];  /* Maps shadow slot -> point light index */
-    int active_shadow_light_count;                         /* Number of shadow-casting lights this frame */
+    int active_shadow_light_count;                         /* Number of shadow-casting point lights this frame */
+
+    /* Spot light shadow tracking */
+    Agentite_Shader *spot_light_shadow_shader;  /* Spot light with shadow sampling */
+    int spot_shadow_light_indices[MAX_SHADOW_CASTING_LIGHTS];  /* Maps shadow slot -> spot light index */
+    int active_spot_shadow_light_count;                         /* Number of shadow-casting spot lights this frame */
 
     /* State */
     bool frame_started;
@@ -183,6 +188,27 @@ typedef struct {
     float _pad[3];          /* offset 68: padding to 80 bytes */
 } PointLightShadowUniforms;
 
+/* Spot light shadow uniform data - matches SpotLightShadowParams in shader
+ * Metal alignment: float2 requires 8-byte alignment */
+typedef struct {
+    float light_center[2];  /* offset 0: Light center in UV space (0-1) */
+    float direction[2];     /* offset 8: Normalized direction vector */
+    float radius;           /* offset 16: Max distance in UV space */
+    float inner_angle;      /* offset 20: Cosine of inner cone angle */
+    float outer_angle;      /* offset 24: Cosine of outer cone angle */
+    float intensity;        /* offset 28: Light intensity multiplier */
+    float color[4];         /* offset 32: RGBA color */
+    float falloff_type;     /* offset 48: Falloff curve type */
+    float shadow_softness;  /* offset 52: Shadow edge softness (world units) */
+    float aspect[2];        /* offset 56: Aspect ratio correction */
+    float lightmap_size[2]; /* offset 64: Lightmap dimensions for UV to world */
+    float radius_world;     /* offset 72: Light radius in world units */
+    float shadow_row;       /* offset 76: Which row in shadow atlas (0-7) */
+    float atlas_height;     /* offset 80: Total atlas height (8.0) */
+    float cone_angle_rad;   /* offset 84: Outer cone angle in radians (for shadow map) */
+    float _pad[2];          /* offset 88: padding to 96 bytes */
+} SpotLightShadowUniforms;
+
 /* ============================================================================
  * Forward Declarations
  * ============================================================================ */
@@ -208,6 +234,12 @@ static void generate_shadow_map(Agentite_LightingSystem *ls,
                                 float light_x, float light_y,
                                 float light_radius,
                                 float *shadow_distances);
+static void generate_spot_shadow_map(Agentite_LightingSystem *ls,
+                                     float light_x, float light_y,
+                                     float light_radius,
+                                     float dir_x, float dir_y,
+                                     float outer_angle,
+                                     float *shadow_distances);
 static bool upload_shadow_map(Agentite_LightingSystem *ls,
                               SDL_GPUCommandBuffer *cmd,
                               const float *shadow_distances);
@@ -773,9 +805,70 @@ void agentite_lighting_render_lights(Agentite_LightingSystem *ls,
             /* Log shadow light count on first frame with shadows */
             static bool logged_shadow_count = false;
             if (!logged_shadow_count && ls->active_shadow_light_count > 0) {
-                SDL_Log("Lighting: %d shadow-casting lights active, %u occluders",
+                SDL_Log("Lighting: %d shadow-casting point lights active, %u occluders",
                         ls->active_shadow_light_count, ls->occluder_count);
                 logged_shadow_count = true;
+            }
+        }
+    }
+
+    /* ========================================================================
+     * Shadow Map Generation for Spot Lights
+     * ======================================================================== */
+
+    ls->active_spot_shadow_light_count = 0;
+
+    if (ls->config.enable_shadows && ls->spot_light_shadow_shader && ls->occluder_count > 0) {
+        /* Initialize shadow map resolution if needed */
+        if (ls->shadow_map_resolution <= 0) {
+            ls->shadow_map_resolution = ls->config.shadow_ray_count > 0
+                ? ls->config.shadow_ray_count : 720;
+        }
+
+        /* Allocate reusable shadow distances array */
+        shadow_distances = (float *)malloc((size_t)ls->shadow_map_resolution * sizeof(float));
+        if (!shadow_distances) {
+            SDL_Log("Lighting: Failed to allocate shadow distances array for spot lights");
+        } else {
+            /* Generate shadow maps for shadow-casting spot lights */
+            /* Spot lights use rows after point lights in the atlas */
+            int base_row = ls->active_shadow_light_count;
+
+            for (uint32_t i = 0; i < (uint32_t)ls->config.max_spot_lights; i++) {
+                int row_index = base_row + ls->active_spot_shadow_light_count;
+                if (row_index >= MAX_SHADOW_CASTING_LIGHTS) break;
+
+                InternalSpotLight *light = &ls->spot_lights[i];
+                if (!light->active || !light->enabled) continue;
+                if (!light->desc.casts_shadows) continue;
+
+                /* Generate shadow map for this spot light */
+                generate_spot_shadow_map(ls,
+                                         light->desc.x, light->desc.y,
+                                         light->desc.radius,
+                                         light->desc.direction_x, light->desc.direction_y,
+                                         light->desc.outer_angle,
+                                         shadow_distances);
+
+                /* Upload to the appropriate row in the atlas */
+                if (upload_shadow_map_row(ls, cmd, shadow_distances, row_index)) {
+                    /* Track which spot light is in which shadow slot */
+                    ls->spot_shadow_light_indices[ls->active_spot_shadow_light_count] = (int)i;
+                    ls->active_spot_shadow_light_count++;
+                } else {
+                    SDL_Log("Lighting: Failed to upload shadow map for spot light %u", i);
+                }
+            }
+
+            free(shadow_distances);
+            shadow_distances = NULL;
+
+            /* Log spot shadow light count */
+            static bool logged_spot_shadow_count = false;
+            if (!logged_spot_shadow_count && ls->active_spot_shadow_light_count > 0) {
+                SDL_Log("Lighting: %d shadow-casting spot lights active",
+                        ls->active_spot_shadow_light_count);
+                logged_spot_shadow_count = true;
             }
         }
     }
@@ -917,28 +1010,73 @@ void agentite_lighting_render_lights(Agentite_LightingSystem *ls,
         /* Convert radius from world units to UV space */
         float radius_uv = light->desc.radius / (float)ls->lightmap_height;
 
-        /* Build uniform data matching SpotLightParams in shader */
-        SpotLightUniforms params;
-        params.light_center[0] = uv_x;
-        params.light_center[1] = uv_y;
-        params.direction[0] = light->desc.direction_x;
-        params.direction[1] = light->desc.direction_y;
-        params.radius = radius_uv;
-        params.inner_angle = cosf(light->desc.inner_angle);
-        params.outer_angle = cosf(light->desc.outer_angle);
-        params.intensity = light->desc.intensity;
-        params.color[0] = light->desc.color.r;
-        params.color[1] = light->desc.color.g;
-        params.color[2] = light->desc.color.b;
-        params.color[3] = light->desc.color.a;
-        params.falloff_type = (float)light->desc.falloff;
-        params._pad_align = 0.0f;
-        params.aspect[0] = aspect_x;
-        params.aspect[1] = aspect_y;
+        /* Look up if this spot light has a shadow slot */
+        int shadow_slot = -1;
+        for (int s = 0; s < ls->active_spot_shadow_light_count; s++) {
+            if (ls->spot_shadow_light_indices[s] == (int)i) {
+                /* Shadow slot is after point lights in the atlas */
+                shadow_slot = ls->active_shadow_light_count + s;
+                break;
+            }
+        }
 
-        /* Draw spot light using fullscreen shader with additive blending */
-        agentite_shader_draw_fullscreen(ls->shader_system, cmd, pass,
-            ls->spot_light_shader, NULL, &params, sizeof(params));
+        /* Check if this spot light uses the shadow shader */
+        if (shadow_slot >= 0 && ls->shadow_map) {
+            /* Use shadow shader with shadow map atlas texture */
+            SpotLightShadowUniforms shadow_params;
+            shadow_params.light_center[0] = uv_x;
+            shadow_params.light_center[1] = uv_y;
+            shadow_params.direction[0] = light->desc.direction_x;
+            shadow_params.direction[1] = light->desc.direction_y;
+            shadow_params.radius = radius_uv;
+            shadow_params.inner_angle = cosf(light->desc.inner_angle);
+            shadow_params.outer_angle = cosf(light->desc.outer_angle);
+            shadow_params.intensity = light->desc.intensity;
+            shadow_params.color[0] = light->desc.color.r;
+            shadow_params.color[1] = light->desc.color.g;
+            shadow_params.color[2] = light->desc.color.b;
+            shadow_params.color[3] = light->desc.color.a;
+            shadow_params.falloff_type = (float)light->desc.falloff;
+            shadow_params.shadow_softness = 4.0f;  /* Soft shadow edge in world units */
+            shadow_params.aspect[0] = aspect_x;
+            shadow_params.aspect[1] = aspect_y;
+            shadow_params.lightmap_size[0] = (float)ls->lightmap_width;
+            shadow_params.lightmap_size[1] = (float)ls->lightmap_height;
+            shadow_params.radius_world = light->desc.radius;
+            shadow_params.shadow_row = (float)shadow_slot;
+            shadow_params.atlas_height = (float)MAX_SHADOW_CASTING_LIGHTS;
+            shadow_params.cone_angle_rad = light->desc.outer_angle;
+            shadow_params._pad[0] = 0.0f;
+            shadow_params._pad[1] = 0.0f;
+
+            /* Draw with shadow shader, passing shadow map atlas texture */
+            agentite_shader_draw_fullscreen(ls->shader_system, cmd, pass,
+                ls->spot_light_shadow_shader, ls->shadow_map,
+                &shadow_params, sizeof(shadow_params));
+        } else {
+            /* Use regular shader (no shadows) */
+            SpotLightUniforms params;
+            params.light_center[0] = uv_x;
+            params.light_center[1] = uv_y;
+            params.direction[0] = light->desc.direction_x;
+            params.direction[1] = light->desc.direction_y;
+            params.radius = radius_uv;
+            params.inner_angle = cosf(light->desc.inner_angle);
+            params.outer_angle = cosf(light->desc.outer_angle);
+            params.intensity = light->desc.intensity;
+            params.color[0] = light->desc.color.r;
+            params.color[1] = light->desc.color.g;
+            params.color[2] = light->desc.color.b;
+            params.color[3] = light->desc.color.a;
+            params.falloff_type = (float)light->desc.falloff;
+            params._pad_align = 0.0f;
+            params.aspect[0] = aspect_x;
+            params.aspect[1] = aspect_y;
+
+            /* Draw spot light using fullscreen shader with additive blending */
+            agentite_shader_draw_fullscreen(ls->shader_system, cmd, pass,
+                ls->spot_light_shader, NULL, &params, sizeof(params));
+        }
     }
 
     SDL_EndGPURenderPass(pass);
@@ -1267,6 +1405,16 @@ static bool create_gpu_resources(Agentite_LightingSystem *ls)
             SDL_Log("Lighting: Failed to create point light shadow shader: %s",
                     agentite_get_last_error());
         }
+
+        /* Spot light shadow shader (samples from shadow map texture) */
+        ls->spot_light_shadow_shader = agentite_shader_load_spirv(ls->shader_system,
+            "assets/shaders/lighting/lighting.vert.spv",
+            "assets/shaders/lighting/spot_light_shadow.frag.spv",
+            &desc);
+        if (!ls->spot_light_shadow_shader) {
+            SDL_Log("Lighting: Failed to create spot light shadow shader: %s",
+                    agentite_get_last_error());
+        }
     }
     /* Fall back to MSL (Metal on macOS/iOS) */
     else if (has_msl) {
@@ -1328,6 +1476,16 @@ static bool create_gpu_resources(Agentite_LightingSystem *ls)
                                                                   &desc);
         if (!ls->point_light_shadow_shader) {
             SDL_Log("Lighting: Failed to create point light shadow shader: %s",
+                    agentite_get_last_error());
+        }
+
+        /* Create spot light shadow shader (samples from shadow map texture) */
+        desc.fragment_entry = "spot_light_shadow_fragment";
+        ls->spot_light_shadow_shader = agentite_shader_load_msl(ls->shader_system,
+                                                                 spot_light_shadow_msl,
+                                                                 &desc);
+        if (!ls->spot_light_shadow_shader) {
+            SDL_Log("Lighting: Failed to create spot light shadow shader: %s",
                     agentite_get_last_error());
         }
     }
@@ -1399,6 +1557,10 @@ static void destroy_gpu_resources(Agentite_LightingSystem *ls)
         if (ls->point_light_shadow_shader) {
             agentite_shader_destroy(ls->shader_system, ls->point_light_shadow_shader);
             ls->point_light_shadow_shader = NULL;
+        }
+        if (ls->spot_light_shadow_shader) {
+            agentite_shader_destroy(ls->shader_system, ls->spot_light_shadow_shader);
+            ls->spot_light_shadow_shader = NULL;
         }
     }
 
@@ -1630,6 +1792,81 @@ static void generate_shadow_map(Agentite_LightingSystem *ls,
     /* For each ray angle */
     for (int i = 0; i < ray_count; i++) {
         float angle = (float)i * angle_step;
+        float dx = cosf(angle);
+        float dy = sinf(angle);
+
+        float min_dist = light_radius;  /* Start with max range */
+
+        /* Test against all active occluders */
+        for (uint32_t j = 0; j < (uint32_t)ls->config.max_occluders; j++) {
+            if (!ls->occluders[j].active) continue;
+
+            const Agentite_Occluder *occ = &ls->occluders[j].occluder;
+            float dist = FLT_MAX;
+
+            switch (occ->type) {
+                case AGENTITE_OCCLUDER_SEGMENT:
+                    dist = ray_segment_intersect(light_x, light_y, dx, dy,
+                                                 occ->segment.x1, occ->segment.y1,
+                                                 occ->segment.x2, occ->segment.y2);
+                    break;
+
+                case AGENTITE_OCCLUDER_BOX:
+                    dist = ray_box_intersect(light_x, light_y, dx, dy,
+                                             occ->box.x, occ->box.y,
+                                             occ->box.w, occ->box.h);
+                    break;
+
+                case AGENTITE_OCCLUDER_CIRCLE:
+                    dist = ray_circle_intersect(light_x, light_y, dx, dy,
+                                                occ->circle.x, occ->circle.y,
+                                                occ->circle.radius);
+                    break;
+            }
+
+            if (dist < min_dist) {
+                min_dist = dist;
+            }
+        }
+
+        shadow_distances[i] = min_dist;
+    }
+}
+
+/*
+ * Generate shadow map for a spot light.
+ * Casts rays within the cone angle from light position.
+ * The rays cover the full outer cone angle, mapped to the full shadow map resolution.
+ *
+ * shadow_distances: output array of size ls->shadow_map_resolution
+ * dir_x, dir_y: normalized direction of the spot light
+ * outer_angle: outer cone half-angle in radians
+ */
+static void generate_spot_shadow_map(Agentite_LightingSystem *ls,
+                                     float light_x, float light_y,
+                                     float light_radius,
+                                     float dir_x, float dir_y,
+                                     float outer_angle,
+                                     float *shadow_distances)
+{
+    if (!ls || !shadow_distances) return;
+
+    int ray_count = ls->shadow_map_resolution;
+    if (ray_count <= 0) ray_count = 720;  /* Default to 720 rays */
+
+    /* Calculate base direction angle */
+    float dir_angle = atan2f(dir_y, dir_x);
+
+    /* Rays span from -outer_angle to +outer_angle relative to direction */
+    float total_angle = 2.0f * outer_angle;
+    float angle_step = total_angle / (float)(ray_count - 1);
+
+    /* For each ray within the cone */
+    for (int i = 0; i < ray_count; i++) {
+        /* Calculate angle relative to direction: -outer_angle to +outer_angle */
+        float rel_angle = -outer_angle + (float)i * angle_step;
+        float angle = dir_angle + rel_angle;
+
         float dx = cosf(angle);
         float dy = sinf(angle);
 

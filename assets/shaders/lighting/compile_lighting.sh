@@ -20,6 +20,9 @@ echo "  point_light_shadow.frag.spv"
 glslc -fshader-stage=fragment spot_light.frag.glsl -o spot_light.frag.spv
 echo "  spot_light.frag.spv"
 
+glslc -fshader-stage=fragment spot_light_shadow.frag.glsl -o spot_light_shadow.frag.spv
+echo "  spot_light_shadow.frag.spv"
+
 glslc -fshader-stage=fragment composite.frag.glsl -o composite.frag.spv
 echo "  composite.frag.spv"
 

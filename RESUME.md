@@ -510,18 +510,52 @@ For each shadow-casting light:
 - `upload_shadow_map_row()` uploads to specific atlas row
 - Shader samples at `v = (shadow_row + 0.5) / atlas_height`
 
+### Spot Light Shadow Support (2026-01-05)
+
+Implemented shadow casting for spot lights using the same 2D atlas approach as point lights.
+
+**Key differences from point light shadows:**
+- Rays only cover the cone angle (not full 360°)
+- Shadow map stores distances for rays from `-outer_angle` to `+outer_angle` relative to direction
+- Shader maps fragment angle relative to light direction to shadow map UV coordinate
+
+**Implementation:**
+- `generate_spot_shadow_map()` - Casts rays within the spot light's cone
+- `spot_light_shadow_msl` / `spot_light_shadow.frag.glsl` - Fragment shader with cone-aware shadow sampling
+- Spot lights share the shadow atlas with point lights (spot lights use rows after point lights)
+
+**Uniform struct (`SpotLightShadowUniforms`):**
+```cpp
+light_center[2]   // UV space position
+direction[2]      // Normalized direction
+radius            // Max distance in UV space
+inner_angle       // Cosine of inner cone angle
+outer_angle       // Cosine of outer cone angle
+intensity         // Light intensity
+color[4]          // RGBA
+falloff_type      // Falloff curve
+shadow_softness   // Shadow edge softness (world units)
+aspect[2]         // Aspect ratio correction
+lightmap_size[2]  // For UV to world conversion
+radius_world      // Light radius in world units
+shadow_row        // Atlas row index
+atlas_height      // Total atlas height (8.0)
+cone_angle_rad    // Outer cone angle in radians
+```
+
 ### Current Limitations
-- Maximum 8 shadow-casting point lights (configurable via MAX_SHADOW_CASTING_LIGHTS)
-- Spot light shadows not yet implemented
+- Maximum 8 shadow-casting lights total (point + spot combined)
 
 **Files with shadow implementation:**
 - `src/graphics/lighting.cpp` - Ray intersection, shadow map generation, atlas upload
-- `src/graphics/lighting_shaders.h` - `point_light_shadow_msl` shader with atlas sampling
-- `examples/lighting/main.cpp` - Demo with 3 shadow-casting lights
+- `src/graphics/lighting_shaders.h` - `point_light_shadow_msl` and `spot_light_shadow_msl` shaders
+- `assets/shaders/lighting/spot_light_shadow.frag.glsl` - GLSL/SPIR-V version
+- `examples/lighting/main.cpp` - Demo with shadow-casting lights
 
 **Debug features:**
 - Press TAB in lighting example to see green occluder rectangles
-- Log output shows: `Lighting: N shadow-casting lights active, M occluders`
+- Log output shows: `Lighting: N shadow-casting point lights active, M occluders`
+- Log output shows: `Lighting: N shadow-casting spot lights active`
 
 ### Usage
 ```cpp
@@ -530,9 +564,15 @@ Agentite_LightingConfig cfg = AGENTITE_LIGHTING_CONFIG_DEFAULT;
 cfg.enable_shadows = true;
 cfg.shadow_ray_count = 720;  // Higher = smoother, slower
 
-// Mark light as shadow-casting
-Agentite_PointLightDesc light = AGENTITE_POINT_LIGHT_DEFAULT;
-light.casts_shadows = true;
+// Mark point light as shadow-casting
+Agentite_PointLightDesc point = AGENTITE_POINT_LIGHT_DEFAULT;
+point.casts_shadows = true;
+
+// Mark spot light as shadow-casting
+Agentite_SpotLightDesc spot = AGENTITE_SPOT_LIGHT_DEFAULT;
+spot.casts_shadows = true;
+spot.direction_x = 0.707f;
+spot.direction_y = 0.707f;  // 45 degrees
 
 // Add occluders for shadows
 Agentite_Occluder box = { .type = AGENTITE_OCCLUDER_BOX,
@@ -638,7 +678,7 @@ Created GLSL shaders for all lighting effects, compiled to SPIR-V:
 - [x] Shadow casting from occluders - Working with 1D radial shadow maps
 - [x] Multiple shadow-casting lights - Up to 8 lights using 2D shadow map atlas (720x8)
 - [x] SPIR-V shaders - All lighting shaders now work on Vulkan/Linux
-- [ ] Spot light shadows
+- [x] Spot light shadows - Working with cone-aware shadow maps (2026-01-05)
 
 ### Other Examples
 - ~~Update transitions example to use new render-to-texture API~~ ✅ DONE
