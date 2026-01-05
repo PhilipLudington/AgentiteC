@@ -1300,6 +1300,196 @@ fragment float4 pixelate_fragment(
 }
 )";
 
+static const char *builtin_brightness_msl = R"(
+struct Params {
+    float amount;
+    float3 _pad;
+};
+
+fragment float4 brightness_fragment(
+    VertexOut in [[stage_in]],
+    texture2d<float> tex [[texture(0)]],
+    sampler samp [[sampler(0)]],
+    constant Params& params [[buffer(0)]])
+{
+    float4 color = tex.sample(samp, in.texcoord);
+    return float4(color.rgb + params.amount, color.a);
+}
+)";
+
+static const char *builtin_contrast_msl = R"(
+struct Params {
+    float amount;
+    float3 _pad;
+};
+
+fragment float4 contrast_fragment(
+    VertexOut in [[stage_in]],
+    texture2d<float> tex [[texture(0)]],
+    sampler samp [[sampler(0)]],
+    constant Params& params [[buffer(0)]])
+{
+    float4 color = tex.sample(samp, in.texcoord);
+    float contrast = params.amount + 1.0;
+    float3 adjusted = (color.rgb - 0.5) * contrast + 0.5;
+    return float4(clamp(adjusted, 0.0, 1.0), color.a);
+}
+)";
+
+static const char *builtin_saturation_msl = R"(
+struct Params {
+    float amount;
+    float3 _pad;
+};
+
+fragment float4 saturation_fragment(
+    VertexOut in [[stage_in]],
+    texture2d<float> tex [[texture(0)]],
+    sampler samp [[sampler(0)]],
+    constant Params& params [[buffer(0)]])
+{
+    float4 color = tex.sample(samp, in.texcoord);
+    float gray = dot(color.rgb, float3(0.299, 0.587, 0.114));
+    float saturation = params.amount + 1.0;
+    float3 adjusted = mix(float3(gray), color.rgb, saturation);
+    return float4(clamp(adjusted, 0.0, 1.0), color.a);
+}
+)";
+
+static const char *builtin_blur_box_msl = R"(
+struct Params {
+    float radius;
+    float sigma;
+    float2 _pad;
+};
+
+fragment float4 blur_box_fragment(
+    VertexOut in [[stage_in]],
+    texture2d<float> tex [[texture(0)]],
+    sampler samp [[sampler(0)]],
+    constant Params& params [[buffer(0)]])
+{
+    float2 tex_size = float2(tex.get_width(), tex.get_height());
+    float2 texel = 1.0 / tex_size;
+
+    int iradius = int(params.radius);
+    if (iradius <= 0) iradius = 1;
+
+    float4 sum = float4(0.0);
+    float count = 0.0;
+
+    for (int x = -iradius; x <= iradius; x++) {
+        for (int y = -iradius; y <= iradius; y++) {
+            float2 offset = float2(float(x), float(y)) * texel;
+            sum += tex.sample(samp, in.texcoord + offset);
+            count += 1.0;
+        }
+    }
+
+    return sum / count;
+}
+)";
+
+static const char *builtin_chromatic_msl = R"(
+struct Params {
+    float offset;
+    float3 _pad;
+};
+
+fragment float4 chromatic_fragment(
+    VertexOut in [[stage_in]],
+    texture2d<float> tex [[texture(0)]],
+    sampler samp [[sampler(0)]],
+    constant Params& params [[buffer(0)]])
+{
+    float2 tex_size = float2(tex.get_width(), tex.get_height());
+    float2 texel = 1.0 / tex_size;
+
+    float2 dir = in.texcoord - 0.5;
+    dir = normalize(dir) * texel * params.offset;
+
+    float r = tex.sample(samp, in.texcoord - dir).r;
+    float g = tex.sample(samp, in.texcoord).g;
+    float b = tex.sample(samp, in.texcoord + dir).b;
+    float a = tex.sample(samp, in.texcoord).a;
+
+    return float4(r, g, b, a);
+}
+)";
+
+static const char *builtin_scanlines_msl = R"(
+struct Params {
+    float intensity;
+    float count;
+    float2 _pad;
+};
+
+fragment float4 scanlines_fragment(
+    VertexOut in [[stage_in]],
+    texture2d<float> tex [[texture(0)]],
+    sampler samp [[sampler(0)]],
+    constant Params& params [[buffer(0)]])
+{
+    float4 color = tex.sample(samp, in.texcoord);
+
+    float line_count = params.count > 0.0 ? params.count : 240.0;
+    float scanline = sin(in.texcoord.y * line_count * 3.14159265);
+    scanline = scanline * 0.5 + 0.5;
+    scanline = 1.0 - (params.intensity * (1.0 - scanline));
+
+    return float4(color.rgb * scanline, color.a);
+}
+)";
+
+static const char *builtin_sobel_msl = R"(
+fragment float4 sobel_fragment(
+    VertexOut in [[stage_in]],
+    texture2d<float> tex [[texture(0)]],
+    sampler samp [[sampler(0)]])
+{
+    float2 tex_size = float2(tex.get_width(), tex.get_height());
+    float2 texel = 1.0 / tex_size;
+
+    float3 luma = float3(0.299, 0.587, 0.114);
+
+    float tl = dot(tex.sample(samp, in.texcoord + float2(-texel.x, -texel.y)).rgb, luma);
+    float tm = dot(tex.sample(samp, in.texcoord + float2(0.0, -texel.y)).rgb, luma);
+    float tr = dot(tex.sample(samp, in.texcoord + float2(texel.x, -texel.y)).rgb, luma);
+    float ml = dot(tex.sample(samp, in.texcoord + float2(-texel.x, 0.0)).rgb, luma);
+    float mr = dot(tex.sample(samp, in.texcoord + float2(texel.x, 0.0)).rgb, luma);
+    float bl = dot(tex.sample(samp, in.texcoord + float2(-texel.x, texel.y)).rgb, luma);
+    float bm = dot(tex.sample(samp, in.texcoord + float2(0.0, texel.y)).rgb, luma);
+    float br = dot(tex.sample(samp, in.texcoord + float2(texel.x, texel.y)).rgb, luma);
+
+    float gx = -tl - 2.0*ml - bl + tr + 2.0*mr + br;
+    float gy = -tl - 2.0*tm - tr + bl + 2.0*bm + br;
+
+    float edge = sqrt(gx*gx + gy*gy);
+    return float4(float3(edge), 1.0);
+}
+)";
+
+static const char *builtin_flash_msl = R"(
+struct Params {
+    float color_r;
+    float color_g;
+    float color_b;
+    float intensity;  /* Use 4th slot for intensity instead of alpha */
+};
+
+fragment float4 flash_fragment(
+    VertexOut in [[stage_in]],
+    texture2d<float> tex [[texture(0)]],
+    sampler samp [[sampler(0)]],
+    constant Params& params [[buffer(0)]])
+{
+    float4 color = tex.sample(samp, in.texcoord);
+    float3 flash_color = float3(params.color_r, params.color_g, params.color_b);
+    float3 result = mix(color.rgb, flash_color, params.intensity);
+    return float4(result, color.a);
+}
+)";
+
 /* Helper to create a builtin shader from SPIRV bytecode */
 static Agentite_Shader *create_builtin_spirv(Agentite_ShaderSystem *ss,
                                               const uint8_t *frag_spv, size_t frag_size,
@@ -1414,6 +1604,73 @@ static bool init_builtin_shaders(Agentite_ShaderSystem *ss)
         ss->builtins[AGENTITE_SHADER_PIXELATE] = agentite_shader_load_msl(ss, combined, &desc);
         if (ss->builtins[AGENTITE_SHADER_PIXELATE]) {
             ss->builtins[AGENTITE_SHADER_PIXELATE]->is_builtin = true;
+        }
+
+        /* Brightness (needs uniform buffer) */
+        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_brightness_msl);
+        desc.fragment_entry = "brightness_fragment";
+        desc.num_fragment_uniforms = 1;
+        ss->builtins[AGENTITE_SHADER_BRIGHTNESS] = agentite_shader_load_msl(ss, combined, &desc);
+        if (ss->builtins[AGENTITE_SHADER_BRIGHTNESS]) {
+            ss->builtins[AGENTITE_SHADER_BRIGHTNESS]->is_builtin = true;
+        }
+
+        /* Contrast (needs uniform buffer) */
+        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_contrast_msl);
+        desc.fragment_entry = "contrast_fragment";
+        ss->builtins[AGENTITE_SHADER_CONTRAST] = agentite_shader_load_msl(ss, combined, &desc);
+        if (ss->builtins[AGENTITE_SHADER_CONTRAST]) {
+            ss->builtins[AGENTITE_SHADER_CONTRAST]->is_builtin = true;
+        }
+
+        /* Saturation (needs uniform buffer) */
+        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_saturation_msl);
+        desc.fragment_entry = "saturation_fragment";
+        ss->builtins[AGENTITE_SHADER_SATURATION] = agentite_shader_load_msl(ss, combined, &desc);
+        if (ss->builtins[AGENTITE_SHADER_SATURATION]) {
+            ss->builtins[AGENTITE_SHADER_SATURATION]->is_builtin = true;
+        }
+
+        /* Blur Box (needs uniform buffer) */
+        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_blur_box_msl);
+        desc.fragment_entry = "blur_box_fragment";
+        ss->builtins[AGENTITE_SHADER_BLUR_BOX] = agentite_shader_load_msl(ss, combined, &desc);
+        if (ss->builtins[AGENTITE_SHADER_BLUR_BOX]) {
+            ss->builtins[AGENTITE_SHADER_BLUR_BOX]->is_builtin = true;
+        }
+
+        /* Chromatic Aberration (needs uniform buffer) */
+        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_chromatic_msl);
+        desc.fragment_entry = "chromatic_fragment";
+        ss->builtins[AGENTITE_SHADER_CHROMATIC] = agentite_shader_load_msl(ss, combined, &desc);
+        if (ss->builtins[AGENTITE_SHADER_CHROMATIC]) {
+            ss->builtins[AGENTITE_SHADER_CHROMATIC]->is_builtin = true;
+        }
+
+        /* Scanlines (needs uniform buffer) */
+        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_scanlines_msl);
+        desc.fragment_entry = "scanlines_fragment";
+        ss->builtins[AGENTITE_SHADER_SCANLINES] = agentite_shader_load_msl(ss, combined, &desc);
+        if (ss->builtins[AGENTITE_SHADER_SCANLINES]) {
+            ss->builtins[AGENTITE_SHADER_SCANLINES]->is_builtin = true;
+        }
+
+        /* Sobel edge detection (no uniforms) */
+        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_sobel_msl);
+        desc.fragment_entry = "sobel_fragment";
+        desc.num_fragment_uniforms = 0;
+        ss->builtins[AGENTITE_SHADER_SOBEL] = agentite_shader_load_msl(ss, combined, &desc);
+        if (ss->builtins[AGENTITE_SHADER_SOBEL]) {
+            ss->builtins[AGENTITE_SHADER_SOBEL]->is_builtin = true;
+        }
+
+        /* Flash (needs uniform buffer) */
+        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_flash_msl);
+        desc.fragment_entry = "flash_fragment";
+        desc.num_fragment_uniforms = 1;
+        ss->builtins[AGENTITE_SHADER_FLASH] = agentite_shader_load_msl(ss, combined, &desc);
+        if (ss->builtins[AGENTITE_SHADER_FLASH]) {
+            ss->builtins[AGENTITE_SHADER_FLASH]->is_builtin = true;
         }
 
         return true;

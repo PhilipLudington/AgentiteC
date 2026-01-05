@@ -71,11 +71,10 @@
 
 **Current state:**
 - Example runs with working postprocess effects
-- Controls: 0-7 select effects (grayscale, sepia, invert, vignette, scanlines, pixelate, contrast)
+- Controls: 0-9 select effects, plus B/C/S/F for blur/chromatic/sobel/flash
 - Text rendered on top of postprocessed scene (not affected by effects)
 - Dark backgrounds behind text ensure readability on all effects (especially Invert)
-- Available effects on macOS (Metal): grayscale, sepia, invert, vignette, pixelate
-- Note: scanlines/contrast shaders only have SPIRV (not MSL), displayed as "(N/A on Metal)"
+- All effects now available on macOS (Metal) - MSL shaders added for all common effects
 
 ### Transitions Example (`examples/transitions/main.cpp`) - RUNS, EFFECTS PENDING
 
@@ -191,7 +190,7 @@ if (agentite_begin_render_pass(engine, r, g, b, a)) {
 - `src/core/physics.cpp` (fixed collision response sign bug)
 - `src/core/engine.cpp` (added render-to-texture API)
 - `include/agentite/agentite.h` (added render-to-texture function declarations)
-- `src/graphics/shader.cpp` (MSL fragment shader fixes - removed duplicate VertexOut)
+- `src/graphics/shader.cpp` (MSL fragment shader fixes, added MSL for all common builtin effects)
 - `Makefile` (added `-DNDEBUG` to Chipmunk compilation)
 
 ## Verification Commands
@@ -254,26 +253,44 @@ agentite_text_render(text, cmd, pass);       // Text on top (not postprocessed)
 agentite_end_render_pass(engine);
 ```
 
-## Future Work
+## MSL Shaders for Metal (COMPLETED)
 
-### Priority: Add MSL Shaders for All Platforms
-The following builtin shaders only have SPIRV implementations and are NOT available on macOS (Metal):
-- `AGENTITE_SHADER_BRIGHTNESS` - Brightness adjustment
-- `AGENTITE_SHADER_CONTRAST` - Contrast adjustment
-- `AGENTITE_SHADER_SATURATION` - Saturation adjustment
-- `AGENTITE_SHADER_BLUR_BOX` - Box blur effect
-- `AGENTITE_SHADER_BLUR_GAUSSIAN` - Gaussian blur (if different from box)
-- `AGENTITE_SHADER_CHROMATIC` - Chromatic aberration
-- `AGENTITE_SHADER_SCANLINES` - CRT scanline effect
+All commonly-used builtin shaders now have MSL implementations for macOS (Metal) support:
+
+**Now available on Metal:**
+- ✅ `AGENTITE_SHADER_GRAYSCALE` - Grayscale effect
+- ✅ `AGENTITE_SHADER_SEPIA` - Sepia tone
+- ✅ `AGENTITE_SHADER_INVERT` - Color inversion
+- ✅ `AGENTITE_SHADER_BRIGHTNESS` - Brightness adjustment
+- ✅ `AGENTITE_SHADER_CONTRAST` - Contrast adjustment
+- ✅ `AGENTITE_SHADER_SATURATION` - Saturation adjustment
+- ✅ `AGENTITE_SHADER_BLUR_BOX` - Box blur effect
+- ✅ `AGENTITE_SHADER_VIGNETTE` - Darkened edges
+- ✅ `AGENTITE_SHADER_CHROMATIC` - Chromatic aberration
+- ✅ `AGENTITE_SHADER_SCANLINES` - CRT scanline effect
+- ✅ `AGENTITE_SHADER_PIXELATE` - Pixelation effect
+- ✅ `AGENTITE_SHADER_SOBEL` - Sobel edge detection
+- ✅ `AGENTITE_SHADER_FLASH` - Flash/hit effect
+
+**Still SPIRV-only (not yet on Metal):**
+- `AGENTITE_SHADER_BLUR_GAUSSIAN` - Gaussian blur
 - `AGENTITE_SHADER_OUTLINE` - Edge outline
-- `AGENTITE_SHADER_SOBEL` - Sobel edge detection
 - `AGENTITE_SHADER_GLOW` - Bloom/glow effect
-- `AGENTITE_SHADER_FLASH` - Flash/hit effect
 - `AGENTITE_SHADER_DISSOLVE` - Dissolve transition
 
-File to update: `src/graphics/shader.cpp` in `init_builtin_shaders()` function (~line 1370)
-Pattern: Add MSL source strings similar to `builtin_grayscale_msl`, `builtin_vignette_msl`, etc.
+File: `src/graphics/shader.cpp` - MSL shader sources and registration in `init_builtin_shaders()`
+
+**Known limitation:** `agentite_postprocess_apply()` only passes 16 bytes of uniform params (hardcoded in line 734). Effects with larger param structs (like `Agentite_ShaderParams_Flash` which is 32 bytes) won't work correctly. The Flash MSL shader was redesigned to use 16 bytes: `float[4] = {R, G, B, intensity}` instead of the standard struct.
+
+## Future Work
 
 ### Other Examples
 - Update transitions example to use new render-to-texture API
 - Update lighting example if it needs render-to-texture for shadows/effects
+
+### Remaining MSL Shaders
+- Add MSL for Gaussian blur, outline, glow, and dissolve effects
+
+### Postprocess Params Limitation
+- Fix `agentite_postprocess_apply()` to support variable-size params (currently hardcoded to 16 bytes)
+- Update `Agentite_ShaderParams_Flash` to match the 16-byte MSL implementation, or increase the limit

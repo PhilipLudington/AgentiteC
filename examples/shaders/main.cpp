@@ -5,8 +5,13 @@
  * This example shows how to set up and use post-processing effects.
  *
  * Controls:
- *   1-7    - Select effect (grayscale, sepia, invert, vignette, scanlines, pixelate, contrast)
  *   0      - Disable all effects (passthrough)
+ *   1-7    - Basic effects (grayscale, sepia, invert, vignette, scanlines, pixelate, contrast)
+ *   8-9    - Adjustment effects (brightness, saturation)
+ *   B      - Box blur
+ *   C      - Chromatic aberration
+ *   S      - Sobel edge detection
+ *   F      - Flash effect
  *   ESC    - Quit
  */
 
@@ -48,6 +53,12 @@ static const char *get_effect_name(Agentite_BuiltinShader effect) {
         case AGENTITE_SHADER_SCANLINES: return "Scanlines";
         case AGENTITE_SHADER_PIXELATE: return "Pixelate";
         case AGENTITE_SHADER_CONTRAST: return "High Contrast";
+        case AGENTITE_SHADER_BRIGHTNESS: return "Brightness";
+        case AGENTITE_SHADER_SATURATION: return "Saturation";
+        case AGENTITE_SHADER_BLUR_BOX: return "Box Blur";
+        case AGENTITE_SHADER_CHROMATIC: return "Chromatic Aberration";
+        case AGENTITE_SHADER_SOBEL: return "Sobel Edge Detection";
+        case AGENTITE_SHADER_FLASH: return "Flash";
         default: return "Unknown";
     }
 }
@@ -164,6 +175,12 @@ int main(int argc, char *argv[]) {
     printf("  5: Scanlines\n");
     printf("  6: Pixelate\n");
     printf("  7: High Contrast\n");
+    printf("  8: Brightness\n");
+    printf("  9: Saturation\n");
+    printf("  B: Box Blur\n");
+    printf("  C: Chromatic Aberration\n");
+    printf("  S: Sobel Edge Detection\n");
+    printf("  F: Flash\n");
     printf("  ESC: Quit\n\n");
 
     while (agentite_is_running(app.engine)) {
@@ -199,6 +216,18 @@ int main(int argc, char *argv[]) {
             app.current_effect = AGENTITE_SHADER_PIXELATE;
         if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_7))
             app.current_effect = AGENTITE_SHADER_CONTRAST;
+        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_8))
+            app.current_effect = AGENTITE_SHADER_BRIGHTNESS;
+        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_9))
+            app.current_effect = AGENTITE_SHADER_SATURATION;
+        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_B))
+            app.current_effect = AGENTITE_SHADER_BLUR_BOX;
+        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_C))
+            app.current_effect = AGENTITE_SHADER_CHROMATIC;
+        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_S))
+            app.current_effect = AGENTITE_SHADER_SOBEL;
+        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_F))
+            app.current_effect = AGENTITE_SHADER_FLASH;
 
         /* Render */
         SDL_GPUCommandBuffer *cmd = agentite_acquire_command_buffer(app.engine);
@@ -244,7 +273,7 @@ int main(int argc, char *argv[]) {
                     effect_text, 10, 30, 0.7f, 1.0f, 0.7f, 0.9f);
 
                 agentite_text_draw_colored(app.text, app.font,
-                    "0-7: Select effect | ESC: Quit",
+                    "0-9, B/C/S/F: Effects | ESC: Quit",
                     10, WINDOW_HEIGHT - 30, 0.5f, 0.5f, 0.5f, 0.9f);
                 agentite_text_end(app.text);
             }
@@ -268,7 +297,7 @@ int main(int argc, char *argv[]) {
                     /* Top text area background - text at (10,10) and (10,30), font 16px */
                     agentite_sprite_draw_scaled(app.sprites, &ui_bg, 5, 5, 360, 55);
                     /* Bottom text area background - text at (10, WINDOW_HEIGHT-30) */
-                    agentite_sprite_draw_scaled(app.sprites, &ui_bg, 5, WINDOW_HEIGHT - 35, 320, 26);
+                    agentite_sprite_draw_scaled(app.sprites, &ui_bg, 5, WINDOW_HEIGHT - 35, 400, 26);
                 }
                 agentite_sprite_upload(app.sprites, cmd);
 
@@ -282,12 +311,23 @@ int main(int argc, char *argv[]) {
                     Agentite_ShaderParams_Scanlines scanline_params = { .intensity = 0.3f, .count = 240.0f };
                     Agentite_ShaderParams_Pixelate pixelate_params = { .pixel_size = 8.0f };
                     Agentite_ShaderParams_Adjust contrast_params = { .amount = 0.5f };
+                    Agentite_ShaderParams_Adjust brightness_params = { .amount = 0.3f };
+                    Agentite_ShaderParams_Adjust saturation_params = { .amount = 0.5f };
+                    Agentite_ShaderParams_Blur blur_params = { .radius = 3.0f, .sigma = 0.0f };
+                    Agentite_ShaderParams_Chromatic chromatic_params = { .offset = 5.0f };
+                    /* Flash uses 16-byte params: RGB color + intensity in 4th slot */
+                    float flash_params[4] = { 1.0f, 0.3f, 0.3f, 0.6f };  /* R, G, B, intensity */
 
                     switch (app.current_effect) {
                         case AGENTITE_SHADER_VIGNETTE: params = &vignette_params; break;
                         case AGENTITE_SHADER_SCANLINES: params = &scanline_params; break;
                         case AGENTITE_SHADER_PIXELATE: params = &pixelate_params; break;
                         case AGENTITE_SHADER_CONTRAST: params = &contrast_params; break;
+                        case AGENTITE_SHADER_BRIGHTNESS: params = &brightness_params; break;
+                        case AGENTITE_SHADER_SATURATION: params = &saturation_params; break;
+                        case AGENTITE_SHADER_BLUR_BOX: params = &blur_params; break;
+                        case AGENTITE_SHADER_CHROMATIC: params = &chromatic_params; break;
+                        case AGENTITE_SHADER_FLASH: params = &flash_params; break;
                         default: break;
                     }
 
