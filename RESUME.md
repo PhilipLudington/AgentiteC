@@ -1,5 +1,38 @@
 # Example Testing Progress
 
+## ✅ HiDPI Postprocess Bug - FIXED (2026-01-05)
+
+### The Problem (RESOLVED)
+Postprocessed scene was rendering to upper-left portion of window on HiDPI (2x) displays.
+
+### Root Cause
+The postprocess texture was created at **physical dimensions** (2560x1440) while the sprite renderer uses **logical dimensions** (1280x720) for its ortho projection. When sprites rendered to the physical-sized texture, they only covered a portion of it (the center), not the full texture.
+
+### The Fix
+Change the postprocess target to use **logical dimensions** to match the sprite renderer:
+
+**`examples/shaders/main.cpp`:**
+```cpp
+// BEFORE (broken):
+int pp_width, pp_height;
+SDL_GetWindowSizeInPixels(window, &pp_width, &pp_height);  // 2560x1440
+pp_cfg.width = pp_width;   /* Physical size */
+pp_cfg.height = pp_height;
+
+// AFTER (fixed):
+pp_cfg.width = WINDOW_WIDTH;   /* Logical size: 1280 */
+pp_cfg.height = WINDOW_HEIGHT; /* Logical size: 720 */
+```
+
+Also updated `agentite_begin_render_pass_to_texture()` to use logical dimensions.
+
+### Key Insight
+The sprite renderer's ortho projection maps logical coordinates (0-1280, 0-720) to NDC. When combined with ANY viewport size, the sprites will fill that viewport. BUT when you then sample the texture with UV 0-1, you're sampling the entire texture including empty areas if the texture is larger than the content coverage.
+
+The solution is simple: **keep texture, viewport, and projection all at the same coordinate space** (logical dimensions).
+
+---
+
 ## Completed Examples
 
 ### Particles Example (`examples/particles/main.cpp`)
@@ -90,11 +123,13 @@
 - [x] Added transition system with configurable effects and easing
 - [x] Added UI showing current effect, easing, duration, and progress
 - [x] Added dark backgrounds for text readability
-- [x] Moved scene texture down 200px to avoid UI overlap
+- [x] **Fixed vertical centering** - Removed unnecessary `+50` Y offset from sprite positioning
+- [x] **Fixed transition effects not rendering** - `agentite_shader_draw_fullscreen()` was missing projection matrix push
 
 **Current state:**
 - Example runs with working transition effects
 - Displays 3 colored test scenes with distinct patterns (circles, stripes, grid)
+- Scene sprite properly centered both horizontally and vertically
 - Controls:
   - 1-3: Switch scenes (with animated transition)
   - T: Cycle through transition effects
@@ -159,7 +194,7 @@ All 8 examples have been tested:
 - ✅ physics2d - Working
 - ✅ noise - Working
 - ✅ shaders - **Working with postprocess effects!**
-- ✅ transitions - Runs, fade/pixelate work, other transitions pending
+- ✅ transitions - **Working with fade/pixelate transitions!** Properly centered, effects functional
 - ✅ lighting - **Working with 2D lighting!** Point lights, spot lights, ambient, compositing all functional
 
 ## Common Issues Found and Fixed
@@ -231,7 +266,7 @@ if (agentite_begin_render_pass(engine, r, g, b, a)) {
 - `src/core/physics.cpp` (fixed collision response sign bug)
 - `src/core/engine.cpp` (added render-to-texture API)
 - `include/agentite/agentite.h` (added render-to-texture function declarations)
-- `src/graphics/shader.cpp` (MSL fragment shader fixes, added MSL for all common builtin effects)
+- `src/graphics/shader.cpp` (MSL fragment shader fixes, added MSL for all common builtin effects, fixed `agentite_shader_draw_fullscreen()` missing projection matrix)
 - `src/graphics/lighting.cpp` (implemented render_lights and apply, fixed struct alignment)
 - `Makefile` (added `-DNDEBUG` to Chipmunk compilation)
 
@@ -383,23 +418,156 @@ float aspect_y = 1.0f;
    - Ambient added during composite pass
 ```
 
+## Shadow Casting Implementation (IN PROGRESS)
+
+**🔧 IN PROGRESS:** 2D shadow casting from occluders is implemented but has a direction bug.
+
+### Algorithm: 1D Radial Shadow Map
+For each shadow-casting light:
+1. Cast 720 rays from light center at 0.5° intervals
+2. For each ray, find nearest occluder intersection using ray-occluder tests
+3. Store distances in a 1D texture (R32_FLOAT format)
+4. In fragment shader: compare pixel distance to sampled shadow distance
+5. Apply soft shadow edge with smoothstep
+
+### Implementation Details
+
+**Ray-Occluder Intersection** (`src/graphics/lighting.cpp`):
+- `ray_segment_intersect()` - Parametric line intersection
+- `ray_box_intersect()` - Tests all 4 edges of AABB
+- `ray_circle_intersect()` - Quadratic formula for ray-circle
+
+**Shadow Map Generation**:
+- `generate_shadow_map()` - CPU-side raycasting (720 rays × occluders)
+- `upload_shadow_map()` - Transfer buffer → copy pass → GPU texture
+- Resolution: 720 rays (configurable via `shadow_ray_count`)
+
+**Point Light Shadow Shader** (`src/graphics/lighting_shaders.h`):
+- Samples shadow map at fragment's angle from light center
+- Converts UV distance to world distance for comparison
+- Soft shadow edges via smoothstep (4.0 world units default)
+- Full falloff support (linear, quadratic, smooth, none)
+
+### Current Status & Known Bug
+
+**Shadow appears but direction is WRONG:**
+- Shadows are rendering and the shadow map is being generated correctly
+- Debug stats show correct values (e.g., "min=123.3 max=400.0 blocked=153/720")
+- However, the shadow appears on the WRONG SIDE of the occluder
+- Shadow appears BETWEEN the light and occluder instead of BEYOND the occluder
+- This suggests a 180-degree angle error or inverted comparison somewhere
+
+**Files with shadow implementation:**
+- `src/graphics/lighting.cpp` - Ray intersection functions, shadow map generation/upload
+- `src/graphics/lighting_shaders.h` - `point_light_shadow_msl` shader (around line 99)
+- `examples/lighting/main.cpp` - Test scene with occluders
+
+**Debug features added:**
+- Press TAB in lighting example to see green occluder rectangles
+- Log output shows shadow map stats (min/max distances, blocked ray count)
+- Light position can be adjusted to test shadow direction
+
+**To debug further:**
+1. Simplify to single occluder to isolate the issue
+2. Check if angle calculation in shader matches shadow map generation
+3. Verify smoothstep comparison direction is correct
+4. Consider if there's a Y-axis flip between coordinate systems
+
+### Current Limitations
+- Only one light can cast shadows per frame (first shadow-casting light wins)
+- Multiple shadow-casting lights would require shadow map texture array
+- Metal-only (MSL shader) - SPIR-V needed for Vulkan/Linux
+- **BUG: Shadow direction is inverted (needs fix)**
+
+### Usage
+```cpp
+// Enable shadows in config
+Agentite_LightingConfig cfg = AGENTITE_LIGHTING_CONFIG_DEFAULT;
+cfg.enable_shadows = true;
+cfg.shadow_ray_count = 720;  // Higher = smoother, slower
+
+// Mark light as shadow-casting
+Agentite_PointLightDesc light = AGENTITE_POINT_LIGHT_DEFAULT;
+light.casts_shadows = true;
+
+// Add occluders for shadows
+Agentite_Occluder box = { .type = AGENTITE_OCCLUDER_BOX,
+                          .box = { x, y, w, h } };
+agentite_lighting_add_occluder(lighting, &box);
+```
+
+## HiDPI Postprocess Rendering Issue - ✅ FIXED
+
+**Root Cause:** The **scissor rect** was not being updated when switching between render targets of different sizes.
+
+### The Problem
+On HiDPI displays (e.g., macOS Retina with 2x scale factor):
+- Window: 1280x720 logical, 2560x1440 physical
+- Postprocess rendered to 1280x720 intermediate texture first
+- When rendering to swapchain, viewport was correctly set to 2560x1440
+- BUT scissor rect remained at 1280x720 from the intermediate texture
+- Result: fullscreen quad was clipped to upper-left quarter
+
+### The Fix
+Added `SDL_SetGPUScissor()` calls alongside all `SDL_SetGPUViewport()` calls:
+
+**Files Modified:**
+- `src/core/engine.cpp`:
+  - `agentite_begin_render_pass()` - scissor set to physical dimensions
+  - `agentite_begin_render_pass_no_clear()` - scissor set to physical dimensions
+  - `agentite_begin_render_pass_to_texture()` - scissor set to texture dimensions
+  - `agentite_begin_render_pass_to_texture_no_clear()` - scissor set to texture dimensions
+- `src/graphics/shader.cpp`:
+  - `agentite_postprocess_apply_scaled()` - scissor set to output dimensions
+
+### Verification
+```bash
+./build/example-shaders
+# Press 0 - fullscreen passthrough ✅
+# Press 1-9, B/C/S/F - fullscreen postprocess effects ✅
+```
+
+---
+
+## Fullscreen Shader Fix (2026-01-05)
+
+**Issue:** `agentite_shader_draw_fullscreen()` was not pushing the projection matrix required by builtin shaders.
+
+**Root Cause:** The builtin shaders (brightness, pixelate, etc.) use a vertex shader that expects a projection matrix uniform:
+```metal
+vertex VertexOut fullscreen_vertex(
+    VertexIn in [[stage_in]],
+    constant Uniforms &uniforms [[buffer(0)]])
+{
+    out.position = uniforms.projection * float4(in.position, 0.0, 1.0);
+    ...
+}
+```
+
+But `agentite_shader_draw_fullscreen()` was not pushing this matrix, while `agentite_postprocess_apply()` was.
+
+**Fix:** Added projection matrix push to `agentite_shader_draw_fullscreen()`:
+```cpp
+mat4 projection;
+glm_ortho(0.0f, 1.0f, 1.0f, 0.0f, -1.0f, 1.0f, projection);
+SDL_PushGPUVertexUniformData(cmd, 0, projection, sizeof(projection));
+```
+
+**File:** `src/graphics/shader.cpp` line 856-861
+
+---
+
 ## Future Work
 
-### Lighting System - Shadow Casting
-The basic lighting system is now working. Shadow casting is partially implemented but not functional:
-- [x] ~~`agentite_lighting_render_lights()` - Implement light drawing~~ ✅ DONE
-- [x] ~~`agentite_lighting_apply()` - Implement scene/lightmap compositing~~ ✅ DONE
-- [x] ~~Update example to use render-to-texture~~ ✅ DONE
-- [ ] Shadow casting from occluders
-  - Infrastructure added (shadow_map texture, occluder_buffer in struct)
-  - Need 1D shadow map shader for ray-occluder intersection
-  - Need to modify point light shader to sample shadow map
-  - Complex implementation - consider for future work
+### Lighting System - Remaining Work
+- [ ] Multiple shadow-casting lights (requires texture array)
 - [ ] SPIR-V shaders - Currently Metal-only, need SPIR-V for Vulkan/Linux
+- [ ] Spot light shadows
 
 ### Other Examples
 - ~~Update transitions example to use new render-to-texture API~~ ✅ DONE
 - ~~Update lighting example~~ ✅ DONE - Point lights, spot lights, ambient all working
+- ~~Fix transitions centering and effects~~ ✅ DONE (2026-01-05)
 
 ### Transition Shaders
 - Implement crossfade shader (blend two textures with alpha)

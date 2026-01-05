@@ -8,6 +8,7 @@
 #include "agentite/error.h"
 
 #include <SDL3/SDL.h>
+#include <cglm/cglm.h>
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
@@ -709,6 +710,62 @@ void agentite_postprocess_begin(Agentite_PostProcess *pp,
     pp->ping_pong = false;
 }
 
+void agentite_postprocess_apply_scaled(Agentite_PostProcess *pp,
+                                        SDL_GPUCommandBuffer *cmd,
+                                        SDL_GPURenderPass *pass,
+                                        Agentite_Shader *shader,
+                                        const void *params,
+                                        int output_width,
+                                        int output_height)
+{
+    if (!pp || !cmd || !pass || !shader) return;
+
+    Agentite_ShaderSystem *ss = pp->shader_system;
+
+    /* Bind pipeline FIRST */
+    SDL_BindGPUGraphicsPipeline(pass, shader->pipeline);
+
+    /* Push orthographic projection matrix that maps unit quad (0-1) to clip space.
+     * This approach (like the sprite renderer) works correctly on HiDPI displays
+     * where raw NDC coordinates don't scale properly. */
+    mat4 projection;
+    glm_ortho(0.0f, 1.0f, 1.0f, 0.0f, -1.0f, 1.0f, projection);
+    SDL_PushGPUVertexUniformData(cmd, 0, projection, sizeof(projection));
+
+    /* Unused - we rely on ortho projection now, not viewport manipulation */
+    (void)output_width;
+    (void)output_height;
+
+    /* Bind source texture */
+    SDL_GPUTextureSamplerBinding tex_binding = {};
+    tex_binding.texture = pp->current_source;
+    tex_binding.sampler = ss->linear_sampler;
+    SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
+
+    /* Push parameters if provided */
+    if (params && shader->desc.num_fragment_uniforms > 0) {
+        /* Assume 16-byte aligned params, default size */
+        SDL_PushGPUFragmentUniformData(cmd, 0, params, 16);
+    }
+
+    /* Bind fullscreen quad vertex buffer */
+    SDL_GPUBufferBinding vb_binding = {};
+    vb_binding.buffer = ss->quad_vertex_buffer;
+    vb_binding.offset = 0;
+    SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
+
+    /* Draw fullscreen quad */
+    SDL_DrawGPUPrimitives(pass, FULLSCREEN_QUAD_VERTICES, 1, 0, 0);
+
+    /* Swap ping-pong targets */
+    if (pp->target_b) {
+        SDL_GPUTexture *temp = pp->current_source;
+        pp->current_source = pp->current_dest;
+        pp->current_dest = temp;
+        pp->ping_pong = !pp->ping_pong;
+    }
+}
+
 void agentite_postprocess_apply(Agentite_PostProcess *pp,
                                 SDL_GPUCommandBuffer *cmd,
                                 SDL_GPURenderPass *pass,
@@ -721,6 +778,11 @@ void agentite_postprocess_apply(Agentite_PostProcess *pp,
 
     /* Bind pipeline */
     SDL_BindGPUGraphicsPipeline(pass, shader->pipeline);
+
+    /* Push orthographic projection matrix for HiDPI support */
+    mat4 projection;
+    glm_ortho(0.0f, 1.0f, 1.0f, 0.0f, -1.0f, 1.0f, projection);
+    SDL_PushGPUVertexUniformData(cmd, 0, projection, sizeof(projection));
 
     /* Bind source texture */
     SDL_GPUTextureSamplerBinding tex_binding = {};
@@ -791,6 +853,13 @@ void agentite_shader_draw_fullscreen(Agentite_ShaderSystem *ss,
     /* Bind pipeline */
     SDL_BindGPUGraphicsPipeline(pass, shader->pipeline);
 
+    /* Push orthographic projection matrix for HiDPI support.
+     * The fullscreen quad uses unit coordinates (0-1), and the vertex shader
+     * expects a projection matrix to transform these to clip space. */
+    mat4 projection;
+    glm_ortho(0.0f, 1.0f, 1.0f, 0.0f, -1.0f, 1.0f, projection);
+    SDL_PushGPUVertexUniformData(cmd, 0, projection, sizeof(projection));
+
     /* Bind texture if provided */
     if (texture) {
         SDL_GPUTextureSamplerBinding tex_binding = {};
@@ -852,17 +921,18 @@ SDL_GPUSampler *agentite_shader_get_linear_sampler(Agentite_ShaderSystem *ss)
 static bool init_fullscreen_quad(Agentite_ShaderSystem *ss)
 {
     /* Fullscreen quad vertices (two triangles, CCW winding)
-     * Positions are in clip space (-1 to 1)
-     * UVs are standard (0,0 top-left to 1,1 bottom-right) */
+     * Positions are in UNIT coordinates (0 to 1) - scaled by projection matrix
+     * UVs are standard (0,0 top-left to 1,1 bottom-right)
+     * Using unit coords + projection matrix fixes HiDPI scaling issues */
     QuadVertex vertices[FULLSCREEN_QUAD_VERTICES] = {
         /* Triangle 1 */
-        {{ -1.0f, -1.0f }, { 0.0f, 1.0f }},  /* Bottom-left */
-        {{  1.0f, -1.0f }, { 1.0f, 1.0f }},  /* Bottom-right */
-        {{  1.0f,  1.0f }, { 1.0f, 0.0f }},  /* Top-right */
+        {{ 0.0f, 1.0f }, { 0.0f, 1.0f }},  /* Bottom-left */
+        {{ 1.0f, 1.0f }, { 1.0f, 1.0f }},  /* Bottom-right */
+        {{ 1.0f, 0.0f }, { 1.0f, 0.0f }},  /* Top-right */
         /* Triangle 2 */
-        {{ -1.0f, -1.0f }, { 0.0f, 1.0f }},  /* Bottom-left */
-        {{  1.0f,  1.0f }, { 1.0f, 0.0f }},  /* Top-right */
-        {{ -1.0f,  1.0f }, { 0.0f, 0.0f }},  /* Top-left */
+        {{ 0.0f, 1.0f }, { 0.0f, 1.0f }},  /* Bottom-left */
+        {{ 1.0f, 0.0f }, { 1.0f, 0.0f }},  /* Top-right */
+        {{ 0.0f, 0.0f }, { 0.0f, 0.0f }},  /* Top-left */
     };
 
     /* Create vertex buffer */
@@ -1207,10 +1277,16 @@ static void *load_file(const char *path, size_t *out_size)
     return data;
 }
 
-/* Built-in shader source - simple fullscreen passthrough vertex shader */
+/* Built-in shader source - fullscreen vertex shader with projection matrix
+ * This uses logical pixel coordinates and a projection matrix (like sprite renderer)
+ * to work correctly on HiDPI displays where raw NDC coords don't scale properly. */
 static const char *builtin_vertex_msl = R"(
 #include <metal_stdlib>
 using namespace metal;
+
+struct Uniforms {
+    float4x4 projection;
+};
 
 struct VertexIn {
     float2 position [[attribute(0)]];
@@ -1222,9 +1298,12 @@ struct VertexOut {
     float2 texcoord;
 };
 
-vertex VertexOut fullscreen_vertex(VertexIn in [[stage_in]]) {
+vertex VertexOut fullscreen_vertex(
+    VertexIn in [[stage_in]],
+    constant Uniforms &uniforms [[buffer(0)]])
+{
     VertexOut out;
-    out.position = float4(in.position, 0.0, 1.0);
+    out.position = uniforms.projection * float4(in.position, 0.0, 1.0);
     out.texcoord = in.texcoord;
     return out;
 }
@@ -1572,6 +1651,7 @@ static bool init_builtin_shaders(Agentite_ShaderSystem *ss)
 
         Agentite_ShaderDesc desc = AGENTITE_SHADER_DESC_DEFAULT;
         desc.num_fragment_samplers = 1;
+        desc.num_vertex_uniforms = 1;  /* Projection matrix for HiDPI support */
         desc.blend_mode = AGENTITE_BLEND_NONE;
 
         /* Grayscale */

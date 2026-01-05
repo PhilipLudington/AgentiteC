@@ -166,15 +166,17 @@ static void render_scene_to_target(AppState *app, SDL_GPUCommandBuffer *cmd,
 
     if (app->scene_textures[scene_idx]) {
         Agentite_Sprite sprite = agentite_sprite_from_texture(app->scene_textures[scene_idx]);
-        float px = (WINDOW_WIDTH - 512) / 2.0f;
-        float py = (WINDOW_HEIGHT - 512) / 2.0f + 200.0f;  /* Move down to avoid UI overlap */
+        /* Sprite uses centered origin (0.5, 0.5), so position is the CENTER */
+        float px = WINDOW_WIDTH / 2.0f;
+        float py = WINDOW_HEIGHT / 2.0f;
         agentite_sprite_draw(app->sprites, &sprite, px, py);
     }
 
     agentite_sprite_upload(app->sprites, cmd);
 
     /* Render to target texture */
-    if (agentite_begin_render_pass_to_texture(app->engine, target, r, g, b, 1.0f)) {
+    if (agentite_begin_render_pass_to_texture(app->engine, target,
+            WINDOW_WIDTH, WINDOW_HEIGHT, r, g, b, 1.0f)) {
         SDL_GPURenderPass *pass = agentite_get_render_pass(app->engine);
         agentite_sprite_render(app->sprites, cmd, pass);
         agentite_end_render_pass_no_submit(app->engine);
@@ -479,8 +481,9 @@ int main(int argc, char *argv[]) {
                 agentite_sprite_begin(app.sprites, NULL);
                 if (app.scene_textures[app.current_scene]) {
                     Agentite_Sprite sprite = agentite_sprite_from_texture(app.scene_textures[app.current_scene]);
-                    float px = (WINDOW_WIDTH - 512) / 2.0f;
-                    float py = (WINDOW_HEIGHT - 512) / 2.0f + 200.0f;  /* Move down to avoid UI overlap */
+                    /* Sprite uses centered origin (0.5, 0.5), so position is the CENTER */
+                    float px = WINDOW_WIDTH / 2.0f;
+                    float py = WINDOW_HEIGHT / 2.0f;
                     agentite_sprite_draw(app.sprites, &sprite, px, py);
                 }
 
