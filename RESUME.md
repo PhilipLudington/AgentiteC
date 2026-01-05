@@ -76,22 +76,35 @@
 - Dark backgrounds behind text ensure readability on all effects (especially Invert)
 - All effects now available on macOS (Metal) - MSL shaders added for all common effects
 
-### Transitions Example (`examples/transitions/main.cpp`) - RUNS, EFFECTS PENDING
+### Transitions Example (`examples/transitions/main.cpp`) - WORKING
 
 **Fixed issues:**
 - [x] Fixed font path (`ProggyClean.ttf` -> `Roboto-Regular.ttf`)
 - [x] Fixed render loop order (upload before render pass)
 - [x] Removed `agentite_sprite_end(NULL, NULL)` that was causing issues
-- [x] Simplified example to show scenes without transition effects
-
-**Architectural issue:**
-Same as postprocess/shaders - transition system requires render-to-texture API.
+- [x] **IMPLEMENTED RENDER-TO-TEXTURE TRANSITIONS** using the new API
+  - Creates two GPU render targets for scene capture
+  - Renders source and destination scenes to separate textures
+  - Applies transition effects via shader system
+- [x] Added shader system and postprocess pipeline
+- [x] Added transition system with configurable effects and easing
+- [x] Added UI showing current effect, easing, duration, and progress
+- [x] Added dark backgrounds for text readability
+- [x] Moved scene texture down 200px to avoid UI overlap
 
 **Current state:**
-- Example runs without crashes
-- Displays 3 colored test scenes that can be switched with 1-3 keys
-- Transition effects commented out with TODO explaining the issue
-- Scene switching works (instant, no transition animation)
+- Example runs with working transition effects
+- Displays 3 colored test scenes with distinct patterns (circles, stripes, grid)
+- Controls:
+  - 1-3: Switch scenes (with animated transition)
+  - T: Cycle through transition effects
+  - E: Cycle through easing functions (linear, ease-in-out, quad, cubic, back, bounce)
+  - +/-: Adjust transition duration (0.1s to 3.0s)
+- **Working effects:**
+  - **Fade**: Uses brightness shader for smooth fade-through-black
+  - **Pixelate**: Uses pixelate shader with animated pixel size (up then down)
+- **Not yet implemented** (require dedicated two-texture blend shaders):
+  - Crossfade, Wipe (left/right/up/down), Circle open/close, Slide, Push
 
 ### Lighting Example (`examples/lighting/main.cpp`) - RUNS, EFFECTS MAY BE PARTIAL
 
@@ -285,8 +298,14 @@ File: `src/graphics/shader.cpp` - MSL shader sources and registration in `init_b
 ## Future Work
 
 ### Other Examples
-- Update transitions example to use new render-to-texture API
+- ~~Update transitions example to use new render-to-texture API~~ ✅ DONE
 - Update lighting example if it needs render-to-texture for shadows/effects
+
+### Transition Shaders
+- Implement crossfade shader (blend two textures with alpha)
+- Implement wipe shaders (horizontal/vertical/diagonal wipe with softness)
+- Implement circle/iris shader (radial wipe from center)
+- Implement slide/push shaders (offset-based scene movement)
 
 ### Remaining MSL Shaders
 - Add MSL for Gaussian blur, outline, glow, and dissolve effects
