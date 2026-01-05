@@ -1199,77 +1199,141 @@ static bool create_gpu_resources(Agentite_LightingSystem *ls)
         return ls && ls->shaders_initialized;
     }
 
-    /* Check for MSL support (Metal on macOS) */
+    /* Check for shader format support */
     SDL_GPUShaderFormat formats = agentite_shader_get_formats(ls->shader_system);
+    bool has_spirv = (formats & SDL_GPU_SHADERFORMAT_SPIRV) != 0;
     bool has_msl = (formats & SDL_GPU_SHADERFORMAT_MSL) != 0;
 
-    if (!has_msl) {
-        /* For non-Metal platforms, we need SPIR-V shaders */
-        /* TODO: Add SPIR-V shader loading when cross-platform support is needed */
-        SDL_Log("Lighting: MSL shaders not supported, lighting will be disabled");
-        return true;
+    /* Try SPIR-V first (Vulkan, D3D12) */
+    if (has_spirv) {
+        SDL_Log("Lighting: Loading SPIR-V shaders for Vulkan/D3D12");
+
+        Agentite_ShaderDesc desc = AGENTITE_SHADER_DESC_DEFAULT;
+        desc.num_fragment_uniforms = 1;
+        desc.num_fragment_samplers = 0;
+        desc.blend_mode = AGENTITE_BLEND_ADDITIVE;
+
+        /* Point light shader */
+        ls->point_light_shader = agentite_shader_load_spirv(ls->shader_system,
+            "assets/shaders/lighting/lighting.vert.spv",
+            "assets/shaders/lighting/point_light.frag.spv",
+            &desc);
+        if (!ls->point_light_shader) {
+            SDL_Log("Lighting: Failed to create point light shader: %s",
+                    agentite_get_last_error());
+        }
+
+        /* Spot light shader */
+        ls->spot_light_shader = agentite_shader_load_spirv(ls->shader_system,
+            "assets/shaders/lighting/lighting.vert.spv",
+            "assets/shaders/lighting/spot_light.frag.spv",
+            &desc);
+        if (!ls->spot_light_shader) {
+            SDL_Log("Lighting: Failed to create spot light shader: %s",
+                    agentite_get_last_error());
+        }
+
+        /* Composite shader (uses scene texture + light texture) */
+        desc.num_fragment_samplers = 2;
+        desc.blend_mode = AGENTITE_BLEND_NONE;
+        ls->composite_shader = agentite_shader_load_spirv(ls->shader_system,
+            "assets/shaders/lighting/lighting.vert.spv",
+            "assets/shaders/lighting/composite.frag.spv",
+            &desc);
+        if (!ls->composite_shader) {
+            SDL_Log("Lighting: Failed to create composite shader: %s",
+                    agentite_get_last_error());
+        }
+
+        /* Ambient shader */
+        desc.num_fragment_samplers = 0;
+        ls->ambient_shader = agentite_shader_load_spirv(ls->shader_system,
+            "assets/shaders/lighting/lighting.vert.spv",
+            "assets/shaders/lighting/ambient.frag.spv",
+            &desc);
+        if (!ls->ambient_shader) {
+            SDL_Log("Lighting: Failed to create ambient shader: %s",
+                    agentite_get_last_error());
+        }
+
+        /* Point light shadow shader (samples from shadow map texture) */
+        desc.num_fragment_samplers = 1;
+        desc.blend_mode = AGENTITE_BLEND_ADDITIVE;
+        ls->point_light_shadow_shader = agentite_shader_load_spirv(ls->shader_system,
+            "assets/shaders/lighting/lighting.vert.spv",
+            "assets/shaders/lighting/point_light_shadow.frag.spv",
+            &desc);
+        if (!ls->point_light_shadow_shader) {
+            SDL_Log("Lighting: Failed to create point light shadow shader: %s",
+                    agentite_get_last_error());
+        }
     }
+    /* Fall back to MSL (Metal on macOS/iOS) */
+    else if (has_msl) {
+        Agentite_ShaderDesc desc = AGENTITE_SHADER_DESC_DEFAULT;
+        desc.num_fragment_uniforms = 1;
+        desc.num_fragment_samplers = 0;
+        desc.blend_mode = AGENTITE_BLEND_ADDITIVE;
+        desc.vertex_entry = "lighting_vertex";
+        desc.fragment_entry = "point_light_fragment";
 
-    /* Shader description for fullscreen quad shaders */
-    Agentite_ShaderDesc desc = AGENTITE_SHADER_DESC_DEFAULT;
-    desc.num_fragment_uniforms = 1;
-    desc.num_fragment_samplers = 0;
-    desc.blend_mode = AGENTITE_BLEND_ADDITIVE;  /* Lights are additive */
-    desc.vertex_entry = "lighting_vertex";
-    desc.fragment_entry = "point_light_fragment";
+        /* Create point light shader */
+        ls->point_light_shader = agentite_shader_load_msl(ls->shader_system,
+                                                           point_light_msl,
+                                                           &desc);
+        if (!ls->point_light_shader) {
+            SDL_Log("Lighting: Failed to create point light shader: %s",
+                    agentite_get_last_error());
+        }
 
-    /* Create point light shader */
-    ls->point_light_shader = agentite_shader_load_msl(ls->shader_system,
-                                                       point_light_msl,
+        /* Create spot light shader */
+        desc.fragment_entry = "spot_light_fragment";
+        ls->spot_light_shader = agentite_shader_load_msl(ls->shader_system,
+                                                          spot_light_msl,
+                                                          &desc);
+        if (!ls->spot_light_shader) {
+            SDL_Log("Lighting: Failed to create spot light shader: %s",
+                    agentite_get_last_error());
+        }
+
+        /* Create composite shader (uses scene texture + light texture) */
+        desc.num_fragment_samplers = 2;
+        desc.blend_mode = AGENTITE_BLEND_NONE;
+        desc.fragment_entry = "composite_fragment";
+        ls->composite_shader = agentite_shader_load_msl(ls->shader_system,
+                                                         composite_msl,
+                                                         &desc);
+        if (!ls->composite_shader) {
+            SDL_Log("Lighting: Failed to create composite shader: %s",
+                    agentite_get_last_error());
+        }
+
+        /* Create ambient shader */
+        desc.num_fragment_samplers = 0;
+        desc.fragment_entry = "ambient_fragment";
+        ls->ambient_shader = agentite_shader_load_msl(ls->shader_system,
+                                                       ambient_msl,
                                                        &desc);
-    if (!ls->point_light_shader) {
-        SDL_Log("Lighting: Failed to create point light shader: %s",
-                agentite_get_last_error());
-    }
+        if (!ls->ambient_shader) {
+            SDL_Log("Lighting: Failed to create ambient shader: %s",
+                    agentite_get_last_error());
+        }
 
-    /* Create spot light shader */
-    desc.fragment_entry = "spot_light_fragment";
-    ls->spot_light_shader = agentite_shader_load_msl(ls->shader_system,
-                                                      spot_light_msl,
-                                                      &desc);
-    if (!ls->spot_light_shader) {
-        SDL_Log("Lighting: Failed to create spot light shader: %s",
-                agentite_get_last_error());
+        /* Create point light shadow shader (samples from shadow map texture) */
+        desc.num_fragment_samplers = 1;
+        desc.blend_mode = AGENTITE_BLEND_ADDITIVE;
+        desc.fragment_entry = "point_light_shadow_fragment";
+        ls->point_light_shadow_shader = agentite_shader_load_msl(ls->shader_system,
+                                                                  point_light_shadow_msl,
+                                                                  &desc);
+        if (!ls->point_light_shadow_shader) {
+            SDL_Log("Lighting: Failed to create point light shadow shader: %s",
+                    agentite_get_last_error());
+        }
     }
-
-    /* Create composite shader (uses scene texture + light texture) */
-    desc.num_fragment_samplers = 2;
-    desc.blend_mode = AGENTITE_BLEND_NONE;  /* Direct output */
-    desc.fragment_entry = "composite_fragment";
-    ls->composite_shader = agentite_shader_load_msl(ls->shader_system,
-                                                     composite_msl,
-                                                     &desc);
-    if (!ls->composite_shader) {
-        SDL_Log("Lighting: Failed to create composite shader: %s",
-                agentite_get_last_error());
-    }
-
-    /* Create ambient shader */
-    desc.num_fragment_samplers = 0;
-    desc.fragment_entry = "ambient_fragment";
-    ls->ambient_shader = agentite_shader_load_msl(ls->shader_system,
-                                                   ambient_msl,
-                                                   &desc);
-    if (!ls->ambient_shader) {
-        SDL_Log("Lighting: Failed to create ambient shader: %s",
-                agentite_get_last_error());
-    }
-
-    /* Create point light shadow shader (samples from shadow map texture) */
-    desc.num_fragment_samplers = 1;  /* Shadow map texture */
-    desc.blend_mode = AGENTITE_BLEND_ADDITIVE;
-    desc.fragment_entry = "point_light_shadow_fragment";
-    ls->point_light_shadow_shader = agentite_shader_load_msl(ls->shader_system,
-                                                              point_light_shadow_msl,
-                                                              &desc);
-    if (!ls->point_light_shadow_shader) {
-        SDL_Log("Lighting: Failed to create point light shadow shader: %s",
-                agentite_get_last_error());
+    else {
+        SDL_Log("Lighting: No supported shader format (need SPIR-V or MSL)");
+        return true;
     }
 
     /* Create sampler */
