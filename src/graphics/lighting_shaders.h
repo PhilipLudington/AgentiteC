@@ -42,7 +42,10 @@ struct PointLightParams {
 
 vertex VertexOutput lighting_vertex(VertexInput in [[stage_in]]) {
     VertexOutput out;
-    out.position = float4(in.position, 0.0, 1.0);
+    // Convert unit coords (0-1) to clip space (-1 to +1), flip Y for screen coords
+    float2 clip_pos = in.position * 2.0 - 1.0;
+    clip_pos.y = -clip_pos.y;
+    out.position = float4(clip_pos, 0.0, 1.0);
     out.texcoord = in.texcoord;
     return out;
 }
@@ -89,6 +92,130 @@ fragment float4 point_light_fragment(
 )";
 
 /* ============================================================================
+ * Point Light Shadow Shader (Vertex + Fragment)
+ *
+ * Renders a radial gradient with shadow map sampling for occluder shadows.
+ * The shadow map is a 1D texture containing distances from the light center
+ * to the nearest occluder at each angle.
+ * ============================================================================ */
+
+static const char *point_light_shadow_msl = R"(
+#include <metal_stdlib>
+using namespace metal;
+
+struct VertexInput {
+    float2 position [[attribute(0)]];
+    float2 texcoord [[attribute(1)]];
+};
+
+struct VertexOutput {
+    float4 position [[position]];
+    float2 texcoord;
+};
+
+struct PointLightShadowParams {
+    float2 light_center;    // Light center in UV space (0-1)
+    float radius;           // Light radius in UV space
+    float intensity;        // Light intensity multiplier
+    float4 color;           // RGBA color
+    float falloff_type;     // 0=linear, 1=quadratic, 2=smooth, 3=none
+    float shadow_softness;  // Shadow edge softness (world units)
+    float2 aspect;          // Aspect ratio correction (width/height, 1.0)
+    float2 lightmap_size;   // Lightmap dimensions (width, height) for UV to world
+    float radius_world;     // Light radius in world units
+    float _pad;
+};
+
+vertex VertexOutput lighting_vertex(VertexInput in [[stage_in]]) {
+    VertexOutput out;
+    // Convert unit coords (0-1) to clip space (-1 to +1), flip Y for screen coords
+    float2 clip_pos = in.position * 2.0 - 1.0;
+    clip_pos.y = -clip_pos.y;
+    out.position = float4(clip_pos, 0.0, 1.0);
+    out.texcoord = in.texcoord;
+    return out;
+}
+
+float apply_falloff_shadow(float dist, float falloff_type) {
+    if (falloff_type < 0.5) {
+        // Linear falloff
+        return 1.0 - dist;
+    } else if (falloff_type < 1.5) {
+        // Quadratic falloff
+        return 1.0 / (1.0 + dist * dist * 4.0);
+    } else if (falloff_type < 2.5) {
+        // Smooth (smoothstep) falloff
+        return 1.0 - dist * dist * (3.0 - 2.0 * dist);
+    } else {
+        // No falloff
+        return 1.0;
+    }
+}
+
+fragment float4 point_light_shadow_fragment(
+    VertexOutput in [[stage_in]],
+    texture2d<float> shadow_map [[texture(0)]],
+    sampler shadow_sampler [[sampler(0)]],
+    constant PointLightShadowParams& params [[buffer(0)]]
+) {
+    // Calculate delta in UV space
+    float2 delta_uv = in.texcoord - params.light_center;
+
+    // Convert to world coordinates for shadow map comparison
+    // UV space (0-1) * lightmap dimensions = world/pixel coordinates
+    float2 delta_world = delta_uv * params.lightmap_size;
+    float dist_world = length(delta_world);
+
+    // Calculate distance WITH aspect correction (for circular falloff display)
+    float2 delta_aspect = delta_uv * params.aspect;
+    float dist_uv = length(delta_aspect);
+    float dist_normalized = dist_uv / params.radius;
+
+    // Outside radius = no contribution
+    if (dist_normalized >= 1.0) {
+        return float4(0.0);
+    }
+
+    // Calculate angle in WORLD coordinates (matching shadow map generation)
+    // Shadow map was generated with rays going OUTWARD from light at each angle
+    // For a pixel at position P, we need the angle of the ray FROM LIGHT TO PIXEL
+    // atan2 gives us the direction from light to pixel, which matches the shadow map
+    float angle = atan2(delta_world.y, delta_world.x);  // -PI to PI
+    if (angle < 0.0) angle += 2.0 * M_PI_F;  // Convert to [0, 2*PI]
+    float angle_normalized = angle / (2.0 * M_PI_F);  // 0 to 1
+
+    // Clamp to valid range to avoid sampling artifacts at edges
+    angle_normalized = clamp(angle_normalized, 0.001, 0.999);
+
+    // Sample shadow map at this angle
+    // shadow_map contains distances in world units (pixels)
+    float shadow_dist = shadow_map.sample(shadow_sampler, float2(angle_normalized, 0.5)).r;
+
+    // Shadow test with soft edge
+    // If fragment is further than shadow distance, it's in shadow
+    float shadow_softness = params.shadow_softness;
+    if (shadow_softness < 0.001) shadow_softness = 4.0;  // Default softness in world units
+
+    float shadow = smoothstep(shadow_dist - shadow_softness,
+                              shadow_dist + shadow_softness,
+                              dist_world);
+
+    // Apply falloff using aspect-corrected normalized distance
+    float attenuation = apply_falloff_shadow(dist_normalized, params.falloff_type);
+
+    // Reduce light contribution in shadow regions
+    attenuation *= (1.0 - shadow);
+
+    // Final color with intensity
+    float4 result = params.color;
+    result.rgb *= attenuation * params.intensity;
+    result.a = attenuation * params.intensity;
+
+    return result;
+}
+)";
+
+/* ============================================================================
  * Spot Light Shader (Vertex + Fragment)
  *
  * Renders a cone-shaped light with direction, inner/outer angles, and falloff.
@@ -122,7 +249,10 @@ struct SpotLightParams {
 
 vertex VertexOutput lighting_vertex(VertexInput in [[stage_in]]) {
     VertexOutput out;
-    out.position = float4(in.position, 0.0, 1.0);
+    // Convert unit coords (0-1) to clip space (-1 to +1), flip Y for screen coords
+    float2 clip_pos = in.position * 2.0 - 1.0;
+    clip_pos.y = -clip_pos.y;
+    out.position = float4(clip_pos, 0.0, 1.0);
     out.texcoord = in.texcoord;
     return out;
 }
@@ -210,7 +340,10 @@ struct CompositeParams {
 
 vertex VertexOutput lighting_vertex(VertexInput in [[stage_in]]) {
     VertexOutput out;
-    out.position = float4(in.position, 0.0, 1.0);
+    // Convert unit coords (0-1) to clip space (-1 to +1), flip Y for screen coords
+    float2 clip_pos = in.position * 2.0 - 1.0;
+    clip_pos.y = -clip_pos.y;
+    out.position = float4(clip_pos, 0.0, 1.0);
     out.texcoord = in.texcoord;
     return out;
 }
@@ -282,7 +415,10 @@ struct AmbientParams {
 
 vertex VertexOutput lighting_vertex(VertexInput in [[stage_in]]) {
     VertexOutput out;
-    out.position = float4(in.position, 0.0, 1.0);
+    // Convert unit coords (0-1) to clip space (-1 to +1), flip Y for screen coords
+    float2 clip_pos = in.position * 2.0 - 1.0;
+    clip_pos.y = -clip_pos.y;
+    out.position = float4(clip_pos, 0.0, 1.0);
     out.texcoord = in.texcoord;
     return out;
 }

@@ -145,9 +145,16 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    /* Create postprocess pipeline */
+    /* Get dimensions */
+    int drawable_w, drawable_h;
+    agentite_get_drawable_size(app.engine, &drawable_w, &drawable_h);
+    float dpi_scale = agentite_get_dpi_scale(app.engine);
+
+    /* Create postprocess pipeline at LOGICAL size to match sprite renderer.
+     * The sprite renderer's ortho projection uses logical coords, so the
+     * render target must also use logical dimensions for correct positioning. */
     Agentite_PostProcessConfig pp_cfg = AGENTITE_POSTPROCESS_CONFIG_DEFAULT;
-    pp_cfg.width = WINDOW_WIDTH;
+    pp_cfg.width = WINDOW_WIDTH;   /* Logical size */
     pp_cfg.height = WINDOW_HEIGHT;
     app.postprocess = agentite_postprocess_create(app.shaders, window, &pp_cfg);
     if (!app.postprocess) {
@@ -155,14 +162,21 @@ int main(int argc, char *argv[]) {
         printf("Effects will be disabled.\n");
     }
 
+    /* Keep sprite and text renderers at LOGICAL dimensions (default).
+     * Don't call set_screen_size - they're already at 1280x720 from init. */
+
+    printf("DEBUG: Postprocess target: %d x %d (logical)\n", pp_cfg.width, pp_cfg.height);
+    printf("DEBUG: Physical size: %d x %d\n", drawable_w, drawable_h);
+    printf("DEBUG: DPI scale: %.2f\n", dpi_scale);
+
     /* Create test scene */
     app.scene_texture = create_test_scene(app.sprites);
 
     /* Create dark background texture for UI text readability */
     app.ui_bg_texture = create_solid_texture(app.sprites, 0, 0, 0, 200);
 
-    /* Start with grayscale effect to demonstrate postprocess */
-    app.current_effect = AGENTITE_SHADER_GRAYSCALE;
+    /* Start with no effect for testing - press 1 for grayscale */
+    app.current_effect = AGENTITE_SHADER_NONE;
 
     printf("Shader System Example\n");
     printf("=====================\n");
@@ -250,12 +264,35 @@ int main(int argc, char *argv[]) {
 
             if (app.scene_texture) {
                 Agentite_Sprite sprite = agentite_sprite_from_texture(app.scene_texture);
-                agentite_sprite_draw_scaled(app.sprites, &sprite,
-                    (WINDOW_WIDTH - 512) / 2.0f, (WINDOW_HEIGHT - 512) / 2.0f + 200.0f,
-                    1.0f, 1.0f);
+                /* Draw centered in window */
+                float x = (WINDOW_WIDTH - 512) / 2.0f;
+                float y = (WINDOW_HEIGHT - 512) / 2.0f;
+
+                static bool logged_pos = false;
+                if (!logged_pos) {
+                    printf("DEBUG: Drawing sprite at (%f, %f) size 512x512\n", x, y);
+                    printf("DEBUG: WINDOW_WIDTH=%d, WINDOW_HEIGHT=%d\n", WINDOW_WIDTH, WINDOW_HEIGHT);
+                    logged_pos = true;
+                }
+
+                /* Use agentite_sprite_draw like hidpi does */
+                sprite.origin_x = 0.0f;  /* Top-left origin for this positioning */
+                sprite.origin_y = 0.0f;
+                agentite_sprite_draw(app.sprites, &sprite, x, y);
             }
 
-            /* Prepare text batch (same for both paths) */
+            /* Draw red border lines at window edges (like hidpi example) */
+            if (app.ui_bg_texture) {
+                Agentite_Sprite line = agentite_sprite_from_texture(app.ui_bg_texture);
+                const float LINE_W = 3.0f;
+                /* Use draw_scaled with explicit dimensions */
+                agentite_sprite_draw_scaled(app.sprites, &line, 0, 0, LINE_W, (float)WINDOW_HEIGHT);                    /* Left */
+                agentite_sprite_draw_scaled(app.sprites, &line, WINDOW_WIDTH - LINE_W, 0, LINE_W, (float)WINDOW_HEIGHT); /* Right */
+                agentite_sprite_draw_scaled(app.sprites, &line, 0, 0, (float)WINDOW_WIDTH, LINE_W);                      /* Top */
+                agentite_sprite_draw_scaled(app.sprites, &line, 0, WINDOW_HEIGHT - LINE_W, (float)WINDOW_WIDTH, LINE_W); /* Bottom */
+            }
+
+            /* Prepare text batch - use logical coordinates */
             if (app.text && app.font) {
                 agentite_text_begin(app.text);
                 agentite_text_draw_colored(app.text, app.font,
@@ -283,8 +320,10 @@ int main(int argc, char *argv[]) {
             if (app.text) agentite_text_upload(app.text, cmd);
 
             if (use_postprocess) {
-                /* Pass 1: Render scene to postprocess target texture */
-                if (agentite_begin_render_pass_to_texture(app.engine, pp_target, 0.1f, 0.1f, 0.15f, 1.0f)) {
+                /* Pass 1: Render scene to postprocess target texture.
+                 * Use LOGICAL dimensions to match sprite renderer's ortho projection. */
+                if (agentite_begin_render_pass_to_texture(app.engine, pp_target,
+                        WINDOW_WIDTH, WINDOW_HEIGHT, 0.1f, 0.1f, 0.15f, 1.0f)) {
                     SDL_GPURenderPass *pass = agentite_get_render_pass(app.engine);
                     agentite_sprite_render(app.sprites, cmd, pass);
                     agentite_end_render_pass_no_submit(app.engine);
@@ -294,9 +333,9 @@ int main(int argc, char *argv[]) {
                 agentite_sprite_begin(app.sprites, NULL);
                 if (app.ui_bg_texture) {
                     Agentite_Sprite ui_bg = agentite_sprite_from_texture(app.ui_bg_texture);
-                    /* Top text area background - text at (10,10) and (10,30), font 16px */
+                    /* Top text area background */
                     agentite_sprite_draw_scaled(app.sprites, &ui_bg, 5, 5, 360, 55);
-                    /* Bottom text area background - text at (10, WINDOW_HEIGHT-30) */
+                    /* Bottom text area background */
                     agentite_sprite_draw_scaled(app.sprites, &ui_bg, 5, WINDOW_HEIGHT - 35, 400, 26);
                 }
                 agentite_sprite_upload(app.sprites, cmd);
@@ -332,8 +371,10 @@ int main(int argc, char *argv[]) {
                     }
 
                     /* Apply postprocess effect */
+                    int phys_w, phys_h;
+                    agentite_get_drawable_size(app.engine, &phys_w, &phys_h);
                     agentite_postprocess_begin(app.postprocess, cmd, pp_target);
-                    agentite_postprocess_apply(app.postprocess, cmd, pass, effect_shader, params);
+                    agentite_postprocess_apply_scaled(app.postprocess, cmd, pass, effect_shader, params, phys_w, phys_h);
                     agentite_postprocess_end(app.postprocess, cmd, pass);
 
                     /* Render UI backgrounds on top of postprocess (not affected by effect) */

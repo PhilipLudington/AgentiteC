@@ -150,6 +150,7 @@ dirs:
 	@mkdir -p $(BUILD_DIR)/examples/shaders
 	@mkdir -p $(BUILD_DIR)/examples/transitions
 	@mkdir -p $(BUILD_DIR)/examples/lighting
+	@mkdir -p $(BUILD_DIR)/examples/hidpi
 
 # Link main executable (game template)
 $(BUILD_DIR)/$(EXECUTABLE): $(OBJS) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS)
@@ -335,6 +336,11 @@ example-transitions: dirs $(BUILD_DIR)/examples/transitions/main.o $(patsubst $(
 example-lighting: dirs $(BUILD_DIR)/examples/lighting/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
 	$(CXX) $(BUILD_DIR)/examples/lighting/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-lighting $(LDFLAGS)
 	./$(BUILD_DIR)/example-lighting
+
+# Build and run HiDPI test (minimal reproduction of postprocess positioning bug)
+example-hidpi: dirs $(BUILD_DIR)/examples/hidpi/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/hidpi/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-hidpi $(LDFLAGS)
+	./$(BUILD_DIR)/example-hidpi
 
 #============================================================================
 # Test targets

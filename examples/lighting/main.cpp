@@ -125,12 +125,13 @@ static Agentite_Texture *create_scene(Agentite_SpriteRenderer *sr) {
 
 /* Create shadow occluders matching the scene walls */
 static void create_occluders(AppState *app) {
-    float scene_offset_y = (WINDOW_HEIGHT - 512) / 2.0f + 300.0f;
+    float scene_offset_x = (WINDOW_WIDTH - 512) / 2.0f;   /* 384 */
+    float scene_offset_y = (WINDOW_HEIGHT - 512) / 2.0f;  /* 104 - centered */
 
     /* Central pillar */
     Agentite_Occluder pillar;
     pillar.type = AGENTITE_OCCLUDER_BOX;
-    pillar.box.x = 200 + (WINDOW_WIDTH - 512) / 2.0f;
+    pillar.box.x = 200 + scene_offset_x;
     pillar.box.y = 200 + scene_offset_y;
     pillar.box.w = 50;
     pillar.box.h = 50;
@@ -139,7 +140,7 @@ static void create_occluders(AppState *app) {
     /* Left wall */
     Agentite_Occluder wall1;
     wall1.type = AGENTITE_OCCLUDER_BOX;
-    wall1.box.x = 50 + (WINDOW_WIDTH - 512) / 2.0f;
+    wall1.box.x = 50 + scene_offset_x;
     wall1.box.y = 100 + scene_offset_y;
     wall1.box.w = 10;
     wall1.box.h = 200;
@@ -148,7 +149,7 @@ static void create_occluders(AppState *app) {
     /* Top wall */
     Agentite_Occluder wall2;
     wall2.type = AGENTITE_OCCLUDER_BOX;
-    wall2.box.x = 400 + (WINDOW_WIDTH - 512) / 2.0f;
+    wall2.box.x = 400 + scene_offset_x;
     wall2.box.y = 50 + scene_offset_y;
     wall2.box.w = 50;
     wall2.box.h = 10;
@@ -157,7 +158,7 @@ static void create_occluders(AppState *app) {
     /* Bottom wall */
     Agentite_Occluder wall3;
     wall3.type = AGENTITE_OCCLUDER_BOX;
-    wall3.box.x = 300 + (WINDOW_WIDTH - 512) / 2.0f;
+    wall3.box.x = 300 + scene_offset_x;
     wall3.box.y = 350 + scene_offset_y;
     wall3.box.w = 50;
     wall3.box.h = 100;
@@ -204,6 +205,8 @@ int main(int argc, char *argv[]) {
     light_cfg.max_point_lights = MAX_LIGHTS;
     light_cfg.lightmap_width = WINDOW_WIDTH;
     light_cfg.lightmap_height = WINDOW_HEIGHT;
+    light_cfg.enable_shadows = true;      /* Enable shadow casting */
+    light_cfg.shadow_ray_count = 720;     /* 720 rays for high quality shadows */
     app.lighting = agentite_lighting_create(gpu, app.shaders, window, &light_cfg);
 
     /* Set initial ambient light (dark) */
@@ -232,15 +235,17 @@ int main(int argc, char *argv[]) {
     /* Create occluders */
     create_occluders(&app);
 
-    /* Add initial light at scene center */
-    /* Use logical coordinates (matching sprite/lightmap space, not physical pixels) */
-    float scene_center_x = 420.0f;
-    float scene_center_y = 400.0f;
+    /* Add initial light to the RIGHT of the pillar for clear shadow testing
+     * Scene texture is at (384, 104) with size 512x512
+     * Central pillar is at (584, 304) with size 50x50
+     * Place light clearly to the right so shadow direction is obvious */
+    float light_x = 800.0f;   /* Right side of scene */
+    float light_y = 350.0f;   /* Middle height */
 
     Agentite_PointLightDesc initial_light = AGENTITE_POINT_LIGHT_DEFAULT;
-    initial_light.x = scene_center_x;
-    initial_light.y = scene_center_y;
-    initial_light.radius = 200.0f;
+    initial_light.x = light_x;
+    initial_light.y = light_y;
+    initial_light.radius = 400.0f;  /* Large radius to reach all occluders */
     initial_light.color = LIGHT_COLORS[1];  /* Warm */
     initial_light.casts_shadows = true;
     agentite_lighting_add_point_light(app.lighting, &initial_light);
@@ -350,8 +355,9 @@ int main(int argc, char *argv[]) {
             agentite_sprite_begin(app.sprites, NULL);
             if (app.scene_texture) {
                 Agentite_Sprite sprite = agentite_sprite_from_texture(app.scene_texture);
-                float px = (WINDOW_WIDTH - 512) / 2.0f;
-                float py = (WINDOW_HEIGHT - 512) / 2.0f + 300.0f;
+                /* Sprite uses centered origin (0.5, 0.5), so position is the CENTER */
+                float px = WINDOW_WIDTH / 2.0f;
+                float py = WINDOW_HEIGHT / 2.0f;
                 agentite_sprite_draw(app.sprites, &sprite, px, py);
             }
 
@@ -363,11 +369,12 @@ int main(int argc, char *argv[]) {
                 Agentite_LightingStats stats;
                 agentite_lighting_get_stats(app.lighting, &stats);
                 snprintf(info, sizeof(info),
-                    "Lights: %d  Mode: %s  Color: %s  Radius: %.0f  Debug: %s",
+                    "Lights: %d  Mode: %s  Color: %s  Radius: %.0f  Shadows: %s  Debug: %s",
                     stats.point_light_count + stats.spot_light_count,
                     app.spot_mode ? "Spot" : "Point",
                     COLOR_NAMES[app.color_mode],
                     app.light_radius,
+                    app.shadows_enabled ? "ON" : "OFF",
                     app.show_debug ? "ON" : "OFF");
                 agentite_text_draw_colored(app.text, app.font, info, 10, 10, 1, 1, 1, 0.9f);
 
@@ -415,6 +422,23 @@ int main(int argc, char *argv[]) {
                     }
                 }
 
+                /* Draw occluder boxes in green */
+                float scene_offset_x = (WINDOW_WIDTH - 512) / 2.0f;
+                float scene_offset_y = (WINDOW_HEIGHT - 512) / 2.0f;
+
+                /* Central pillar */
+                agentite_gizmos_rect_2d(app.gizmos,
+                    200 + scene_offset_x, 200 + scene_offset_y, 50, 50, 0x00FF0080);
+                /* Left wall */
+                agentite_gizmos_rect_2d(app.gizmos,
+                    50 + scene_offset_x, 100 + scene_offset_y, 10, 200, 0x00FF0080);
+                /* Top wall */
+                agentite_gizmos_rect_2d(app.gizmos,
+                    400 + scene_offset_x, 50 + scene_offset_y, 50, 10, 0x00FF0080);
+                /* Bottom wall */
+                agentite_gizmos_rect_2d(app.gizmos,
+                    300 + scene_offset_x, 350 + scene_offset_y, 50, 100, 0x00FF0080);
+
                 agentite_gizmos_end(app.gizmos);
                 agentite_gizmos_upload(app.gizmos, cmd);
             }
@@ -425,7 +449,8 @@ int main(int argc, char *argv[]) {
 
             /* Step 2: Render scene to intermediate texture */
             if (app.scene_target && agentite_begin_render_pass_to_texture(
-                    app.engine, app.scene_target, 0.05f, 0.05f, 0.1f, 1.0f)) {
+                    app.engine, app.scene_target, WINDOW_WIDTH, WINDOW_HEIGHT,
+                    0.05f, 0.05f, 0.1f, 1.0f)) {
                 SDL_GPURenderPass *pass = agentite_get_render_pass(app.engine);
                 agentite_sprite_render(app.sprites, cmd, pass);
                 agentite_end_render_pass_no_submit(app.engine);

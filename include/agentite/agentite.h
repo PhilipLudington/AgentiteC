@@ -255,6 +255,8 @@ bool agentite_begin_render_pass_no_clear(Agentite_Engine *engine);
  *
  * @param engine Engine instance
  * @param target Target texture (must be created with render target usage)
+ * @param width Target texture width (for viewport)
+ * @param height Target texture height (for viewport)
  * @param r Red clear color (0.0-1.0)
  * @param g Green clear color (0.0-1.0)
  * @param b Blue clear color (0.0-1.0)
@@ -263,6 +265,7 @@ bool agentite_begin_render_pass_no_clear(Agentite_Engine *engine);
  */
 bool agentite_begin_render_pass_to_texture(Agentite_Engine *engine,
                                             SDL_GPUTexture *target,
+                                            int width, int height,
                                             float r, float g, float b, float a);
 
 /**
@@ -271,10 +274,13 @@ bool agentite_begin_render_pass_to_texture(Agentite_Engine *engine,
  *
  * @param engine Engine instance
  * @param target Target texture (must be created with render target usage)
+ * @param width Target texture width (for viewport)
+ * @param height Target texture height (for viewport)
  * @return true on success
  */
 bool agentite_begin_render_pass_to_texture_no_clear(Agentite_Engine *engine,
-                                                     SDL_GPUTexture *target);
+                                                     SDL_GPUTexture *target,
+                                                     int width, int height);
 
 /**
  * End the render pass but keep the command buffer open.

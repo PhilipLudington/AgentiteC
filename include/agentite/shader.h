@@ -392,6 +392,26 @@ void agentite_postprocess_apply(Agentite_PostProcess *pp,
                                 const void *params);
 
 /**
+ * Apply post-processing effect with explicit output dimensions.
+ * Use this on HiDPI displays to ensure correct fullscreen quad rendering.
+ *
+ * @param pp Post-process pipeline
+ * @param cmd Command buffer
+ * @param pass Render pass
+ * @param shader Shader to apply
+ * @param params Optional parameters (shader-specific, can be NULL)
+ * @param output_width Width of the output render target (e.g., physical/drawable width)
+ * @param output_height Height of the output render target (e.g., physical/drawable height)
+ */
+void agentite_postprocess_apply_scaled(Agentite_PostProcess *pp,
+                                        SDL_GPUCommandBuffer *cmd,
+                                        SDL_GPURenderPass *pass,
+                                        Agentite_Shader *shader,
+                                        const void *params,
+                                        int output_width,
+                                        int output_height);
+
+/**
  * End post-processing and output final result.
  * Call after all apply() calls.
  */

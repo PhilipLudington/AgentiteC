@@ -1130,6 +1130,13 @@ void agentite_sprite_end(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
                 float padding[2];
             } uniforms;
 
+            static bool logged_ortho = false;
+            if (!logged_ortho) {
+                SDL_Log("DEBUG: Sprite render - camera=%p, screen_size=%dx%d, sprite_count=%d",
+                        (void*)sr->camera, sr->screen_width, sr->screen_height, sr->sprite_count);
+                logged_ortho = true;
+            }
+
             if (sr->camera) {
                 const float *vp = agentite_camera_get_vp_matrix(sr->camera);
                 memcpy(uniforms.view_projection, vp, sizeof(float) * 16);
@@ -1233,6 +1240,13 @@ void agentite_sprite_render(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *c
                           SDL_GPURenderPass *pass)
 {
     if (!sr || !cmd || !pass || sr->sprite_count == 0) return;
+
+    static bool logged_render = false;
+    if (!logged_render) {
+        SDL_Log("DEBUG: agentite_sprite_render - camera=%p, screen=%dx%d, sprites=%d",
+                (void*)sr->camera, sr->screen_width, sr->screen_height, sr->sprite_count);
+        logged_render = true;
+    }
 
     /* Bind pipeline */
     SDL_BindGPUGraphicsPipeline(pass, sr->pipeline);

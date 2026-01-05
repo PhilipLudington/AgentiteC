@@ -258,12 +258,13 @@ bool agentite_begin_render_pass(Agentite_Engine *engine, float r, float g, float
 
     // Acquire swapchain texture
     SDL_GPUTexture *swapchain_texture = NULL;
+    Uint32 swapchain_w = 0, swapchain_h = 0;
     if (!SDL_WaitAndAcquireGPUSwapchainTexture(
             engine->cmd_buffer,
             engine->window,
             &swapchain_texture,
-            NULL,
-            NULL)) {
+            &swapchain_w,
+            &swapchain_h)) {
         agentite_set_error_from_sdl("Failed to acquire swapchain texture");
         SDL_CancelGPUCommandBuffer(engine->cmd_buffer);
         engine->cmd_buffer = NULL;
@@ -279,6 +280,14 @@ bool agentite_begin_render_pass(Agentite_Engine *engine, float r, float g, float
 
     // Cache texture for subsequent render passes
     engine->swapchain_texture = swapchain_texture;
+
+    // Debug: Log swapchain dimensions (first time only)
+    static bool swapchain_logged = false;
+    if (!swapchain_logged) {
+        SDL_Log("DEBUG: Swapchain texture actual size: %u x %u", swapchain_w, swapchain_h);
+        SDL_Log("DEBUG: physical_width/height we're using: %d x %d", engine->physical_width, engine->physical_height);
+        swapchain_logged = true;
+    }
 
     // Set up color target with clear color
     SDL_GPUColorTargetInfo color_target = {};
@@ -301,6 +310,30 @@ bool agentite_begin_render_pass(Agentite_Engine *engine, float r, float g, float
         engine->cmd_buffer = NULL;
         engine->swapchain_texture = NULL;
         return false;
+    }
+
+    // Set viewport to PHYSICAL dimensions to match swapchain texture size
+    // Ortho projections use logical coords, viewport maps to physical pixels
+    SDL_GPUViewport viewport = {};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.w = (float)engine->physical_width;
+    viewport.h = (float)engine->physical_height;
+    viewport.min_depth = 0.0f;
+    viewport.max_depth = 1.0f;
+    SDL_SetGPUViewport(engine->render_pass, &viewport);
+
+    SDL_Rect scissor = {};
+    scissor.x = 0;
+    scissor.y = 0;
+    scissor.w = engine->physical_width;
+    scissor.h = engine->physical_height;
+    SDL_SetGPUScissor(engine->render_pass, &scissor);
+
+    static bool logged = false;
+    if (!logged) {
+        SDL_Log("Swapchain viewport set to: %d x %d (PHYSICAL)", engine->physical_width, engine->physical_height);
+        logged = true;
     }
 
     return true;
@@ -334,11 +367,30 @@ bool agentite_begin_render_pass_no_clear(Agentite_Engine *engine) {
         return false;
     }
 
+    // Set viewport to physical dimensions (critical after render-to-texture passes)
+    SDL_GPUViewport viewport = {};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.w = (float)engine->physical_width;
+    viewport.h = (float)engine->physical_height;
+    viewport.min_depth = 0.0f;
+    viewport.max_depth = 1.0f;
+    SDL_SetGPUViewport(engine->render_pass, &viewport);
+
+    // Also set scissor rect to match viewport
+    SDL_Rect scissor = {};
+    scissor.x = 0;
+    scissor.y = 0;
+    scissor.w = engine->physical_width;
+    scissor.h = engine->physical_height;
+    SDL_SetGPUScissor(engine->render_pass, &scissor);
+
     return true;
 }
 
 bool agentite_begin_render_pass_to_texture(Agentite_Engine *engine,
                                             SDL_GPUTexture *target,
+                                            int width, int height,
                                             float r, float g, float b, float a) {
     if (!engine || !engine->gpu_device) return false;
     if (!target) {
@@ -375,11 +427,36 @@ bool agentite_begin_render_pass_to_texture(Agentite_Engine *engine,
         return false;
     }
 
+    // Set viewport to match target texture dimensions
+    SDL_GPUViewport viewport = {};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.w = (float)width;
+    viewport.h = (float)height;
+    viewport.min_depth = 0.0f;
+    viewport.max_depth = 1.0f;
+    SDL_SetGPUViewport(engine->render_pass, &viewport);
+
+    // Also set scissor rect to match viewport
+    SDL_Rect scissor = {};
+    scissor.x = 0;
+    scissor.y = 0;
+    scissor.w = width;
+    scissor.h = height;
+    SDL_SetGPUScissor(engine->render_pass, &scissor);
+
+    static bool logged_rtt = false;
+    if (!logged_rtt) {
+        SDL_Log("Render-to-texture viewport set to: %d x %d", width, height);
+        logged_rtt = true;
+    }
+
     return true;
 }
 
 bool agentite_begin_render_pass_to_texture_no_clear(Agentite_Engine *engine,
-                                                     SDL_GPUTexture *target) {
+                                                     SDL_GPUTexture *target,
+                                                     int width, int height) {
     if (!engine || !engine->gpu_device) return false;
     if (!target) {
         agentite_set_error("Target texture is NULL");
@@ -413,6 +490,24 @@ bool agentite_begin_render_pass_to_texture_no_clear(Agentite_Engine *engine,
         agentite_set_error_from_sdl("Failed to begin render pass to texture (no clear)");
         return false;
     }
+
+    // Set viewport to match target texture dimensions
+    SDL_GPUViewport viewport = {};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.w = (float)width;
+    viewport.h = (float)height;
+    viewport.min_depth = 0.0f;
+    viewport.max_depth = 1.0f;
+    SDL_SetGPUViewport(engine->render_pass, &viewport);
+
+    // Also set scissor rect to match viewport
+    SDL_Rect scissor = {};
+    scissor.x = 0;
+    scissor.y = 0;
+    scissor.w = width;
+    scissor.h = height;
+    SDL_SetGPUScissor(engine->render_pass, &scissor);
 
     return true;
 }

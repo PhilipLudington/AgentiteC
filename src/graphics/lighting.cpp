@@ -16,6 +16,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
+#include <cfloat>
 
 /* ============================================================================
  * Constants
@@ -160,6 +161,21 @@ typedef struct {
     float _pad[3];
 } CompositeUniforms;
 
+/* Point light shadow uniform data - matches PointLightShadowParams in shader
+ * Metal alignment: float2 requires 8-byte alignment */
+typedef struct {
+    float light_center[2];  /* offset 0: Light center in UV space (0-1) */
+    float radius;           /* offset 8: Light radius in UV space */
+    float intensity;        /* offset 12: Light intensity multiplier */
+    float color[4];         /* offset 16: RGBA color */
+    float falloff_type;     /* offset 32: 0=linear, 1=quadratic, 2=smooth, 3=none */
+    float shadow_softness;  /* offset 36: Shadow edge softness (world units) */
+    float aspect[2];        /* offset 40: Aspect ratio correction */
+    float lightmap_size[2]; /* offset 48: Lightmap dimensions for UV to world conversion */
+    float radius_world;     /* offset 56: Light radius in world units */
+    float _pad;             /* offset 60: padding to 64 bytes */
+} PointLightShadowUniforms;
+
 /* ============================================================================
  * Forward Declarations
  * ============================================================================ */
@@ -173,6 +189,22 @@ static void render_point_light(Agentite_LightingSystem *ls,
                                const InternalPointLight *light,
                                const Agentite_Camera *camera);
 static float apply_falloff(float dist, float radius, Agentite_LightFalloff falloff);
+
+/* Shadow casting */
+static float ray_segment_intersect(float ox, float oy, float dx, float dy,
+                                   float x1, float y1, float x2, float y2);
+static float ray_box_intersect(float ox, float oy, float dx, float dy,
+                               float bx, float by, float bw, float bh);
+static float ray_circle_intersect(float ox, float oy, float dx, float dy,
+                                  float cx, float cy, float r);
+static void generate_shadow_map(Agentite_LightingSystem *ls,
+                                float light_x, float light_y,
+                                float light_radius,
+                                float *shadow_distances);
+static bool upload_shadow_map(Agentite_LightingSystem *ls,
+                              SDL_GPUCommandBuffer *cmd,
+                              const float *shadow_distances);
+static bool create_shadow_map_texture(Agentite_LightingSystem *ls);
 
 /* ============================================================================
  * Lifecycle
@@ -670,7 +702,92 @@ void agentite_lighting_render_lights(Agentite_LightingSystem *ls,
         return;
     }
 
-    /* Begin render pass to lightmap - clear to black (lights add to this) */
+    /* Calculate aspect ratio for correct circular falloff */
+    float aspect_x = (float)ls->lightmap_width / (float)ls->lightmap_height;
+    float aspect_y = 1.0f;
+
+    /* ========================================================================
+     * Shadow Map Generation (before render pass)
+     *
+     * For shadow-casting lights, we generate a shadow map containing the
+     * distance to the nearest occluder at each angle from the light center.
+     * This must happen before the render pass since it uses a copy pass.
+     *
+     * Current limitation: Only one light can cast shadows per frame.
+     * Multiple shadow-casting lights would require multiple shadow map textures.
+     * ======================================================================== */
+
+    uint32_t shadow_light_index = UINT32_MAX;  /* Index of light using shadow map */
+    float *shadow_distances = NULL;
+
+    if (ls->config.enable_shadows && ls->point_light_shadow_shader && ls->occluder_count > 0) {
+        /* Find first shadow-casting point light */
+        for (uint32_t i = 0; i < (uint32_t)ls->config.max_point_lights; i++) {
+            InternalPointLight *light = &ls->point_lights[i];
+            if (!light->active || !light->enabled) continue;
+            if (!light->desc.casts_shadows) continue;
+
+            /* Found a shadow-casting light */
+            shadow_light_index = i;
+            static bool logged = false;
+            if (!logged) {
+                SDL_Log("Lighting: Shadow-casting light found at index %u, %u occluders",
+                        i, ls->occluder_count);
+                logged = true;
+            }
+
+            /* Initialize shadow map resolution if needed */
+            if (ls->shadow_map_resolution <= 0) {
+                ls->shadow_map_resolution = ls->config.shadow_ray_count > 0
+                    ? ls->config.shadow_ray_count : 720;
+            }
+
+            /* Allocate shadow distances array */
+            shadow_distances = (float *)malloc((size_t)ls->shadow_map_resolution * sizeof(float));
+            if (!shadow_distances) {
+                SDL_Log("Lighting: Failed to allocate shadow distances array");
+                shadow_light_index = UINT32_MAX;
+                break;
+            }
+
+            /* Generate shadow map for this light */
+            generate_shadow_map(ls,
+                                light->desc.x, light->desc.y,
+                                light->desc.radius,
+                                shadow_distances);
+
+            /* Debug: Log some shadow map values */
+            static bool logged_shadow_values = false;
+            if (!logged_shadow_values) {
+                float min_dist = shadow_distances[0], max_dist = shadow_distances[0];
+                int blocked_count = 0;
+                for (int r = 0; r < ls->shadow_map_resolution; r++) {
+                    if (shadow_distances[r] < min_dist) min_dist = shadow_distances[r];
+                    if (shadow_distances[r] > max_dist) max_dist = shadow_distances[r];
+                    if (shadow_distances[r] < light->desc.radius - 1.0f) blocked_count++;
+                }
+                SDL_Log("Lighting: Shadow map stats: min=%.1f max=%.1f blocked=%d/%d radius=%.1f",
+                        min_dist, max_dist, blocked_count, ls->shadow_map_resolution, light->desc.radius);
+                logged_shadow_values = true;
+            }
+
+            /* Upload shadow map to GPU (copy pass) */
+            if (!upload_shadow_map(ls, cmd, shadow_distances)) {
+                SDL_Log("Lighting: Failed to upload shadow map");
+                free(shadow_distances);
+                shadow_distances = NULL;
+                shadow_light_index = UINT32_MAX;
+            }
+
+            /* Only process first shadow-casting light */
+            break;
+        }
+    }
+
+    /* ========================================================================
+     * Begin render pass to lightmap
+     * ======================================================================== */
+
     SDL_GPUColorTargetInfo color_target = {};
     color_target.texture = ls->lightmap;
     color_target.clear_color.r = 0.0f;
@@ -682,22 +799,25 @@ void agentite_lighting_render_lights(Agentite_LightingSystem *ls,
 
     SDL_GPURenderPass *pass = SDL_BeginGPURenderPass(cmd, &color_target, 1, NULL);
     if (!pass) {
+        free(shadow_distances);
         ls->frame_started = false;
         return;
     }
 
-    /* Calculate aspect ratio for correct circular falloff
-     * In UV space: delta.x spans width pixels, delta.y spans height pixels
-     * To normalize to the same scale (height pixels), multiply x by width/height
-     * This makes distance calculations treat x and y equally in pixel terms */
-    float aspect_x = (float)ls->lightmap_width / (float)ls->lightmap_height;
-    float aspect_y = 1.0f;
+    /* Set viewport to match lightmap dimensions (critical for HiDPI displays) */
+    SDL_GPUViewport viewport = {};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.w = (float)ls->lightmap_width;
+    viewport.h = (float)ls->lightmap_height;
+    viewport.min_depth = 0.0f;
+    viewport.max_depth = 1.0f;
+    SDL_SetGPUViewport(pass, &viewport);
 
-    /* Note: Ambient is handled by the composite shader, not here.
-     * The lightmap contains only light contributions, which are added
-     * to ambient during compositing. */
+    /* ========================================================================
+     * Render Point Lights
+     * ======================================================================== */
 
-    /* Step 1: Render each enabled point light */
     for (uint32_t i = 0; i < (uint32_t)ls->config.max_point_lights; i++) {
         InternalPointLight *light = &ls->point_lights[i];
         if (!light->active || !light->enabled) continue;
@@ -719,26 +839,60 @@ void agentite_lighting_render_lights(Agentite_LightingSystem *ls,
         /* Convert radius from world units to UV space */
         float radius_uv = light->desc.radius / (float)ls->lightmap_height;
 
-        /* Build uniform data matching PointLightParams in shader */
-        PointLightUniforms params;
-        params.light_center[0] = uv_x;
-        params.light_center[1] = uv_y;
-        params.radius = radius_uv;
-        params.intensity = light->desc.intensity;
-        params.color[0] = light->desc.color.r;
-        params.color[1] = light->desc.color.g;
-        params.color[2] = light->desc.color.b;
-        params.color[3] = light->desc.color.a;
-        params.falloff_type = (float)light->desc.falloff;
-        params._pad_align = 0.0f;
-        params.aspect[0] = aspect_x;
-        params.aspect[1] = aspect_y;
-        params._pad = 0.0f;
+        /* Check if this light uses the shadow shader */
+        if (i == shadow_light_index && ls->shadow_map) {
+            /* Use shadow shader with shadow map texture */
+            static bool logged_shadow_render = false;
+            if (!logged_shadow_render) {
+                SDL_Log("Lighting: Rendering light %u with shadow shader", i);
+                logged_shadow_render = true;
+            }
+            PointLightShadowUniforms shadow_params;
+            shadow_params.light_center[0] = uv_x;
+            shadow_params.light_center[1] = uv_y;
+            shadow_params.radius = radius_uv;
+            shadow_params.intensity = light->desc.intensity;
+            shadow_params.color[0] = light->desc.color.r;
+            shadow_params.color[1] = light->desc.color.g;
+            shadow_params.color[2] = light->desc.color.b;
+            shadow_params.color[3] = light->desc.color.a;
+            shadow_params.falloff_type = (float)light->desc.falloff;
+            shadow_params.shadow_softness = 4.0f;  /* Soft shadow edge in world units */
+            shadow_params.aspect[0] = aspect_x;
+            shadow_params.aspect[1] = aspect_y;
+            shadow_params.lightmap_size[0] = (float)ls->lightmap_width;
+            shadow_params.lightmap_size[1] = (float)ls->lightmap_height;
+            shadow_params.radius_world = light->desc.radius;
+            shadow_params._pad = 0.0f;
 
-        /* Draw light using fullscreen shader with additive blending */
-        agentite_shader_draw_fullscreen(ls->shader_system, cmd, pass,
-            ls->point_light_shader, NULL, &params, sizeof(params));
+            /* Draw with shadow shader, passing shadow map texture */
+            agentite_shader_draw_fullscreen(ls->shader_system, cmd, pass,
+                ls->point_light_shadow_shader, ls->shadow_map,
+                &shadow_params, sizeof(shadow_params));
+        } else {
+            /* Use regular shader (no shadows) */
+            PointLightUniforms params;
+            params.light_center[0] = uv_x;
+            params.light_center[1] = uv_y;
+            params.radius = radius_uv;
+            params.intensity = light->desc.intensity;
+            params.color[0] = light->desc.color.r;
+            params.color[1] = light->desc.color.g;
+            params.color[2] = light->desc.color.b;
+            params.color[3] = light->desc.color.a;
+            params.falloff_type = (float)light->desc.falloff;
+            params._pad_align = 0.0f;
+            params.aspect[0] = aspect_x;
+            params.aspect[1] = aspect_y;
+            params._pad = 0.0f;
+
+            agentite_shader_draw_fullscreen(ls->shader_system, cmd, pass,
+                ls->point_light_shader, NULL, &params, sizeof(params));
+        }
     }
+
+    /* Free shadow distances array */
+    free(shadow_distances);
 
     /* Step 2: Render each enabled spot light */
     for (uint32_t i = 0; i < (uint32_t)ls->config.max_spot_lights; i++) {
@@ -1105,6 +1259,18 @@ static bool create_gpu_resources(Agentite_LightingSystem *ls)
                 agentite_get_last_error());
     }
 
+    /* Create point light shadow shader (samples from shadow map texture) */
+    desc.num_fragment_samplers = 1;  /* Shadow map texture */
+    desc.blend_mode = AGENTITE_BLEND_ADDITIVE;
+    desc.fragment_entry = "point_light_shadow_fragment";
+    ls->point_light_shadow_shader = agentite_shader_load_msl(ls->shader_system,
+                                                              point_light_shadow_msl,
+                                                              &desc);
+    if (!ls->point_light_shadow_shader) {
+        SDL_Log("Lighting: Failed to create point light shadow shader: %s",
+                agentite_get_last_error());
+    }
+
     /* Create sampler */
     SDL_GPUSamplerCreateInfo sampler_info = {};
     sampler_info.min_filter = SDL_GPU_FILTER_LINEAR;
@@ -1130,6 +1296,11 @@ static void destroy_gpu_resources(Agentite_LightingSystem *ls)
     if (ls->lightmap) {
         SDL_ReleaseGPUTexture(ls->gpu, ls->lightmap);
         ls->lightmap = NULL;
+    }
+
+    if (ls->shadow_map) {
+        SDL_ReleaseGPUTexture(ls->gpu, ls->shadow_map);
+        ls->shadow_map = NULL;
     }
 
     if (ls->quad_vertex_buffer) {
@@ -1159,6 +1330,10 @@ static void destroy_gpu_resources(Agentite_LightingSystem *ls)
         if (ls->ambient_shader) {
             agentite_shader_destroy(ls->shader_system, ls->ambient_shader);
             ls->ambient_shader = NULL;
+        }
+        if (ls->point_light_shadow_shader) {
+            agentite_shader_destroy(ls->shader_system, ls->point_light_shadow_shader);
+            ls->point_light_shadow_shader = NULL;
         }
     }
 
@@ -1236,4 +1411,307 @@ static float apply_falloff(float dist, float radius, Agentite_LightFalloff fallo
         default:
             return 1.0f - normalized;
     }
+}
+
+/* ============================================================================
+ * Shadow Casting - Ray-Occluder Intersection Functions
+ * ============================================================================ */
+
+/*
+ * Ray-segment intersection using parametric line intersection.
+ * Ray: P = O + t*D where t >= 0
+ * Segment: Q = A + s*(B-A) where 0 <= s <= 1
+ *
+ * Returns distance to intersection point, or FLT_MAX if no intersection.
+ */
+static float ray_segment_intersect(float ox, float oy, float dx, float dy,
+                                   float x1, float y1, float x2, float y2)
+{
+    /* Segment direction */
+    float sx = x2 - x1;
+    float sy = y2 - y1;
+
+    /* Cross product of directions: D x S */
+    float cross = dx * sy - dy * sx;
+
+    /* If cross is near zero, lines are parallel */
+    if (fabsf(cross) < 1e-8f) {
+        return FLT_MAX;
+    }
+
+    /* Vector from ray origin to segment start */
+    float qx = x1 - ox;
+    float qy = y1 - oy;
+
+    /* Parameter t for ray: intersection at O + t*D */
+    float t = (qx * sy - qy * sx) / cross;
+
+    /* Parameter s for segment: intersection at A + s*(B-A) */
+    float s = (qx * dy - qy * dx) / cross;
+
+    /* Check if intersection is valid (ray forward, within segment) */
+    if (t >= 0.0f && s >= 0.0f && s <= 1.0f) {
+        return t;  /* Distance along ray */
+    }
+
+    return FLT_MAX;
+}
+
+/*
+ * Ray-box intersection by testing all 4 edges.
+ * Box is defined by top-left corner (bx, by) and dimensions (bw, bh).
+ *
+ * Returns distance to nearest intersection, or FLT_MAX if no intersection.
+ */
+static float ray_box_intersect(float ox, float oy, float dx, float dy,
+                               float bx, float by, float bw, float bh)
+{
+    float min_dist = FLT_MAX;
+
+    /* Box corners */
+    float x1 = bx;
+    float y1 = by;
+    float x2 = bx + bw;
+    float y2 = by + bh;
+
+    /* Test all 4 edges */
+    float d;
+
+    /* Top edge: (x1,y1) to (x2,y1) */
+    d = ray_segment_intersect(ox, oy, dx, dy, x1, y1, x2, y1);
+    if (d < min_dist) min_dist = d;
+
+    /* Bottom edge: (x1,y2) to (x2,y2) */
+    d = ray_segment_intersect(ox, oy, dx, dy, x1, y2, x2, y2);
+    if (d < min_dist) min_dist = d;
+
+    /* Left edge: (x1,y1) to (x1,y2) */
+    d = ray_segment_intersect(ox, oy, dx, dy, x1, y1, x1, y2);
+    if (d < min_dist) min_dist = d;
+
+    /* Right edge: (x2,y1) to (x2,y2) */
+    d = ray_segment_intersect(ox, oy, dx, dy, x2, y1, x2, y2);
+    if (d < min_dist) min_dist = d;
+
+    return min_dist;
+}
+
+/*
+ * Ray-circle intersection using quadratic formula.
+ * Circle at (cx, cy) with radius r.
+ * Ray: P = O + t*D
+ *
+ * Solve: |O + t*D - C|^2 = r^2
+ * Expanding: t^2*(D.D) + 2t*(D.(O-C)) + (O-C).(O-C) - r^2 = 0
+ *
+ * Returns distance to nearest intersection (in front of ray), or FLT_MAX if none.
+ */
+static float ray_circle_intersect(float ox, float oy, float dx, float dy,
+                                  float cx, float cy, float r)
+{
+    /* Vector from circle center to ray origin */
+    float ocx = ox - cx;
+    float ocy = oy - cy;
+
+    /* Quadratic coefficients: at^2 + bt + c = 0 */
+    float a = dx * dx + dy * dy;
+    float b = 2.0f * (dx * ocx + dy * ocy);
+    float c = ocx * ocx + ocy * ocy - r * r;
+
+    /* Discriminant */
+    float discriminant = b * b - 4.0f * a * c;
+
+    if (discriminant < 0.0f) {
+        return FLT_MAX;  /* No intersection */
+    }
+
+    float sqrt_disc = sqrtf(discriminant);
+    float inv_2a = 1.0f / (2.0f * a);
+
+    /* Two possible solutions */
+    float t1 = (-b - sqrt_disc) * inv_2a;
+    float t2 = (-b + sqrt_disc) * inv_2a;
+
+    /* Return nearest positive t */
+    if (t1 >= 0.0f) {
+        return t1;
+    }
+    if (t2 >= 0.0f) {
+        return t2;
+    }
+
+    return FLT_MAX;  /* Both behind ray origin */
+}
+
+/*
+ * Generate shadow map for a single light.
+ * Casts rays from light position in all directions (720 rays for 0.5 degree resolution).
+ * Stores distance to nearest occluder for each ray angle.
+ *
+ * shadow_distances: output array of size ls->shadow_map_resolution
+ */
+static void generate_shadow_map(Agentite_LightingSystem *ls,
+                                float light_x, float light_y,
+                                float light_radius,
+                                float *shadow_distances)
+{
+    if (!ls || !shadow_distances) return;
+
+    int ray_count = ls->shadow_map_resolution;
+    if (ray_count <= 0) ray_count = 720;  /* Default to 720 rays */
+
+    float angle_step = (float)(2.0 * M_PI) / (float)ray_count;
+
+    /* For each ray angle */
+    for (int i = 0; i < ray_count; i++) {
+        float angle = (float)i * angle_step;
+        float dx = cosf(angle);
+        float dy = sinf(angle);
+
+        float min_dist = light_radius;  /* Start with max range */
+
+        /* Test against all active occluders */
+        for (uint32_t j = 0; j < (uint32_t)ls->config.max_occluders; j++) {
+            if (!ls->occluders[j].active) continue;
+
+            const Agentite_Occluder *occ = &ls->occluders[j].occluder;
+            float dist = FLT_MAX;
+
+            switch (occ->type) {
+                case AGENTITE_OCCLUDER_SEGMENT:
+                    dist = ray_segment_intersect(light_x, light_y, dx, dy,
+                                                 occ->segment.x1, occ->segment.y1,
+                                                 occ->segment.x2, occ->segment.y2);
+                    break;
+
+                case AGENTITE_OCCLUDER_BOX:
+                    dist = ray_box_intersect(light_x, light_y, dx, dy,
+                                             occ->box.x, occ->box.y,
+                                             occ->box.w, occ->box.h);
+                    break;
+
+                case AGENTITE_OCCLUDER_CIRCLE:
+                    dist = ray_circle_intersect(light_x, light_y, dx, dy,
+                                                occ->circle.x, occ->circle.y,
+                                                occ->circle.radius);
+                    break;
+            }
+
+            if (dist < min_dist) {
+                min_dist = dist;
+            }
+        }
+
+        shadow_distances[i] = min_dist;
+    }
+}
+
+/*
+ * Create the 1D shadow map texture.
+ * Format: R32_FLOAT, dimensions: shadow_map_resolution x 1
+ */
+static bool create_shadow_map_texture(Agentite_LightingSystem *ls)
+{
+    if (!ls || !ls->gpu) return false;
+
+    /* Release existing shadow map if any */
+    if (ls->shadow_map) {
+        SDL_ReleaseGPUTexture(ls->gpu, ls->shadow_map);
+        ls->shadow_map = NULL;
+    }
+
+    /* Use config or default */
+    int resolution = ls->config.shadow_ray_count;
+    if (resolution <= 0) resolution = 720;
+    ls->shadow_map_resolution = resolution;
+
+    /* Create 1D texture (actually 2D with height=1)
+     * Needs both SAMPLER (for reading in shader) and no special upload flag
+     * because we use copy pass for upload */
+    SDL_GPUTextureCreateInfo tex_info = {};
+    tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+    tex_info.format = SDL_GPU_TEXTUREFORMAT_R32_FLOAT;
+    tex_info.width = (Uint32)resolution;
+    tex_info.height = 1;
+    tex_info.layer_count_or_depth = 1;
+    tex_info.num_levels = 1;
+    tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;  /* Copy pass upload works with this */
+
+    ls->shadow_map = SDL_CreateGPUTexture(ls->gpu, &tex_info);
+    if (!ls->shadow_map) {
+        SDL_Log("Lighting: Failed to create shadow map texture: %s", SDL_GetError());
+        return false;
+    }
+
+    return true;
+}
+
+/*
+ * Upload shadow distances to the shadow map texture.
+ * Uses a transfer buffer to copy CPU data to GPU texture.
+ */
+static bool upload_shadow_map(Agentite_LightingSystem *ls,
+                              SDL_GPUCommandBuffer *cmd,
+                              const float *shadow_distances)
+{
+    if (!ls || !cmd || !shadow_distances) return false;
+
+    /* Create shadow map texture if needed */
+    if (!ls->shadow_map) {
+        if (!create_shadow_map_texture(ls)) {
+            return false;
+        }
+    }
+
+    int resolution = ls->shadow_map_resolution;
+    size_t data_size = (size_t)resolution * sizeof(float);
+
+    /* Create transfer buffer for upload */
+    SDL_GPUTransferBufferCreateInfo transfer_info = {};
+    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    transfer_info.size = (Uint32)data_size;
+
+    SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(ls->gpu, &transfer_info);
+    if (!transfer) {
+        SDL_Log("Lighting: Failed to create shadow map transfer buffer");
+        return false;
+    }
+
+    /* Map and copy data */
+    void *mapped = SDL_MapGPUTransferBuffer(ls->gpu, transfer, false);
+    if (!mapped) {
+        SDL_ReleaseGPUTransferBuffer(ls->gpu, transfer);
+        return false;
+    }
+    memcpy(mapped, shadow_distances, data_size);
+    SDL_UnmapGPUTransferBuffer(ls->gpu, transfer);
+
+    /* Begin copy pass */
+    SDL_GPUCopyPass *copy_pass = SDL_BeginGPUCopyPass(cmd);
+    if (!copy_pass) {
+        SDL_ReleaseGPUTransferBuffer(ls->gpu, transfer);
+        return false;
+    }
+
+    /* Upload to texture */
+    SDL_GPUTextureTransferInfo src = {};
+    src.transfer_buffer = transfer;
+    src.offset = 0;
+    src.pixels_per_row = (Uint32)resolution;
+    src.rows_per_layer = 1;
+
+    SDL_GPUTextureRegion dst = {};
+    dst.texture = ls->shadow_map;
+    dst.w = (Uint32)resolution;
+    dst.h = 1;
+    dst.d = 1;
+
+    SDL_UploadToGPUTexture(copy_pass, &src, &dst, false);
+    SDL_EndGPUCopyPass(copy_pass);
+
+    /* Release transfer buffer */
+    SDL_ReleaseGPUTransferBuffer(ls->gpu, transfer);
+
+    return true;
 }
