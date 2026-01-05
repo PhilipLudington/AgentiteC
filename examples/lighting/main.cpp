@@ -59,6 +59,9 @@ typedef struct AppState {
 
     /* Scene texture */
     Agentite_Texture *scene_texture;
+
+    /* Render target for scene (used by lighting composite) */
+    SDL_GPUTexture *scene_target;
 } AppState;
 
 /* Color presets */
@@ -191,10 +194,8 @@ int main(int argc, char *argv[]) {
         app.font = agentite_font_load(app.text, "assets/fonts/Roboto-Regular.ttf", 16);
     }
 
-    /* Use physical pixel dimensions for gizmos to match sprite rendering on HiDPI */
-    int phys_w, phys_h;
-    SDL_GetWindowSizeInPixels(window, &phys_w, &phys_h);
-    agentite_gizmos_set_screen_size(app.gizmos, phys_w, phys_h);
+    /* Use logical window dimensions for gizmos to match light coordinates */
+    agentite_gizmos_set_screen_size(app.gizmos, WINDOW_WIDTH, WINDOW_HEIGHT);
 
     /* Create shader and lighting systems */
     app.shaders = agentite_shader_system_create(gpu);
@@ -211,19 +212,35 @@ int main(int argc, char *argv[]) {
     /* Create scene texture */
     app.scene_texture = create_scene(app.sprites);
 
+    /* Create scene render target for lighting composite */
+    {
+        SDL_GPUTextureCreateInfo tex_info = {};
+        tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+        tex_info.format = SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM;
+        tex_info.width = WINDOW_WIDTH;
+        tex_info.height = WINDOW_HEIGHT;
+        tex_info.layer_count_or_depth = 1;
+        tex_info.num_levels = 1;
+        tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+        tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
+        app.scene_target = SDL_CreateGPUTexture(gpu, &tex_info);
+        if (!app.scene_target) {
+            printf("WARNING: Failed to create scene render target\n");
+        }
+    }
+
     /* Create occluders */
     create_occluders(&app);
 
     /* Add initial light at scene center */
-    /* Scene center in logical coords ~(420, 400), scaled to physical for gizmos */
-    float dpi_scale = SDL_GetWindowPixelDensity(window);
-    float scene_center_x = 420.0f * dpi_scale;
-    float scene_center_y = 400.0f * dpi_scale;
+    /* Use logical coordinates (matching sprite/lightmap space, not physical pixels) */
+    float scene_center_x = 420.0f;
+    float scene_center_y = 400.0f;
 
     Agentite_PointLightDesc initial_light = AGENTITE_POINT_LIGHT_DEFAULT;
     initial_light.x = scene_center_x;
     initial_light.y = scene_center_y;
-    initial_light.radius = 200.0f * dpi_scale;
+    initial_light.radius = 200.0f;
     initial_light.color = LIGHT_COLORS[1];  /* Warm */
     initial_light.casts_shadows = true;
     agentite_lighting_add_point_light(app.lighting, &initial_light);
@@ -244,19 +261,19 @@ int main(int argc, char *argv[]) {
             agentite_input_process_event(app.input, &event);
             if (event.type == SDL_EVENT_QUIT) agentite_quit(app.engine);
 
-            /* Add light on click - scale to physical pixels to match gizmos */
+            /* Add light on click - use logical coordinates (matching lightmap space) */
             if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
                 event.button.button == SDL_BUTTON_LEFT) {
 
-                float dpi = SDL_GetWindowPixelDensity(window);
-                float mouse_x = event.button.x * dpi;
-                float mouse_y = event.button.y * dpi;
+                /* event.button.x/y are already in logical coordinates */
+                float mouse_x = event.button.x;
+                float mouse_y = event.button.y;
 
                 if (app.spot_mode) {
                     Agentite_SpotLightDesc spot = AGENTITE_SPOT_LIGHT_DEFAULT;
                     spot.x = mouse_x;
                     spot.y = mouse_y;
-                    spot.radius = app.light_radius * dpi;
+                    spot.radius = app.light_radius;
                     spot.direction_y = 1.0f;  /* Point down */
                     spot.color = LIGHT_COLORS[app.color_mode];
                     spot.casts_shadows = app.shadows_enabled;
@@ -265,7 +282,7 @@ int main(int argc, char *argv[]) {
                     Agentite_PointLightDesc point = AGENTITE_POINT_LIGHT_DEFAULT;
                     point.x = mouse_x;
                     point.y = mouse_y;
-                    point.radius = app.light_radius * dpi;
+                    point.radius = app.light_radius;
                     point.color = LIGHT_COLORS[app.color_mode];
                     point.casts_shadows = app.shadows_enabled;
                     agentite_lighting_add_point_light(app.lighting, &point);
@@ -358,11 +375,6 @@ int main(int argc, char *argv[]) {
                     "Click: Add  1-4: Color  S: Spot  +/-: Size  A: Ambient  D: Day/Night",
                     10, 30, 0.7f, 0.7f, 0.7f, 0.9f);
 
-                /* Note that lighting effects aren't visible */
-                agentite_text_draw_colored(app.text, app.font,
-                    "(Lighting apply not implemented - use TAB for debug view)",
-                    10, 50, 1.0f, 0.6f, 0.3f, 0.9f);
-
                 agentite_text_draw_colored(app.text, app.font,
                     "O: Shadows  R: Clear  TAB: Debug  ESC: Quit",
                     10, WINDOW_HEIGHT - 30, 0.5f, 0.5f, 0.5f, 0.9f);
@@ -407,25 +419,33 @@ int main(int argc, char *argv[]) {
                 agentite_gizmos_upload(app.gizmos, cmd);
             }
 
-            /* NOTE: agentite_lighting_apply() is currently a stub - lighting effects
-             * are NOT visible. The lightmap is rendered but never composited with scene.
-             * This is the same architectural limitation as postprocess/transitions.
-             */
+            /* Step 1: Render lights to lightmap */
             agentite_lighting_begin(app.lighting);
             agentite_lighting_render_lights(app.lighting, cmd, NULL);
 
-            /* Main render pass */
-            if (agentite_begin_render_pass(app.engine, 0.05f, 0.05f, 0.1f, 1.0f)) {
+            /* Step 2: Render scene to intermediate texture */
+            if (app.scene_target && agentite_begin_render_pass_to_texture(
+                    app.engine, app.scene_target, 0.05f, 0.05f, 0.1f, 1.0f)) {
                 SDL_GPURenderPass *pass = agentite_get_render_pass(app.engine);
                 agentite_sprite_render(app.sprites, cmd, pass);
-                agentite_lighting_apply(app.lighting, cmd, pass);
+                agentite_end_render_pass_no_submit(app.engine);
+            }
 
-                /* Debug visualization */
+            /* Step 3: Composite scene + lighting to swapchain */
+            if (agentite_begin_render_pass(app.engine, 0.0f, 0.0f, 0.0f, 1.0f)) {
+                SDL_GPURenderPass *pass = agentite_get_render_pass(app.engine);
+
+                /* Apply lighting (composites scene_target with lightmap) */
+                if (app.scene_target) {
+                    agentite_lighting_apply(app.lighting, cmd, pass, app.scene_target);
+                }
+
+                /* Debug visualization (rendered on top, not affected by lighting) */
                 if (app.show_debug) {
                     agentite_gizmos_render(app.gizmos, cmd, pass);
                 }
 
-                /* Render text UI */
+                /* Render text UI (on top, not affected by lighting) */
                 if (app.text) agentite_text_render(app.text, cmd, pass);
 
                 agentite_end_render_pass(app.engine);
@@ -435,6 +455,9 @@ int main(int argc, char *argv[]) {
         agentite_end_frame(app.engine);
     }
 
+    if (app.scene_target) {
+        SDL_ReleaseGPUTexture(agentite_get_gpu_device(app.engine), app.scene_target);
+    }
     if (app.scene_texture) agentite_texture_destroy(app.sprites, app.scene_texture);
     agentite_lighting_destroy(app.lighting);
     agentite_shader_system_destroy(app.shaders);

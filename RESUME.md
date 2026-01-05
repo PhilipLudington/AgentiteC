@@ -106,38 +106,53 @@
 - **Not yet implemented** (require dedicated two-texture blend shaders):
   - Crossfade, Wipe (left/right/up/down), Circle open/close, Slide, Push
 
-### Lighting Example (`examples/lighting/main.cpp`) - RUNS, LIGHTING NOT VISIBLE
+### Lighting Example (`examples/lighting/main.cpp`) - WORKING
 
-**Fixed issues:**
+**Implemented:**
+- [x] **`agentite_lighting_render_lights()` - FULLY IMPLEMENTED**
+  - Renders point lights and spot lights to lightmap texture
+  - Converts world coordinates to UV space for shader
+  - Proper aspect ratio correction for circular lights
+  - Additive blending for light accumulation
+- [x] **`agentite_lighting_apply()` - FULLY IMPLEMENTED**
+  - Composites scene texture with lightmap
+  - Binds both textures (scene + lightmap) to composite shader
+  - Supports multiply, additive, and overlay blend modes
+  - Adds ambient lighting during composite pass
+- [x] **Fixed uniform struct alignment for Metal**
+  - Metal's `float2` requires 8-byte alignment
+  - Added padding before `aspect` field in `PointLightUniforms` and `SpotLightUniforms`
+  - Without this fix, lights appeared vertically stretched instead of circular
+- [x] **Updated example to use render-to-texture workflow**
+  - Creates `SDL_GPUTexture` scene render target
+  - Renders scene to target texture first
+  - Composites scene + lighting to swapchain
+- [x] **Fixed coordinate space issues**
+  - Lights now use logical coordinates (matching lightmap space)
+  - Gizmos use logical coordinates to match lights
+  - Removed DPI scaling that caused coordinate mismatch
+
+**Previous fixes:**
 - [x] Fixed font path (`ProggyClean.ttf` -> `Roboto-Regular.ttf`)
 - [x] Fixed render loop order (all uploads before render pass)
-- [x] Fixed text render being called after render pass ended
-- [x] Removed `agentite_sprite_end(NULL, NULL)`
-- [x] Added `agentite_text_end()` before upload
-- [x] **Fixed debug visualization bug** - Light ID iteration was using indices (0,1,2...) but IDs start at 1
-- [x] **Fixed HiDPI/Retina coordinate mismatch** - Gizmos were misaligned with sprites on 2x displays
-  - Set gizmos screen size to physical pixels (`SDL_GetWindowSizeInPixels`)
-  - Scale light positions, radii, and mouse coordinates by DPI factor
-- [x] Moved scene down 300px as requested
-- [x] Positioned initial light at scene center
-- [x] Updated shadow occluder positions to match scene offset
+- [x] Fixed debug visualization bug - Light ID iteration starts at 1, not 0
+- [x] Removed "not implemented" warning text from UI
 
 **Current state:**
-- Example runs without crashes
-- Displays scene with checkerboard floor and wall obstacles
-- Text UI displays correctly
-- Debug gizmos (TAB) show light positions correctly - **aligned with mouse clicks**
-- Click to add lights works properly
+- Example runs with **working 2D lighting effects**
+- Point lights render as circular gradients with configurable falloff
+- Spot lights render as cone-shaped lights with direction
+- Ambient lighting affects overall scene brightness
+- Debug gizmos (TAB) show light positions and radii matching actual lights
+- Multiple lights accumulate correctly (additive blend on lightmap)
 
-**NOT IMPLEMENTED - Actual lighting effects:**
-- `agentite_lighting_render_lights()` is a stub (TODO in code) - lights not rendered to lightmap
-- `agentite_lighting_apply()` is a stub (TODO in code) - lightmap not composited with scene
-- Result: No visible lighting or shadow effects, only debug circles via gizmos
-- **Requires:** Implement light rendering shaders and lightmap compositing (similar to postprocess system)
+**Not yet implemented:**
+- Shadow casting from occluders (infrastructure added but rendering not implemented)
+- SPIR-V shaders for Vulkan/Linux (currently Metal-only)
 
 ## All Examples Tested
 
-All 8 examples have been tested and fixed:
+All 8 examples have been tested:
 - ✅ particles - Working
 - ✅ collision - Working
 - ✅ physics - Working
@@ -145,7 +160,7 @@ All 8 examples have been tested and fixed:
 - ✅ noise - Working
 - ✅ shaders - **Working with postprocess effects!**
 - ✅ transitions - Runs, fade/pixelate work, other transitions pending
-- ⚠️ lighting - Runs, debug view works, but **lighting effects not implemented** (stub functions)
+- ✅ lighting - **Working with 2D lighting!** Point lights, spot lights, ambient, compositing all functional
 
 ## Common Issues Found and Fixed
 
@@ -207,7 +222,7 @@ if (agentite_begin_render_pass(engine, r, g, b, a)) {
 - `examples/particles/main.cpp`
 - `examples/collision/main.cpp`
 - `examples/transitions/main.cpp` (complete rewrite - simplified, transitions disabled)
-- `examples/lighting/main.cpp` (text fix, render order fix, HiDPI gizmo fix, scene offset)
+- `examples/lighting/main.cpp` (render-to-texture workflow, logical coordinates, working lighting)
 - `examples/physics/main.cpp` (text fix, bottom instructions, physics config)
 - `examples/physics2d/main.cpp` (text fix, bottom instructions)
 - `examples/noise/main.cpp` (text fix, fractal noise fix, control hints)
@@ -217,6 +232,7 @@ if (agentite_begin_render_pass(engine, r, g, b, a)) {
 - `src/core/engine.cpp` (added render-to-texture API)
 - `include/agentite/agentite.h` (added render-to-texture function declarations)
 - `src/graphics/shader.cpp` (MSL fragment shader fixes, added MSL for all common builtin effects)
+- `src/graphics/lighting.cpp` (implemented render_lights and apply, fixed struct alignment)
 - `Makefile` (added `-DNDEBUG` to Chipmunk compilation)
 
 ## Verification Commands
@@ -308,18 +324,82 @@ File: `src/graphics/shader.cpp` - MSL shader sources and registration in `init_b
 
 **Known limitation:** `agentite_postprocess_apply()` only passes 16 bytes of uniform params (hardcoded in line 734). Effects with larger param structs (like `Agentite_ShaderParams_Flash` which is 32 bytes) won't work correctly. The Flash MSL shader was redesigned to use 16 bytes: `float[4] = {R, G, B, intensity}` instead of the standard struct.
 
+## Lighting System Implementation (COMPLETED)
+
+**✅ COMPLETED:** The 2D lighting system is now fully functional with point lights, spot lights, and ambient lighting.
+
+**Key implementation details:**
+
+### Uniform Struct Alignment for Metal
+Metal requires `float2` to be 8-byte aligned. The original structs had `aspect` immediately after `falloff_type`, causing misalignment:
+```cpp
+// WRONG - aspect at offset 36, but needs 8-byte alignment (offset 40)
+typedef struct {
+    float light_center[2];  // offset 0
+    float radius;           // offset 8
+    float intensity;        // offset 12
+    float color[4];         // offset 16
+    float falloff_type;     // offset 32
+    float aspect[2];        // offset 36 - MISALIGNED!
+} PointLightUniforms;
+
+// CORRECT - add padding before aspect
+typedef struct {
+    float light_center[2];  // offset 0
+    float radius;           // offset 8
+    float intensity;        // offset 12
+    float color[4];         // offset 16
+    float falloff_type;     // offset 32
+    float _pad_align;       // offset 36 - padding
+    float aspect[2];        // offset 40 - properly aligned
+} PointLightUniforms;
+```
+
+### Coordinate Spaces
+- **Light positions**: Logical window coordinates (e.g., 0-1280 for width)
+- **Lightmap**: Same logical dimensions as window
+- **UV space**: 0-1 normalized coordinates used in shaders
+- **Conversion**: `uv = screen_pos / lightmap_size`
+
+### Aspect Ratio Correction
+To make lights appear circular on non-square viewports:
+```cpp
+float aspect_x = (float)lightmap_width / (float)lightmap_height;
+float aspect_y = 1.0f;
+// In shader: delta *= aspect (normalizes to height-based units)
+```
+
+### Render Pipeline
+```
+1. agentite_lighting_begin() - Mark frame started
+2. agentite_lighting_render_lights() - Render to lightmap:
+   - Clear lightmap to black
+   - For each point light: draw fullscreen with additive blend
+   - For each spot light: draw fullscreen with additive blend
+3. Render scene to intermediate texture (render-to-texture)
+4. agentite_lighting_apply() - Composite to swapchain:
+   - Bind scene texture (slot 0) + lightmap (slot 1)
+   - Use composite shader with multiply blend
+   - Ambient added during composite pass
+```
+
 ## Future Work
 
-### Lighting System Implementation
-The lighting system (`src/graphics/lighting.cpp`) has the data structures but rendering is not implemented:
-- `agentite_lighting_render_lights()` - Need to render point/spot lights to lightmap texture
-- `agentite_lighting_apply()` - Need to composite lightmap with scene (multiply blend)
-- Shadow casting - Need shadow map generation from occluders
-- **Approach:** Use render-to-texture API like postprocess system
+### Lighting System - Shadow Casting
+The basic lighting system is now working. Shadow casting is partially implemented but not functional:
+- [x] ~~`agentite_lighting_render_lights()` - Implement light drawing~~ ✅ DONE
+- [x] ~~`agentite_lighting_apply()` - Implement scene/lightmap compositing~~ ✅ DONE
+- [x] ~~Update example to use render-to-texture~~ ✅ DONE
+- [ ] Shadow casting from occluders
+  - Infrastructure added (shadow_map texture, occluder_buffer in struct)
+  - Need 1D shadow map shader for ray-occluder intersection
+  - Need to modify point light shader to sample shadow map
+  - Complex implementation - consider for future work
+- [ ] SPIR-V shaders - Currently Metal-only, need SPIR-V for Vulkan/Linux
 
 ### Other Examples
 - ~~Update transitions example to use new render-to-texture API~~ ✅ DONE
-- ~~Update lighting example~~ ✅ Debug view fixed, needs render implementation
+- ~~Update lighting example~~ ✅ DONE - Point lights, spot lights, ambient all working
 
 ### Transition Shaders
 - Implement crossfade shader (blend two textures with alpha)

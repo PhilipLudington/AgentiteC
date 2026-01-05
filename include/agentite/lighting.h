@@ -25,11 +25,14 @@
  *   agentite_lighting_begin(ls);
  *   agentite_lighting_render_lights(ls, cmd, camera);  // Render lightmap
  *
- *   // Render your scene as normal, then composite:
- *   agentite_begin_render_pass(engine, cmd, &pass);
+ *   // Render scene to texture, then composite with lighting:
+ *   agentite_begin_render_pass_to_texture(engine, scene_texture, ...);
  *   agentite_sprite_render(sr, cmd, pass);
- *   agentite_lighting_apply(ls, cmd, pass);  // Apply lighting to scene
- *   agentite_end_render_pass(pass);
+ *   agentite_end_render_pass_no_submit(engine);
+ *
+ *   agentite_begin_render_pass(engine, 0, 0, 0, 1);
+ *   agentite_lighting_apply(ls, cmd, pass, scene_texture);  // Composite
+ *   agentite_end_render_pass(engine);
  *
  *   // Cleanup
  *   agentite_lighting_destroy(ls);
@@ -528,16 +531,18 @@ void agentite_lighting_render_lights(Agentite_LightingSystem *ls,
                                      const Agentite_Camera *camera);
 
 /**
- * Apply the lightmap to the current scene.
- * Call during your main render pass.
+ * Composite the lightmap with the scene.
+ * Call during your main render pass after rendering lights.
  *
- * @param ls   Lighting system
- * @param cmd  Command buffer
- * @param pass Render pass
+ * @param ls            Lighting system
+ * @param cmd           Command buffer
+ * @param pass          Render pass (to swapchain)
+ * @param scene_texture Scene texture to composite with lightmap
  */
 void agentite_lighting_apply(Agentite_LightingSystem *ls,
                              SDL_GPUCommandBuffer *cmd,
-                             SDL_GPURenderPass *pass);
+                             SDL_GPURenderPass *pass,
+                             SDL_GPUTexture *scene_texture);
 
 /**
  * Get the lightmap texture for custom rendering.

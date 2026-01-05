@@ -835,6 +835,16 @@ void agentite_shader_get_stats(Agentite_ShaderSystem *ss, Agentite_ShaderStats *
     *stats = ss->stats;
 }
 
+SDL_GPUBuffer *agentite_shader_get_quad_buffer(Agentite_ShaderSystem *ss)
+{
+    return ss ? ss->quad_vertex_buffer : NULL;
+}
+
+SDL_GPUSampler *agentite_shader_get_linear_sampler(Agentite_ShaderSystem *ss)
+{
+    return ss ? ss->linear_sampler : NULL;
+}
+
 /* ============================================================================
  * Internal Functions
  * ============================================================================ */

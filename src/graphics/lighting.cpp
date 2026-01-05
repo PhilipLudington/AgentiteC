@@ -97,11 +97,18 @@ struct Agentite_LightingSystem {
     Agentite_Shader *spot_light_shader;
     Agentite_Shader *composite_shader;
     Agentite_Shader *ambient_shader;
+    Agentite_Shader *point_light_shadow_shader;  /* Point light with shadow sampling */
     bool shaders_initialized;
 
     /* GPU resources */
     SDL_GPUBuffer *quad_vertex_buffer;
     SDL_GPUSampler *sampler;
+
+    /* Shadow mapping */
+    SDL_GPUTexture *shadow_map;           /* 1D texture for angular shadow distances */
+    int shadow_map_resolution;            /* Width of shadow map (angles) */
+    SDL_GPUBuffer *occluder_buffer;       /* GPU buffer for occluder data */
+    uint32_t occluder_buffer_capacity;    /* Max occluders in buffer */
 
     /* State */
     bool frame_started;
@@ -113,18 +120,40 @@ typedef struct {
     float uv[2];
 } LightQuadVertex;
 
-/* Point light uniform data (must be 16-byte aligned) */
+/* Point light uniform data - must match PointLightParams in lighting_shaders.h
+ * Metal alignment: float2 requires 8-byte alignment, float4 requires 16-byte alignment */
 typedef struct {
-    float light_pos[2];     /* Light position in screen space */
-    float light_radius;     /* Light radius in pixels */
-    float intensity;        /* Light intensity */
-    float color[4];         /* RGBA color */
-    float falloff_type;     /* 0=linear, 1=quadratic, 2=smooth, 3=none */
-    float screen_size[2];   /* Screen dimensions */
-    float _pad;
+    float light_center[2];  /* offset 0: Light center in UV space (0-1) */
+    float radius;           /* offset 8: Light radius in UV space */
+    float intensity;        /* offset 12: Light intensity multiplier */
+    float color[4];         /* offset 16: RGBA color */
+    float falloff_type;     /* offset 32: 0=linear, 1=quadratic, 2=smooth, 3=none */
+    float _pad_align;       /* offset 36: padding for float2 alignment */
+    float aspect[2];        /* offset 40: Aspect ratio correction */
+    float _pad;             /* offset 48: padding */
 } PointLightUniforms;
 
-/* Composite uniform data */
+/* Spot light uniform data - must match SpotLightParams in lighting_shaders.h
+ * Metal alignment: float2 requires 8-byte alignment, float4 requires 16-byte alignment */
+typedef struct {
+    float light_center[2];  /* offset 0: Light center in UV space (0-1) */
+    float direction[2];     /* offset 8: Normalized direction vector */
+    float radius;           /* offset 16: Max distance in UV space */
+    float inner_angle;      /* offset 20: Cosine of inner cone angle */
+    float outer_angle;      /* offset 24: Cosine of outer cone angle */
+    float intensity;        /* offset 28: Light intensity multiplier */
+    float color[4];         /* offset 32: RGBA color */
+    float falloff_type;     /* offset 48: Falloff curve type */
+    float _pad_align;       /* offset 52: padding for float2 alignment */
+    float aspect[2];        /* offset 56: Aspect ratio correction */
+} SpotLightUniforms;
+
+/* Ambient uniform data - must match AmbientParams in lighting_shaders.h */
+typedef struct {
+    float color[4];         /* Ambient RGBA */
+} AmbientUniforms;
+
+/* Composite uniform data - must match CompositeParams in lighting_shaders.h */
 typedef struct {
     float ambient[4];       /* Ambient RGBA */
     float blend_mode;       /* 0=multiply, 1=additive, 2=overlay */
@@ -641,9 +670,6 @@ void agentite_lighting_render_lights(Agentite_LightingSystem *ls,
         return;
     }
 
-    /* camera is used for world-to-screen transform when implemented */
-    (void)camera;
-
     /* Begin render pass to lightmap - clear to black (lights add to this) */
     SDL_GPUColorTargetInfo color_target = {};
     color_target.texture = ls->lightmap;
@@ -660,10 +686,105 @@ void agentite_lighting_render_lights(Agentite_LightingSystem *ls,
         return;
     }
 
-    /* For each point light, we would draw a fullscreen quad with the shader */
-    /* The shader will calculate the radial falloff in UV space */
-    /* TODO: Actually render point lights using agentite_shader_draw_fullscreen */
-    /* This requires the shader system to be passed in or accessible */
+    /* Calculate aspect ratio for correct circular falloff
+     * In UV space: delta.x spans width pixels, delta.y spans height pixels
+     * To normalize to the same scale (height pixels), multiply x by width/height
+     * This makes distance calculations treat x and y equally in pixel terms */
+    float aspect_x = (float)ls->lightmap_width / (float)ls->lightmap_height;
+    float aspect_y = 1.0f;
+
+    /* Note: Ambient is handled by the composite shader, not here.
+     * The lightmap contains only light contributions, which are added
+     * to ambient during compositing. */
+
+    /* Step 1: Render each enabled point light */
+    for (uint32_t i = 0; i < (uint32_t)ls->config.max_point_lights; i++) {
+        InternalPointLight *light = &ls->point_lights[i];
+        if (!light->active || !light->enabled) continue;
+
+        /* Convert world position to screen coordinates */
+        float screen_x = light->desc.x;
+        float screen_y = light->desc.y;
+
+        /* Apply camera transform if provided */
+        if (camera) {
+            agentite_camera_world_to_screen((Agentite_Camera *)camera,
+                light->desc.x, light->desc.y, &screen_x, &screen_y);
+        }
+
+        /* Convert screen coordinates to UV space (0-1) */
+        float uv_x = screen_x / (float)ls->lightmap_width;
+        float uv_y = screen_y / (float)ls->lightmap_height;
+
+        /* Convert radius from world units to UV space */
+        float radius_uv = light->desc.radius / (float)ls->lightmap_height;
+
+        /* Build uniform data matching PointLightParams in shader */
+        PointLightUniforms params;
+        params.light_center[0] = uv_x;
+        params.light_center[1] = uv_y;
+        params.radius = radius_uv;
+        params.intensity = light->desc.intensity;
+        params.color[0] = light->desc.color.r;
+        params.color[1] = light->desc.color.g;
+        params.color[2] = light->desc.color.b;
+        params.color[3] = light->desc.color.a;
+        params.falloff_type = (float)light->desc.falloff;
+        params._pad_align = 0.0f;
+        params.aspect[0] = aspect_x;
+        params.aspect[1] = aspect_y;
+        params._pad = 0.0f;
+
+        /* Draw light using fullscreen shader with additive blending */
+        agentite_shader_draw_fullscreen(ls->shader_system, cmd, pass,
+            ls->point_light_shader, NULL, &params, sizeof(params));
+    }
+
+    /* Step 2: Render each enabled spot light */
+    for (uint32_t i = 0; i < (uint32_t)ls->config.max_spot_lights; i++) {
+        InternalSpotLight *light = &ls->spot_lights[i];
+        if (!light->active || !light->enabled) continue;
+
+        /* Convert world position to screen coordinates */
+        float screen_x = light->desc.x;
+        float screen_y = light->desc.y;
+
+        /* Apply camera transform if provided */
+        if (camera) {
+            agentite_camera_world_to_screen((Agentite_Camera *)camera,
+                light->desc.x, light->desc.y, &screen_x, &screen_y);
+        }
+
+        /* Convert screen coordinates to UV space (0-1) */
+        float uv_x = screen_x / (float)ls->lightmap_width;
+        float uv_y = screen_y / (float)ls->lightmap_height;
+
+        /* Convert radius from world units to UV space */
+        float radius_uv = light->desc.radius / (float)ls->lightmap_height;
+
+        /* Build uniform data matching SpotLightParams in shader */
+        SpotLightUniforms params;
+        params.light_center[0] = uv_x;
+        params.light_center[1] = uv_y;
+        params.direction[0] = light->desc.direction_x;
+        params.direction[1] = light->desc.direction_y;
+        params.radius = radius_uv;
+        params.inner_angle = cosf(light->desc.inner_angle);
+        params.outer_angle = cosf(light->desc.outer_angle);
+        params.intensity = light->desc.intensity;
+        params.color[0] = light->desc.color.r;
+        params.color[1] = light->desc.color.g;
+        params.color[2] = light->desc.color.b;
+        params.color[3] = light->desc.color.a;
+        params.falloff_type = (float)light->desc.falloff;
+        params._pad_align = 0.0f;
+        params.aspect[0] = aspect_x;
+        params.aspect[1] = aspect_y;
+
+        /* Draw spot light using fullscreen shader with additive blending */
+        agentite_shader_draw_fullscreen(ls->shader_system, cmd, pass,
+            ls->spot_light_shader, NULL, &params, sizeof(params));
+    }
 
     SDL_EndGPURenderPass(pass);
     ls->frame_started = false;
@@ -671,15 +792,52 @@ void agentite_lighting_render_lights(Agentite_LightingSystem *ls,
 
 void agentite_lighting_apply(Agentite_LightingSystem *ls,
                              SDL_GPUCommandBuffer *cmd,
-                             SDL_GPURenderPass *pass)
+                             SDL_GPURenderPass *pass,
+                             SDL_GPUTexture *scene_texture)
 {
-    if (!ls || !cmd || !pass) return;
+    if (!ls || !cmd || !pass || !scene_texture) return;
 
-    /* TODO: Composite lightmap with scene
-     * 1. Bind composite shader
-     * 2. Bind lightmap as texture
-     * 3. Draw fullscreen quad
-     */
+    /* Ensure we have the necessary resources */
+    if (!ls->composite_shader || !ls->lightmap || !ls->sampler) return;
+
+    /* Get the pipeline from the composite shader */
+    SDL_GPUGraphicsPipeline *pipeline = agentite_shader_get_pipeline(ls->composite_shader);
+    if (!pipeline) return;
+
+    /* Bind composite shader pipeline */
+    SDL_BindGPUGraphicsPipeline(pass, pipeline);
+
+    /* Bind both textures: scene at slot 0, lightmap at slot 1 */
+    SDL_GPUTextureSamplerBinding bindings[2] = {};
+    bindings[0].texture = scene_texture;
+    bindings[0].sampler = ls->sampler;
+    bindings[1].texture = ls->lightmap;
+    bindings[1].sampler = ls->sampler;
+    SDL_BindGPUFragmentSamplers(pass, 0, bindings, 2);
+
+    /* Build composite uniform data */
+    CompositeUniforms params;
+    params.ambient[0] = ls->ambient.r;
+    params.ambient[1] = ls->ambient.g;
+    params.ambient[2] = ls->ambient.b;
+    params.ambient[3] = ls->ambient.a;
+    params.blend_mode = (float)ls->config.blend;
+    params._pad[0] = 0.0f;
+    params._pad[1] = 0.0f;
+    params._pad[2] = 0.0f;
+
+    /* Push uniform data */
+    SDL_PushGPUFragmentUniformData(cmd, 0, &params, sizeof(params));
+
+    /* Bind fullscreen quad vertex buffer and draw */
+    SDL_GPUBuffer *quad_buffer = agentite_shader_get_quad_buffer(ls->shader_system);
+    if (quad_buffer) {
+        SDL_GPUBufferBinding vb_binding = {};
+        vb_binding.buffer = quad_buffer;
+        vb_binding.offset = 0;
+        SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
+        SDL_DrawGPUPrimitives(pass, 6, 1, 0, 0);  /* 6 vertices for fullscreen quad */
+    }
 }
 
 SDL_GPUTexture *agentite_lighting_get_lightmap(const Agentite_LightingSystem *ls)

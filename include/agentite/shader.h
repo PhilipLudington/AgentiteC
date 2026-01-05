@@ -441,6 +441,24 @@ void agentite_shader_draw_fullscreen(Agentite_ShaderSystem *ss,
                                      const void *params,
                                      size_t params_size);
 
+/**
+ * Get the fullscreen quad vertex buffer.
+ * Useful for custom rendering that needs the standard fullscreen quad.
+ *
+ * @param ss Shader system
+ * @return Quad vertex buffer (borrowed reference, do not destroy)
+ */
+SDL_GPUBuffer *agentite_shader_get_quad_buffer(Agentite_ShaderSystem *ss);
+
+/**
+ * Get the linear sampler.
+ * Useful for custom rendering that needs the standard linear sampler.
+ *
+ * @param ss Shader system
+ * @return Linear sampler (borrowed reference, do not destroy)
+ */
+SDL_GPUSampler *agentite_shader_get_linear_sampler(Agentite_ShaderSystem *ss);
+
 /* ============================================================================
  * Built-in Effect Parameters
  * ============================================================================ */
