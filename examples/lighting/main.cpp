@@ -235,23 +235,43 @@ int main(int argc, char *argv[]) {
     /* Create occluders */
     create_occluders(&app);
 
-    /* Add initial light to the RIGHT of the pillar for clear shadow testing
-     * Scene texture is at (384, 104) with size 512x512
-     * Central pillar is at (584, 304) with size 50x50
-     * Place light clearly to the right so shadow direction is obvious */
-    float light_x = 800.0f;   /* Right side of scene */
-    float light_y = 350.0f;   /* Middle height */
+    /* Add multiple shadow-casting lights at different positions to demonstrate
+     * the multi-light shadow system (up to 8 lights can cast shadows).
+     * Scene texture is at (384, 104) with size 512x512. */
+    float scene_cx = WINDOW_WIDTH / 2.0f;   /* 640 - center of scene */
+    float scene_cy = WINDOW_HEIGHT / 2.0f;  /* 360 - center of scene */
 
-    Agentite_PointLightDesc initial_light = AGENTITE_POINT_LIGHT_DEFAULT;
-    initial_light.x = light_x;
-    initial_light.y = light_y;
-    initial_light.radius = 400.0f;  /* Large radius to reach all occluders */
-    initial_light.color = LIGHT_COLORS[1];  /* Warm */
-    initial_light.casts_shadows = true;
-    agentite_lighting_add_point_light(app.lighting, &initial_light);
+    /* Light 1: Right side - Warm color */
+    Agentite_PointLightDesc light1 = AGENTITE_POINT_LIGHT_DEFAULT;
+    light1.x = scene_cx + 250.0f;  /* Right of scene */
+    light1.y = scene_cy;
+    light1.radius = 350.0f;
+    light1.color = (Agentite_LightColor){1.0f, 0.7f, 0.4f, 1.0f};  /* Warm orange */
+    light1.casts_shadows = true;
+    agentite_lighting_add_point_light(app.lighting, &light1);
 
-    printf("2D Lighting Example\n");
-    printf("===================\n");
+    /* Light 2: Left side - Cool color */
+    Agentite_PointLightDesc light2 = AGENTITE_POINT_LIGHT_DEFAULT;
+    light2.x = scene_cx - 280.0f;  /* Left of scene, outside the wall occluder */
+    light2.y = scene_cy;
+    light2.radius = 300.0f;
+    light2.color = (Agentite_LightColor){0.4f, 0.7f, 1.0f, 1.0f};  /* Cool blue */
+    light2.casts_shadows = true;
+    agentite_lighting_add_point_light(app.lighting, &light2);
+
+    /* Light 3: Top - Purple color */
+    Agentite_PointLightDesc light3 = AGENTITE_POINT_LIGHT_DEFAULT;
+    light3.x = scene_cx + 50.0f;
+    light3.y = scene_cy - 180.0f;  /* Above scene */
+    light3.radius = 280.0f;
+    light3.color = (Agentite_LightColor){0.8f, 0.4f, 1.0f, 1.0f};  /* Purple */
+    light3.casts_shadows = true;
+    agentite_lighting_add_point_light(app.lighting, &light3);
+
+    printf("2D Lighting Example - Multi-Light Shadows\n");
+    printf("==========================================\n");
+    printf("Started with 3 shadow-casting lights (orange, blue, purple)\n");
+    printf("Up to 8 lights can cast shadows simultaneously.\n\n");
     printf("Click: Add light  1-4: Color  S: Spot mode\n");
     printf("+/-: Radius  A: Ambient  D: Day/Night  O: Shadows\n");
     printf("R: Clear  TAB: Debug\n");
@@ -336,10 +356,10 @@ int main(int argc, char *argv[]) {
         if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_ESCAPE))
             agentite_quit(app.engine);
 
-        /* Day/night cycle */
+        /* Day/night cycle - faster for demo purposes */
         if (app.day_night) {
-            app.day_cycle += dt * 0.2f;
-            float brightness = (sinf(app.day_cycle) + 1.0f) * 0.3f + 0.1f;
+            app.day_cycle += dt * 1.0f;  /* Full cycle in ~6 seconds */
+            float brightness = (sinf(app.day_cycle) + 1.0f) * 0.35f + 0.05f;
             float warmth = (sinf(app.day_cycle + 0.5f) + 1.0f) * 0.2f;
             agentite_lighting_set_ambient(app.lighting,
                 brightness + warmth * 0.3f,
@@ -369,13 +389,13 @@ int main(int argc, char *argv[]) {
                 Agentite_LightingStats stats;
                 agentite_lighting_get_stats(app.lighting, &stats);
                 snprintf(info, sizeof(info),
-                    "Lights: %d  Mode: %s  Color: %s  Radius: %.0f  Shadows: %s  Debug: %s",
+                    "Lights: %d  Mode: %s  Color: %s  Radius: %.0f  Shadows: %s  Day/Night: %s",
                     stats.point_light_count + stats.spot_light_count,
                     app.spot_mode ? "Spot" : "Point",
                     COLOR_NAMES[app.color_mode],
                     app.light_radius,
                     app.shadows_enabled ? "ON" : "OFF",
-                    app.show_debug ? "ON" : "OFF");
+                    app.day_night ? "ON" : "OFF");
                 agentite_text_draw_colored(app.text, app.font, info, 10, 10, 1, 1, 1, 0.9f);
 
                 agentite_text_draw_colored(app.text, app.font,

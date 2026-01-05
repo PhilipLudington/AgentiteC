@@ -25,6 +25,7 @@
 #define LIGHT_ID_INVALID 0
 #define LIGHT_ID_OFFSET_POINT 1
 #define LIGHT_ID_OFFSET_SPOT 10000
+#define MAX_SHADOW_CASTING_LIGHTS 8
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -106,10 +107,14 @@ struct Agentite_LightingSystem {
     SDL_GPUSampler *sampler;
 
     /* Shadow mapping */
-    SDL_GPUTexture *shadow_map;           /* 1D texture for angular shadow distances */
-    int shadow_map_resolution;            /* Width of shadow map (angles) */
+    SDL_GPUTexture *shadow_map;           /* 2D texture atlas for shadow maps (resolution x MAX_SHADOW_CASTING_LIGHTS) */
+    int shadow_map_resolution;            /* Width of shadow map (angles per light) */
     SDL_GPUBuffer *occluder_buffer;       /* GPU buffer for occluder data */
     uint32_t occluder_buffer_capacity;    /* Max occluders in buffer */
+
+    /* Multi-light shadow tracking */
+    int shadow_light_indices[MAX_SHADOW_CASTING_LIGHTS];  /* Maps shadow slot -> point light index */
+    int active_shadow_light_count;                         /* Number of shadow-casting lights this frame */
 
     /* State */
     bool frame_started;
@@ -173,7 +178,9 @@ typedef struct {
     float aspect[2];        /* offset 40: Aspect ratio correction */
     float lightmap_size[2]; /* offset 48: Lightmap dimensions for UV to world conversion */
     float radius_world;     /* offset 56: Light radius in world units */
-    float _pad;             /* offset 60: padding to 64 bytes */
+    float shadow_row;       /* offset 60: Which row in shadow atlas (0-7) */
+    float atlas_height;     /* offset 64: Total atlas height (8.0) */
+    float _pad[3];          /* offset 68: padding to 80 bytes */
 } PointLightShadowUniforms;
 
 /* ============================================================================
@@ -204,6 +211,10 @@ static void generate_shadow_map(Agentite_LightingSystem *ls,
 static bool upload_shadow_map(Agentite_LightingSystem *ls,
                               SDL_GPUCommandBuffer *cmd,
                               const float *shadow_distances);
+static bool upload_shadow_map_row(Agentite_LightingSystem *ls,
+                                  SDL_GPUCommandBuffer *cmd,
+                                  const float *shadow_distances,
+                                  int row_index);
 static bool create_shadow_map_texture(Agentite_LightingSystem *ls);
 
 /* ============================================================================
@@ -713,74 +724,59 @@ void agentite_lighting_render_lights(Agentite_LightingSystem *ls,
      * distance to the nearest occluder at each angle from the light center.
      * This must happen before the render pass since it uses a copy pass.
      *
-     * Current limitation: Only one light can cast shadows per frame.
-     * Multiple shadow-casting lights would require multiple shadow map textures.
+     * Supports up to MAX_SHADOW_CASTING_LIGHTS (8) lights with shadows.
+     * Each light's shadow map is stored in a row of the shadow atlas texture.
      * ======================================================================== */
 
-    uint32_t shadow_light_index = UINT32_MAX;  /* Index of light using shadow map */
     float *shadow_distances = NULL;
+    ls->active_shadow_light_count = 0;
 
     if (ls->config.enable_shadows && ls->point_light_shadow_shader && ls->occluder_count > 0) {
-        /* Find first shadow-casting point light */
-        for (uint32_t i = 0; i < (uint32_t)ls->config.max_point_lights; i++) {
-            InternalPointLight *light = &ls->point_lights[i];
-            if (!light->active || !light->enabled) continue;
-            if (!light->desc.casts_shadows) continue;
+        /* Initialize shadow map resolution if needed */
+        if (ls->shadow_map_resolution <= 0) {
+            ls->shadow_map_resolution = ls->config.shadow_ray_count > 0
+                ? ls->config.shadow_ray_count : 720;
+        }
 
-            /* Found a shadow-casting light */
-            shadow_light_index = i;
-            static bool logged = false;
-            if (!logged) {
-                SDL_Log("Lighting: Shadow-casting light found at index %u, %u occluders",
-                        i, ls->occluder_count);
-                logged = true;
-            }
+        /* Allocate reusable shadow distances array */
+        shadow_distances = (float *)malloc((size_t)ls->shadow_map_resolution * sizeof(float));
+        if (!shadow_distances) {
+            SDL_Log("Lighting: Failed to allocate shadow distances array");
+        } else {
+            /* Generate shadow maps for ALL shadow-casting lights (up to MAX) */
+            for (uint32_t i = 0; i < (uint32_t)ls->config.max_point_lights; i++) {
+                if (ls->active_shadow_light_count >= MAX_SHADOW_CASTING_LIGHTS) break;
 
-            /* Initialize shadow map resolution if needed */
-            if (ls->shadow_map_resolution <= 0) {
-                ls->shadow_map_resolution = ls->config.shadow_ray_count > 0
-                    ? ls->config.shadow_ray_count : 720;
-            }
+                InternalPointLight *light = &ls->point_lights[i];
+                if (!light->active || !light->enabled) continue;
+                if (!light->desc.casts_shadows) continue;
 
-            /* Allocate shadow distances array */
-            shadow_distances = (float *)malloc((size_t)ls->shadow_map_resolution * sizeof(float));
-            if (!shadow_distances) {
-                SDL_Log("Lighting: Failed to allocate shadow distances array");
-                shadow_light_index = UINT32_MAX;
-                break;
-            }
+                /* Generate shadow map for this light */
+                generate_shadow_map(ls,
+                                    light->desc.x, light->desc.y,
+                                    light->desc.radius,
+                                    shadow_distances);
 
-            /* Generate shadow map for this light */
-            generate_shadow_map(ls,
-                                light->desc.x, light->desc.y,
-                                light->desc.radius,
-                                shadow_distances);
-
-            /* Debug: Log some shadow map values */
-            static bool logged_shadow_values = false;
-            if (!logged_shadow_values) {
-                float min_dist = shadow_distances[0], max_dist = shadow_distances[0];
-                int blocked_count = 0;
-                for (int r = 0; r < ls->shadow_map_resolution; r++) {
-                    if (shadow_distances[r] < min_dist) min_dist = shadow_distances[r];
-                    if (shadow_distances[r] > max_dist) max_dist = shadow_distances[r];
-                    if (shadow_distances[r] < light->desc.radius - 1.0f) blocked_count++;
+                /* Upload to the appropriate row in the atlas */
+                if (upload_shadow_map_row(ls, cmd, shadow_distances, ls->active_shadow_light_count)) {
+                    /* Track which light is in which shadow slot */
+                    ls->shadow_light_indices[ls->active_shadow_light_count] = (int)i;
+                    ls->active_shadow_light_count++;
+                } else {
+                    SDL_Log("Lighting: Failed to upload shadow map for light %u", i);
                 }
-                SDL_Log("Lighting: Shadow map stats: min=%.1f max=%.1f blocked=%d/%d radius=%.1f",
-                        min_dist, max_dist, blocked_count, ls->shadow_map_resolution, light->desc.radius);
-                logged_shadow_values = true;
             }
 
-            /* Upload shadow map to GPU (copy pass) */
-            if (!upload_shadow_map(ls, cmd, shadow_distances)) {
-                SDL_Log("Lighting: Failed to upload shadow map");
-                free(shadow_distances);
-                shadow_distances = NULL;
-                shadow_light_index = UINT32_MAX;
-            }
+            free(shadow_distances);
+            shadow_distances = NULL;
 
-            /* Only process first shadow-casting light */
-            break;
+            /* Log shadow light count on first frame with shadows */
+            static bool logged_shadow_count = false;
+            if (!logged_shadow_count && ls->active_shadow_light_count > 0) {
+                SDL_Log("Lighting: %d shadow-casting lights active, %u occluders",
+                        ls->active_shadow_light_count, ls->occluder_count);
+                logged_shadow_count = true;
+            }
         }
     }
 
@@ -839,14 +835,18 @@ void agentite_lighting_render_lights(Agentite_LightingSystem *ls,
         /* Convert radius from world units to UV space */
         float radius_uv = light->desc.radius / (float)ls->lightmap_height;
 
-        /* Check if this light uses the shadow shader */
-        if (i == shadow_light_index && ls->shadow_map) {
-            /* Use shadow shader with shadow map texture */
-            static bool logged_shadow_render = false;
-            if (!logged_shadow_render) {
-                SDL_Log("Lighting: Rendering light %u with shadow shader", i);
-                logged_shadow_render = true;
+        /* Look up if this light has a shadow slot */
+        int shadow_slot = -1;
+        for (int s = 0; s < ls->active_shadow_light_count; s++) {
+            if (ls->shadow_light_indices[s] == (int)i) {
+                shadow_slot = s;
+                break;
             }
+        }
+
+        /* Check if this light uses the shadow shader */
+        if (shadow_slot >= 0 && ls->shadow_map) {
+            /* Use shadow shader with shadow map atlas texture */
             PointLightShadowUniforms shadow_params;
             shadow_params.light_center[0] = uv_x;
             shadow_params.light_center[1] = uv_y;
@@ -863,9 +863,13 @@ void agentite_lighting_render_lights(Agentite_LightingSystem *ls,
             shadow_params.lightmap_size[0] = (float)ls->lightmap_width;
             shadow_params.lightmap_size[1] = (float)ls->lightmap_height;
             shadow_params.radius_world = light->desc.radius;
-            shadow_params._pad = 0.0f;
+            shadow_params.shadow_row = (float)shadow_slot;
+            shadow_params.atlas_height = (float)MAX_SHADOW_CASTING_LIGHTS;
+            shadow_params._pad[0] = 0.0f;
+            shadow_params._pad[1] = 0.0f;
+            shadow_params._pad[2] = 0.0f;
 
-            /* Draw with shadow shader, passing shadow map texture */
+            /* Draw with shadow shader, passing shadow map atlas texture */
             agentite_shader_draw_fullscreen(ls->shader_system, cmd, pass,
                 ls->point_light_shadow_shader, ls->shadow_map,
                 &shadow_params, sizeof(shadow_params));
@@ -890,9 +894,6 @@ void agentite_lighting_render_lights(Agentite_LightingSystem *ls,
                 ls->point_light_shader, NULL, &params, sizeof(params));
         }
     }
-
-    /* Free shadow distances array */
-    free(shadow_distances);
 
     /* Step 2: Render each enabled spot light */
     for (uint32_t i = 0; i < (uint32_t)ls->config.max_spot_lights; i++) {
@@ -1607,8 +1608,9 @@ static void generate_shadow_map(Agentite_LightingSystem *ls,
 }
 
 /*
- * Create the 1D shadow map texture.
- * Format: R32_FLOAT, dimensions: shadow_map_resolution x 1
+ * Create the shadow map atlas texture.
+ * Format: R32_FLOAT, dimensions: shadow_map_resolution x MAX_SHADOW_CASTING_LIGHTS
+ * Each row stores the shadow distances for one light.
  */
 static bool create_shadow_map_texture(Agentite_LightingSystem *ls)
 {
@@ -1625,14 +1627,13 @@ static bool create_shadow_map_texture(Agentite_LightingSystem *ls)
     if (resolution <= 0) resolution = 720;
     ls->shadow_map_resolution = resolution;
 
-    /* Create 1D texture (actually 2D with height=1)
-     * Needs both SAMPLER (for reading in shader) and no special upload flag
-     * because we use copy pass for upload */
+    /* Create 2D atlas texture (resolution x MAX_SHADOW_CASTING_LIGHTS)
+     * Each row stores shadow distances for one light */
     SDL_GPUTextureCreateInfo tex_info = {};
     tex_info.type = SDL_GPU_TEXTURETYPE_2D;
     tex_info.format = SDL_GPU_TEXTUREFORMAT_R32_FLOAT;
     tex_info.width = (Uint32)resolution;
-    tex_info.height = 1;
+    tex_info.height = MAX_SHADOW_CASTING_LIGHTS;
     tex_info.layer_count_or_depth = 1;
     tex_info.num_levels = 1;
     tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
@@ -1640,10 +1641,11 @@ static bool create_shadow_map_texture(Agentite_LightingSystem *ls)
 
     ls->shadow_map = SDL_CreateGPUTexture(ls->gpu, &tex_info);
     if (!ls->shadow_map) {
-        SDL_Log("Lighting: Failed to create shadow map texture: %s", SDL_GetError());
+        SDL_Log("Lighting: Failed to create shadow map atlas texture: %s", SDL_GetError());
         return false;
     }
 
+    SDL_Log("Lighting: Created shadow map atlas %dx%d", resolution, MAX_SHADOW_CASTING_LIGHTS);
     return true;
 }
 
@@ -1703,6 +1705,79 @@ static bool upload_shadow_map(Agentite_LightingSystem *ls,
 
     SDL_GPUTextureRegion dst = {};
     dst.texture = ls->shadow_map;
+    dst.w = (Uint32)resolution;
+    dst.h = 1;
+    dst.d = 1;
+
+    SDL_UploadToGPUTexture(copy_pass, &src, &dst, false);
+    SDL_EndGPUCopyPass(copy_pass);
+
+    /* Release transfer buffer */
+    SDL_ReleaseGPUTransferBuffer(ls->gpu, transfer);
+
+    return true;
+}
+
+/*
+ * Upload shadow distances to a specific row of the shadow map atlas.
+ * row_index: Which row (0 to MAX_SHADOW_CASTING_LIGHTS-1)
+ */
+static bool upload_shadow_map_row(Agentite_LightingSystem *ls,
+                                  SDL_GPUCommandBuffer *cmd,
+                                  const float *shadow_distances,
+                                  int row_index)
+{
+    if (!ls || !cmd || !shadow_distances) return false;
+    if (row_index < 0 || row_index >= MAX_SHADOW_CASTING_LIGHTS) return false;
+
+    /* Create shadow map texture if needed */
+    if (!ls->shadow_map) {
+        if (!create_shadow_map_texture(ls)) {
+            return false;
+        }
+    }
+
+    int resolution = ls->shadow_map_resolution;
+    size_t data_size = (size_t)resolution * sizeof(float);
+
+    /* Create transfer buffer for upload */
+    SDL_GPUTransferBufferCreateInfo transfer_info = {};
+    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    transfer_info.size = (Uint32)data_size;
+
+    SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(ls->gpu, &transfer_info);
+    if (!transfer) {
+        SDL_Log("Lighting: Failed to create shadow map transfer buffer for row %d", row_index);
+        return false;
+    }
+
+    /* Map and copy data */
+    void *mapped = SDL_MapGPUTransferBuffer(ls->gpu, transfer, false);
+    if (!mapped) {
+        SDL_ReleaseGPUTransferBuffer(ls->gpu, transfer);
+        return false;
+    }
+    memcpy(mapped, shadow_distances, data_size);
+    SDL_UnmapGPUTransferBuffer(ls->gpu, transfer);
+
+    /* Begin copy pass */
+    SDL_GPUCopyPass *copy_pass = SDL_BeginGPUCopyPass(cmd);
+    if (!copy_pass) {
+        SDL_ReleaseGPUTransferBuffer(ls->gpu, transfer);
+        return false;
+    }
+
+    /* Upload to specific row of atlas texture */
+    SDL_GPUTextureTransferInfo src = {};
+    src.transfer_buffer = transfer;
+    src.offset = 0;
+    src.pixels_per_row = (Uint32)resolution;
+    src.rows_per_layer = 1;
+
+    SDL_GPUTextureRegion dst = {};
+    dst.texture = ls->shadow_map;
+    dst.x = 0;
+    dst.y = (Uint32)row_index;  /* Target specific row */
     dst.w = (Uint32)resolution;
     dst.h = 1;
     dst.d = 1;

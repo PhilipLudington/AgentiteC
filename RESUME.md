@@ -71,8 +71,8 @@ The solution is simple: **keep texture, viewport, and projection all at the same
   - Manually implemented octave layering that respects the selected noise type
   - Now 1=Perlin, 2=Simplex, 3=Worley, 4=Value all look distinct
 - [x] Added complete control hints (Space: New Seed, Scroll: Zoom)
-- [x] Moved preview down 50px to avoid text overlap
-- [x] Committed: `bdaf3f3`
+- [x] Fixed texture centering - sprites have centered origin (0.5, 0.5) by default, so position should be window center (`WINDOW_WIDTH/2, WINDOW_HEIGHT/2`), not calculated top-left offset
+- [x] Committed: `4d9af95`
 
 ### Shaders Example (`examples/shaders/main.cpp`) - WORKING
 
@@ -185,6 +185,23 @@ The solution is simple: **keep texture, viewport, and projection all at the same
 - Shadow casting from occluders (infrastructure added but rendering not implemented)
 - SPIR-V shaders for Vulkan/Linux (currently Metal-only)
 
+## Multi-Light Shadow Support (2026-01-05)
+
+Implemented support for up to 8 shadow-casting lights simultaneously using a 2D texture atlas approach.
+
+**Key changes:**
+- Shadow map atlas: 720x8 texture (R32_FLOAT), each row = one light's shadow distances
+- `shadow_light_indices[]` array maps shadow slot → light index
+- `upload_shadow_map_row()` uploads to specific atlas row
+- Shader samples at `v = (shadow_row + 0.5) / atlas_height`
+
+**Files modified:**
+- `src/graphics/lighting.cpp` - Atlas texture, multi-light generation loop
+- `src/graphics/lighting_shaders.h` - Atlas sampling in shadow shader
+- `examples/lighting/main.cpp` - Demo with 3 colored shadow-casting lights
+
+---
+
 ## All Examples Tested
 
 All 8 examples have been tested:
@@ -192,10 +209,19 @@ All 8 examples have been tested:
 - ✅ collision - Working
 - ✅ physics - Working
 - ✅ physics2d - Working
-- ✅ noise - Working
+- ✅ noise - Working (centering fixed 2026-01-05)
 - ✅ shaders - **Working with postprocess effects!**
 - ✅ transitions - **Working with fade/pixelate transitions!** Properly centered, effects functional
 - ✅ lighting - **Working with 2D lighting!** Point lights, spot lights, ambient, compositing all functional
+
+### Post-HiDPI Fix Verification (2026-01-05)
+
+Re-tested all 8 examples after the HiDPI scissor rect fix to ensure no regressions:
+- All examples start and shut down cleanly
+- HiDPI scaling works correctly (logical 1280x720 → physical 2560x1440)
+- Render-to-texture examples (shaders, transitions, lighting) work correctly
+
+**One bug found and fixed:** The noise example had incorrect sprite centering. Sprites default to centered origin (0.5, 0.5), so the position parameter specifies where the sprite's **center** goes, not its top-left corner. Fixed by using `WINDOW_WIDTH/2, WINDOW_HEIGHT/2` instead of calculating top-left offset.
 
 ## Common Issues Found and Fixed
 
@@ -252,6 +278,28 @@ if (agentite_begin_render_pass(engine, r, g, b, a)) {
 - Use OBB shapes for rotatable rectangles
 - Collision normals should be drawn from player position for clarity
 
+### Sprite Centering
+Sprites created with `agentite_sprite_from_texture()` default to **centered origin** (0.5, 0.5). This means the position passed to `agentite_sprite_draw()` specifies where the sprite's **center** goes, not its top-left corner.
+
+```cpp
+// WRONG - calculates top-left position but sprite origin is center
+float px = (WINDOW_WIDTH - SPRITE_SIZE) / 2.0f;   // Top-left X
+float py = (WINDOW_HEIGHT - SPRITE_SIZE) / 2.0f;  // Top-left Y
+agentite_sprite_draw(sr, &sprite, px, py);        // Places CENTER at top-left position!
+
+// RIGHT - use window center since sprite origin is center
+float px = WINDOW_WIDTH / 2.0f;
+float py = WINDOW_HEIGHT / 2.0f;
+agentite_sprite_draw(sr, &sprite, px, py);        // Centers sprite in window
+
+// ALTERNATIVE - override origin to top-left (0, 0)
+sprite.origin_x = 0.0f;
+sprite.origin_y = 0.0f;
+float px = (WINDOW_WIDTH - SPRITE_SIZE) / 2.0f;   // Now this works correctly
+float py = (WINDOW_HEIGHT - SPRITE_SIZE) / 2.0f;
+agentite_sprite_draw(sr, &sprite, px, py);
+```
+
 ## Files Modified
 
 - `examples/particles/main.cpp`
@@ -260,7 +308,7 @@ if (agentite_begin_render_pass(engine, r, g, b, a)) {
 - `examples/lighting/main.cpp` (render-to-texture workflow, logical coordinates, working lighting)
 - `examples/physics/main.cpp` (text fix, bottom instructions, physics config)
 - `examples/physics2d/main.cpp` (text fix, bottom instructions)
-- `examples/noise/main.cpp` (text fix, fractal noise fix, control hints)
+- `examples/noise/main.cpp` (text fix, fractal noise fix, control hints, centering fix)
 - `examples/shaders/main.cpp` (complete rewrite - working postprocess effects)
 - `src/graphics/particle.cpp` (rain visibility)
 - `src/core/physics.cpp` (fixed collision response sign bug)
@@ -418,9 +466,9 @@ float aspect_y = 1.0f;
    - Ambient added during composite pass
 ```
 
-## Shadow Casting Implementation (IN PROGRESS)
+## Shadow Casting Implementation (COMPLETED)
 
-**🔧 IN PROGRESS:** 2D shadow casting from occluders is implemented but has a direction bug.
+**✅ COMPLETED:** 2D shadow casting from occluders is fully functional.
 
 ### Algorithm: 1D Radial Shadow Map
 For each shadow-casting light:
@@ -448,36 +496,33 @@ For each shadow-casting light:
 - Soft shadow edges via smoothstep (4.0 world units default)
 - Full falloff support (linear, quadratic, smooth, none)
 
-### Current Status & Known Bug
+### Multi-Light Shadow Support (COMPLETED 2026-01-05)
 
-**Shadow appears but direction is WRONG:**
-- Shadows are rendering and the shadow map is being generated correctly
-- Debug stats show correct values (e.g., "min=123.3 max=400.0 blocked=153/720")
-- However, the shadow appears on the WRONG SIDE of the occluder
-- Shadow appears BETWEEN the light and occluder instead of BEYOND the occluder
-- This suggests a 180-degree angle error or inverted comparison somewhere
+**Implementation:** 2D Texture Atlas approach
+- Shadow map atlas: `720 x 8` (R32_FLOAT format)
+- Each row stores shadow distances for one light
+- Shader samples correct row via `shadow_row` uniform
+- Supports up to 8 shadow-casting lights simultaneously
 
-**Files with shadow implementation:**
-- `src/graphics/lighting.cpp` - Ray intersection functions, shadow map generation/upload
-- `src/graphics/lighting_shaders.h` - `point_light_shadow_msl` shader (around line 99)
-- `examples/lighting/main.cpp` - Test scene with occluders
-
-**Debug features added:**
-- Press TAB in lighting example to see green occluder rectangles
-- Log output shows shadow map stats (min/max distances, blocked ray count)
-- Light position can be adjusted to test shadow direction
-
-**To debug further:**
-1. Simplify to single occluder to isolate the issue
-2. Check if angle calculation in shader matches shadow map generation
-3. Verify smoothstep comparison direction is correct
-4. Consider if there's a Y-axis flip between coordinate systems
+**Key changes:**
+- `shadow_light_indices[]` array maps shadow slot → light index
+- `active_shadow_light_count` tracks how many lights have shadows
+- `upload_shadow_map_row()` uploads to specific atlas row
+- Shader samples at `v = (shadow_row + 0.5) / atlas_height`
 
 ### Current Limitations
-- Only one light can cast shadows per frame (first shadow-casting light wins)
-- Multiple shadow-casting lights would require shadow map texture array
+- Maximum 8 shadow-casting point lights (configurable via MAX_SHADOW_CASTING_LIGHTS)
 - Metal-only (MSL shader) - SPIR-V needed for Vulkan/Linux
-- **BUG: Shadow direction is inverted (needs fix)**
+- Spot light shadows not yet implemented
+
+**Files with shadow implementation:**
+- `src/graphics/lighting.cpp` - Ray intersection, shadow map generation, atlas upload
+- `src/graphics/lighting_shaders.h` - `point_light_shadow_msl` shader with atlas sampling
+- `examples/lighting/main.cpp` - Demo with 3 shadow-casting lights
+
+**Debug features:**
+- Press TAB in lighting example to see green occluder rectangles
+- Log output shows: `Lighting: N shadow-casting lights active, M occluders`
 
 ### Usage
 ```cpp
@@ -560,7 +605,8 @@ SDL_PushGPUVertexUniformData(cmd, 0, projection, sizeof(projection));
 ## Future Work
 
 ### Lighting System - Remaining Work
-- [ ] Multiple shadow-casting lights (requires texture array)
+- [x] Shadow casting from occluders - Working with 1D radial shadow maps
+- [x] Multiple shadow-casting lights - Up to 8 lights using 2D shadow map atlas (720x8)
 - [ ] SPIR-V shaders - Currently Metal-only, need SPIR-V for Vulkan/Linux
 - [ ] Spot light shadows
 

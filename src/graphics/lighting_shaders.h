@@ -123,7 +123,9 @@ struct PointLightShadowParams {
     float2 aspect;          // Aspect ratio correction (width/height, 1.0)
     float2 lightmap_size;   // Lightmap dimensions (width, height) for UV to world
     float radius_world;     // Light radius in world units
-    float _pad;
+    float shadow_row;       // Which row in shadow atlas (0-7)
+    float atlas_height;     // Total atlas height (8.0)
+    float3 _pad;
 };
 
 vertex VertexOutput lighting_vertex(VertexInput in [[stage_in]]) {
@@ -187,9 +189,10 @@ fragment float4 point_light_shadow_fragment(
     // Clamp to valid range to avoid sampling artifacts at edges
     angle_normalized = clamp(angle_normalized, 0.001, 0.999);
 
-    // Sample shadow map at this angle
-    // shadow_map contains distances in world units (pixels)
-    float shadow_dist = shadow_map.sample(shadow_sampler, float2(angle_normalized, 0.5)).r;
+    // Sample shadow map atlas at this angle and the correct row for this light
+    // shadow_map is an atlas with each row containing one light's shadow distances
+    float v = (params.shadow_row + 0.5) / params.atlas_height;
+    float shadow_dist = shadow_map.sample(shadow_sampler, float2(angle_normalized, v)).r;
 
     // Shadow test with soft edge
     // If fragment is further than shadow distance, it's in shadow
