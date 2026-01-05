@@ -60,13 +60,22 @@
   - Root cause: Builtin shaders were added to both `ss->shaders[]` and `ss->builtins[]`, causing double-free during cleanup
   - Fix: Skip builtin shaders in the first cleanup loop (check `is_builtin` flag)
 - [x] Added `SDL_WaitForGPUIdle()` before cleanup to ensure GPU operations are complete
+- [x] **Added dark UI backgrounds for text readability**
+  - Creates 1x1 semi-transparent black texture, stretched as background behind text
+  - UI backgrounds render AFTER postprocess (not affected by effects like Invert)
+  - Top background: 360x55 at (5,5) for title and effect name
+  - Bottom background: 320x26 at (5, WINDOW_HEIGHT-35) for controls
+- [x] Moved scene texture down 200px to avoid overlap with UI text
+- [x] Added "(N/A on Metal)" indicator for unavailable shaders
+  - Shows actual effect name + availability status instead of just "Passthrough"
 
 **Current state:**
 - Example runs with working postprocess effects
 - Controls: 0-7 select effects (grayscale, sepia, invert, vignette, scanlines, pixelate, contrast)
 - Text rendered on top of postprocessed scene (not affected by effects)
+- Dark backgrounds behind text ensure readability on all effects (especially Invert)
 - Available effects on macOS (Metal): grayscale, sepia, invert, vignette, pixelate
-- Note: scanlines/contrast shaders only have SPIRV (not MSL), so not available on Metal
+- Note: scanlines/contrast shaders only have SPIRV (not MSL), displayed as "(N/A on Metal)"
 
 ### Transitions Example (`examples/transitions/main.cpp`) - RUNS, EFFECTS PENDING
 
@@ -216,25 +225,32 @@ make -j4  # Build everything
 
 **Postprocess workflow:**
 ```cpp
-// 1. Acquire command buffer and upload data
+// 1. Acquire command buffer and upload scene data
 SDL_GPUCommandBuffer *cmd = agentite_acquire_command_buffer(engine);
-agentite_sprite_upload(sprites, cmd);
+agentite_sprite_upload(sprites, cmd);  // Scene sprites
 agentite_text_upload(text, cmd);
 
-// 2. Render scene to postprocess target
+// 2. Render scene to postprocess target (Pass 1)
 SDL_GPUTexture *target = agentite_postprocess_get_target(pp);
 agentite_begin_render_pass_to_texture(engine, target, 0.1f, 0.1f, 0.15f, 1.0f);
 SDL_GPURenderPass *pass = agentite_get_render_pass(engine);
 agentite_sprite_render(sprites, cmd, pass);
 agentite_end_render_pass_no_submit(engine);
 
-// 3. Apply postprocess effect to swapchain
+// 3. Prepare UI backgrounds (rendered AFTER postprocess for readability)
+agentite_sprite_begin(sprites, NULL);
+agentite_sprite_draw_scaled(sprites, &ui_bg, 5, 5, 360, 55);      // Top
+agentite_sprite_draw_scaled(sprites, &ui_bg, 5, HEIGHT-35, 320, 26); // Bottom
+agentite_sprite_upload(sprites, cmd);
+
+// 4. Apply postprocess effect to swapchain (Pass 2)
 agentite_begin_render_pass(engine, 0, 0, 0, 1);
 pass = agentite_get_render_pass(engine);
 agentite_postprocess_begin(pp, cmd, target);
 agentite_postprocess_apply(pp, cmd, pass, effect_shader, params);
 agentite_postprocess_end(pp, cmd, pass);
-agentite_text_render(text, cmd, pass);  // Text on top, not affected by postprocess
+agentite_sprite_render(sprites, cmd, pass);  // UI backgrounds (not postprocessed)
+agentite_text_render(text, cmd, pass);       // Text on top (not postprocessed)
 agentite_end_render_pass(engine);
 ```
 
