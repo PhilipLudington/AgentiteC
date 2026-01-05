@@ -13,9 +13,6 @@
 #include <cstring>
 #include <cstdio>
 
-/* SPIRV bytecode for built-in post-processing shaders */
-#include "postprocess_shaders_spirv.h"
-
 /* ============================================================================
  * Constants
  * ============================================================================ */
@@ -1579,19 +1576,23 @@ fragment float4 flash_fragment(
 }
 )";
 
-/* Helper to create a builtin shader from SPIRV bytecode */
-static Agentite_Shader *create_builtin_spirv(Agentite_ShaderSystem *ss,
-                                              const uint8_t *frag_spv, size_t frag_size,
-                                              bool needs_uniforms)
+/* Helper to create a builtin shader from SPIRV files */
+static Agentite_Shader *create_builtin_from_file(Agentite_ShaderSystem *ss,
+                                                  const char *frag_filename,
+                                                  bool needs_uniforms)
 {
+    char frag_path[256];
+    snprintf(frag_path, sizeof(frag_path),
+             "assets/shaders/postprocess/%s", frag_filename);
+
     Agentite_ShaderDesc desc = AGENTITE_SHADER_DESC_DEFAULT;
     desc.num_fragment_samplers = 1;
     desc.num_fragment_uniforms = needs_uniforms ? 1 : 0;
     desc.blend_mode = AGENTITE_BLEND_NONE;
 
-    Agentite_Shader *shader = agentite_shader_load_memory(ss,
-        fullscreen_vert_spv, fullscreen_vert_spv_len,
-        frag_spv, frag_size, &desc);
+    Agentite_Shader *shader = agentite_shader_load_spirv(ss,
+        "assets/shaders/postprocess/fullscreen.vert.spv",
+        frag_path, &desc);
 
     if (shader) {
         shader->is_builtin = true;
@@ -1603,44 +1604,44 @@ static bool init_builtin_shaders(Agentite_ShaderSystem *ss)
 {
     /* Try SPIRV first (works on Vulkan, D3D12) */
     if (ss->formats & SDL_GPU_SHADERFORMAT_SPIRV) {
-        ss->builtins[AGENTITE_SHADER_GRAYSCALE] = create_builtin_spirv(ss,
-            grayscale_frag_spv, grayscale_frag_spv_len, false);
+        ss->builtins[AGENTITE_SHADER_GRAYSCALE] = create_builtin_from_file(ss,
+            "grayscale.frag.spv", false);
 
-        ss->builtins[AGENTITE_SHADER_SEPIA] = create_builtin_spirv(ss,
-            sepia_frag_spv, sepia_frag_spv_len, false);
+        ss->builtins[AGENTITE_SHADER_SEPIA] = create_builtin_from_file(ss,
+            "sepia.frag.spv", false);
 
-        ss->builtins[AGENTITE_SHADER_INVERT] = create_builtin_spirv(ss,
-            invert_frag_spv, invert_frag_spv_len, false);
+        ss->builtins[AGENTITE_SHADER_INVERT] = create_builtin_from_file(ss,
+            "invert.frag.spv", false);
 
-        ss->builtins[AGENTITE_SHADER_BRIGHTNESS] = create_builtin_spirv(ss,
-            brightness_frag_spv, brightness_frag_spv_len, true);
+        ss->builtins[AGENTITE_SHADER_BRIGHTNESS] = create_builtin_from_file(ss,
+            "brightness.frag.spv", true);
 
-        ss->builtins[AGENTITE_SHADER_CONTRAST] = create_builtin_spirv(ss,
-            contrast_frag_spv, contrast_frag_spv_len, true);
+        ss->builtins[AGENTITE_SHADER_CONTRAST] = create_builtin_from_file(ss,
+            "contrast.frag.spv", true);
 
-        ss->builtins[AGENTITE_SHADER_SATURATION] = create_builtin_spirv(ss,
-            saturation_frag_spv, saturation_frag_spv_len, true);
+        ss->builtins[AGENTITE_SHADER_SATURATION] = create_builtin_from_file(ss,
+            "saturation.frag.spv", true);
 
-        ss->builtins[AGENTITE_SHADER_BLUR_BOX] = create_builtin_spirv(ss,
-            blur_box_frag_spv, blur_box_frag_spv_len, true);
+        ss->builtins[AGENTITE_SHADER_BLUR_BOX] = create_builtin_from_file(ss,
+            "blur_box.frag.spv", true);
 
-        ss->builtins[AGENTITE_SHADER_VIGNETTE] = create_builtin_spirv(ss,
-            vignette_pp_frag_spv, vignette_pp_frag_spv_len, true);
+        ss->builtins[AGENTITE_SHADER_VIGNETTE] = create_builtin_from_file(ss,
+            "vignette_pp.frag.spv", true);
 
-        ss->builtins[AGENTITE_SHADER_CHROMATIC] = create_builtin_spirv(ss,
-            chromatic_frag_spv, chromatic_frag_spv_len, true);
+        ss->builtins[AGENTITE_SHADER_CHROMATIC] = create_builtin_from_file(ss,
+            "chromatic.frag.spv", true);
 
-        ss->builtins[AGENTITE_SHADER_SCANLINES] = create_builtin_spirv(ss,
-            scanlines_frag_spv, scanlines_frag_spv_len, true);
+        ss->builtins[AGENTITE_SHADER_SCANLINES] = create_builtin_from_file(ss,
+            "scanlines.frag.spv", true);
 
-        ss->builtins[AGENTITE_SHADER_PIXELATE] = create_builtin_spirv(ss,
-            pixelate_frag_spv, pixelate_frag_spv_len, true);
+        ss->builtins[AGENTITE_SHADER_PIXELATE] = create_builtin_from_file(ss,
+            "pixelate.frag.spv", true);
 
-        ss->builtins[AGENTITE_SHADER_SOBEL] = create_builtin_spirv(ss,
-            sobel_frag_spv, sobel_frag_spv_len, false);
+        ss->builtins[AGENTITE_SHADER_SOBEL] = create_builtin_from_file(ss,
+            "sobel.frag.spv", false);
 
-        ss->builtins[AGENTITE_SHADER_FLASH] = create_builtin_spirv(ss,
-            flash_frag_spv, flash_frag_spv_len, true);
+        ss->builtins[AGENTITE_SHADER_FLASH] = create_builtin_from_file(ss,
+            "flash.frag.spv", true);
 
         return true;
     }
