@@ -248,6 +248,35 @@ bool agentite_begin_render_pass(Agentite_Engine *engine, float r, float g, float
 bool agentite_begin_render_pass_no_clear(Agentite_Engine *engine);
 
 /**
+ * Begin a render pass targeting a custom texture (not the swapchain).
+ * Use for offscreen rendering, post-processing, shadow maps, etc.
+ * Call agentite_end_render_pass_no_submit() after rendering to continue
+ * with additional passes, or agentite_end_render_pass() to finish.
+ *
+ * @param engine Engine instance
+ * @param target Target texture (must be created with render target usage)
+ * @param r Red clear color (0.0-1.0)
+ * @param g Green clear color (0.0-1.0)
+ * @param b Blue clear color (0.0-1.0)
+ * @param a Alpha clear color (0.0-1.0)
+ * @return true on success
+ */
+bool agentite_begin_render_pass_to_texture(Agentite_Engine *engine,
+                                            SDL_GPUTexture *target,
+                                            float r, float g, float b, float a);
+
+/**
+ * Begin a render pass targeting a custom texture without clearing.
+ * Use when you want to preserve existing texture contents.
+ *
+ * @param engine Engine instance
+ * @param target Target texture (must be created with render target usage)
+ * @return true on success
+ */
+bool agentite_begin_render_pass_to_texture_no_clear(Agentite_Engine *engine,
+                                                     SDL_GPUTexture *target);
+
+/**
  * End the render pass but keep the command buffer open.
  * Use when you need multiple render passes per frame.
  *

@@ -174,9 +174,9 @@ void agentite_shader_system_destroy(Agentite_ShaderSystem *ss)
 {
     if (!ss) return;
 
-    /* Destroy all loaded shaders */
+    /* Destroy all loaded shaders (skip builtins - they're handled separately) */
     for (uint32_t i = 0; i < ss->shader_count; i++) {
-        if (ss->shaders[i]) {
+        if (ss->shaders[i] && !ss->shaders[i]->is_builtin) {
             if (ss->shaders[i]->pipeline) {
                 SDL_ReleaseGPUGraphicsPipeline(ss->gpu, ss->shaders[i]->pipeline);
             }

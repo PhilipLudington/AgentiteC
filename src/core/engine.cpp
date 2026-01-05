@@ -337,6 +337,86 @@ bool agentite_begin_render_pass_no_clear(Agentite_Engine *engine) {
     return true;
 }
 
+bool agentite_begin_render_pass_to_texture(Agentite_Engine *engine,
+                                            SDL_GPUTexture *target,
+                                            float r, float g, float b, float a) {
+    if (!engine || !engine->gpu_device) return false;
+    if (!target) {
+        agentite_set_error("Target texture is NULL");
+        return false;
+    }
+
+    // Acquire command buffer if not already acquired
+    if (!engine->cmd_buffer) {
+        engine->cmd_buffer = SDL_AcquireGPUCommandBuffer(engine->gpu_device);
+        if (!engine->cmd_buffer) {
+            agentite_set_error_from_sdl("Failed to acquire command buffer");
+            return false;
+        }
+    }
+
+    // Set up color target with clear color
+    SDL_GPUColorTargetInfo color_target = {};
+    color_target.texture = target;
+    color_target.load_op = SDL_GPU_LOADOP_CLEAR;
+    color_target.store_op = SDL_GPU_STOREOP_STORE;
+    color_target.clear_color = { r, g, b, a };
+
+    // Begin render pass
+    engine->render_pass = SDL_BeginGPURenderPass(
+        engine->cmd_buffer,
+        &color_target,
+        1,
+        NULL
+    );
+
+    if (!engine->render_pass) {
+        agentite_set_error_from_sdl("Failed to begin render pass to texture");
+        return false;
+    }
+
+    return true;
+}
+
+bool agentite_begin_render_pass_to_texture_no_clear(Agentite_Engine *engine,
+                                                     SDL_GPUTexture *target) {
+    if (!engine || !engine->gpu_device) return false;
+    if (!target) {
+        agentite_set_error("Target texture is NULL");
+        return false;
+    }
+
+    // Acquire command buffer if not already acquired
+    if (!engine->cmd_buffer) {
+        engine->cmd_buffer = SDL_AcquireGPUCommandBuffer(engine->gpu_device);
+        if (!engine->cmd_buffer) {
+            agentite_set_error_from_sdl("Failed to acquire command buffer");
+            return false;
+        }
+    }
+
+    // Set up color target with LOAD (preserve existing content)
+    SDL_GPUColorTargetInfo color_target = {};
+    color_target.texture = target;
+    color_target.load_op = SDL_GPU_LOADOP_LOAD;
+    color_target.store_op = SDL_GPU_STOREOP_STORE;
+
+    // Begin render pass
+    engine->render_pass = SDL_BeginGPURenderPass(
+        engine->cmd_buffer,
+        &color_target,
+        1,
+        NULL
+    );
+
+    if (!engine->render_pass) {
+        agentite_set_error_from_sdl("Failed to begin render pass to texture (no clear)");
+        return false;
+    }
+
+    return true;
+}
+
 void agentite_end_render_pass_no_submit(Agentite_Engine *engine) {
     if (!engine) return;
 
