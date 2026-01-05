@@ -181,9 +181,9 @@ The solution is simple: **keep texture, viewport, and projection all at the same
 - Debug gizmos (TAB) show light positions and radii matching actual lights
 - Multiple lights accumulate correctly (additive blend on lightmap)
 
-**Not yet implemented:**
-- Shadow casting from occluders (infrastructure added but rendering not implemented)
-- SPIR-V shaders for Vulkan/Linux (currently Metal-only)
+**Platform support:**
+- ✅ macOS/iOS: MSL shaders (Metal)
+- ✅ Linux/Windows: SPIR-V shaders (Vulkan, D3D12)
 
 ## Multi-Light Shadow Support (2026-01-05)
 
@@ -512,7 +512,6 @@ For each shadow-casting light:
 
 ### Current Limitations
 - Maximum 8 shadow-casting point lights (configurable via MAX_SHADOW_CASTING_LIGHTS)
-- Metal-only (MSL shader) - SPIR-V needed for Vulkan/Linux
 - Spot light shadows not yet implemented
 
 **Files with shadow implementation:**
@@ -602,12 +601,43 @@ SDL_PushGPUVertexUniformData(cmd, 0, projection, sizeof(projection));
 
 ---
 
+## SPIR-V Shader Improvements (2026-01-05)
+
+### Removed Embedded Bytecode
+- **Deleted**: `src/graphics/postprocess_shaders_spirv.h` (151KB, 2131 lines)
+- Postprocess shaders now load from external `.spv` files at runtime
+- Files: `assets/shaders/postprocess/*.spv`
+- Reduced source code size significantly
+
+### Added SPIR-V Lighting Shaders
+Created GLSL shaders for all lighting effects, compiled to SPIR-V:
+
+| Shader | Purpose |
+|--------|---------|
+| `lighting.vert.spv` | Shared fullscreen quad vertex shader |
+| `point_light.frag.spv` | Radial gradient with falloff |
+| `point_light_shadow.frag.spv` | Shadow map atlas sampling |
+| `spot_light.frag.spv` | Cone-shaped directional light |
+| `composite.frag.spv` | Scene + lightmap blending |
+| `ambient.frag.spv` | Ambient fill |
+
+**Files:**
+- `assets/shaders/lighting/*.glsl` - GLSL source files
+- `assets/shaders/lighting/*.spv` - Compiled SPIR-V bytecode
+- `assets/shaders/lighting/compile_lighting.sh` - Build script
+
+**Modified:**
+- `src/graphics/lighting.cpp` - Checks SPIR-V first, falls back to MSL
+- `src/graphics/shader.cpp` - Loads postprocess shaders from files
+
+---
+
 ## Future Work
 
 ### Lighting System - Remaining Work
 - [x] Shadow casting from occluders - Working with 1D radial shadow maps
 - [x] Multiple shadow-casting lights - Up to 8 lights using 2D shadow map atlas (720x8)
-- [ ] SPIR-V shaders - Currently Metal-only, need SPIR-V for Vulkan/Linux
+- [x] SPIR-V shaders - All lighting shaders now work on Vulkan/Linux
 - [ ] Spot light shadows
 
 ### Other Examples
