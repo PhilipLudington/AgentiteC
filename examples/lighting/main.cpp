@@ -122,11 +122,13 @@ static Agentite_Texture *create_scene(Agentite_SpriteRenderer *sr) {
 
 /* Create shadow occluders matching the scene walls */
 static void create_occluders(AppState *app) {
+    float scene_offset_y = (WINDOW_HEIGHT - 512) / 2.0f + 300.0f;
+
     /* Central pillar */
     Agentite_Occluder pillar;
     pillar.type = AGENTITE_OCCLUDER_BOX;
     pillar.box.x = 200 + (WINDOW_WIDTH - 512) / 2.0f;
-    pillar.box.y = 200 + (WINDOW_HEIGHT - 512) / 2.0f;
+    pillar.box.y = 200 + scene_offset_y;
     pillar.box.w = 50;
     pillar.box.h = 50;
     agentite_lighting_add_occluder(app->lighting, &pillar);
@@ -135,7 +137,7 @@ static void create_occluders(AppState *app) {
     Agentite_Occluder wall1;
     wall1.type = AGENTITE_OCCLUDER_BOX;
     wall1.box.x = 50 + (WINDOW_WIDTH - 512) / 2.0f;
-    wall1.box.y = 100 + (WINDOW_HEIGHT - 512) / 2.0f;
+    wall1.box.y = 100 + scene_offset_y;
     wall1.box.w = 10;
     wall1.box.h = 200;
     agentite_lighting_add_occluder(app->lighting, &wall1);
@@ -144,7 +146,7 @@ static void create_occluders(AppState *app) {
     Agentite_Occluder wall2;
     wall2.type = AGENTITE_OCCLUDER_BOX;
     wall2.box.x = 400 + (WINDOW_WIDTH - 512) / 2.0f;
-    wall2.box.y = 50 + (WINDOW_HEIGHT - 512) / 2.0f;
+    wall2.box.y = 50 + scene_offset_y;
     wall2.box.w = 50;
     wall2.box.h = 10;
     agentite_lighting_add_occluder(app->lighting, &wall2);
@@ -153,7 +155,7 @@ static void create_occluders(AppState *app) {
     Agentite_Occluder wall3;
     wall3.type = AGENTITE_OCCLUDER_BOX;
     wall3.box.x = 300 + (WINDOW_WIDTH - 512) / 2.0f;
-    wall3.box.y = 350 + (WINDOW_HEIGHT - 512) / 2.0f;
+    wall3.box.y = 350 + scene_offset_y;
     wall3.box.w = 50;
     wall3.box.h = 100;
     agentite_lighting_add_occluder(app->lighting, &wall3);
@@ -189,7 +191,10 @@ int main(int argc, char *argv[]) {
         app.font = agentite_font_load(app.text, "assets/fonts/Roboto-Regular.ttf", 16);
     }
 
-    agentite_gizmos_set_screen_size(app.gizmos, WINDOW_WIDTH, WINDOW_HEIGHT);
+    /* Use physical pixel dimensions for gizmos to match sprite rendering on HiDPI */
+    int phys_w, phys_h;
+    SDL_GetWindowSizeInPixels(window, &phys_w, &phys_h);
+    agentite_gizmos_set_screen_size(app.gizmos, phys_w, phys_h);
 
     /* Create shader and lighting systems */
     app.shaders = agentite_shader_system_create(gpu);
@@ -209,11 +214,16 @@ int main(int argc, char *argv[]) {
     /* Create occluders */
     create_occluders(&app);
 
-    /* Add initial light at center */
+    /* Add initial light at scene center */
+    /* Scene center in logical coords ~(420, 400), scaled to physical for gizmos */
+    float dpi_scale = SDL_GetWindowPixelDensity(window);
+    float scene_center_x = 420.0f * dpi_scale;
+    float scene_center_y = 400.0f * dpi_scale;
+
     Agentite_PointLightDesc initial_light = AGENTITE_POINT_LIGHT_DEFAULT;
-    initial_light.x = WINDOW_WIDTH / 2.0f;
-    initial_light.y = WINDOW_HEIGHT / 2.0f;
-    initial_light.radius = 200.0f;
+    initial_light.x = scene_center_x;
+    initial_light.y = scene_center_y;
+    initial_light.radius = 200.0f * dpi_scale;
     initial_light.color = LIGHT_COLORS[1];  /* Warm */
     initial_light.casts_shadows = true;
     agentite_lighting_add_point_light(app.lighting, &initial_light);
@@ -234,24 +244,28 @@ int main(int argc, char *argv[]) {
             agentite_input_process_event(app.input, &event);
             if (event.type == SDL_EVENT_QUIT) agentite_quit(app.engine);
 
-            /* Add light on click */
+            /* Add light on click - scale to physical pixels to match gizmos */
             if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
                 event.button.button == SDL_BUTTON_LEFT) {
 
+                float dpi = SDL_GetWindowPixelDensity(window);
+                float mouse_x = event.button.x * dpi;
+                float mouse_y = event.button.y * dpi;
+
                 if (app.spot_mode) {
                     Agentite_SpotLightDesc spot = AGENTITE_SPOT_LIGHT_DEFAULT;
-                    spot.x = event.button.x;
-                    spot.y = event.button.y;
-                    spot.radius = app.light_radius;
+                    spot.x = mouse_x;
+                    spot.y = mouse_y;
+                    spot.radius = app.light_radius * dpi;
                     spot.direction_y = 1.0f;  /* Point down */
                     spot.color = LIGHT_COLORS[app.color_mode];
                     spot.casts_shadows = app.shadows_enabled;
                     agentite_lighting_add_spot_light(app.lighting, &spot);
                 } else {
                     Agentite_PointLightDesc point = AGENTITE_POINT_LIGHT_DEFAULT;
-                    point.x = event.button.x;
-                    point.y = event.button.y;
-                    point.radius = app.light_radius;
+                    point.x = mouse_x;
+                    point.y = mouse_y;
+                    point.radius = app.light_radius * dpi;
                     point.color = LIGHT_COLORS[app.color_mode];
                     point.casts_shadows = app.shadows_enabled;
                     agentite_lighting_add_point_light(app.lighting, &point);
@@ -320,7 +334,7 @@ int main(int argc, char *argv[]) {
             if (app.scene_texture) {
                 Agentite_Sprite sprite = agentite_sprite_from_texture(app.scene_texture);
                 float px = (WINDOW_WIDTH - 512) / 2.0f;
-                float py = (WINDOW_HEIGHT - 512) / 2.0f;
+                float py = (WINDOW_HEIGHT - 512) / 2.0f + 300.0f;
                 agentite_sprite_draw(app.sprites, &sprite, px, py);
             }
 
@@ -365,12 +379,15 @@ int main(int argc, char *argv[]) {
                 agentite_gizmos_begin(app.gizmos, NULL);
 
                 /* Draw light positions and radii */
+                /* Note: Light IDs start at 1, not 0. Iterate through potential IDs. */
                 Agentite_LightingStats debug_stats;
                 agentite_lighting_get_stats(app.lighting, &debug_stats);
 
-                for (uint32_t i = 0; i < debug_stats.point_light_count; i++) {
+                uint32_t found = 0;
+                for (uint32_t id = 1; found < debug_stats.point_light_count && id < 1000; id++) {
                     Agentite_PointLightDesc light;
-                    if (agentite_lighting_get_point_light(app.lighting, i, &light)) {
+                    if (agentite_lighting_get_point_light(app.lighting, id, &light)) {
+                        found++;
                         /* Convert color to RGBA packed uint32 */
                         uint32_t r = (uint32_t)(light.color.r * 255) & 0xFF;
                         uint32_t g = (uint32_t)(light.color.g * 255) & 0xFF;

@@ -106,7 +106,7 @@
 - **Not yet implemented** (require dedicated two-texture blend shaders):
   - Crossfade, Wipe (left/right/up/down), Circle open/close, Slide, Push
 
-### Lighting Example (`examples/lighting/main.cpp`) - RUNS, EFFECTS MAY BE PARTIAL
+### Lighting Example (`examples/lighting/main.cpp`) - RUNS, LIGHTING NOT VISIBLE
 
 **Fixed issues:**
 - [x] Fixed font path (`ProggyClean.ttf` -> `Roboto-Regular.ttf`)
@@ -114,13 +114,26 @@
 - [x] Fixed text render being called after render pass ended
 - [x] Removed `agentite_sprite_end(NULL, NULL)`
 - [x] Added `agentite_text_end()` before upload
+- [x] **Fixed debug visualization bug** - Light ID iteration was using indices (0,1,2...) but IDs start at 1
+- [x] **Fixed HiDPI/Retina coordinate mismatch** - Gizmos were misaligned with sprites on 2x displays
+  - Set gizmos screen size to physical pixels (`SDL_GetWindowSizeInPixels`)
+  - Scale light positions, radii, and mouse coordinates by DPI factor
+- [x] Moved scene down 300px as requested
+- [x] Positioned initial light at scene center
+- [x] Updated shadow occluder positions to match scene offset
 
 **Current state:**
 - Example runs without crashes
 - Displays scene with checkerboard floor and wall obstacles
 - Text UI displays correctly
-- Lighting system initialized (may have partial functionality)
-- NOTE: Full lighting effects may require same render-to-texture API
+- Debug gizmos (TAB) show light positions correctly - **aligned with mouse clicks**
+- Click to add lights works properly
+
+**NOT IMPLEMENTED - Actual lighting effects:**
+- `agentite_lighting_render_lights()` is a stub (TODO in code) - lights not rendered to lightmap
+- `agentite_lighting_apply()` is a stub (TODO in code) - lightmap not composited with scene
+- Result: No visible lighting or shadow effects, only debug circles via gizmos
+- **Requires:** Implement light rendering shaders and lightmap compositing (similar to postprocess system)
 
 ## All Examples Tested
 
@@ -131,8 +144,8 @@ All 8 examples have been tested and fixed:
 - ✅ physics2d - Working
 - ✅ noise - Working
 - ✅ shaders - **Working with postprocess effects!**
-- ✅ transitions - Runs, transitions pending (can use new render-to-texture API)
-- ✅ lighting - Runs, may have partial functionality
+- ✅ transitions - Runs, fade/pixelate work, other transitions pending
+- ⚠️ lighting - Runs, debug view works, but **lighting effects not implemented** (stub functions)
 
 ## Common Issues Found and Fixed
 
@@ -194,7 +207,7 @@ if (agentite_begin_render_pass(engine, r, g, b, a)) {
 - `examples/particles/main.cpp`
 - `examples/collision/main.cpp`
 - `examples/transitions/main.cpp` (complete rewrite - simplified, transitions disabled)
-- `examples/lighting/main.cpp` (text fix, render order fix)
+- `examples/lighting/main.cpp` (text fix, render order fix, HiDPI gizmo fix, scene offset)
 - `examples/physics/main.cpp` (text fix, bottom instructions, physics config)
 - `examples/physics2d/main.cpp` (text fix, bottom instructions)
 - `examples/noise/main.cpp` (text fix, fractal noise fix, control hints)
@@ -297,9 +310,16 @@ File: `src/graphics/shader.cpp` - MSL shader sources and registration in `init_b
 
 ## Future Work
 
+### Lighting System Implementation
+The lighting system (`src/graphics/lighting.cpp`) has the data structures but rendering is not implemented:
+- `agentite_lighting_render_lights()` - Need to render point/spot lights to lightmap texture
+- `agentite_lighting_apply()` - Need to composite lightmap with scene (multiply blend)
+- Shadow casting - Need shadow map generation from occluders
+- **Approach:** Use render-to-texture API like postprocess system
+
 ### Other Examples
 - ~~Update transitions example to use new render-to-texture API~~ ✅ DONE
-- Update lighting example if it needs render-to-texture for shadows/effects
+- ~~Update lighting example~~ ✅ Debug view fixed, needs render implementation
 
 ### Transition Shaders
 - Implement crossfade shader (blend two textures with alpha)
