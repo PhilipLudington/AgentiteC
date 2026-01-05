@@ -303,11 +303,11 @@ int main(int argc, char *argv[]) {
         if (cmd) {
             agentite_sprite_begin(app.sprites, NULL);
 
-            /* Draw preview centered (offset down for text) */
+            /* Draw preview centered (sprite origin is at center, so use window center) */
             if (app.preview_texture) {
                 Agentite_Sprite sprite = agentite_sprite_from_texture(app.preview_texture);
-                float px = (WINDOW_WIDTH - PREVIEW_SIZE) / 2.0f;
-                float py = (WINDOW_HEIGHT - PREVIEW_SIZE) / 2.0f + 50.0f;
+                float px = WINDOW_WIDTH / 2.0f;
+                float py = WINDOW_HEIGHT / 2.0f;
                 agentite_sprite_draw(app.sprites, &sprite, px, py);
             }
 
