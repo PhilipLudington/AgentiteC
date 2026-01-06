@@ -373,6 +373,7 @@ void agentite_get_drawable_size(Agentite_Engine *engine, int *w, int *h);
 #include "agentite/unlock.h"
 #include "agentite/blueprint.h"
 #include "agentite/game_speed.h"
+#include "agentite/replay.h"
 
 // UI utilities
 #include "agentite/notification.h"

@@ -64,6 +64,7 @@ Agentite is built around these core principles:
 - Spatial indexing
 - Modifier system
 - Construction and blueprints
+- Replay recording and playback
 
 ### UI
 - Immediate-mode UI system (AUI)
@@ -201,6 +202,7 @@ make example-strategy-sim # Strategy systems simulation
 make example-pathfinding  # A* pathfinding visualization
 make example-scene        # Scene loading and switching
 make example-prefab       # Prefab entity spawning
+make example-replay       # Replay recording and playback
 ```
 
 ### ECS & Tools

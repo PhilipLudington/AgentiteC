@@ -154,6 +154,7 @@ dirs:
 	@mkdir -p $(BUILD_DIR)/examples/lighting
 	@mkdir -p $(BUILD_DIR)/examples/hidpi
 	@mkdir -p $(BUILD_DIR)/examples/debug
+	@mkdir -p $(BUILD_DIR)/examples/replay
 
 # Link main executable (game template)
 $(BUILD_DIR)/$(EXECUTABLE): $(OBJS) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS)
@@ -355,6 +356,11 @@ example-debug: dirs $(BUILD_DIR)/examples/debug/main.o $(patsubst $(SRC_DIR)/%.c
 	$(CXX) $(BUILD_DIR)/examples/debug/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-debug $(LDFLAGS)
 	./$(BUILD_DIR)/example-debug
 
+# Build and run Replay System demo
+example-replay: dirs $(BUILD_DIR)/examples/replay/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/replay/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-replay $(LDFLAGS)
+	./$(BUILD_DIR)/example-replay
+
 #============================================================================
 # Test targets
 #============================================================================
@@ -517,4 +523,4 @@ help:
 
 .PHONY: all dirs run run-demo clean install-deps-macos install-deps-linux info help test test-verbose
 .PHONY: check safety format format-check
-.PHONY: example-minimal example-sprites example-animation example-tilemap example-ui example-ui-node example-strategy example-strategy-sim example-msdf example-charts example-richtext example-dialogs example-pathfinding example-ecs example-inspector example-gizmos example-async example-prefab example-scene example-debug
+.PHONY: example-minimal example-sprites example-animation example-tilemap example-ui example-ui-node example-strategy example-strategy-sim example-msdf example-charts example-richtext example-dialogs example-pathfinding example-ecs example-inspector example-gizmos example-async example-prefab example-scene example-debug example-replay

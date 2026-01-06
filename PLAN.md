@@ -202,13 +202,13 @@ These features have been implemented but need dedicated example programs to demo
 ## Phase 4: Advanced Features
 
 ### Replay System
-- [ ] Design replay API (`agentite_replay_*`)
-- [ ] Leverage existing command queue for recording
-- [ ] Implement replay file format (versioned, compressed)
-- [ ] Add replay playback with speed control
-- [ ] Implement seek/scrub functionality
-- [ ] Add replay metadata (timestamp, version, duration)
-- [ ] Create replay UI widget
+- [x] Design replay API (`agentite_replay_*`)
+- [x] Leverage existing command queue for recording
+- [x] Implement replay file format (versioned, compressed)
+- [x] Add replay playback with speed control
+- [x] Implement seek/scrub functionality
+- [x] Add replay metadata (timestamp, version, duration)
+- [x] Create replay UI widget
 
 ### Hot Reload / Mod Support
 - [ ] Implement asset file watching
