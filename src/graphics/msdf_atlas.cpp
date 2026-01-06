@@ -279,7 +279,6 @@ bool msdf_atlas_add_string(MSDF_Atlas *atlas, const char *str)
 
     /* Full UTF-8 decoding */
     const unsigned char *p = (const unsigned char *)str;
-    int added = 0;
     while (*p) {
         uint32_t codepoint;
         unsigned char c = *p++;
