@@ -741,8 +741,10 @@ void agentite_postprocess_apply_scaled(Agentite_PostProcess *pp,
 
     /* Push parameters if provided */
     if (params && shader->desc.num_fragment_uniforms > 0) {
-        /* Assume 16-byte aligned params, default size */
-        SDL_PushGPUFragmentUniformData(cmd, 0, params, 16);
+        /* Use shader's declared uniform size, default to 16 bytes */
+        uint32_t uniform_size = shader->desc.fragment_uniform_size;
+        if (uniform_size == 0) uniform_size = 16;
+        SDL_PushGPUFragmentUniformData(cmd, 0, params, uniform_size);
     }
 
     /* Bind fullscreen quad vertex buffer */
@@ -789,8 +791,10 @@ void agentite_postprocess_apply(Agentite_PostProcess *pp,
 
     /* Push parameters if provided */
     if (params && shader->desc.num_fragment_uniforms > 0) {
-        /* Assume 16-byte aligned params, default size */
-        SDL_PushGPUFragmentUniformData(cmd, 0, params, 16);
+        /* Use shader's declared uniform size, default to 16 bytes */
+        uint32_t uniform_size = shader->desc.fragment_uniform_size;
+        if (uniform_size == 0) uniform_size = 16;
+        SDL_PushGPUFragmentUniformData(cmd, 0, params, uniform_size);
     }
 
     /* Bind fullscreen quad vertex buffer */
@@ -1814,7 +1818,7 @@ fragment float4 dissolve_fragment(
 /* Helper to create a builtin shader from SPIRV files */
 static Agentite_Shader *create_builtin_from_file(Agentite_ShaderSystem *ss,
                                                   const char *frag_filename,
-                                                  bool needs_uniforms)
+                                                  uint32_t uniform_size)
 {
     char frag_path[256];
     snprintf(frag_path, sizeof(frag_path),
@@ -1822,7 +1826,8 @@ static Agentite_Shader *create_builtin_from_file(Agentite_ShaderSystem *ss,
 
     Agentite_ShaderDesc desc = AGENTITE_SHADER_DESC_DEFAULT;
     desc.num_fragment_samplers = 1;
-    desc.num_fragment_uniforms = needs_uniforms ? 1 : 0;
+    desc.num_fragment_uniforms = (uniform_size > 0) ? 1 : 0;
+    desc.fragment_uniform_size = uniform_size;
     desc.blend_mode = AGENTITE_BLEND_NONE;
 
     Agentite_Shader *shader = agentite_shader_load_spirv(ss,
@@ -1837,46 +1842,50 @@ static Agentite_Shader *create_builtin_from_file(Agentite_ShaderSystem *ss,
 
 static bool init_builtin_shaders(Agentite_ShaderSystem *ss)
 {
+    /* Uniform sizes for builtin shaders (must match Agentite_ShaderParams_* structs) */
+    const uint32_t UNIFORM_SIZE_16 = 16;  /* Most effects: Adjust, Blur, Vignette, etc. */
+    const uint32_t UNIFORM_SIZE_32 = 32;  /* Flash, Outline: larger param structs */
+
     /* Try SPIRV first (works on Vulkan, D3D12) */
     if (ss->formats & SDL_GPU_SHADERFORMAT_SPIRV) {
         ss->builtins[AGENTITE_SHADER_GRAYSCALE] = create_builtin_from_file(ss,
-            "grayscale.frag.spv", false);
+            "grayscale.frag.spv", 0);
 
         ss->builtins[AGENTITE_SHADER_SEPIA] = create_builtin_from_file(ss,
-            "sepia.frag.spv", false);
+            "sepia.frag.spv", 0);
 
         ss->builtins[AGENTITE_SHADER_INVERT] = create_builtin_from_file(ss,
-            "invert.frag.spv", false);
+            "invert.frag.spv", 0);
 
         ss->builtins[AGENTITE_SHADER_BRIGHTNESS] = create_builtin_from_file(ss,
-            "brightness.frag.spv", true);
+            "brightness.frag.spv", UNIFORM_SIZE_16);
 
         ss->builtins[AGENTITE_SHADER_CONTRAST] = create_builtin_from_file(ss,
-            "contrast.frag.spv", true);
+            "contrast.frag.spv", UNIFORM_SIZE_16);
 
         ss->builtins[AGENTITE_SHADER_SATURATION] = create_builtin_from_file(ss,
-            "saturation.frag.spv", true);
+            "saturation.frag.spv", UNIFORM_SIZE_16);
 
         ss->builtins[AGENTITE_SHADER_BLUR_BOX] = create_builtin_from_file(ss,
-            "blur_box.frag.spv", true);
+            "blur_box.frag.spv", UNIFORM_SIZE_16);
 
         ss->builtins[AGENTITE_SHADER_VIGNETTE] = create_builtin_from_file(ss,
-            "vignette_pp.frag.spv", true);
+            "vignette_pp.frag.spv", UNIFORM_SIZE_16);
 
         ss->builtins[AGENTITE_SHADER_CHROMATIC] = create_builtin_from_file(ss,
-            "chromatic.frag.spv", true);
+            "chromatic.frag.spv", UNIFORM_SIZE_16);
 
         ss->builtins[AGENTITE_SHADER_SCANLINES] = create_builtin_from_file(ss,
-            "scanlines.frag.spv", true);
+            "scanlines.frag.spv", UNIFORM_SIZE_16);
 
         ss->builtins[AGENTITE_SHADER_PIXELATE] = create_builtin_from_file(ss,
-            "pixelate.frag.spv", true);
+            "pixelate.frag.spv", UNIFORM_SIZE_16);
 
         ss->builtins[AGENTITE_SHADER_SOBEL] = create_builtin_from_file(ss,
-            "sobel.frag.spv", false);
+            "sobel.frag.spv", 0);
 
         ss->builtins[AGENTITE_SHADER_FLASH] = create_builtin_from_file(ss,
-            "flash.frag.spv", true);
+            "flash.frag.spv", UNIFORM_SIZE_32);
 
         return true;
     }
@@ -1889,17 +1898,19 @@ static bool init_builtin_shaders(Agentite_ShaderSystem *ss)
         desc.num_fragment_samplers = 1;
         desc.num_vertex_uniforms = 1;  /* Projection matrix for HiDPI support */
         desc.blend_mode = AGENTITE_BLEND_NONE;
-
-        /* Grayscale */
-        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_grayscale_msl);
         desc.vertex_entry = "fullscreen_vertex";
+
+        /* Grayscale (no uniforms) */
+        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_grayscale_msl);
         desc.fragment_entry = "grayscale_fragment";
+        desc.num_fragment_uniforms = 0;
+        desc.fragment_uniform_size = 0;
         ss->builtins[AGENTITE_SHADER_GRAYSCALE] = agentite_shader_load_msl(ss, combined, &desc);
         if (ss->builtins[AGENTITE_SHADER_GRAYSCALE]) {
             ss->builtins[AGENTITE_SHADER_GRAYSCALE]->is_builtin = true;
         }
 
-        /* Sepia */
+        /* Sepia (no uniforms) */
         snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_sepia_msl);
         desc.fragment_entry = "sepia_fragment";
         ss->builtins[AGENTITE_SHADER_SEPIA] = agentite_shader_load_msl(ss, combined, &desc);
@@ -1907,7 +1918,7 @@ static bool init_builtin_shaders(Agentite_ShaderSystem *ss)
             ss->builtins[AGENTITE_SHADER_SEPIA]->is_builtin = true;
         }
 
-        /* Invert */
+        /* Invert (no uniforms) */
         snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_invert_msl);
         desc.fragment_entry = "invert_fragment";
         ss->builtins[AGENTITE_SHADER_INVERT] = agentite_shader_load_msl(ss, combined, &desc);
@@ -1915,16 +1926,27 @@ static bool init_builtin_shaders(Agentite_ShaderSystem *ss)
             ss->builtins[AGENTITE_SHADER_INVERT]->is_builtin = true;
         }
 
-        /* Vignette (needs uniform buffer) */
+        /* Sobel edge detection (no uniforms) */
+        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_sobel_msl);
+        desc.fragment_entry = "sobel_fragment";
+        ss->builtins[AGENTITE_SHADER_SOBEL] = agentite_shader_load_msl(ss, combined, &desc);
+        if (ss->builtins[AGENTITE_SHADER_SOBEL]) {
+            ss->builtins[AGENTITE_SHADER_SOBEL]->is_builtin = true;
+        }
+
+        /* Effects with 16-byte uniforms */
+        desc.num_fragment_uniforms = 1;
+        desc.fragment_uniform_size = UNIFORM_SIZE_16;
+
+        /* Vignette */
         snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_vignette_msl);
         desc.fragment_entry = "vignette_fragment";
-        desc.num_fragment_uniforms = 1;
         ss->builtins[AGENTITE_SHADER_VIGNETTE] = agentite_shader_load_msl(ss, combined, &desc);
         if (ss->builtins[AGENTITE_SHADER_VIGNETTE]) {
             ss->builtins[AGENTITE_SHADER_VIGNETTE]->is_builtin = true;
         }
 
-        /* Pixelate (needs uniform buffer) */
+        /* Pixelate */
         snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_pixelate_msl);
         desc.fragment_entry = "pixelate_fragment";
         ss->builtins[AGENTITE_SHADER_PIXELATE] = agentite_shader_load_msl(ss, combined, &desc);
@@ -1932,16 +1954,15 @@ static bool init_builtin_shaders(Agentite_ShaderSystem *ss)
             ss->builtins[AGENTITE_SHADER_PIXELATE]->is_builtin = true;
         }
 
-        /* Brightness (needs uniform buffer) */
+        /* Brightness */
         snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_brightness_msl);
         desc.fragment_entry = "brightness_fragment";
-        desc.num_fragment_uniforms = 1;
         ss->builtins[AGENTITE_SHADER_BRIGHTNESS] = agentite_shader_load_msl(ss, combined, &desc);
         if (ss->builtins[AGENTITE_SHADER_BRIGHTNESS]) {
             ss->builtins[AGENTITE_SHADER_BRIGHTNESS]->is_builtin = true;
         }
 
-        /* Contrast (needs uniform buffer) */
+        /* Contrast */
         snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_contrast_msl);
         desc.fragment_entry = "contrast_fragment";
         ss->builtins[AGENTITE_SHADER_CONTRAST] = agentite_shader_load_msl(ss, combined, &desc);
@@ -1949,7 +1970,7 @@ static bool init_builtin_shaders(Agentite_ShaderSystem *ss)
             ss->builtins[AGENTITE_SHADER_CONTRAST]->is_builtin = true;
         }
 
-        /* Saturation (needs uniform buffer) */
+        /* Saturation */
         snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_saturation_msl);
         desc.fragment_entry = "saturation_fragment";
         ss->builtins[AGENTITE_SHADER_SATURATION] = agentite_shader_load_msl(ss, combined, &desc);
@@ -1957,7 +1978,7 @@ static bool init_builtin_shaders(Agentite_ShaderSystem *ss)
             ss->builtins[AGENTITE_SHADER_SATURATION]->is_builtin = true;
         }
 
-        /* Blur Box (needs uniform buffer) */
+        /* Blur Box */
         snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_blur_box_msl);
         desc.fragment_entry = "blur_box_fragment";
         ss->builtins[AGENTITE_SHADER_BLUR_BOX] = agentite_shader_load_msl(ss, combined, &desc);
@@ -1965,7 +1986,15 @@ static bool init_builtin_shaders(Agentite_ShaderSystem *ss)
             ss->builtins[AGENTITE_SHADER_BLUR_BOX]->is_builtin = true;
         }
 
-        /* Chromatic Aberration (needs uniform buffer) */
+        /* Gaussian Blur */
+        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_blur_gaussian_msl);
+        desc.fragment_entry = "blur_gaussian_fragment";
+        ss->builtins[AGENTITE_SHADER_BLUR_GAUSSIAN] = agentite_shader_load_msl(ss, combined, &desc);
+        if (ss->builtins[AGENTITE_SHADER_BLUR_GAUSSIAN]) {
+            ss->builtins[AGENTITE_SHADER_BLUR_GAUSSIAN]->is_builtin = true;
+        }
+
+        /* Chromatic Aberration */
         snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_chromatic_msl);
         desc.fragment_entry = "chromatic_fragment";
         ss->builtins[AGENTITE_SHADER_CHROMATIC] = agentite_shader_load_msl(ss, combined, &desc);
@@ -1973,7 +2002,7 @@ static bool init_builtin_shaders(Agentite_ShaderSystem *ss)
             ss->builtins[AGENTITE_SHADER_CHROMATIC]->is_builtin = true;
         }
 
-        /* Scanlines (needs uniform buffer) */
+        /* Scanlines */
         snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_scanlines_msl);
         desc.fragment_entry = "scanlines_fragment";
         ss->builtins[AGENTITE_SHADER_SCANLINES] = agentite_shader_load_msl(ss, combined, &desc);
@@ -1981,58 +2010,39 @@ static bool init_builtin_shaders(Agentite_ShaderSystem *ss)
             ss->builtins[AGENTITE_SHADER_SCANLINES]->is_builtin = true;
         }
 
-        /* Sobel edge detection (no uniforms) */
-        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_sobel_msl);
-        desc.fragment_entry = "sobel_fragment";
-        desc.num_fragment_uniforms = 0;
-        ss->builtins[AGENTITE_SHADER_SOBEL] = agentite_shader_load_msl(ss, combined, &desc);
-        if (ss->builtins[AGENTITE_SHADER_SOBEL]) {
-            ss->builtins[AGENTITE_SHADER_SOBEL]->is_builtin = true;
-        }
-
-        /* Flash (needs uniform buffer) */
-        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_flash_msl);
-        desc.fragment_entry = "flash_fragment";
-        desc.num_fragment_uniforms = 1;
-        ss->builtins[AGENTITE_SHADER_FLASH] = agentite_shader_load_msl(ss, combined, &desc);
-        if (ss->builtins[AGENTITE_SHADER_FLASH]) {
-            ss->builtins[AGENTITE_SHADER_FLASH]->is_builtin = true;
-        }
-
-        /* Gaussian Blur (needs uniform buffer) */
-        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_blur_gaussian_msl);
-        desc.fragment_entry = "blur_gaussian_fragment";
-        desc.num_fragment_uniforms = 1;
-        ss->builtins[AGENTITE_SHADER_BLUR_GAUSSIAN] = agentite_shader_load_msl(ss, combined, &desc);
-        if (ss->builtins[AGENTITE_SHADER_BLUR_GAUSSIAN]) {
-            ss->builtins[AGENTITE_SHADER_BLUR_GAUSSIAN]->is_builtin = true;
-        }
-
-        /* Outline (needs uniform buffer) */
-        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_outline_msl);
-        desc.fragment_entry = "outline_fragment";
-        desc.num_fragment_uniforms = 1;
-        ss->builtins[AGENTITE_SHADER_OUTLINE] = agentite_shader_load_msl(ss, combined, &desc);
-        if (ss->builtins[AGENTITE_SHADER_OUTLINE]) {
-            ss->builtins[AGENTITE_SHADER_OUTLINE]->is_builtin = true;
-        }
-
-        /* Glow/Bloom (needs uniform buffer) */
+        /* Glow/Bloom */
         snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_glow_msl);
         desc.fragment_entry = "glow_fragment";
-        desc.num_fragment_uniforms = 1;
         ss->builtins[AGENTITE_SHADER_GLOW] = agentite_shader_load_msl(ss, combined, &desc);
         if (ss->builtins[AGENTITE_SHADER_GLOW]) {
             ss->builtins[AGENTITE_SHADER_GLOW]->is_builtin = true;
         }
 
-        /* Dissolve (needs uniform buffer) */
+        /* Dissolve */
         snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_dissolve_msl);
         desc.fragment_entry = "dissolve_fragment";
-        desc.num_fragment_uniforms = 1;
         ss->builtins[AGENTITE_SHADER_DISSOLVE] = agentite_shader_load_msl(ss, combined, &desc);
         if (ss->builtins[AGENTITE_SHADER_DISSOLVE]) {
             ss->builtins[AGENTITE_SHADER_DISSOLVE]->is_builtin = true;
+        }
+
+        /* Effects with 32-byte uniforms */
+        desc.fragment_uniform_size = UNIFORM_SIZE_32;
+
+        /* Flash */
+        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_flash_msl);
+        desc.fragment_entry = "flash_fragment";
+        ss->builtins[AGENTITE_SHADER_FLASH] = agentite_shader_load_msl(ss, combined, &desc);
+        if (ss->builtins[AGENTITE_SHADER_FLASH]) {
+            ss->builtins[AGENTITE_SHADER_FLASH]->is_builtin = true;
+        }
+
+        /* Outline */
+        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_outline_msl);
+        desc.fragment_entry = "outline_fragment";
+        ss->builtins[AGENTITE_SHADER_OUTLINE] = agentite_shader_load_msl(ss, combined, &desc);
+        if (ss->builtins[AGENTITE_SHADER_OUTLINE]) {
+            ss->builtins[AGENTITE_SHADER_OUTLINE]->is_builtin = true;
         }
 
         return true;

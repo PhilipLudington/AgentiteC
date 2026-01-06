@@ -405,7 +405,7 @@ All commonly-used builtin shaders now have MSL implementations for macOS (Metal)
 
 File: `src/graphics/shader.cpp` - MSL shader sources and registration in `init_builtin_shaders()`
 
-**Known limitation:** `agentite_postprocess_apply()` only passes 16 bytes of uniform params (hardcoded in line 734). Effects with larger param structs (like `Agentite_ShaderParams_Flash` which is 32 bytes) won't work correctly. The Flash MSL shader was redesigned to use 16 bytes: `float[4] = {R, G, B, intensity}` instead of the standard struct.
+**Note:** The uniform size limitation was fixed on 2026-01-05. Shaders now declare their uniform size via `fragment_uniform_size` in `Agentite_ShaderDesc`, allowing proper support for larger param structs like `Agentite_ShaderParams_Flash` (32 bytes).
 
 ## Lighting System Implementation (COMPLETED)
 
@@ -711,6 +711,22 @@ Created GLSL shaders for all lighting effects, compiled to SPIR-V:
 - ✅ Glow - Added 2026-01-05
 - ✅ Dissolve - Added 2026-01-05 (procedural noise with orange fire edge)
 
-### Postprocess Params Limitation
-- Fix `agentite_postprocess_apply()` to support variable-size params (currently hardcoded to 16 bytes)
-- Update `Agentite_ShaderParams_Flash` to match the 16-byte MSL implementation, or increase the limit
+### Postprocess Params Limitation - ✅ FIXED (2026-01-05)
+Added `fragment_uniform_size` field to `Agentite_ShaderDesc` to support variable-size uniform params:
+
+**Changes:**
+- Added `fragment_uniform_size` field to `Agentite_ShaderDesc` (default 0 = 16 bytes for backward compatibility)
+- Updated `agentite_postprocess_apply()` and `agentite_postprocess_apply_scaled()` to use shader's declared uniform size
+- Updated `create_builtin_from_file()` to accept uniform_size parameter
+- Updated all builtin shader creation to specify correct uniform sizes:
+  - 0 bytes: Grayscale, Sepia, Invert, Sobel (no uniforms)
+  - 16 bytes: Brightness, Contrast, Saturation, Blur, Vignette, Chromatic, Scanlines, Pixelate, Glow, Dissolve
+  - 32 bytes: Flash, Outline (larger param structs)
+
+**Usage for custom shaders:**
+```c
+Agentite_ShaderDesc desc = AGENTITE_SHADER_DESC_DEFAULT;
+desc.num_fragment_uniforms = 1;
+desc.fragment_uniform_size = sizeof(MyCustomParams);  // e.g., 48 bytes
+Agentite_Shader *shader = agentite_shader_load_spirv(ss, vert_path, frag_path, &desc);
+```

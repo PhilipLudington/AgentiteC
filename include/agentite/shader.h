@@ -150,6 +150,9 @@ typedef struct Agentite_ShaderDesc {
     uint32_t num_vertex_samplers;       /* Texture samplers in vertex shader */
     uint32_t num_fragment_samplers;     /* Texture samplers in fragment shader */
 
+    /* Uniform buffer sizes (0 = default 16 bytes) */
+    uint32_t fragment_uniform_size;     /* Size of fragment uniform data in bytes */
+
     /* Vertex layout (NULL for fullscreen quad shaders) */
     const Agentite_VertexLayout *vertex_layout;
 
@@ -170,6 +173,7 @@ typedef struct Agentite_ShaderDesc {
     .num_fragment_uniforms = 0,        \
     .num_vertex_samplers = 0,          \
     .num_fragment_samplers = 1,        \
+    .fragment_uniform_size = 0,        \
     .vertex_layout = NULL,             \
     .blend_mode = AGENTITE_BLEND_ALPHA,\
     .target_format = SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM, \
