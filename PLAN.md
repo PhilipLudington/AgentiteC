@@ -191,13 +191,13 @@ These features have been implemented but need dedicated example programs to demo
 - [x] Create localization validation tool
 
 ### Enhanced Debug Tools
-- [ ] Add entity gizmo overlay (show positions, velocities)
-- [ ] Implement collision shape visualization toggle
-- [ ] Add AI path visualization
-- [ ] Create spatial hash grid overlay
-- [ ] Implement fog of war debug view
-- [ ] Add turn/phase state inspector
-- [ ] Create console command system for runtime debugging
+- [x] Add entity gizmo overlay (show positions, velocities)
+- [x] Implement collision shape visualization toggle
+- [x] Add AI path visualization
+- [x] Create spatial hash grid overlay
+- [x] Implement fog of war debug view
+- [x] Add turn/phase state inspector
+- [x] Create console command system for runtime debugging
 
 ## Phase 4: Advanced Features
 

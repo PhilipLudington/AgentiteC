@@ -68,7 +68,8 @@ ENGINE_SRCS := $(wildcard $(SRC_DIR)/core/*.cpp) \
                $(wildcard $(SRC_DIR)/ecs/*.cpp) \
                $(wildcard $(SRC_DIR)/ai/*.cpp) \
                $(wildcard $(SRC_DIR)/strategy/*.cpp) \
-               $(wildcard $(SRC_DIR)/scene/*.cpp)
+               $(wildcard $(SRC_DIR)/scene/*.cpp) \
+               $(wildcard $(SRC_DIR)/debug/*.cpp)
 
 # Game template source files
 GAME_SRCS := $(wildcard $(SRC_DIR)/game/*.cpp) \
@@ -117,6 +118,7 @@ dirs:
 	@mkdir -p $(BUILD_DIR)/ai
 	@mkdir -p $(BUILD_DIR)/strategy
 	@mkdir -p $(BUILD_DIR)/scene
+	@mkdir -p $(BUILD_DIR)/debug
 	@mkdir -p $(BUILD_DIR)/chipmunk
 	@mkdir -p $(BUILD_DIR)/game
 	@mkdir -p $(BUILD_DIR)/game/systems
@@ -151,6 +153,7 @@ dirs:
 	@mkdir -p $(BUILD_DIR)/examples/transitions
 	@mkdir -p $(BUILD_DIR)/examples/lighting
 	@mkdir -p $(BUILD_DIR)/examples/hidpi
+	@mkdir -p $(BUILD_DIR)/examples/debug
 
 # Link main executable (game template)
 $(BUILD_DIR)/$(EXECUTABLE): $(OBJS) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS)
@@ -347,6 +350,11 @@ example-hidpi: dirs $(BUILD_DIR)/examples/hidpi/main.o $(patsubst $(SRC_DIR)/%.c
 	$(CXX) $(BUILD_DIR)/examples/hidpi/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-hidpi $(LDFLAGS)
 	./$(BUILD_DIR)/example-hidpi
 
+# Build and run Debug Tools demo
+example-debug: dirs $(BUILD_DIR)/examples/debug/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/debug/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-debug $(LDFLAGS)
+	./$(BUILD_DIR)/example-debug
+
 #============================================================================
 # Test targets
 #============================================================================
@@ -509,4 +517,4 @@ help:
 
 .PHONY: all dirs run run-demo clean install-deps-macos install-deps-linux info help test test-verbose
 .PHONY: check safety format format-check
-.PHONY: example-minimal example-sprites example-animation example-tilemap example-ui example-ui-node example-strategy example-strategy-sim example-msdf example-charts example-richtext example-dialogs example-pathfinding example-ecs example-inspector example-gizmos example-async example-prefab example-scene
+.PHONY: example-minimal example-sprites example-animation example-tilemap example-ui example-ui-node example-strategy example-strategy-sim example-msdf example-charts example-richtext example-dialogs example-pathfinding example-ecs example-inspector example-gizmos example-async example-prefab example-scene example-debug
