@@ -602,8 +602,9 @@ void aui_destroy_pipeline(AUI_Context *ctx)
  * Draw Command Queue Management
  * ============================================================================ */
 
-/* Flush current batch to draw command queue */
-static void aui_flush_draw_cmd(AUI_Context *ctx)
+/* Flush current batch to draw command queue.
+ * This function is also called from ui_text.cpp when switching fonts. */
+void aui_flush_draw_cmd(AUI_Context *ctx)
 {
     if (!ctx) return;
 
@@ -621,17 +622,32 @@ static void aui_flush_draw_cmd(AUI_Context *ctx)
 
     /* Create draw command */
     AUI_DrawCmd *cmd = &ctx->draw_cmds[ctx->draw_cmd_count++];
-    /* Detect solid primitives: white_texture or no texture means solid color */
-    bool is_solid = !ctx->current_texture || (ctx->current_texture == ctx->white_texture);
-    cmd->type = is_solid ? AUI_DRAW_CMD_SOLID : AUI_DRAW_CMD_BITMAP_TEXT;
+
+    /* Use tracked command type if set, otherwise detect based on texture */
+    if (ctx->current_cmd_type != AUI_DRAW_CMD_SOLID) {
+        /* SDF/MSDF text - use tracked type and params */
+        cmd->type = ctx->current_cmd_type;
+        cmd->sdf_scale = ctx->current_sdf_scale;
+        cmd->sdf_distance_range = ctx->current_sdf_distance_range;
+    } else {
+        /* Detect solid primitives: white_texture or no texture means solid color */
+        bool is_solid = !ctx->current_texture || (ctx->current_texture == ctx->white_texture);
+        cmd->type = is_solid ? AUI_DRAW_CMD_SOLID : AUI_DRAW_CMD_BITMAP_TEXT;
+        cmd->sdf_scale = 1.0f;
+        cmd->sdf_distance_range = 0.0f;
+    }
+
     cmd->texture = ctx->current_texture ? ctx->current_texture : ctx->white_texture;
     cmd->layer = ctx->current_layer;
     cmd->vertex_offset = ctx->cmd_vertex_start;
     cmd->index_offset = ctx->cmd_index_start;
     cmd->vertex_count = vertex_count;
     cmd->index_count = index_count;
-    cmd->sdf_scale = 1.0f;
-    cmd->sdf_distance_range = 0.0f;
+
+    /* Reset command type tracking for next batch */
+    ctx->current_cmd_type = AUI_DRAW_CMD_SOLID;
+    ctx->current_sdf_scale = 1.0f;
+    ctx->current_sdf_distance_range = 0.0f;
 
     /* Update start positions for next command */
     ctx->cmd_vertex_start = ctx->vertex_count;
@@ -662,6 +678,9 @@ void aui_reset_draw_state(AUI_Context *ctx)
     ctx->current_layer = AUI_DEFAULT_LAYER;
     ctx->cmd_vertex_start = 0;
     ctx->cmd_index_start = 0;
+    ctx->current_cmd_type = AUI_DRAW_CMD_SOLID;
+    ctx->current_sdf_scale = 1.0f;
+    ctx->current_sdf_distance_range = 0.0f;
     ctx->layer_stack_depth = 0;
 }
 
@@ -994,8 +1013,8 @@ void aui_draw_textured_quad(AUI_Context *ctx,
  * SDF Text Drawing
  * ============================================================================ */
 
-/* Forward declarations of static functions used here */
-static void aui_flush_draw_cmd(AUI_Context *ctx);
+/* Forward declarations of functions used here */
+void aui_flush_draw_cmd(AUI_Context *ctx);  /* Non-static, also called from ui_text.cpp */
 static bool aui_reserve(AUI_Context *ctx, uint32_t vert_count, uint32_t idx_count,
                         uint32_t *out_vert_base);
 
@@ -1036,8 +1055,7 @@ void aui_draw_sdf_quad(AUI_Context *ctx, AUI_Font *font,
 
     /* Check if we need to start a new batch */
     if (ctx->current_texture != sdf_font->atlas_texture ||
-        (ctx->draw_cmd_count > 0 &&
-         ctx->draw_cmds[ctx->draw_cmd_count - 1].type != needed_type)) {
+        ctx->current_cmd_type != needed_type) {
         /* Flush current batch */
         aui_flush_draw_cmd(ctx);
         ctx->current_texture = sdf_font->atlas_texture;
@@ -1088,12 +1106,11 @@ void aui_draw_sdf_quad(AUI_Context *ctx, AUI_Font *font,
     i[4] = (uint16_t)(base + 2);
     i[5] = (uint16_t)(base + 3);
 
-    /* Store SDF parameters in the current command (will be finalized in flush) */
-    /* We need to track this for the batch - store in context temporarily */
-    /* The flush function will pick up these values */
-    ctx->draw_cmds[ctx->draw_cmd_count].sdf_scale = scale;
-    ctx->draw_cmds[ctx->draw_cmd_count].sdf_distance_range = sdf_font->distance_range;
-    ctx->draw_cmds[ctx->draw_cmd_count].type = needed_type;
+    /* Store SDF parameters in context for this batch */
+    /* The flush function will use these when creating the draw command */
+    ctx->current_cmd_type = needed_type;
+    ctx->current_sdf_scale = scale;
+    ctx->current_sdf_distance_range = sdf_font->distance_range;
 }
 
 /* ============================================================================
@@ -1332,12 +1349,19 @@ void aui_render(AUI_Context *ctx, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *
 
         /* Select pipeline based on command type */
         SDL_GPUGraphicsPipeline *pipeline;
+        static bool s_msdf_debug = false;
         switch (draw_cmd->type) {
             case AUI_DRAW_CMD_SDF_TEXT:
                 pipeline = ctx->sdf_pipeline;
                 break;
             case AUI_DRAW_CMD_MSDF_TEXT:
                 pipeline = ctx->msdf_pipeline;
+                if (!s_msdf_debug) {
+                    SDL_Log("MSDF RENDER: cmd %u, indices=%u, dist_range=%.2f, scale=%.2f, pipeline=%p",
+                            i, draw_cmd->index_count, draw_cmd->sdf_distance_range,
+                            draw_cmd->sdf_scale, (void*)pipeline);
+                    s_msdf_debug = true;
+                }
                 break;
             case AUI_DRAW_CMD_SOLID:
             case AUI_DRAW_CMD_BITMAP_TEXT:
@@ -1364,6 +1388,12 @@ void aui_render(AUI_Context *ctx, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *
             draw_cmd->sdf_scale            /* For SDF shaders */
         };
         SDL_PushGPUVertexUniformData(cmd, 0, uniforms, sizeof(uniforms));
+
+        /* SDF/MSDF shaders also need fragment uniforms */
+        if (draw_cmd->type == AUI_DRAW_CMD_SDF_TEXT ||
+            draw_cmd->type == AUI_DRAW_CMD_MSDF_TEXT) {
+            SDL_PushGPUFragmentUniformData(cmd, 0, uniforms, sizeof(uniforms));
+        }
 
         /* Bind texture if changed */
         if (draw_cmd->texture != current_texture) {

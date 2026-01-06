@@ -1,0 +1,42 @@
+# Japanese localization
+[meta]
+language = "日本語"
+locale = "ja"
+direction = "ltr"
+font = "cjk"
+
+[strings]
+title = "ローカライズデモ"
+instructions = "1-4キーで言語切替、スペースでアイテム変更"
+greeting = "こんにちは、{name}さん！"
+status = "{name}は{gold}ゴールドと{level}経験値を持っています"
+
+# Japanese has no plural forms
+items = "{count}個のアイテム"
+coins = "{count}枚のコイン"
+enemies = "{count}体の敵"
+
+current_language = "現在の言語"
+section_basic = "基本テキスト"
+section_params = "パラメータ置換"
+section_plural = "複数形"
+section_info = "言語情報"
+
+[strings.menu]
+start = "ゲーム開始"
+options = "オプション"
+credits = "クレジット"
+quit = "終了"
+
+[strings.ui]
+ok = "OK"
+cancel = "キャンセル"
+apply = "適用"
+back = "戻る"
+
+[strings.settings]
+title = "設定"
+audio = "オーディオ"
+video = "ビデオ"
+language = "言語"
+volume = "音量: {value}%"

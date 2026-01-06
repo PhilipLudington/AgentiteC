@@ -214,7 +214,7 @@ typedef struct AUI_DrawCmd {
     float sdf_distance_range;   /* Distance range for SDF font */
 } AUI_DrawCmd;
 
-#define AUI_MAX_DRAW_CMDS 256
+#define AUI_MAX_DRAW_CMDS 4096
 #define AUI_DEFAULT_LAYER 0
 
 /* Table sort specification (forward declared for use in context) */
@@ -272,6 +272,9 @@ struct AUI_Context {
     int current_layer;               /* Current layer for new primitives */
     uint32_t cmd_vertex_start;       /* Start of current command's vertices */
     uint32_t cmd_index_start;        /* Start of current command's indices */
+    AUI_DrawCmdType current_cmd_type; /* Type of command currently being batched */
+    float current_sdf_scale;         /* SDF scale for current batch */
+    float current_sdf_distance_range; /* SDF distance range for current batch */
 
     /* Input state */
     AUI_Input input;
@@ -475,6 +478,19 @@ AUI_Font *aui_font_load(AUI_Context *ctx, const char *path, float size);
  * Returns NULL on failure. */
 AUI_Font *aui_font_load_sdf(AUI_Context *ctx, const char *atlas_path,
                             const char *metrics_path);
+
+/**
+ * Generate MSDF font at runtime from TTF file.
+ * Supports full Unicode via charset parameter.
+ *
+ * @param ctx UI context
+ * @param ttf_path Path to TTF/TTC font file
+ * @param size Font size in pixels
+ * @param charset UTF-8 string of characters to include (NULL for ASCII only)
+ * @return Font handle, or NULL on failure
+ */
+AUI_Font *aui_font_generate_msdf(AUI_Context *ctx, const char *ttf_path,
+                                  float size, const char *charset);
 
 /* Unload a font (removes from registry and frees resources) */
 void aui_font_unload(AUI_Context *ctx, AUI_Font *font);

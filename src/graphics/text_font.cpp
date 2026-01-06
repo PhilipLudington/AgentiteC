@@ -69,8 +69,20 @@ Agentite_Font *agentite_font_load_memory(Agentite_TextRenderer *tr,
     Agentite_Font *font = AGENTITE_ALLOC(Agentite_Font);
     if (!font) return NULL;
 
-    /* Initialize stb_truetype */
-    if (!stbtt_InitFont(&font->stb_font, (const unsigned char *)data, 0)) {
+    const unsigned char *font_data = (const unsigned char *)data;
+
+    /* Get font offset - handles TTC (TrueType Collection) files
+     * For single TTF files, this returns 0
+     * For TTC files, this returns the offset to the first font in the collection */
+    int font_offset = stbtt_GetFontOffsetForIndex(font_data, 0);
+    if (font_offset < 0) {
+        agentite_set_error("Text: Invalid font data or unsupported format");
+        free(font);
+        return NULL;
+    }
+
+    /* Initialize stb_truetype with the correct offset */
+    if (!stbtt_InitFont(&font->stb_font, font_data, font_offset)) {
         agentite_set_error("Text: Failed to initialize font");
         free(font);
         return NULL;
@@ -95,7 +107,7 @@ Agentite_Font *agentite_font_load_memory(Agentite_TextRenderer *tr,
     }
 
     stbtt_bakedchar baked_chars[NUM_CHARS];
-    int result = stbtt_BakeFontBitmap((const unsigned char *)data, 0,
+    int result = stbtt_BakeFontBitmap(font_data, font_offset,
                                        size, atlas_bitmap,
                                        ATLAS_SIZE, ATLAS_SIZE,
                                        FIRST_CHAR, NUM_CHARS,

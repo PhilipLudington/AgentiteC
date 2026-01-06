@@ -214,6 +214,82 @@ AUI_Font *aui_font_load_sdf(AUI_Context *ctx, const char *atlas_path,
     return font;
 }
 
+AUI_Font *aui_font_generate_msdf(AUI_Context *ctx, const char *ttf_path,
+                                  float size, const char *charset)
+{
+    if (!ctx || !ctx->gpu || !ttf_path) return NULL;
+
+    /* Find empty slot in font registry */
+    int slot = -1;
+    for (int i = 0; i < AUI_MAX_FONTS; i++) {
+        if (ctx->fonts[i] == NULL) {
+            slot = i;
+            break;
+        }
+    }
+
+    if (slot < 0) {
+        agentite_set_error("CUI: Font registry full (max %d fonts)", AUI_MAX_FONTS);
+        return NULL;
+    }
+
+    /* Get or create the shared text renderer */
+    Agentite_TextRenderer *tr = aui_get_text_renderer(ctx->gpu, ctx->window);
+    if (!tr) {
+        agentite_set_error("CUI: Failed to create text renderer for MSDF generation");
+        return NULL;
+    }
+
+    /* Configure MSDF generation */
+    Agentite_SDFFontGenConfig config = AGENTITE_SDF_FONT_GEN_CONFIG_DEFAULT;
+    config.glyph_scale = size * 2.0f;  /* Higher resolution for quality */
+    config.generate_msdf = true;
+    config.charset = charset;
+    config.atlas_width = 2048;   /* Larger atlas for Unicode */
+    config.atlas_height = 2048;
+
+    /* Generate MSDF font at runtime */
+    Agentite_SDFFont *sdf_font = agentite_sdf_font_generate(tr, ttf_path, &config);
+    if (!sdf_font) {
+        return NULL;
+    }
+
+    /* Override font_size to be the requested size, not the glyph_scale used for generation.
+     * The glyph_scale is just for higher quality rendering, but we want the text
+     * to render at the requested size. */
+    sdf_font->font_size = size;
+
+    /* Allocate AUI_Font wrapper */
+    AUI_Font *font = (AUI_Font *)calloc(1, sizeof(AUI_Font));
+    if (!font) {
+        agentite_sdf_font_destroy(tr, sdf_font);
+        return NULL;
+    }
+
+    font->type = AUI_FONT_MSDF;
+    font->bitmap_font = NULL;
+    font->sdf_font = sdf_font;
+    font->size = size;
+    font->line_height = sdf_font->line_height * size;
+    font->ascent = sdf_font->ascender * size;
+    font->descent = sdf_font->descender * size;
+    font->in_use = true;
+
+    /* Add to registry */
+    ctx->fonts[slot] = font;
+    ctx->font_count++;
+
+    /* Set as default if first font */
+    if (ctx->default_font == NULL) {
+        ctx->default_font = font;
+        ctx->current_font = font;
+    }
+
+    SDL_Log("CUI: Generated MSDF font '%s' at %.0fpx (slot %d, %d glyphs)",
+            ttf_path, size, slot, sdf_font->glyph_count);
+    return font;
+}
+
 /* ============================================================================
  * Font Unloading
  * ============================================================================ */
@@ -319,10 +395,24 @@ AUI_Font *aui_get_default_font(AUI_Context *ctx)
     return ctx ? ctx->default_font : NULL;
 }
 
+/* Forward declaration from ui_draw.cpp */
+extern void aui_flush_draw_cmd(AUI_Context *ctx);
+
 void aui_set_font(AUI_Context *ctx, AUI_Font *font)
 {
     if (!ctx) return;
-    ctx->current_font = font ? font : ctx->default_font;
+
+    AUI_Font *new_font = font ? font : ctx->default_font;
+    AUI_Font *old_font = ctx->current_font;
+
+    /* If font is actually changing, flush the current batch.
+     * This is critical when switching between font types (bitmap <-> MSDF)
+     * because they use different GPU pipelines and textures. */
+    if (old_font != new_font) {
+        aui_flush_draw_cmd(ctx);
+    }
+
+    ctx->current_font = new_font;
 }
 
 AUI_Font *aui_get_font(AUI_Context *ctx)
@@ -350,6 +440,9 @@ float aui_font_ascent(AUI_Font *font)
  * Text Measurement
  * ============================================================================ */
 
+/* Forward declaration - defined later in file */
+static uint32_t decode_utf8(const char **str);
+
 float aui_text_width_font(AUI_Font *font, const char *text)
 {
     if (!font || !text) return 0;
@@ -369,12 +462,11 @@ float aui_text_width_font(AUI_Font *font, const char *text)
         float width = 0;
         float scale = 1.0f;  /* Default scale */
         while (*text) {
-            unsigned char c = (unsigned char)*text;
-            SDFGlyphInfo *g = text_sdf_find_glyph(font->sdf_font, c);
+            uint32_t codepoint = decode_utf8(&text);
+            SDFGlyphInfo *g = text_sdf_find_glyph(font->sdf_font, codepoint);
             if (g) {
                 width += g->advance * font->sdf_font->font_size * scale;
             }
-            text++;
         }
         return width;
     }
@@ -470,6 +562,35 @@ static float aui_draw_bitmap_text(AUI_Context *ctx, AUI_Font *font, const char *
  * Text Rendering - SDF/MSDF
  * ============================================================================ */
 
+/* Decode one UTF-8 codepoint from string, advance pointer */
+static uint32_t decode_utf8(const char **str)
+{
+    const unsigned char *p = (const unsigned char *)*str;
+    uint32_t codepoint;
+    unsigned char c = *p++;
+
+    if (c < 0x80) {
+        codepoint = c;
+    } else if ((c & 0xE0) == 0xC0) {
+        codepoint = (c & 0x1F) << 6;
+        if ((*p & 0xC0) == 0x80) codepoint |= (*p++ & 0x3F);
+    } else if ((c & 0xF0) == 0xE0) {
+        codepoint = (c & 0x0F) << 12;
+        if ((*p & 0xC0) == 0x80) { codepoint |= (*p++ & 0x3F) << 6; }
+        if ((*p & 0xC0) == 0x80) { codepoint |= (*p++ & 0x3F); }
+    } else if ((c & 0xF8) == 0xF0) {
+        codepoint = (c & 0x07) << 18;
+        if ((*p & 0xC0) == 0x80) { codepoint |= (*p++ & 0x3F) << 12; }
+        if ((*p & 0xC0) == 0x80) { codepoint |= (*p++ & 0x3F) << 6; }
+        if ((*p & 0xC0) == 0x80) { codepoint |= (*p++ & 0x3F); }
+    } else {
+        codepoint = '?'; /* Invalid UTF-8 */
+    }
+
+    *str = (const char *)p;
+    return codepoint;
+}
+
 static float aui_draw_sdf_text_internal(AUI_Context *ctx, AUI_Font *font, const char *text,
                                          float x, float y, float scale, uint32_t color)
 {
@@ -485,8 +606,8 @@ static float aui_draw_sdf_text_internal(AUI_Context *ctx, AUI_Font *font, const 
     y += sf->ascender * font_scale;
 
     while (*text) {
-        unsigned char c = (unsigned char)*text;
-        SDFGlyphInfo *g = text_sdf_find_glyph(sf, c);
+        uint32_t codepoint = decode_utf8(&text);
+        SDFGlyphInfo *g = text_sdf_find_glyph(sf, codepoint);
 
         if (g) {
             /* Calculate screen position from em-space coordinates */
@@ -495,17 +616,17 @@ static float aui_draw_sdf_text_internal(AUI_Context *ctx, AUI_Font *font, const 
             float x1 = x + g->plane_right * font_scale;
             float y1 = y - g->plane_bottom * font_scale;
 
-            /* Calculate texture coordinates */
+            /* Calculate texture coordinates (swap V to fix Y-axis orientation) */
             float u0 = g->atlas_left * inv_atlas_w;
-            float v0 = g->atlas_top * inv_atlas_h;
+            float v0 = g->atlas_bottom * inv_atlas_h;
             float u1 = g->atlas_right * inv_atlas_w;
-            float v1 = g->atlas_bottom * inv_atlas_h;
+            float v1 = g->atlas_top * inv_atlas_h;
 
             aui_draw_sdf_quad(ctx, font, x0, y0, x1, y1, u0, v0, u1, v1, color, scale);
 
             x += g->advance * font_scale;
         }
-        text++;
+        /* Skip missing glyphs silently - they just won't render */
     }
 
     return x - start_x;

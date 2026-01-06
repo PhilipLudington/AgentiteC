@@ -277,9 +277,39 @@ bool msdf_atlas_add_string(MSDF_Atlas *atlas, const char *str)
 {
     if (!atlas || !str) return false;
 
-    /* Simple UTF-8 decoding for ASCII (extend for full UTF-8 if needed) */
-    while (*str) {
-        uint32_t codepoint = (uint8_t)*str++;
+    /* Full UTF-8 decoding */
+    const unsigned char *p = (const unsigned char *)str;
+    int added = 0;
+    while (*p) {
+        uint32_t codepoint;
+        unsigned char c = *p++;
+
+        if (c < 0x80) {
+            /* 1-byte ASCII: 0xxxxxxx */
+            codepoint = c;
+        } else if ((c & 0xE0) == 0xC0) {
+            /* 2-byte sequence: 110xxxxx 10xxxxxx */
+            if ((*p & 0xC0) != 0x80) continue; /* Invalid continuation */
+            codepoint = ((c & 0x1F) << 6) | (*p++ & 0x3F);
+        } else if ((c & 0xF0) == 0xE0) {
+            /* 3-byte sequence: 1110xxxx 10xxxxxx 10xxxxxx (includes CJK) */
+            if ((*p & 0xC0) != 0x80) continue;
+            codepoint = ((c & 0x0F) << 12) | ((*p++ & 0x3F) << 6);
+            if ((*p & 0xC0) != 0x80) continue;
+            codepoint |= (*p++ & 0x3F);
+        } else if ((c & 0xF8) == 0xF0) {
+            /* 4-byte sequence: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx */
+            if ((*p & 0xC0) != 0x80) continue;
+            codepoint = ((c & 0x07) << 18) | ((*p++ & 0x3F) << 12);
+            if ((*p & 0xC0) != 0x80) continue;
+            codepoint |= ((*p++ & 0x3F) << 6);
+            if ((*p & 0xC0) != 0x80) continue;
+            codepoint |= (*p++ & 0x3F);
+        } else {
+            /* Invalid UTF-8 start byte, skip */
+            continue;
+        }
+
         if (!msdf_atlas_add_codepoint(atlas, codepoint)) {
             return false;
         }
@@ -479,9 +509,14 @@ bool msdf_atlas_generate(MSDF_Atlas *atlas)
            atlas->atlas_width * atlas->atlas_height * atlas->format * sizeof(float));
 
     /* Copy glyph bitmaps into atlas */
+    int copied = 0, skipped = 0;
     for (int i = 0; i < atlas->glyph_count; i++) {
         MSDF_AtlasGlyph *glyph = &atlas->glyphs[i];
-        if (!glyph->has_bitmap) continue;
+        if (!glyph->has_bitmap) {
+            skipped++;
+            continue;
+        }
+        copied++;
 
         int dst_x = glyph->atlas_x;
         int dst_y = glyph->atlas_y;
@@ -499,6 +534,7 @@ bool msdf_atlas_generate(MSDF_Atlas *atlas)
         }
     }
 
+    SDL_Log("MSDF Atlas: Copied %d glyphs, skipped %d without bitmaps", copied, skipped);
     atlas->atlas_generated = true;
     return true;
 }
@@ -526,20 +562,19 @@ bool msdf_atlas_get_glyph(const MSDF_Atlas *atlas, uint32_t codepoint,
             out_info->plane_top = g->plane_top;
 
             /* Atlas UV coordinates (normalized 0-1)
-             * Since we render glyphs right-side-up in the bitmap (by flipping Y in projection),
-             * the atlas coordinates are straightforward:
-             *   atlas_bottom = atlas_y (top of glyph region in screen Y-down coords)
-             *   atlas_top = atlas_y + atlas_h (bottom of glyph region)
-             * But we need to match msdf-atlas-gen's yOrigin=bottom convention for the
-             * rendering code, so we still need to flip Y. */
+             * The atlas bitmap is stored Y-down (row 0 is top), same as SDL_GPU textures.
+             * So no Y-flip is needed - just convert pixel coords to normalized UVs.
+             * atlas_bottom/top naming follows msdf convention where bottom < top in Y value,
+             * but in our Y-down coords, atlas_bottom is the TOP edge (lower v) and
+             * atlas_top is the BOTTOM edge (higher v). */
             float inv_w = 1.0f / atlas->atlas_width;
             float inv_h = 1.0f / atlas->atlas_height;
 
             out_info->atlas_left = g->atlas_x * inv_w;
             out_info->atlas_right = (g->atlas_x + g->atlas_w) * inv_w;
-            /* Convert Y-down (screen) to Y-up (msdf-atlas-gen yOrigin=bottom) */
-            out_info->atlas_bottom = (atlas->atlas_height - (g->atlas_y + g->atlas_h)) * inv_h;
-            out_info->atlas_top = (atlas->atlas_height - g->atlas_y) * inv_h;
+            /* Y-down coords: atlas_y is top of glyph, atlas_y + atlas_h is bottom */
+            out_info->atlas_bottom = g->atlas_y * inv_h;  /* Top edge in texture (lower v) */
+            out_info->atlas_top = (g->atlas_y + g->atlas_h) * inv_h;  /* Bottom edge in texture (higher v) */
 
             return true;
         }

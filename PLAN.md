@@ -180,15 +180,15 @@ These features have been implemented but need dedicated example programs to demo
 - [x] Track system-specific timings (AI, physics, rendering)
 
 ### Localization System
-- [ ] Design localization API (`agentite_loc_*`)
-- [ ] Implement string table loading (TOML or JSON format)
-- [ ] Add language switching at runtime
-- [ ] Implement string key lookup with fallback
-- [ ] Add parameter substitution (`{0}`, `{name}`)
-- [ ] Support pluralization rules
-- [ ] Add font switching per language
-- [ ] Integrate with UI text widgets
-- [ ] Create localization validation tool
+- [x] Design localization API (`agentite_loc_*`)
+- [x] Implement string table loading (TOML format)
+- [x] Add language switching at runtime
+- [x] Implement string key lookup with fallback
+- [x] Add parameter substitution (`{0}`, `{name}`)
+- [x] Support pluralization rules
+- [x] Add font switching per language
+- [x] Integrate with UI text widgets (via LOC/LOCF/LOCP macros)
+- [x] Create localization validation tool
 
 ### Enhanced Debug Tools
 - [ ] Add entity gizmo overlay (show positions, velocities)

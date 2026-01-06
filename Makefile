@@ -337,6 +337,11 @@ example-lighting: dirs $(BUILD_DIR)/examples/lighting/main.o $(patsubst $(SRC_DI
 	$(CXX) $(BUILD_DIR)/examples/lighting/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-lighting $(LDFLAGS)
 	./$(BUILD_DIR)/example-lighting
 
+# Build and run Localization demo
+example-localization: dirs $(BUILD_DIR)/examples/localization/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
+	$(CXX) $(BUILD_DIR)/examples/localization/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-localization $(LDFLAGS)
+	./$(BUILD_DIR)/example-localization
+
 # Build and run HiDPI test (minimal reproduction of postprocess positioning bug)
 example-hidpi: dirs $(BUILD_DIR)/examples/hidpi/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ)
 	$(CXX) $(BUILD_DIR)/examples/hidpi/main.o $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(ENGINE_SRCS)) $(FLECS_OBJ) $(TOML_OBJ) $(CHIPMUNK_OBJS) -o $(BUILD_DIR)/example-hidpi $(LDFLAGS)

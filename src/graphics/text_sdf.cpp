@@ -611,37 +611,77 @@ Agentite_SDFFont *agentite_sdf_font_generate(Agentite_TextRenderer *tr,
     /* Convert MSDF glyph info to Agentite format */
     int valid_glyphs = 0;
 
-    /* Determine iteration bounds based on charset source */
-    int iter_count;
     if (config->charset && config->charset[0]) {
-        /* Custom charset: iterate through string characters */
-        iter_count = (int)strlen(config->charset);
+        /* Custom charset: iterate through UTF-8 string
+         * Skip duplicates since msdf_atlas deduplicates but we're iterating the raw charset */
+        const unsigned char *p = (const unsigned char *)config->charset;
+        while (*p && valid_glyphs < glyph_count) {
+            uint32_t codepoint;
+            unsigned char c = *p++;
+
+            if (c < 0x80) {
+                codepoint = c;
+            } else if ((c & 0xE0) == 0xC0) {
+                codepoint = ((c & 0x1F) << 6) | (*p++ & 0x3F);
+            } else if ((c & 0xF0) == 0xE0) {
+                codepoint = ((c & 0x0F) << 12) | ((*p++ & 0x3F) << 6);
+                codepoint |= (*p++ & 0x3F);
+            } else if ((c & 0xF8) == 0xF0) {
+                codepoint = ((c & 0x07) << 18) | ((*p++ & 0x3F) << 12);
+                codepoint |= ((*p++ & 0x3F) << 6);
+                codepoint |= (*p++ & 0x3F);
+            } else {
+                continue;
+            }
+
+            /* Check if we already copied this codepoint */
+            bool already_copied = false;
+            for (int i = 0; i < valid_glyphs; i++) {
+                if (font->glyphs[i].codepoint == codepoint) {
+                    already_copied = true;
+                    break;
+                }
+            }
+            if (already_copied) continue;
+
+            MSDF_GlyphInfo msdf_glyph;
+            if (msdf_atlas_get_glyph(atlas, codepoint, &msdf_glyph)) {
+                font->glyphs[valid_glyphs].codepoint = msdf_glyph.codepoint;
+                font->glyphs[valid_glyphs].advance = msdf_glyph.advance;
+                font->glyphs[valid_glyphs].plane_left = msdf_glyph.plane_left;
+                font->glyphs[valid_glyphs].plane_bottom = msdf_glyph.plane_bottom;
+                font->glyphs[valid_glyphs].plane_right = msdf_glyph.plane_right;
+                font->glyphs[valid_glyphs].plane_top = msdf_glyph.plane_top;
+
+                font->glyphs[valid_glyphs].atlas_left = msdf_glyph.atlas_left * metrics.atlas_width;
+                font->glyphs[valid_glyphs].atlas_bottom = msdf_glyph.atlas_bottom * metrics.atlas_height;
+                font->glyphs[valid_glyphs].atlas_right = msdf_glyph.atlas_right * metrics.atlas_width;
+                font->glyphs[valid_glyphs].atlas_top = msdf_glyph.atlas_top * metrics.atlas_height;
+
+                valid_glyphs++;
+            }
+        }
     } else {
         /* ASCII charset: 95 printable characters (32-126) */
-        iter_count = 95;
-    }
+        for (int i = 0; i < 95; i++) {
+            uint32_t codepoint = (uint32_t)(32 + i);
 
-    for (int i = 0; i < iter_count; i++) {
-        uint32_t codepoint = (config->charset && config->charset[0])
-            ? (uint8_t)config->charset[i]
-            : (uint32_t)(32 + i);
+            MSDF_GlyphInfo msdf_glyph;
+            if (msdf_atlas_get_glyph(atlas, codepoint, &msdf_glyph)) {
+                font->glyphs[valid_glyphs].codepoint = msdf_glyph.codepoint;
+                font->glyphs[valid_glyphs].advance = msdf_glyph.advance;
+                font->glyphs[valid_glyphs].plane_left = msdf_glyph.plane_left;
+                font->glyphs[valid_glyphs].plane_bottom = msdf_glyph.plane_bottom;
+                font->glyphs[valid_glyphs].plane_right = msdf_glyph.plane_right;
+                font->glyphs[valid_glyphs].plane_top = msdf_glyph.plane_top;
 
-        MSDF_GlyphInfo msdf_glyph;
-        if (msdf_atlas_get_glyph(atlas, codepoint, &msdf_glyph)) {
-            font->glyphs[valid_glyphs].codepoint = msdf_glyph.codepoint;
-            font->glyphs[valid_glyphs].advance = msdf_glyph.advance;
-            font->glyphs[valid_glyphs].plane_left = msdf_glyph.plane_left;
-            font->glyphs[valid_glyphs].plane_bottom = msdf_glyph.plane_bottom;
-            font->glyphs[valid_glyphs].plane_right = msdf_glyph.plane_right;
-            font->glyphs[valid_glyphs].plane_top = msdf_glyph.plane_top;
+                font->glyphs[valid_glyphs].atlas_left = msdf_glyph.atlas_left * metrics.atlas_width;
+                font->glyphs[valid_glyphs].atlas_bottom = msdf_glyph.atlas_bottom * metrics.atlas_height;
+                font->glyphs[valid_glyphs].atlas_right = msdf_glyph.atlas_right * metrics.atlas_width;
+                font->glyphs[valid_glyphs].atlas_top = msdf_glyph.atlas_top * metrics.atlas_height;
 
-            /* Convert normalized UV to pixel coordinates for compatibility */
-            font->glyphs[valid_glyphs].atlas_left = msdf_glyph.atlas_left * metrics.atlas_width;
-            font->glyphs[valid_glyphs].atlas_bottom = msdf_glyph.atlas_bottom * metrics.atlas_height;
-            font->glyphs[valid_glyphs].atlas_right = msdf_glyph.atlas_right * metrics.atlas_width;
-            font->glyphs[valid_glyphs].atlas_top = msdf_glyph.atlas_top * metrics.atlas_height;
-
-            valid_glyphs++;
+                valid_glyphs++;
+            }
         }
     }
     font->glyph_count = valid_glyphs;
@@ -687,6 +727,14 @@ Agentite_SDFFont *agentite_sdf_font_generate(Agentite_TextRenderer *tr,
 
     if (config->generate_msdf) {
         msdf_atlas_get_bitmap_rgba8(atlas, upload_data);
+        /* Debug: save atlas to file */
+        FILE *f = fopen("/tmp/msdf_atlas_debug.raw", "wb");
+        if (f) {
+            fwrite(upload_data, 1, data_size, f);
+            fclose(f);
+            SDL_Log("Text: Saved MSDF atlas debug to /tmp/msdf_atlas_debug.raw (%dx%d, %u bytes)",
+                    metrics.atlas_width, metrics.atlas_height, data_size);
+        }
     } else {
         /* Single channel - just convert float to uint8 */
         for (int i = 0; i < metrics.atlas_width * metrics.atlas_height; i++) {

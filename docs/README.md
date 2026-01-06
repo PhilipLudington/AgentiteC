@@ -55,6 +55,7 @@
 | System | Description | Header |
 |--------|-------------|--------|
 | [Profiler](api/profiler.md) | Performance profiling | `agentite/profiler.h` |
+| [Localization](api/localization.md) | Multi-language support | `agentite/localization.h` |
 
 ### Utilities
 

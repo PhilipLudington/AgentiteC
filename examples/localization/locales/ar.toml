@@ -1,0 +1,42 @@
+# Arabic localization
+[meta]
+language = "العربية"
+locale = "ar"
+direction = "rtl"
+font = "arabic"
+
+[strings]
+title = "عرض الترجمة"
+instructions = "اضغط 1-4 لتغيير اللغة، مسافة للعناصر"
+greeting = "مرحباً، {name}!"
+status = "{name} لديه {gold} ذهب و {level} خبرة"
+
+# Arabic pluralization (simplified)
+items = "{count} عنصر"
+coins = "{count} عملة"
+enemies = "{count} عدو"
+
+current_language = "اللغة الحالية"
+section_basic = "نصوص أساسية"
+section_params = "استبدال المعاملات"
+section_plural = "الجمع"
+section_info = "معلومات اللغة"
+
+[strings.menu]
+start = "ابدأ اللعبة"
+options = "الخيارات"
+credits = "الاعتمادات"
+quit = "خروج"
+
+[strings.ui]
+ok = "موافق"
+cancel = "إلغاء"
+apply = "تطبيق"
+back = "رجوع"
+
+[strings.settings]
+title = "الإعدادات"
+audio = "الصوت"
+video = "الفيديو"
+language = "اللغة"
+volume = "مستوى الصوت: {value}%"

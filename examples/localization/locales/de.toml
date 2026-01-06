@@ -1,0 +1,42 @@
+# German localization
+[meta]
+language = "Deutsch"
+locale = "de"
+direction = "ltr"
+font = "german"
+
+[strings]
+title = "Lokalisierungs-Demo"
+instructions = "Drücken Sie 1-4 zum Sprachwechsel, LEERTASTE für Items"
+greeting = "Hallo, {name}!"
+status = "{name} hat {gold} Gold und {level} Erfahrung"
+
+# German pluralization (same as English: singular|plural)
+items = "{count} Gegenstand|{count} Gegenstände"
+coins = "{count} Münze|{count} Münzen"
+enemies = "{count} Feind|{count} Feinde"
+
+current_language = "Aktuelle Sprache"
+section_basic = "Einfache Texte"
+section_params = "Parameter-Ersetzung"
+section_plural = "Pluralisierung"
+section_info = "Sprach-Info"
+
+[strings.menu]
+start = "Spiel starten"
+options = "Optionen"
+credits = "Mitwirkende"
+quit = "Beenden"
+
+[strings.ui]
+ok = "OK"
+cancel = "Abbrechen"
+apply = "Anwenden"
+back = "Zurück"
+
+[strings.settings]
+title = "Einstellungen"
+audio = "Audio"
+video = "Video"
+language = "Sprache"
+volume = "Lautstärke: {value}%"

@@ -1,0 +1,55 @@
+# English localization
+[meta]
+language = "English"
+locale = "en"
+direction = "ltr"
+font = "default"
+
+[strings]
+# Window title
+title = "Localization Demo"
+
+# Instructions
+instructions = "Press 1-4 to switch languages, SPACE to cycle items"
+
+# Greeting with named parameter
+greeting = "Hello, {name}!"
+
+# Status with multiple parameters
+status = "{name} has {gold} gold and {level} experience"
+
+# Pluralization examples (singular|plural)
+items = "{count} item|{count} items"
+coins = "{count} coin|{count} coins"
+enemies = "{count} enemy|{count} enemies"
+
+# Current language display
+current_language = "Current Language"
+
+# Demo sections
+section_basic = "Basic Strings"
+section_params = "Parameter Substitution"
+section_plural = "Pluralization"
+section_info = "Language Info"
+
+# Menu items
+[strings.menu]
+start = "Start Game"
+options = "Options"
+credits = "Credits"
+quit = "Quit"
+
+# UI elements
+[strings.ui]
+ok = "OK"
+cancel = "Cancel"
+apply = "Apply"
+back = "Back"
+
+# Settings
+[strings.settings]
+title = "Settings"
+audio = "Audio"
+video = "Video"
+language = "Language"
+volume = "Volume: {value}%"
