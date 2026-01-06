@@ -210,6 +210,7 @@ make example-inspector    # Entity inspector UI
 make example-gizmos       # Transform gizmos and debug drawing
 make example-profiler     # Performance profiling
 make example-async        # Async asset loading
+make example-debug        # Debug visualizations and console
 ```
 
 ## Project Structure
