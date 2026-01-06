@@ -22,32 +22,35 @@ project(agentite
     LANGUAGES C CXX
 )
 
-# Options
-option(AGENTITE_BUILD_EXAMPLES "Build example programs" ON)
-option(AGENTITE_BUILD_TESTS "Build test suite" ON)
-option(AGENTITE_BUILD_GAME "Build main game template" ON)
+# Detect if we're the top-level project or a submodule
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    set(AGENTITE_IS_ROOT_PROJECT ON)
+else()
+    set(AGENTITE_IS_ROOT_PROJECT OFF)
+endif()
 
-# Export compile commands for IDE integration
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+# Options - default to OFF when used as a submodule
+option(AGENTITE_BUILD_EXAMPLES "Build example programs" ${AGENTITE_IS_ROOT_PROJECT})
+option(AGENTITE_BUILD_TESTS "Build test suite" ${AGENTITE_IS_ROOT_PROJECT})
+option(AGENTITE_BUILD_GAME "Build main game template" ${AGENTITE_IS_ROOT_PROJECT})
 
-# C/C++ standards
+# Only set global options when building as root project
+if(AGENTITE_IS_ROOT_PROJECT)
+    # Export compile commands for IDE integration
+    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+    # Default to Release if not specified
+    if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+        set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+        set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "RelWithDebInfo" "MinSizeRel")
+    endif()
+endif()
+
+# C/C++ standards (applied via target properties below)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-# Default to Release if not specified
-if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
-    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "RelWithDebInfo" "MinSizeRel")
-endif()
-
-# Compiler warnings
-if(MSVC)
-    add_compile_options(/W4)
-else()
-    add_compile_options(-Wall -Wextra)
-endif()
 
 #============================================================================
 # Dependencies
@@ -182,6 +185,13 @@ elseif(WIN32)
     endif()
 endif()
 
+# Compiler warnings (scoped to agentite target only)
+if(MSVC)
+    target_compile_options(agentite PRIVATE /W4)
+else()
+    target_compile_options(agentite PRIVATE -Wall -Wextra)
+endif()
+
 # Alias for use as subproject
 add_library(agentite::agentite ALIAS agentite)
 
@@ -211,6 +221,13 @@ if(AGENTITE_BUILD_GAME)
 
     target_link_libraries(agentite_game PRIVATE agentite)
 
+    # Compiler warnings for game target
+    if(MSVC)
+        target_compile_options(agentite_game PRIVATE /W4)
+    else()
+        target_compile_options(agentite_game PRIVATE -Wall -Wextra)
+    endif()
+
     # Set output name to match Makefile
     set_target_properties(agentite_game PROPERTIES
         OUTPUT_NAME agentite
@@ -233,6 +250,12 @@ if(AGENTITE_BUILD_EXAMPLES)
                 ${CMAKE_CURRENT_SOURCE_DIR}/lib/cglm/include
             )
             target_link_libraries(example-${name} PRIVATE agentite)
+            # Compiler warnings for example targets
+            if(MSVC)
+                target_compile_options(example-${name} PRIVATE /W4)
+            else()
+                target_compile_options(example-${name} PRIVATE -Wall -Wextra)
+            endif()
             set_target_properties(example-${name} PROPERTIES
                 RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
             )
@@ -293,6 +316,13 @@ if(AGENTITE_BUILD_TESTS)
             agentite
             catch2
     )
+
+    # Compiler warnings for test target
+    if(MSVC)
+        target_compile_options(test_runner PRIVATE /W4)
+    else()
+        target_compile_options(test_runner PRIVATE -Wall -Wextra)
+    endif()
 
     set_target_properties(test_runner PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
