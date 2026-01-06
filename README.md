@@ -27,10 +27,26 @@ Agentite is built around these core principles:
 ### Core Engine
 - SDL3 with SDL_GPU for cross-platform rendering (Metal, Vulkan, D3D12)
 - Batched sprite rendering with camera support
+- Sprite animation system
 - Chunk-based tilemap system
 - TrueType font rendering with SDF/MSDF support
-- Action-based input system
+- Action-based input system with gamepad support
 - Audio playback (sounds and music)
+- HiDPI/Retina display support
+
+### Graphics
+- Post-process shader effects (blur, glow, outline, dissolve, etc.)
+- Screen transitions (fade, wipe, dissolve)
+- Particle system with emitters
+- 2D lighting system
+- Procedural noise generation
+- Debug gizmos and shape drawing
+
+### Physics & Collision
+- Kinematic physics simulation
+- Chipmunk2D integration for rigid body physics
+- Collision detection (circles, AABBs, polygons, capsules)
+- Raycasting and shape queries
 
 ### AI Systems
 - A* pathfinding with customizable heuristics
@@ -51,10 +67,21 @@ Agentite is built around these core principles:
 
 ### UI
 - Immediate-mode UI system (AUI)
+- Retained-mode UI with tweening
 - Panels, buttons, sliders, text input
 - Tables with sorting and multi-select
+- Charts (line, bar, pie, real-time)
+- BBCode rich text formatting
+- Modal dialogs and notifications
 - Color picker
 - Theming support
+
+### Tools & Utilities
+- Scene system with file-based definitions
+- Prefab spawning
+- Entity inspector
+- Performance profiler
+- Async asset loading
 
 ## Quick Start
 
@@ -127,22 +154,62 @@ make info         # Show build configuration
 
 ## Examples
 
+Run the comprehensive demo showcasing all systems:
+```bash
+make run-demo             # Full engine demo with tilemap, UI, audio, ECS
+```
+
+### Core Examples
 ```bash
 make example-minimal      # Basic window setup
-make example-sprites      # Sprite rendering
-make example-animation    # Animation system
-make example-tilemap      # Tilemap rendering
-make example-ui           # UI system demo (spinbox, tooltips, gamepad)
+make example-sprites      # Sprite rendering and batching
+make example-animation    # Sprite animation system
+make example-tilemap      # Chunk-based tilemap rendering
+```
+
+### Graphics Examples
+```bash
+make example-msdf         # Scalable MSDF text rendering
+make example-hidpi        # HiDPI/Retina display support
+make example-shaders      # Post-process shader effects
+make example-lighting     # 2D lighting system
+make example-noise        # Procedural noise generation
+make example-transitions  # Screen transition effects
+make example-particles    # Particle system effects
+```
+
+### Physics & Collision
+```bash
+make example-physics      # Kinematic physics simulation
+make example-physics2d    # Chipmunk2D physics integration
+make example-collision    # Collision detection shapes
+```
+
+### UI Examples
+```bash
+make example-ui           # Immediate-mode UI widgets
 make example-ui-node      # Retained-mode UI with tweens
-make example-charts       # Data visualization (line, bar, pie, real-time)
-make example-richtext     # BBCode formatted text with animations
-make example-dialogs      # Modal dialogs, file dialogs, notifications
-make example-strategy     # Strategy game patterns
+make example-charts       # Data visualization (line, bar, pie)
+make example-richtext     # BBCode formatted text
+make example-dialogs      # Modal dialogs and notifications
+```
+
+### Game Systems
+```bash
+make example-strategy     # Strategy game with pathfinding
 make example-strategy-sim # Strategy systems simulation
-make example-pathfinding  # A* pathfinding demo
+make example-pathfinding  # A* pathfinding visualization
+make example-scene        # Scene loading and switching
+make example-prefab       # Prefab entity spawning
+```
+
+### ECS & Tools
+```bash
 make example-ecs          # Custom ECS systems
-make example-msdf         # Scalable text rendering
+make example-inspector    # Entity inspector UI
 make example-gizmos       # Transform gizmos and debug drawing
+make example-profiler     # Performance profiling
+make example-async        # Async asset loading
 ```
 
 ## Project Structure
@@ -187,6 +254,7 @@ Agentite uses the following libraries (see [THIRD_PARTY_LICENSES.md](THIRD_PARTY
 |---------|---------|---------|
 | SDL3 | Windowing, input, GPU abstraction | zlib |
 | Flecs | Entity Component System | MIT |
+| Chipmunk2D | 2D physics engine | MIT |
 | cglm | SIMD math operations | MIT |
 | stb_image | Image loading | Public Domain/MIT |
 | stb_truetype | Font rasterization | Public Domain/MIT |
