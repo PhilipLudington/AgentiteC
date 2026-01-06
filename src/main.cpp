@@ -91,9 +91,6 @@ int main(int argc, char *argv[]) {
 
                 agentite_game_context_end_render_pass(ctx);
             }
-
-            /* End sprite batch */
-            agentite_sprite_end(ctx->sprites, NULL, NULL);
         }
 
         agentite_game_context_end_frame(ctx);

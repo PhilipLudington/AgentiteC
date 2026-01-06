@@ -184,9 +184,6 @@ while (agentite_is_running(engine)) {
         agentite_end_render_pass(engine);
     }
 
-    // 6. End sprite batch
-    agentite_sprite_end(sprites, NULL, NULL);
-
     // === FRAME END ===
     agentite_end_frame(engine);
 }

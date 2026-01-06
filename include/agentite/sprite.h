@@ -167,10 +167,6 @@ void agentite_sprite_draw_full(Agentite_SpriteRenderer *sr, const Agentite_Sprit
                              float origin_x, float origin_y,
                              float r, float g, float b, float a);
 
-/* End sprite batch and render (uploads data + draws) */
-void agentite_sprite_end(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
-                       SDL_GPURenderPass *pass);
-
 /* Flush current batch (for texture changes mid-frame) */
 void agentite_sprite_flush(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
                          SDL_GPURenderPass *pass);

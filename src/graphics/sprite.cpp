@@ -1116,9 +1116,6 @@ void agentite_sprite_flush(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cm
         SDL_UnmapGPUTransferBuffer(sr->gpu, transfer);
     }
 
-    /* We need to end the render pass, do the copy, then restart
-       Actually, for simplicity we'll upload before the render pass in agentite_sprite_end */
-
     SDL_ReleaseGPUTransferBuffer(sr->gpu, transfer);
 
     /* Bind pipeline */
@@ -1155,106 +1152,7 @@ void agentite_sprite_flush(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cm
     sr->index_count = 0;
 }
 
-void agentite_sprite_end(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
-                       SDL_GPURenderPass *pass)
-{
-    if (!sr || !sr->batch_started) return;
-
-    if (sr->sprite_count > 0 && sr->current_texture) {
-        /* Upload vertex data before drawing */
-        SDL_GPUTransferBufferCreateInfo transfer_info = {};
-        transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-        transfer_info.size = (Uint32)(sr->vertex_count * sizeof(Agentite_SpriteVertex) +
-                sr->index_count * sizeof(uint16_t));
-        transfer_info.props = 0;
-        SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(sr->gpu, &transfer_info);
-
-        if (transfer) {
-            void *mapped = SDL_MapGPUTransferBuffer(sr->gpu, transfer, false);
-            if (mapped) {
-                memcpy(mapped, sr->vertices,
-                       sr->vertex_count * sizeof(Agentite_SpriteVertex));
-                memcpy((uint8_t *)mapped + sr->vertex_count * sizeof(Agentite_SpriteVertex),
-                       sr->indices, sr->index_count * sizeof(uint16_t));
-                SDL_UnmapGPUTransferBuffer(sr->gpu, transfer);
-            }
-
-            /* Copy to GPU buffers - this must happen outside render pass */
-            /* NOTE: For proper usage, upload should happen before render pass begins.
-               The caller should call agentite_sprite_upload() before beginning render pass,
-               then agentite_sprite_render() during render pass. For convenience, we combine here
-               but this requires ending/restarting the render pass which is inefficient. */
-
-            /* For now, assume the data is already uploaded or we're doing a simple flow */
-            /* In practice, we do the copy pass before the render pass in main.c */
-
-            SDL_ReleaseGPUTransferBuffer(sr->gpu, transfer);
-        }
-
-        /* Draw if we have a render pass */
-        if (pass) {
-            /* Bind pipeline */
-            SDL_BindGPUGraphicsPipeline(pass, sr->pipeline);
-
-            /* Bind vertex buffer */
-            SDL_GPUBufferBinding vb_binding = {};
-            vb_binding.buffer = sr->vertex_buffer;
-            vb_binding.offset = 0;
-            SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
-
-            /* Bind index buffer */
-            SDL_GPUBufferBinding ib_binding = {};
-            ib_binding.buffer = sr->index_buffer;
-            ib_binding.offset = 0;
-            SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
-
-            /* Build uniforms: mat4 view_projection + vec2 screen_size + vec2 padding */
-            struct {
-                float view_projection[16];
-                float screen_size[2];
-                float padding[2];
-            } uniforms;
-
-            static bool logged_ortho = false;
-            if (!logged_ortho) {
-                SDL_Log("DEBUG: Sprite render - camera=%p, screen_size=%dx%d, sprite_count=%d",
-                        (void*)sr->camera, sr->screen_width, sr->screen_height, sr->sprite_count);
-                logged_ortho = true;
-            }
-
-            if (sr->camera) {
-                const float *vp = agentite_camera_get_vp_matrix(sr->camera);
-                memcpy(uniforms.view_projection, vp, sizeof(float) * 16);
-            } else {
-                mat4 ortho;
-                glm_ortho(0.0f, (float)sr->screen_width,
-                          (float)sr->screen_height, 0.0f,
-                          -1.0f, 1.0f, ortho);
-                memcpy(uniforms.view_projection, ortho, sizeof(float) * 16);
-            }
-
-            uniforms.screen_size[0] = (float)sr->screen_width;
-            uniforms.screen_size[1] = (float)sr->screen_height;
-            uniforms.padding[0] = 0.0f;
-            uniforms.padding[1] = 0.0f;
-
-            SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(uniforms));
-
-            /* Bind texture */
-            SDL_GPUTextureSamplerBinding tex_binding = {};
-            tex_binding.texture = sr->current_texture->gpu_texture;
-            tex_binding.sampler = sr->sampler;
-            SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
-
-            /* Draw */
-            SDL_DrawGPUIndexedPrimitives(pass, sr->index_count, 1, 0, 0, 0);
-        }
-    }
-
-    sr->batch_started = false;
-}
-
-/* Separate upload function for proper render pass management */
+/* Upload sprite batch to GPU (call BEFORE render pass begins) */
 void agentite_sprite_upload(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd)
 {
     if (!sr || !cmd || sr->sprite_count == 0) return;
