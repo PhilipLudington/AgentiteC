@@ -880,6 +880,48 @@ void agentite_shader_draw_fullscreen(Agentite_ShaderSystem *ss,
     SDL_DrawGPUPrimitives(pass, FULLSCREEN_QUAD_VERTICES, 1, 0, 0);
 }
 
+void agentite_shader_draw_fullscreen_two_texture(Agentite_ShaderSystem *ss,
+                                                  SDL_GPUCommandBuffer *cmd,
+                                                  SDL_GPURenderPass *pass,
+                                                  Agentite_Shader *shader,
+                                                  SDL_GPUTexture *texture1,
+                                                  SDL_GPUTexture *texture2,
+                                                  const void *params,
+                                                  size_t params_size)
+{
+    if (!ss || !cmd || !pass || !shader) return;
+
+    /* Bind pipeline */
+    SDL_BindGPUGraphicsPipeline(pass, shader->pipeline);
+
+    /* Push orthographic projection matrix for HiDPI support */
+    mat4 projection;
+    glm_ortho(0.0f, 1.0f, 1.0f, 0.0f, -1.0f, 1.0f, projection);
+    SDL_PushGPUVertexUniformData(cmd, 0, projection, sizeof(projection));
+
+    /* Bind both textures: source at slot 0, dest at slot 1 */
+    SDL_GPUTextureSamplerBinding bindings[2] = {};
+    bindings[0].texture = texture1;
+    bindings[0].sampler = ss->linear_sampler;
+    bindings[1].texture = texture2;
+    bindings[1].sampler = ss->linear_sampler;
+    SDL_BindGPUFragmentSamplers(pass, 0, bindings, 2);
+
+    /* Push params if provided */
+    if (params && params_size > 0) {
+        SDL_PushGPUFragmentUniformData(cmd, 0, params, (Uint32)params_size);
+    }
+
+    /* Bind quad vertex buffer */
+    SDL_GPUBufferBinding vb_binding = {};
+    vb_binding.buffer = ss->quad_vertex_buffer;
+    vb_binding.offset = 0;
+    SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
+
+    /* Draw */
+    SDL_DrawGPUPrimitives(pass, FULLSCREEN_QUAD_VERTICES, 1, 0, 0);
+}
+
 /* ============================================================================
  * Utility Functions
  * ============================================================================ */

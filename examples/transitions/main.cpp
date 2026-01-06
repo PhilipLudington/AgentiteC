@@ -25,15 +25,23 @@
 static const int WINDOW_WIDTH = 1280;
 static const int WINDOW_HEIGHT = 720;
 
-/* Effects that have working shader implementations */
+/* All available transition effects */
 static const Agentite_TransitionEffect DEMO_EFFECTS[] = {
-    AGENTITE_TRANSITION_FADE,       /* Uses brightness shader */
-    AGENTITE_TRANSITION_PIXELATE,   /* Uses pixelate shader */
+    AGENTITE_TRANSITION_CROSSFADE,      /* Smooth blend between scenes */
+    AGENTITE_TRANSITION_WIPE_LEFT,      /* Wipe from right to left */
+    AGENTITE_TRANSITION_WIPE_RIGHT,     /* Wipe from left to right */
+    AGENTITE_TRANSITION_WIPE_DOWN,      /* Wipe from top to bottom */
+    AGENTITE_TRANSITION_WIPE_DIAGONAL,  /* Diagonal wipe */
+    AGENTITE_TRANSITION_CIRCLE_OPEN,    /* Iris open from center */
+    AGENTITE_TRANSITION_CIRCLE_CLOSE,   /* Iris close to center */
+    AGENTITE_TRANSITION_SLIDE_LEFT,     /* Slide new scene from right */
+    AGENTITE_TRANSITION_SLIDE_RIGHT,    /* Slide new scene from left */
+    AGENTITE_TRANSITION_PUSH_LEFT,      /* Push old scene left */
+    AGENTITE_TRANSITION_DISSOLVE,       /* Noise-based dissolve */
+    AGENTITE_TRANSITION_PIXELATE,       /* Pixelate out/in */
+    AGENTITE_TRANSITION_FADE,           /* Fade through black */
 };
 static const int NUM_DEMO_EFFECTS = sizeof(DEMO_EFFECTS) / sizeof(DEMO_EFFECTS[0]);
-
-/* Note: crossfade, wipe, circle effects require dedicated transition shaders
- * that blend two textures. These are not yet implemented. */
 
 typedef struct AppState {
     Agentite_Engine *engine;
@@ -186,72 +194,17 @@ static void render_scene_to_target(AppState *app, SDL_GPUCommandBuffer *cmd,
 /* Debug: track which path we used */
 static const char *s_last_effect_path = "none";
 
-/* Render the transition effect */
+/* Render the transition effect using the transition system */
 static void render_transition_effect(AppState *app, SDL_GPUCommandBuffer *cmd,
                                       SDL_GPURenderPass *pass,
                                       SDL_GPUTexture *source, SDL_GPUTexture *dest,
                                       float progress) {
     Agentite_TransitionEffect effect = DEMO_EFFECTS[app->current_effect_idx];
 
-    /* Use the transition system's blend function if we have proper shaders */
-    /* Otherwise fall back to simple crossfade */
-
-    Agentite_Shader *effect_shader = NULL;
-
-    /* Check if pixelate shader is available (it's the one we know works) */
-    if (effect == AGENTITE_TRANSITION_PIXELATE) {
-        effect_shader = agentite_shader_get_builtin(app->shaders, AGENTITE_SHADER_PIXELATE);
-        if (effect_shader) {
-            /* Calculate pixel size based on progress (pixelate up then down) */
-            float t = progress < 0.5f ? progress * 2.0f : (1.0f - progress) * 2.0f;
-            float pixel_size = 1.0f + t * 15.0f;  /* Max 16 pixel size */
-
-            float params[4] = { pixel_size, 0, 0, 0 };
-
-            /* Draw the appropriate scene with pixelate effect */
-            SDL_GPUTexture *scene = progress < 0.5f ? source : dest;
-            agentite_shader_draw_fullscreen(app->shaders, cmd, pass, effect_shader, scene, params, sizeof(params));
-            s_last_effect_path = "pixelate";
-            return;
-        }
-    }
-
-    /* For other effects, use simple crossfade or fade through black */
-    if (effect == AGENTITE_TRANSITION_FADE) {
-        /* Fade through black: first half fades out, second half fades in */
-        Agentite_Shader *brightness = agentite_shader_get_builtin(app->shaders, AGENTITE_SHADER_BRIGHTNESS);
-        if (brightness) {
-            /* Calculate fade amount */
-            float fade_alpha;
-            SDL_GPUTexture *scene;
-
-            if (progress < 0.5f) {
-                /* Fading out source */
-                fade_alpha = 1.0f - progress * 2.0f;
-                scene = source;
-            } else {
-                /* Fading in destination */
-                fade_alpha = (progress - 0.5f) * 2.0f;
-                scene = dest;
-            }
-
-            float params[4] = { fade_alpha - 1.0f, 0, 0, 0 };  /* -1 to 0 range for brightness */
-            agentite_shader_draw_fullscreen(app->shaders, cmd, pass, brightness, scene, params, sizeof(params));
-            s_last_effect_path = "fade+brightness";
-            return;
-        }
-    }
-
-    /* For crossfade/wipe/etc - use passthrough with midpoint cut for now */
-    /* TODO: Implement proper crossfade shader that can blend two textures */
-    Agentite_Shader *passthrough = agentite_shader_get_builtin(app->shaders, AGENTITE_SHADER_NONE);
-    if (passthrough) {
-        SDL_GPUTexture *scene = progress < 0.5f ? source : dest;
-        agentite_shader_draw_fullscreen(app->shaders, cmd, pass, passthrough, scene, NULL, 0);
-        s_last_effect_path = "fallback-cut";
-    } else {
-        s_last_effect_path = "no-shader!";
-    }
+    /* Use the transition system's blend function for all effects */
+    agentite_transition_set_effect(app->transition, effect);
+    agentite_transition_render_blend(app->transition, cmd, pass, source, dest, progress);
+    s_last_effect_path = agentite_transition_effect_name(effect);
 }
 
 int main(int argc, char *argv[]) {

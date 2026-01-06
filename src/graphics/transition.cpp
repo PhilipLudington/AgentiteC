@@ -7,11 +7,13 @@
 #include "agentite/transition.h"
 #include "agentite/shader.h"
 #include "agentite/error.h"
+#include "transition_shaders.h"
 
 #include <SDL3/SDL.h>
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
+#include <cstdio>
 
 /* ============================================================================
  * Constants
@@ -509,7 +511,7 @@ void agentite_transition_render_blend(Agentite_Transition *trans,
     /* Get appropriate shader */
     Agentite_Shader *shader = get_shader_for_effect(trans, effect);
     if (!shader) {
-        /* Fall back to simple crossfade using built-in if available */
+        /* Fall back: hard cut at 50% progress */
         return;
     }
 
@@ -518,12 +520,51 @@ void agentite_transition_render_blend(Agentite_Transition *trans,
     size_t param_size = 0;
     build_params_for_effect(trans, effect, progress, params, &param_size);
 
-    /* Render fullscreen with the transition shader */
-    /* This blends source and dest based on the effect */
-    agentite_shader_draw_fullscreen(trans->shader_system, cmd, pass,
-                                    shader,
-                                    progress < 0.5f ? source : dest,
-                                    params, param_size);
+    /* Pixelate uses single-texture builtin shader with different param layout */
+    if (effect == AGENTITE_TRANSITION_PIXELATE) {
+        /* Builtin pixelate expects: { float pixel_size; float3 _pad; } */
+        float t = progress < 0.5f ? progress * 2.0f : (1.0f - progress) * 2.0f;
+        float pixel_size = 1.0f + t * (trans->config.pixel_size - 1.0f);
+        float pixelate_params[4] = { pixel_size, 0, 0, 0 };
+
+        agentite_shader_draw_fullscreen(trans->shader_system, cmd, pass,
+                                        shader,
+                                        progress < 0.5f ? source : dest,
+                                        pixelate_params, sizeof(pixelate_params));
+        return;
+    }
+
+    /* Fade uses brightness shader to fade through black */
+    if (effect == AGENTITE_TRANSITION_FADE) {
+        Agentite_Shader *brightness = agentite_shader_get_builtin(trans->shader_system,
+                                                                   AGENTITE_SHADER_BRIGHTNESS);
+        if (brightness) {
+            /* First half: fade source to black, second half: fade dest from black */
+            float brightness_amount;
+            SDL_GPUTexture *scene;
+
+            if (progress < 0.5f) {
+                /* Fading out source: brightness goes from 0 to -1 */
+                brightness_amount = -progress * 2.0f;
+                scene = source;
+            } else {
+                /* Fading in dest: brightness goes from -1 to 0 */
+                brightness_amount = -1.0f + (progress - 0.5f) * 2.0f;
+                scene = dest;
+            }
+
+            float brightness_params[4] = { brightness_amount, 0, 0, 0 };
+            agentite_shader_draw_fullscreen(trans->shader_system, cmd, pass,
+                                            brightness, scene,
+                                            brightness_params, sizeof(brightness_params));
+            return;
+        }
+    }
+
+    /* All other transitions use two-texture blend shaders */
+    agentite_shader_draw_fullscreen_two_texture(trans->shader_system, cmd, pass,
+                                                 shader, source, dest,
+                                                 params, param_size);
 }
 
 /* ============================================================================
@@ -676,24 +717,122 @@ static void destroy_render_targets(Agentite_Transition *trans)
 
 static bool create_shaders(Agentite_Transition *trans)
 {
-    /* Use built-in shaders from shader system where available */
-    /* For custom transition effects, we would create dedicated shaders here */
-
-    /* Get pixelate from built-ins */
+    /* Get pixelate from built-ins (single texture effect) */
     trans->pixelate_shader = agentite_shader_get_builtin(trans->shader_system,
                                                           AGENTITE_SHADER_PIXELATE);
 
-    /* Other transition shaders would be created from embedded SPIRV */
-    /* For the initial implementation, we'll rely on what's available */
+    /* Shader desc for two-texture transition shaders */
+    Agentite_ShaderDesc desc = AGENTITE_SHADER_DESC_DEFAULT;
+    desc.num_vertex_uniforms = 1;     /* Projection matrix */
+    desc.num_fragment_uniforms = 1;   /* Transition params */
+    desc.num_fragment_samplers = 2;   /* Source + dest textures */
+    desc.blend_mode = AGENTITE_BLEND_NONE;
+
+    SDL_GPUShaderFormat formats = agentite_shader_get_formats(trans->shader_system);
+
+    if (formats & SDL_GPU_SHADERFORMAT_SPIRV) {
+        /* Load SPIR-V shaders (Vulkan/Linux/Windows) */
+        trans->crossfade_shader = agentite_shader_load_spirv(trans->shader_system,
+            "assets/shaders/transitions/transition.vert.spv",
+            "assets/shaders/transitions/crossfade.frag.spv", &desc);
+
+        trans->wipe_shader = agentite_shader_load_spirv(trans->shader_system,
+            "assets/shaders/transitions/transition.vert.spv",
+            "assets/shaders/transitions/wipe.frag.spv", &desc);
+
+        trans->circle_shader = agentite_shader_load_spirv(trans->shader_system,
+            "assets/shaders/transitions/transition.vert.spv",
+            "assets/shaders/transitions/circle.frag.spv", &desc);
+
+        trans->slide_shader = agentite_shader_load_spirv(trans->shader_system,
+            "assets/shaders/transitions/transition.vert.spv",
+            "assets/shaders/transitions/slide.frag.spv", &desc);
+
+        trans->dissolve_shader = agentite_shader_load_spirv(trans->shader_system,
+            "assets/shaders/transitions/transition.vert.spv",
+            "assets/shaders/transitions/dissolve.frag.spv", &desc);
+
+        SDL_Log("Transition: Loaded SPIR-V shaders");
+    } else if (formats & SDL_GPU_SHADERFORMAT_MSL) {
+        /* Load MSL shaders (Metal/macOS/iOS) */
+        char combined[8192];
+
+        desc.vertex_entry = "transition_vertex";
+
+        /* Crossfade */
+        snprintf(combined, sizeof(combined), "%s\n%s",
+                 transition_vertex_msl, transition_crossfade_msl);
+        desc.fragment_entry = "crossfade_fragment";
+        trans->crossfade_shader = agentite_shader_load_msl(trans->shader_system,
+                                                            combined, &desc);
+
+        /* Wipe */
+        snprintf(combined, sizeof(combined), "%s\n%s",
+                 transition_vertex_msl, transition_wipe_msl);
+        desc.fragment_entry = "wipe_fragment";
+        trans->wipe_shader = agentite_shader_load_msl(trans->shader_system,
+                                                       combined, &desc);
+
+        /* Circle */
+        snprintf(combined, sizeof(combined), "%s\n%s",
+                 transition_vertex_msl, transition_circle_msl);
+        desc.fragment_entry = "circle_fragment";
+        trans->circle_shader = agentite_shader_load_msl(trans->shader_system,
+                                                         combined, &desc);
+
+        /* Slide */
+        snprintf(combined, sizeof(combined), "%s\n%s",
+                 transition_vertex_msl, transition_slide_msl);
+        desc.fragment_entry = "slide_fragment";
+        trans->slide_shader = agentite_shader_load_msl(trans->shader_system,
+                                                        combined, &desc);
+
+        /* Dissolve */
+        snprintf(combined, sizeof(combined), "%s\n%s",
+                 transition_vertex_msl, transition_dissolve_msl);
+        desc.fragment_entry = "dissolve_fragment";
+        trans->dissolve_shader = agentite_shader_load_msl(trans->shader_system,
+                                                           combined, &desc);
+
+        SDL_Log("Transition: Loaded MSL shaders");
+    }
+
+    /* Log shader availability */
+    SDL_Log("Transition shaders: crossfade=%s wipe=%s circle=%s slide=%s dissolve=%s",
+            trans->crossfade_shader ? "OK" : "N/A",
+            trans->wipe_shader ? "OK" : "N/A",
+            trans->circle_shader ? "OK" : "N/A",
+            trans->slide_shader ? "OK" : "N/A",
+            trans->dissolve_shader ? "OK" : "N/A");
 
     return true;
 }
 
 static void destroy_shaders(Agentite_Transition *trans)
 {
-    /* Built-in shaders are not destroyed */
-    /* Custom shaders would be destroyed here */
-    (void)trans;
+    /* Built-in shaders (pixelate) are not destroyed */
+
+    /* Destroy custom transition shaders */
+    if (trans->crossfade_shader) {
+        agentite_shader_destroy(trans->shader_system, trans->crossfade_shader);
+        trans->crossfade_shader = NULL;
+    }
+    if (trans->wipe_shader) {
+        agentite_shader_destroy(trans->shader_system, trans->wipe_shader);
+        trans->wipe_shader = NULL;
+    }
+    if (trans->circle_shader) {
+        agentite_shader_destroy(trans->shader_system, trans->circle_shader);
+        trans->circle_shader = NULL;
+    }
+    if (trans->slide_shader) {
+        agentite_shader_destroy(trans->shader_system, trans->slide_shader);
+        trans->slide_shader = NULL;
+    }
+    if (trans->dissolve_shader) {
+        agentite_shader_destroy(trans->shader_system, trans->dissolve_shader);
+        trans->dissolve_shader = NULL;
+    }
 }
 
 static Agentite_Shader *get_shader_for_effect(Agentite_Transition *trans,

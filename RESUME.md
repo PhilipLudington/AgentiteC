@@ -685,11 +685,25 @@ Created GLSL shaders for all lighting effects, compiled to SPIR-V:
 - ~~Update lighting example~~ ✅ DONE - Point lights, spot lights, ambient all working
 - ~~Fix transitions centering and effects~~ ✅ DONE (2026-01-05)
 
-### Transition Shaders
-- Implement crossfade shader (blend two textures with alpha)
-- Implement wipe shaders (horizontal/vertical/diagonal wipe with softness)
-- Implement circle/iris shader (radial wipe from center)
-- Implement slide/push shaders (offset-based scene movement)
+### Transition Shaders (2026-01-05) - COMPLETE
+
+**Implemented:**
+- [x] Two-texture shader infrastructure (`agentite_shader_draw_fullscreen_two_texture()`)
+- [x] MSL shaders for Metal (in `src/graphics/transition_shaders.h`)
+- [x] SPIR-V shaders for Vulkan (in `assets/shaders/transitions/`)
+- [x] Shader loading in `transition.cpp` `create_shaders()`
+- [x] Crossfade - working
+- [x] Wipe (all directions) - working
+- [x] Circle open/close - working
+- [x] Dissolve - working
+- [x] Pixelate - working (uses builtin shader)
+- [x] Fade - working (uses brightness shader)
+
+**All transition effects working:**
+- [x] Slide transitions (slide_left, slide_right, etc.) - working
+- [x] Push transitions (push_left, push_right, etc.) - working (verified with debug tints 2026-01-05)
+  - Initial report of "wrong directions" was a perception issue due to fast animation and similar-looking scenes
+  - Both scenes correctly move together in the same direction (like pushing cards)
 
 ### Remaining MSL Shaders
 - Add MSL for Gaussian blur, outline, glow, and dissolve effects

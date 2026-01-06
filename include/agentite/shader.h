@@ -462,6 +462,29 @@ void agentite_shader_draw_fullscreen(Agentite_ShaderSystem *ss,
                                      size_t params_size);
 
 /**
+ * Draw a fullscreen quad with a shader using two textures.
+ * Renders to the current render pass with both textures bound.
+ * Used for transition effects that blend between two scenes.
+ *
+ * @param ss Shader system
+ * @param cmd Command buffer
+ * @param pass Render pass
+ * @param shader Shader to use (must have num_fragment_samplers = 2)
+ * @param texture1 First texture (source, bound to slot 0)
+ * @param texture2 Second texture (dest, bound to slot 1)
+ * @param params Uniform parameters (pushed to fragment slot 0)
+ * @param params_size Size of params in bytes
+ */
+void agentite_shader_draw_fullscreen_two_texture(Agentite_ShaderSystem *ss,
+                                                  SDL_GPUCommandBuffer *cmd,
+                                                  SDL_GPURenderPass *pass,
+                                                  Agentite_Shader *shader,
+                                                  SDL_GPUTexture *texture1,
+                                                  SDL_GPUTexture *texture2,
+                                                  const void *params,
+                                                  size_t params_size);
+
+/**
  * Get the fullscreen quad vertex buffer.
  * Useful for custom rendering that needs the standard fullscreen quad.
  *
