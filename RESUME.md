@@ -390,18 +390,18 @@ All commonly-used builtin shaders now have MSL implementations for macOS (Metal)
 - ✅ `AGENTITE_SHADER_CONTRAST` - Contrast adjustment
 - ✅ `AGENTITE_SHADER_SATURATION` - Saturation adjustment
 - ✅ `AGENTITE_SHADER_BLUR_BOX` - Box blur effect
+- ✅ `AGENTITE_SHADER_BLUR_GAUSSIAN` - Gaussian blur (2026-01-05)
 - ✅ `AGENTITE_SHADER_VIGNETTE` - Darkened edges
 - ✅ `AGENTITE_SHADER_CHROMATIC` - Chromatic aberration
 - ✅ `AGENTITE_SHADER_SCANLINES` - CRT scanline effect
 - ✅ `AGENTITE_SHADER_PIXELATE` - Pixelation effect
 - ✅ `AGENTITE_SHADER_SOBEL` - Sobel edge detection
+- ✅ `AGENTITE_SHADER_OUTLINE` - Edge outline (2026-01-05) - alpha-based edge detection
+- ✅ `AGENTITE_SHADER_GLOW` - Bloom/glow effect (2026-01-05) - threshold-based bright pixel extraction
 - ✅ `AGENTITE_SHADER_FLASH` - Flash/hit effect
 
-**Still SPIRV-only (not yet on Metal):**
-- `AGENTITE_SHADER_BLUR_GAUSSIAN` - Gaussian blur
-- `AGENTITE_SHADER_OUTLINE` - Edge outline
-- `AGENTITE_SHADER_GLOW` - Bloom/glow effect
-- `AGENTITE_SHADER_DISSOLVE` - Dissolve transition
+**All builtin shaders now have MSL implementations!**
+- ✅ `AGENTITE_SHADER_DISSOLVE` - Dissolve transition (2026-01-05) - procedural noise-based dissolve with fire edge
 
 File: `src/graphics/shader.cpp` - MSL shader sources and registration in `init_builtin_shaders()`
 
@@ -705,8 +705,11 @@ Created GLSL shaders for all lighting effects, compiled to SPIR-V:
   - Initial report of "wrong directions" was a perception issue due to fast animation and similar-looking scenes
   - Both scenes correctly move together in the same direction (like pushing cards)
 
-### Remaining MSL Shaders
-- Add MSL for Gaussian blur, outline, glow, and dissolve effects
+### MSL Shaders - COMPLETE
+- ✅ Gaussian blur - Added 2026-01-05
+- ✅ Outline - Added 2026-01-05 (Sobel-based luminance edge detection)
+- ✅ Glow - Added 2026-01-05
+- ✅ Dissolve - Added 2026-01-05 (procedural noise with orange fire edge)
 
 ### Postprocess Params Limitation
 - Fix `agentite_postprocess_apply()` to support variable-size params (currently hardcoded to 16 bytes)

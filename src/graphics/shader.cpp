@@ -1618,6 +1618,199 @@ fragment float4 flash_fragment(
 }
 )";
 
+static const char *builtin_blur_gaussian_msl = R"(
+struct Params {
+    float radius;
+    float sigma;
+    float2 _pad;
+};
+
+fragment float4 blur_gaussian_fragment(
+    VertexOut in [[stage_in]],
+    texture2d<float> tex [[texture(0)]],
+    sampler samp [[sampler(0)]],
+    constant Params& params [[buffer(0)]])
+{
+    float2 tex_size = float2(tex.get_width(), tex.get_height());
+    float2 texel = 1.0 / tex_size;
+
+    int iradius = int(params.radius);
+    if (iradius <= 0) iradius = 1;
+    if (iradius > 16) iradius = 16;  /* Limit for performance */
+
+    float sigma = params.sigma;
+    if (sigma <= 0.0) sigma = float(iradius) / 2.0;
+
+    float4 sum = float4(0.0);
+    float weight_sum = 0.0;
+
+    /* Two-pass separable approximation in single pass */
+    for (int x = -iradius; x <= iradius; x++) {
+        for (int y = -iradius; y <= iradius; y++) {
+            float2 offset = float2(float(x), float(y)) * texel;
+            float dist = sqrt(float(x * x + y * y));
+            float weight = exp(-(dist * dist) / (2.0 * sigma * sigma));
+            sum += tex.sample(samp, in.texcoord + offset) * weight;
+            weight_sum += weight;
+        }
+    }
+
+    return sum / weight_sum;
+}
+)";
+
+static const char *builtin_outline_msl = R"(
+struct Params {
+    float thickness;
+    float color_r;
+    float color_g;
+    float color_b;
+};
+
+fragment float4 outline_fragment(
+    VertexOut in [[stage_in]],
+    texture2d<float> tex [[texture(0)]],
+    sampler samp [[sampler(0)]],
+    constant Params& params [[buffer(0)]])
+{
+    float2 tex_size = float2(tex.get_width(), tex.get_height());
+    float2 texel = 1.0 / tex_size;
+
+    float4 color = tex.sample(samp, in.texcoord);
+    float3 luma = float3(0.299, 0.587, 0.114);
+
+    /* Sobel-like edge detection for outline */
+    float thickness = params.thickness;
+    if (thickness <= 0.0) thickness = 1.0;
+
+    /* Check if we're near the edge - skip outline detection to avoid artifacts */
+    float2 margin = texel * 8.0;  /* 8 pixel margin */
+    if (in.texcoord.x < margin.x || in.texcoord.x > 1.0 - margin.x ||
+        in.texcoord.y < margin.y || in.texcoord.y > 1.0 - margin.y) {
+        return color;
+    }
+
+    /* Sample in 8 directions with clamped UVs */
+    float2 uv = in.texcoord;
+    float tl = dot(tex.sample(samp, clamp(uv + float2(-texel.x, -texel.y) * thickness, 0.0, 1.0)).rgb, luma);
+    float tm = dot(tex.sample(samp, clamp(uv + float2(0.0, -texel.y) * thickness, 0.0, 1.0)).rgb, luma);
+    float tr = dot(tex.sample(samp, clamp(uv + float2(texel.x, -texel.y) * thickness, 0.0, 1.0)).rgb, luma);
+    float ml = dot(tex.sample(samp, clamp(uv + float2(-texel.x, 0.0) * thickness, 0.0, 1.0)).rgb, luma);
+    float mr = dot(tex.sample(samp, clamp(uv + float2(texel.x, 0.0) * thickness, 0.0, 1.0)).rgb, luma);
+    float bl = dot(tex.sample(samp, clamp(uv + float2(-texel.x, texel.y) * thickness, 0.0, 1.0)).rgb, luma);
+    float bm = dot(tex.sample(samp, clamp(uv + float2(0.0, texel.y) * thickness, 0.0, 1.0)).rgb, luma);
+    float br = dot(tex.sample(samp, clamp(uv + float2(texel.x, texel.y) * thickness, 0.0, 1.0)).rgb, luma);
+
+    /* Sobel operators */
+    float gx = -tl - 2.0*ml - bl + tr + 2.0*mr + br;
+    float gy = -tl - 2.0*tm - tr + bl + 2.0*bm + br;
+    float edge = sqrt(gx*gx + gy*gy);
+
+    /* Apply colored outline where edges are detected */
+    float3 outline_color = float3(params.color_r, params.color_g, params.color_b);
+    float3 result = mix(color.rgb, outline_color, clamp(edge * 2.0, 0.0, 1.0));
+
+    return float4(result, color.a);
+}
+)";
+
+static const char *builtin_glow_msl = R"(
+struct Params {
+    float threshold;
+    float intensity;
+    float2 _pad;
+};
+
+fragment float4 glow_fragment(
+    VertexOut in [[stage_in]],
+    texture2d<float> tex [[texture(0)]],
+    sampler samp [[sampler(0)]],
+    constant Params& params [[buffer(0)]])
+{
+    float2 tex_size = float2(tex.get_width(), tex.get_height());
+    float2 texel = 1.0 / tex_size;
+
+    float4 color = tex.sample(samp, in.texcoord);
+
+    /* Extract bright pixels and blur them */
+    float4 glow = float4(0.0);
+    float weight_sum = 0.0;
+    int radius = 4;
+    float sigma = 2.0;
+
+    for (int x = -radius; x <= radius; x++) {
+        for (int y = -radius; y <= radius; y++) {
+            float2 offset = float2(float(x), float(y)) * texel;
+            float4 sample_color = tex.sample(samp, in.texcoord + offset);
+
+            /* Check brightness against threshold */
+            float brightness = dot(sample_color.rgb, float3(0.299, 0.587, 0.114));
+            if (brightness > params.threshold) {
+                float dist = sqrt(float(x * x + y * y));
+                float weight = exp(-(dist * dist) / (2.0 * sigma * sigma));
+                /* Only add the bright excess */
+                float3 bright_part = sample_color.rgb * (brightness - params.threshold);
+                glow.rgb += bright_part * weight;
+                weight_sum += weight;
+            }
+        }
+    }
+
+    if (weight_sum > 0.0) {
+        glow.rgb /= weight_sum;
+    }
+
+    /* Add glow to original */
+    float3 result = color.rgb + glow.rgb * params.intensity;
+    return float4(clamp(result, 0.0, 1.0), color.a);
+}
+)";
+
+static const char *builtin_dissolve_msl = R"(
+struct Params {
+    float progress;
+    float edge_width;
+    float2 _pad;
+};
+
+/* Simple hash-based noise for dissolve pattern */
+float hash21(float2 p) {
+    p = fract(p * float2(234.34, 435.345));
+    p += dot(p, p + 34.23);
+    return fract(p.x * p.y);
+}
+
+fragment float4 dissolve_fragment(
+    VertexOut in [[stage_in]],
+    texture2d<float> tex [[texture(0)]],
+    sampler samp [[sampler(0)]],
+    constant Params& params [[buffer(0)]])
+{
+    float4 color = tex.sample(samp, in.texcoord);
+
+    /* Generate noise pattern based on UV coordinates */
+    float noise = hash21(in.texcoord * 50.0);
+
+    /* Compare noise to progress threshold */
+    float threshold = params.progress;
+    float edge = params.edge_width;
+    if (edge <= 0.0) edge = 0.1;
+
+    if (noise < threshold - edge) {
+        /* Fully dissolved - transparent */
+        discard_fragment();
+    } else if (noise < threshold) {
+        /* Edge region - show bright edge color */
+        float t = (threshold - noise) / edge;
+        float3 edge_color = float3(1.0, 0.5, 0.0);  /* Orange/fire edge */
+        color.rgb = mix(color.rgb, edge_color, t);
+    }
+    /* else: fully visible - return original color */
+
+    return color;
+}
+)";
+
 /* Helper to create a builtin shader from SPIRV files */
 static Agentite_Shader *create_builtin_from_file(Agentite_ShaderSystem *ss,
                                                   const char *frag_filename,
@@ -1804,6 +1997,42 @@ static bool init_builtin_shaders(Agentite_ShaderSystem *ss)
         ss->builtins[AGENTITE_SHADER_FLASH] = agentite_shader_load_msl(ss, combined, &desc);
         if (ss->builtins[AGENTITE_SHADER_FLASH]) {
             ss->builtins[AGENTITE_SHADER_FLASH]->is_builtin = true;
+        }
+
+        /* Gaussian Blur (needs uniform buffer) */
+        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_blur_gaussian_msl);
+        desc.fragment_entry = "blur_gaussian_fragment";
+        desc.num_fragment_uniforms = 1;
+        ss->builtins[AGENTITE_SHADER_BLUR_GAUSSIAN] = agentite_shader_load_msl(ss, combined, &desc);
+        if (ss->builtins[AGENTITE_SHADER_BLUR_GAUSSIAN]) {
+            ss->builtins[AGENTITE_SHADER_BLUR_GAUSSIAN]->is_builtin = true;
+        }
+
+        /* Outline (needs uniform buffer) */
+        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_outline_msl);
+        desc.fragment_entry = "outline_fragment";
+        desc.num_fragment_uniforms = 1;
+        ss->builtins[AGENTITE_SHADER_OUTLINE] = agentite_shader_load_msl(ss, combined, &desc);
+        if (ss->builtins[AGENTITE_SHADER_OUTLINE]) {
+            ss->builtins[AGENTITE_SHADER_OUTLINE]->is_builtin = true;
+        }
+
+        /* Glow/Bloom (needs uniform buffer) */
+        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_glow_msl);
+        desc.fragment_entry = "glow_fragment";
+        desc.num_fragment_uniforms = 1;
+        ss->builtins[AGENTITE_SHADER_GLOW] = agentite_shader_load_msl(ss, combined, &desc);
+        if (ss->builtins[AGENTITE_SHADER_GLOW]) {
+            ss->builtins[AGENTITE_SHADER_GLOW]->is_builtin = true;
+        }
+
+        /* Dissolve (needs uniform buffer) */
+        snprintf(combined, sizeof(combined), "%s\n%s", builtin_vertex_msl, builtin_dissolve_msl);
+        desc.fragment_entry = "dissolve_fragment";
+        desc.num_fragment_uniforms = 1;
+        ss->builtins[AGENTITE_SHADER_DISSOLVE] = agentite_shader_load_msl(ss, combined, &desc);
+        if (ss->builtins[AGENTITE_SHADER_DISSOLVE]) {
+            ss->builtins[AGENTITE_SHADER_DISSOLVE]->is_builtin = true;
         }
 
         return true;

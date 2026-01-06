@@ -9,8 +9,12 @@
  *   1-7    - Basic effects (grayscale, sepia, invert, vignette, scanlines, pixelate, contrast)
  *   8-9    - Adjustment effects (brightness, saturation)
  *   B      - Box blur
+ *   G      - Gaussian blur
  *   C      - Chromatic aberration
  *   S      - Sobel edge detection
+ *   O      - Outline
+ *   W      - Glow/bloom
+ *   D      - Dissolve
  *   F      - Flash effect
  *   ESC    - Quit
  */
@@ -56,8 +60,12 @@ static const char *get_effect_name(Agentite_BuiltinShader effect) {
         case AGENTITE_SHADER_BRIGHTNESS: return "Brightness";
         case AGENTITE_SHADER_SATURATION: return "Saturation";
         case AGENTITE_SHADER_BLUR_BOX: return "Box Blur";
+        case AGENTITE_SHADER_BLUR_GAUSSIAN: return "Gaussian Blur";
         case AGENTITE_SHADER_CHROMATIC: return "Chromatic Aberration";
         case AGENTITE_SHADER_SOBEL: return "Sobel Edge Detection";
+        case AGENTITE_SHADER_OUTLINE: return "Outline";
+        case AGENTITE_SHADER_GLOW: return "Glow/Bloom";
+        case AGENTITE_SHADER_DISSOLVE: return "Dissolve";
         case AGENTITE_SHADER_FLASH: return "Flash";
         default: return "Unknown";
     }
@@ -192,8 +200,12 @@ int main(int argc, char *argv[]) {
     printf("  8: Brightness\n");
     printf("  9: Saturation\n");
     printf("  B: Box Blur\n");
+    printf("  G: Gaussian Blur\n");
     printf("  C: Chromatic Aberration\n");
     printf("  S: Sobel Edge Detection\n");
+    printf("  O: Outline\n");
+    printf("  W: Glow/Bloom\n");
+    printf("  D: Dissolve\n");
     printf("  F: Flash\n");
     printf("  ESC: Quit\n\n");
 
@@ -236,10 +248,18 @@ int main(int argc, char *argv[]) {
             app.current_effect = AGENTITE_SHADER_SATURATION;
         if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_B))
             app.current_effect = AGENTITE_SHADER_BLUR_BOX;
+        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_G))
+            app.current_effect = AGENTITE_SHADER_BLUR_GAUSSIAN;
         if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_C))
             app.current_effect = AGENTITE_SHADER_CHROMATIC;
         if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_S))
             app.current_effect = AGENTITE_SHADER_SOBEL;
+        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_O))
+            app.current_effect = AGENTITE_SHADER_OUTLINE;
+        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_W))
+            app.current_effect = AGENTITE_SHADER_GLOW;
+        if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_D))
+            app.current_effect = AGENTITE_SHADER_DISSOLVE;
         if (agentite_input_key_just_pressed(app.input, SDL_SCANCODE_F))
             app.current_effect = AGENTITE_SHADER_FLASH;
 
@@ -281,16 +301,7 @@ int main(int argc, char *argv[]) {
                 agentite_sprite_draw(app.sprites, &sprite, x, y);
             }
 
-            /* Draw red border lines at window edges (like hidpi example) */
-            if (app.ui_bg_texture) {
-                Agentite_Sprite line = agentite_sprite_from_texture(app.ui_bg_texture);
-                const float LINE_W = 3.0f;
-                /* Use draw_scaled with explicit dimensions */
-                agentite_sprite_draw_scaled(app.sprites, &line, 0, 0, LINE_W, (float)WINDOW_HEIGHT);                    /* Left */
-                agentite_sprite_draw_scaled(app.sprites, &line, WINDOW_WIDTH - LINE_W, 0, LINE_W, (float)WINDOW_HEIGHT); /* Right */
-                agentite_sprite_draw_scaled(app.sprites, &line, 0, 0, (float)WINDOW_WIDTH, LINE_W);                      /* Top */
-                agentite_sprite_draw_scaled(app.sprites, &line, 0, WINDOW_HEIGHT - LINE_W, (float)WINDOW_WIDTH, LINE_W); /* Bottom */
-            }
+            /* Note: Border lines removed - they caused edge detection artifacts with outline shader */
 
             /* Prepare text batch - use logical coordinates */
             if (app.text && app.font) {
@@ -310,7 +321,7 @@ int main(int argc, char *argv[]) {
                     effect_text, 10, 30, 0.7f, 1.0f, 0.7f, 0.9f);
 
                 agentite_text_draw_colored(app.text, app.font,
-                    "0-9, B/C/S/F: Effects | ESC: Quit",
+                    "0-9, B/G/C/S/O/W/D/F: Effects | ESC: Quit",
                     10, WINDOW_HEIGHT - 30, 0.5f, 0.5f, 0.5f, 0.9f);
                 agentite_text_end(app.text);
             }
@@ -353,7 +364,16 @@ int main(int argc, char *argv[]) {
                     Agentite_ShaderParams_Adjust brightness_params = { .amount = 0.3f };
                     Agentite_ShaderParams_Adjust saturation_params = { .amount = 0.5f };
                     Agentite_ShaderParams_Blur blur_params = { .radius = 3.0f, .sigma = 0.0f };
+                    Agentite_ShaderParams_Blur gaussian_params = { .radius = 5.0f, .sigma = 2.5f };
                     Agentite_ShaderParams_Chromatic chromatic_params = { .offset = 5.0f };
+                    /* Outline uses 16-byte params: thickness, R, G, B */
+                    float outline_params[4] = { 2.0f, 1.0f, 0.0f, 0.0f };  /* thickness, R, G, B */
+                    Agentite_ShaderParams_Glow glow_params = { .threshold = 0.5f, .intensity = 2.0f };
+                    /* Dissolve - animate progress over time */
+                    Agentite_ShaderParams_Dissolve dissolve_params = {
+                        .progress = fmodf(app.time * 0.3f, 1.2f),  /* Loop 0 to 1.2 */
+                        .edge_width = 0.1f
+                    };
                     /* Flash uses 16-byte params: RGB color + intensity in 4th slot */
                     float flash_params[4] = { 1.0f, 0.3f, 0.3f, 0.6f };  /* R, G, B, intensity */
 
@@ -365,7 +385,11 @@ int main(int argc, char *argv[]) {
                         case AGENTITE_SHADER_BRIGHTNESS: params = &brightness_params; break;
                         case AGENTITE_SHADER_SATURATION: params = &saturation_params; break;
                         case AGENTITE_SHADER_BLUR_BOX: params = &blur_params; break;
+                        case AGENTITE_SHADER_BLUR_GAUSSIAN: params = &gaussian_params; break;
                         case AGENTITE_SHADER_CHROMATIC: params = &chromatic_params; break;
+                        case AGENTITE_SHADER_OUTLINE: params = &outline_params; break;
+                        case AGENTITE_SHADER_GLOW: params = &glow_params; break;
+                        case AGENTITE_SHADER_DISSOLVE: params = &dissolve_params; break;
                         case AGENTITE_SHADER_FLASH: params = &flash_params; break;
                         default: break;
                     }
