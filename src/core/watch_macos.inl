@@ -47,6 +47,9 @@ static void fsevents_callback(
     const FSEventStreamEventFlags eventFlags[],
     const FSEventStreamEventId eventIds[])
 {
+    (void)streamRef;  /* Required by FSEvents API but unused */
+    (void)eventIds;   /* Event IDs not needed for our use case */
+
     Agentite_FileWatcher *watcher = (Agentite_FileWatcher *)clientCallBackInfo;
     char **paths = (char **)eventPaths;
 

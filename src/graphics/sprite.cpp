@@ -150,6 +150,8 @@ struct Agentite_Texture {
     SDL_GPUTexture *gpu_texture;
     int width;
     int height;
+    Agentite_ScaleMode scale_mode;
+    Agentite_TextureAddressMode address_mode;
 };
 
 struct Agentite_SpriteRenderer {
@@ -163,8 +165,16 @@ struct Agentite_SpriteRenderer {
     SDL_GPUGraphicsPipeline *vignette_pipeline;  /* Post-process vignette */
     SDL_GPUBuffer *vertex_buffer;
     SDL_GPUBuffer *index_buffer;
-    SDL_GPUSampler *sampler;
-    SDL_GPUSampler *linear_sampler;  /* For post-process texture sampling */
+
+    /* Samplers for different scale/address mode combinations */
+    SDL_GPUSampler *sampler;              /* Legacy: nearest + clamp */
+    SDL_GPUSampler *linear_sampler;       /* Legacy: linear + clamp (post-process) */
+    SDL_GPUSampler *nearest_clamp;        /* Nearest filter, clamp to edge */
+    SDL_GPUSampler *nearest_repeat;       /* Nearest filter, repeat/tile */
+    SDL_GPUSampler *nearest_mirror;       /* Nearest filter, mirror */
+    SDL_GPUSampler *linear_clamp;         /* Linear filter, clamp to edge */
+    SDL_GPUSampler *linear_repeat;        /* Linear filter, repeat/tile */
+    SDL_GPUSampler *linear_mirror;        /* Linear filter, mirror */
 
     /* CPU-side batch buffers */
     Agentite_SpriteVertex *vertices;
@@ -500,6 +510,47 @@ static bool sprite_create_vignette_pipeline(Agentite_SpriteRenderer *sr)
 }
 
 /* ============================================================================
+ * Internal: Sampler Helpers
+ * ============================================================================ */
+
+/* Create a sampler with specified filter and address modes */
+static SDL_GPUSampler *create_sampler(SDL_GPUDevice *gpu,
+                                       SDL_GPUFilter filter,
+                                       SDL_GPUSamplerAddressMode address_mode)
+{
+    SDL_GPUSamplerCreateInfo info = {};
+    info.min_filter = filter;
+    info.mag_filter = filter;
+    info.mipmap_mode = (filter == SDL_GPU_FILTER_LINEAR)
+                       ? SDL_GPU_SAMPLERMIPMAPMODE_LINEAR
+                       : SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+    info.address_mode_u = address_mode;
+    info.address_mode_v = address_mode;
+    info.address_mode_w = address_mode;
+    return SDL_CreateGPUSampler(gpu, &info);
+}
+
+/* Get the appropriate sampler for a texture based on its scale and address modes */
+static SDL_GPUSampler *get_sampler_for_texture(Agentite_SpriteRenderer *sr,
+                                                const Agentite_Texture *texture)
+{
+    if (!sr || !texture) return sr ? sr->sampler : NULL;
+
+    /* PIXELART mode uses nearest filtering */
+    bool use_linear = (texture->scale_mode == AGENTITE_SCALEMODE_LINEAR);
+
+    switch (texture->address_mode) {
+    case AGENTITE_ADDRESSMODE_REPEAT:
+        return use_linear ? sr->linear_repeat : sr->nearest_repeat;
+    case AGENTITE_ADDRESSMODE_MIRROR:
+        return use_linear ? sr->linear_mirror : sr->nearest_mirror;
+    case AGENTITE_ADDRESSMODE_CLAMP:
+    default:
+        return use_linear ? sr->linear_clamp : sr->nearest_clamp;
+    }
+}
+
+/* ============================================================================
  * Lifecycle Functions
  * ============================================================================ */
 
@@ -563,35 +614,31 @@ Agentite_SpriteRenderer *agentite_sprite_init(SDL_GPUDevice *gpu, SDL_Window *wi
         return NULL;
     }
 
-    /* Create sampler (nearest for pixel art) */
-    SDL_GPUSamplerCreateInfo sampler_info = {};
-    sampler_info.min_filter = SDL_GPU_FILTER_NEAREST;  /* Pixel art friendly */
-    sampler_info.mag_filter = SDL_GPU_FILTER_NEAREST;
-    sampler_info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
-    sampler_info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-    sampler_info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-    sampler_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-    sr->sampler = SDL_CreateGPUSampler(gpu, &sampler_info);
-    if (!sr->sampler) {
-        agentite_set_error_from_sdl("Sprite: Failed to create sampler");
+    /* Create samplers for all scale/address mode combinations */
+    sr->nearest_clamp = create_sampler(gpu, SDL_GPU_FILTER_NEAREST,
+                                       SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE);
+    sr->nearest_repeat = create_sampler(gpu, SDL_GPU_FILTER_NEAREST,
+                                        SDL_GPU_SAMPLERADDRESSMODE_REPEAT);
+    sr->nearest_mirror = create_sampler(gpu, SDL_GPU_FILTER_NEAREST,
+                                        SDL_GPU_SAMPLERADDRESSMODE_MIRRORED_REPEAT);
+    sr->linear_clamp = create_sampler(gpu, SDL_GPU_FILTER_LINEAR,
+                                      SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE);
+    sr->linear_repeat = create_sampler(gpu, SDL_GPU_FILTER_LINEAR,
+                                       SDL_GPU_SAMPLERADDRESSMODE_REPEAT);
+    sr->linear_mirror = create_sampler(gpu, SDL_GPU_FILTER_LINEAR,
+                                       SDL_GPU_SAMPLERADDRESSMODE_MIRRORED_REPEAT);
+
+    /* Check all samplers created successfully */
+    if (!sr->nearest_clamp || !sr->nearest_repeat || !sr->nearest_mirror ||
+        !sr->linear_clamp || !sr->linear_repeat || !sr->linear_mirror) {
+        agentite_set_error_from_sdl("Sprite: Failed to create samplers");
         agentite_sprite_shutdown(sr);
         return NULL;
     }
 
-    /* Create linear sampler (for post-process effects) */
-    SDL_GPUSamplerCreateInfo linear_sampler_info = {};
-    linear_sampler_info.min_filter = SDL_GPU_FILTER_LINEAR;
-    linear_sampler_info.mag_filter = SDL_GPU_FILTER_LINEAR;
-    linear_sampler_info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
-    linear_sampler_info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-    linear_sampler_info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-    linear_sampler_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-    sr->linear_sampler = SDL_CreateGPUSampler(gpu, &linear_sampler_info);
-    if (!sr->linear_sampler) {
-        agentite_set_error_from_sdl("Sprite: Failed to create linear sampler");
-        agentite_sprite_shutdown(sr);
-        return NULL;
-    }
+    /* Legacy aliases for backwards compatibility */
+    sr->sampler = sr->nearest_clamp;
+    sr->linear_sampler = sr->linear_clamp;
 
     /* Create pipeline */
     if (!sprite_create_pipeline(sr)) {
@@ -625,11 +672,24 @@ void agentite_sprite_shutdown(Agentite_SpriteRenderer *sr)
     if (sr->index_buffer) {
         SDL_ReleaseGPUBuffer(sr->gpu, sr->index_buffer);
     }
-    if (sr->sampler) {
-        SDL_ReleaseGPUSampler(sr->gpu, sr->sampler);
+    /* Release all samplers (sampler and linear_sampler are aliases, not separate) */
+    if (sr->nearest_clamp) {
+        SDL_ReleaseGPUSampler(sr->gpu, sr->nearest_clamp);
     }
-    if (sr->linear_sampler) {
-        SDL_ReleaseGPUSampler(sr->gpu, sr->linear_sampler);
+    if (sr->nearest_repeat) {
+        SDL_ReleaseGPUSampler(sr->gpu, sr->nearest_repeat);
+    }
+    if (sr->nearest_mirror) {
+        SDL_ReleaseGPUSampler(sr->gpu, sr->nearest_mirror);
+    }
+    if (sr->linear_clamp) {
+        SDL_ReleaseGPUSampler(sr->gpu, sr->linear_clamp);
+    }
+    if (sr->linear_repeat) {
+        SDL_ReleaseGPUSampler(sr->gpu, sr->linear_repeat);
+    }
+    if (sr->linear_mirror) {
+        SDL_ReleaseGPUSampler(sr->gpu, sr->linear_mirror);
     }
 
     free(sr->vertices);
@@ -763,6 +823,8 @@ Agentite_Texture *agentite_texture_create(Agentite_SpriteRenderer *sr,
 
     texture->width = width;
     texture->height = height;
+    texture->scale_mode = AGENTITE_SCALEMODE_NEAREST;  /* Default: pixel-art friendly */
+    texture->address_mode = AGENTITE_ADDRESSMODE_CLAMP;
 
     /* Create GPU texture */
     SDL_GPUTextureCreateInfo tex_info = {};
@@ -811,6 +873,30 @@ void agentite_texture_get_size(Agentite_Texture *texture, int *width, int *heigh
     }
     if (width) *width = texture->width;
     if (height) *height = texture->height;
+}
+
+void agentite_texture_set_scale_mode(Agentite_Texture *texture, Agentite_ScaleMode mode)
+{
+    if (texture) {
+        texture->scale_mode = mode;
+    }
+}
+
+Agentite_ScaleMode agentite_texture_get_scale_mode(const Agentite_Texture *texture)
+{
+    return texture ? texture->scale_mode : AGENTITE_SCALEMODE_NEAREST;
+}
+
+void agentite_texture_set_address_mode(Agentite_Texture *texture, Agentite_TextureAddressMode mode)
+{
+    if (texture) {
+        texture->address_mode = mode;
+    }
+}
+
+Agentite_TextureAddressMode agentite_texture_get_address_mode(const Agentite_Texture *texture)
+{
+    return texture ? texture->address_mode : AGENTITE_ADDRESSMODE_CLAMP;
 }
 
 bool agentite_texture_reload(Agentite_SpriteRenderer *sr,
@@ -1208,10 +1294,10 @@ static void sprite_render_segment(Agentite_SpriteRenderer *sr,
                                    SDL_GPURenderPass *pass, Agentite_Texture *texture,
                                    uint32_t start_index, uint32_t index_count)
 {
-    /* Bind texture */
+    /* Bind texture with appropriate sampler based on texture's scale/address modes */
     SDL_GPUTextureSamplerBinding tex_binding = {};
     tex_binding.texture = texture->gpu_texture;
-    tex_binding.sampler = sr->sampler;
+    tex_binding.sampler = get_sampler_for_texture(sr, texture);
     SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
 
     /* Draw this segment */
@@ -1321,6 +1407,8 @@ Agentite_Texture *agentite_texture_create_render_target(Agentite_SpriteRenderer 
 
     texture->width = width;
     texture->height = height;
+    texture->scale_mode = AGENTITE_SCALEMODE_LINEAR;  /* Render targets typically use linear */
+    texture->address_mode = AGENTITE_ADDRESSMODE_CLAMP;
 
     /* Create GPU texture with render target usage */
     SDL_GPUTextureCreateInfo tex_info = {};

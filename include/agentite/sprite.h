@@ -38,6 +38,26 @@ extern "C" {
 /* Opaque texture handle */
 typedef struct Agentite_Texture Agentite_Texture;
 
+/**
+ * Texture scale mode for sampling.
+ * Controls how textures are filtered when scaled.
+ */
+typedef enum Agentite_ScaleMode {
+    AGENTITE_SCALEMODE_NEAREST,   /**< Nearest-neighbor (crisp pixels) */
+    AGENTITE_SCALEMODE_LINEAR,    /**< Bilinear filtering (smooth) */
+    AGENTITE_SCALEMODE_PIXELART   /**< Pixel-art mode (nearest + integer scaling hints) */
+} Agentite_ScaleMode;
+
+/**
+ * Texture address mode for UV coordinates outside [0,1].
+ * Controls how textures wrap or clamp at edges.
+ */
+typedef enum Agentite_TextureAddressMode {
+    AGENTITE_ADDRESSMODE_CLAMP,   /**< Clamp to edge (default) */
+    AGENTITE_ADDRESSMODE_REPEAT,  /**< Repeat/tile the texture */
+    AGENTITE_ADDRESSMODE_MIRROR   /**< Mirror at edges */
+} Agentite_TextureAddressMode;
+
 /* Sprite definition - references a region of a texture */
 typedef struct Agentite_Sprite {
     Agentite_Texture *texture;
@@ -102,6 +122,36 @@ void agentite_texture_destroy(Agentite_SpriteRenderer *sr, Agentite_Texture *tex
 
 /* Get texture dimensions */
 void agentite_texture_get_size(Agentite_Texture *texture, int *width, int *height);
+
+/**
+ * Set texture scale mode.
+ * Controls filtering when texture is scaled up or down.
+ * Default is AGENTITE_SCALEMODE_NEAREST for pixel-art friendly rendering.
+ *
+ * @param texture Texture to modify
+ * @param mode    Scale mode (NEAREST, LINEAR, or PIXELART)
+ */
+void agentite_texture_set_scale_mode(Agentite_Texture *texture, Agentite_ScaleMode mode);
+
+/**
+ * Get texture scale mode.
+ */
+Agentite_ScaleMode agentite_texture_get_scale_mode(const Agentite_Texture *texture);
+
+/**
+ * Set texture address mode.
+ * Controls wrapping behavior for UV coordinates outside [0,1].
+ * Default is AGENTITE_ADDRESSMODE_CLAMP.
+ *
+ * @param texture Texture to modify
+ * @param mode    Address mode (CLAMP, REPEAT, or MIRROR)
+ */
+void agentite_texture_set_address_mode(Agentite_Texture *texture, Agentite_TextureAddressMode mode);
+
+/**
+ * Get texture address mode.
+ */
+Agentite_TextureAddressMode agentite_texture_get_address_mode(const Agentite_Texture *texture);
 
 /**
  * Reload texture from disk, updating GPU contents in-place.

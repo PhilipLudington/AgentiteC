@@ -2,6 +2,7 @@
 #include "agentite/error.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
 
 struct Agentite_Engine {
     SDL_Window *window;
@@ -569,4 +570,198 @@ void agentite_get_drawable_size(Agentite_Engine *engine, int *w, int *h) {
         if (w) *w = 0;
         if (h) *h = 0;
     }
+}
+
+/* ============================================================================
+ * Window Progress (SDL 3.4.0+)
+ * ============================================================================ */
+
+/* Map our progress state to SDL's */
+static SDL_ProgressState to_sdl_progress_state(Agentite_ProgressState state) {
+    switch (state) {
+    case AGENTITE_PROGRESS_NONE:          return SDL_PROGRESS_STATE_NONE;
+    case AGENTITE_PROGRESS_INDETERMINATE: return SDL_PROGRESS_STATE_INDETERMINATE;
+    case AGENTITE_PROGRESS_NORMAL:        return SDL_PROGRESS_STATE_NORMAL;
+    case AGENTITE_PROGRESS_PAUSED:        return SDL_PROGRESS_STATE_PAUSED;
+    case AGENTITE_PROGRESS_ERROR:         return SDL_PROGRESS_STATE_ERROR;
+    default:                              return SDL_PROGRESS_STATE_NONE;
+    }
+}
+
+bool agentite_set_progress_state(Agentite_Engine *engine, Agentite_ProgressState state) {
+    if (!engine || !engine->window) return false;
+    return SDL_SetWindowProgressState(engine->window, to_sdl_progress_state(state));
+}
+
+bool agentite_set_progress_value(Agentite_Engine *engine, float value) {
+    if (!engine || !engine->window) return false;
+    /* Clamp value to valid range */
+    if (value < 0.0f) value = 0.0f;
+    if (value > 1.0f) value = 1.0f;
+    return SDL_SetWindowProgressValue(engine->window, value);
+}
+
+bool agentite_set_loading_progress(Agentite_Engine *engine, float progress) {
+    if (!engine || !engine->window) return false;
+    /* Set state to NORMAL and update value */
+    if (!SDL_SetWindowProgressState(engine->window, SDL_PROGRESS_STATE_NORMAL)) {
+        return false;
+    }
+    /* Clamp value to valid range */
+    if (progress < 0.0f) progress = 0.0f;
+    if (progress > 1.0f) progress = 1.0f;
+    return SDL_SetWindowProgressValue(engine->window, progress);
+}
+
+void agentite_clear_loading_progress(Agentite_Engine *engine) {
+    if (engine && engine->window) {
+        SDL_SetWindowProgressState(engine->window, SDL_PROGRESS_STATE_NONE);
+    }
+}
+
+/* ============================================================================
+ * Screenshots (SDL 3.4.0+)
+ * ============================================================================ */
+
+bool agentite_save_screenshot(Agentite_Engine *engine, const char *path) {
+    if (!engine || !path) {
+        agentite_set_error("Screenshot: Invalid parameters");
+        return false;
+    }
+
+    if (!engine->swapchain_texture) {
+        agentite_set_error("Screenshot: No swapchain texture - call during render pass");
+        return false;
+    }
+
+    int width = engine->physical_width;
+    int height = engine->physical_height;
+    size_t pixel_size = (size_t)width * (size_t)height * 4;
+
+    /* Create transfer buffer for download */
+    SDL_GPUTransferBufferCreateInfo transfer_info = {};
+    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD;
+    transfer_info.size = (Uint32)pixel_size;
+    SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(engine->gpu_device, &transfer_info);
+    if (!transfer) {
+        agentite_set_error_from_sdl("Screenshot: Failed to create transfer buffer");
+        return false;
+    }
+
+    /* End current render pass if active */
+    bool had_render_pass = (engine->render_pass != NULL);
+    if (had_render_pass) {
+        SDL_EndGPURenderPass(engine->render_pass);
+        engine->render_pass = NULL;
+    }
+
+    /* Begin copy pass to download texture */
+    SDL_GPUCopyPass *copy_pass = SDL_BeginGPUCopyPass(engine->cmd_buffer);
+    if (!copy_pass) {
+        agentite_set_error_from_sdl("Screenshot: Failed to begin copy pass");
+        SDL_ReleaseGPUTransferBuffer(engine->gpu_device, transfer);
+        return false;
+    }
+
+    /* Set up source region (entire texture) */
+    SDL_GPUTextureRegion src_region = {};
+    src_region.texture = engine->swapchain_texture;
+    src_region.mip_level = 0;
+    src_region.layer = 0;
+    src_region.x = 0;
+    src_region.y = 0;
+    src_region.z = 0;
+    src_region.w = (Uint32)width;
+    src_region.h = (Uint32)height;
+    src_region.d = 1;
+
+    /* Set up destination transfer info */
+    SDL_GPUTextureTransferInfo dst_info = {};
+    dst_info.transfer_buffer = transfer;
+    dst_info.offset = 0;
+    dst_info.pixels_per_row = (Uint32)width;
+    dst_info.rows_per_layer = (Uint32)height;
+
+    /* Download texture to transfer buffer */
+    SDL_DownloadFromGPUTexture(copy_pass, &src_region, &dst_info);
+    SDL_EndGPUCopyPass(copy_pass);
+
+    /* Submit and wait for completion */
+    SDL_GPUFence *fence = SDL_SubmitGPUCommandBufferAndAcquireFence(engine->cmd_buffer);
+    engine->cmd_buffer = NULL;  /* Command buffer consumed */
+
+    if (!fence) {
+        agentite_set_error_from_sdl("Screenshot: Failed to submit command buffer");
+        SDL_ReleaseGPUTransferBuffer(engine->gpu_device, transfer);
+        return false;
+    }
+
+    /* Wait for GPU to finish */
+    SDL_WaitForGPUFences(engine->gpu_device, true, &fence, 1);
+    SDL_ReleaseGPUFence(engine->gpu_device, fence);
+
+    /* Map transfer buffer and read pixels */
+    void *pixels = SDL_MapGPUTransferBuffer(engine->gpu_device, transfer, false);
+    if (!pixels) {
+        agentite_set_error_from_sdl("Screenshot: Failed to map transfer buffer");
+        SDL_ReleaseGPUTransferBuffer(engine->gpu_device, transfer);
+        return false;
+    }
+
+    /* Create SDL_Surface from pixels (BGRA format from swapchain) */
+    SDL_Surface *surface = SDL_CreateSurfaceFrom(
+        width, height,
+        SDL_PIXELFORMAT_BGRA32,
+        pixels,
+        width * 4
+    );
+
+    bool success = false;
+    if (surface) {
+        /* Save to PNG using SDL 3.4.0 native PNG support */
+        success = SDL_SavePNG(surface, path);
+        if (!success) {
+            agentite_set_error_from_sdl("Screenshot: Failed to save PNG");
+        } else {
+            SDL_Log("Screenshot saved: %s (%dx%d)", path, width, height);
+        }
+        SDL_DestroySurface(surface);
+    } else {
+        agentite_set_error_from_sdl("Screenshot: Failed to create surface");
+    }
+
+    SDL_UnmapGPUTransferBuffer(engine->gpu_device, transfer);
+    SDL_ReleaseGPUTransferBuffer(engine->gpu_device, transfer);
+
+    /* Acquire new command buffer for subsequent operations */
+    engine->cmd_buffer = SDL_AcquireGPUCommandBuffer(engine->gpu_device);
+
+    return success;
+}
+
+bool agentite_save_screenshot_auto(Agentite_Engine *engine, const char *directory) {
+    if (!engine) {
+        agentite_set_error("Screenshot: Invalid engine");
+        return false;
+    }
+
+    /* Generate timestamp-based filename */
+    time_t now = time(NULL);
+    struct tm *tm_info = localtime(&now);
+
+    char filename[256];
+    if (directory && directory[0]) {
+        snprintf(filename, sizeof(filename),
+                 "%s/screenshot_%04d%02d%02d_%02d%02d%02d.png",
+                 directory,
+                 tm_info->tm_year + 1900, tm_info->tm_mon + 1, tm_info->tm_mday,
+                 tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec);
+    } else {
+        snprintf(filename, sizeof(filename),
+                 "screenshot_%04d%02d%02d_%02d%02d%02d.png",
+                 tm_info->tm_year + 1900, tm_info->tm_mon + 1, tm_info->tm_mday,
+                 tm_info->tm_hour, tm_info->tm_min, tm_info->tm_sec);
+    }
+
+    return agentite_save_screenshot(engine, filename);
 }

@@ -38,7 +38,7 @@ bool agentite_debug_console_panel(Agentite_DebugSystem *debug,
     /* Draw output area */
     float output_x = x + padding;
     float output_y = y + padding;
-    float output_w = w - padding * 2;
+    (void)(w - padding * 2);  /* output_w - reserved for future text clipping */
 
     /* Get output lines */
     const char *lines[256];

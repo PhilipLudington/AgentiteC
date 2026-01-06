@@ -230,4 +230,32 @@ const Agentite_GamepadState *agentite_input_get_gamepad(Agentite_Input *input, i
  */
 int agentite_input_get_gamepad_count(Agentite_Input *input);
 
+/* ============ Event Debugging (SDL 3.4.0+) ============ */
+
+/**
+ * Enable or disable event logging.
+ * When enabled, all processed events are logged with their descriptions.
+ * Useful for debugging input issues.
+ *
+ * @param input Input system
+ * @param enabled true to enable logging, false to disable
+ */
+void agentite_input_set_event_logging(Agentite_Input *input, bool enabled);
+
+/**
+ * Check if event logging is enabled.
+ */
+bool agentite_input_get_event_logging(Agentite_Input *input);
+
+/**
+ * Get a human-readable description of an SDL event.
+ * Uses SDL_GetEventDescription() (SDL 3.4.0+).
+ *
+ * @param event Event to describe
+ * @param buf   Output buffer
+ * @param buflen Buffer size
+ * @return Number of characters written (not including null terminator)
+ */
+int agentite_input_describe_event(const SDL_Event *event, char *buf, int buflen);
+
 #endif /* AGENTITE_INPUT_H */

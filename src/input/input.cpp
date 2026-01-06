@@ -27,6 +27,9 @@ struct Agentite_Input {
     /* Gamepad state */
     Agentite_GamepadState gamepads[MAX_GAMEPADS];
     int gamepad_count;
+
+    /* Debug options */
+    bool event_logging;
 };
 
 /* Helper: clamp value to range */
@@ -122,6 +125,13 @@ void agentite_input_begin_frame(Agentite_Input *input) {
 
 bool agentite_input_process_event(Agentite_Input *input, const SDL_Event *event) {
     if (!input || !event) return false;
+
+    /* Log event if debugging is enabled */
+    if (input->event_logging) {
+        char desc[256];
+        SDL_GetEventDescription(event, desc, sizeof(desc));
+        SDL_Log("Input Event: %s", desc);
+    }
 
     switch (event->type) {
     case SDL_EVENT_KEY_DOWN:
@@ -533,4 +543,24 @@ const Agentite_GamepadState *agentite_input_get_gamepad(Agentite_Input *input, i
 int agentite_input_get_gamepad_count(Agentite_Input *input) {
     if (!input) return 0;
     return input->gamepad_count;
+}
+
+/* ============ Event Debugging (SDL 3.4.0+) ============ */
+
+void agentite_input_set_event_logging(Agentite_Input *input, bool enabled) {
+    if (input) {
+        input->event_logging = enabled;
+        if (enabled) {
+            SDL_Log("Input: Event logging enabled");
+        }
+    }
+}
+
+bool agentite_input_get_event_logging(Agentite_Input *input) {
+    return input ? input->event_logging : false;
+}
+
+int agentite_input_describe_event(const SDL_Event *event, char *buf, int buflen) {
+    if (!event || !buf || buflen <= 0) return 0;
+    return SDL_GetEventDescription(event, buf, buflen);
 }

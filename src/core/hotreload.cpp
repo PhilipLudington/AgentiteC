@@ -221,6 +221,8 @@ static void emit_reload_event(Agentite_HotReloadManager *manager,
                                Agentite_ReloadType type,
                                bool success)
 {
+    (void)path;  /* Used in event data, but may be unused in some builds */
+
     if (!manager->config.events || !manager->config.emit_events) {
         return;
     }

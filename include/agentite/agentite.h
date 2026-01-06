@@ -346,6 +346,89 @@ void agentite_get_window_size(Agentite_Engine *engine, int *w, int *h);
  */
 void agentite_get_drawable_size(Agentite_Engine *engine, int *w, int *h);
 
+/* ============================================================================
+ * Window Progress (SDL 3.4.0+)
+ * ============================================================================
+ * Display loading progress in the taskbar/dock. Supported on Windows and
+ * Linux; does nothing on macOS (not supported by the platform).
+ */
+
+/**
+ * Progress state for taskbar indication.
+ */
+typedef enum Agentite_ProgressState {
+    AGENTITE_PROGRESS_NONE,           /**< No progress bar shown */
+    AGENTITE_PROGRESS_INDETERMINATE,  /**< Spinning/pulsing progress (unknown duration) */
+    AGENTITE_PROGRESS_NORMAL,         /**< Normal progress bar (use with set_progress_value) */
+    AGENTITE_PROGRESS_PAUSED,         /**< Paused progress (yellow on Windows) */
+    AGENTITE_PROGRESS_ERROR           /**< Error state (red on Windows) */
+} Agentite_ProgressState;
+
+/**
+ * Set window progress state.
+ * Shows or hides the progress indicator in the taskbar.
+ *
+ * @param engine Engine instance
+ * @param state  Progress state
+ * @return true on success, false on error or unsupported platform
+ */
+bool agentite_set_progress_state(Agentite_Engine *engine, Agentite_ProgressState state);
+
+/**
+ * Set window progress value.
+ * Only visible when state is AGENTITE_PROGRESS_NORMAL.
+ *
+ * @param engine Engine instance
+ * @param value  Progress value (0.0 to 1.0)
+ * @return true on success, false on error or unsupported platform
+ */
+bool agentite_set_progress_value(Agentite_Engine *engine, float value);
+
+/**
+ * Convenience function to set progress state and value together.
+ *
+ * @param engine   Engine instance
+ * @param progress Progress value (0.0 to 1.0)
+ * @return true on success
+ */
+bool agentite_set_loading_progress(Agentite_Engine *engine, float progress);
+
+/**
+ * Clear progress indicator (equivalent to setting state to NONE).
+ *
+ * @param engine Engine instance
+ */
+void agentite_clear_loading_progress(Agentite_Engine *engine);
+
+/* ============================================================================
+ * Screenshots (SDL 3.4.0+)
+ * ============================================================================
+ * Save the current frame to a PNG file using SDL_SavePNG().
+ */
+
+/**
+ * Save a screenshot of the current frame to a PNG file.
+ * Must be called AFTER rendering but BEFORE agentite_end_render_pass().
+ *
+ * Note: This function causes a GPU sync and may impact performance.
+ * For continuous recording, consider a background thread approach.
+ *
+ * @param engine Engine instance
+ * @param path   Output file path (PNG format)
+ * @return true on success, false on failure (check agentite_get_last_error())
+ */
+bool agentite_save_screenshot(Agentite_Engine *engine, const char *path);
+
+/**
+ * Save a screenshot with a timestamp-based filename.
+ * Creates file like "screenshot_20260106_143052.png" in the specified directory.
+ *
+ * @param engine    Engine instance
+ * @param directory Output directory (NULL for current directory)
+ * @return true on success, false on failure
+ */
+bool agentite_save_screenshot_auto(Agentite_Engine *engine, const char *directory);
+
 // Core infrastructure
 #include "agentite/error.h"
 #include "agentite/log.h"
