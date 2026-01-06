@@ -650,6 +650,68 @@ void agentite_sprite_set_screen_size(Agentite_SpriteRenderer *sr, int width, int
  * Texture Functions
  * ============================================================================ */
 
+/* Internal: Upload pixel data to an existing GPU texture */
+static bool upload_pixels_to_gpu(Agentite_SpriteRenderer *sr,
+                                 SDL_GPUTexture *gpu_texture,
+                                 int width, int height,
+                                 const void *pixels)
+{
+    if (!sr || !gpu_texture || !pixels || width <= 0 || height <= 0) {
+        return false;
+    }
+
+    /* Create transfer buffer */
+    SDL_GPUTransferBufferCreateInfo transfer_info = {};
+    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    transfer_info.size = (Uint32)(width * height * 4);
+    transfer_info.props = 0;
+    SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(sr->gpu, &transfer_info);
+    if (!transfer) {
+        agentite_set_error_from_sdl("Sprite: Failed to create transfer buffer");
+        return false;
+    }
+
+    /* Map and copy pixels */
+    void *mapped = SDL_MapGPUTransferBuffer(sr->gpu, transfer, false);
+    if (mapped) {
+        memcpy(mapped, pixels, width * height * 4);
+        SDL_UnmapGPUTransferBuffer(sr->gpu, transfer);
+    }
+
+    /* Copy to texture */
+    SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(sr->gpu);
+    if (!cmd) {
+        agentite_set_error_from_sdl("Sprite: Failed to acquire command buffer for texture upload");
+        SDL_ReleaseGPUTransferBuffer(sr->gpu, transfer);
+        return false;
+    }
+
+    SDL_GPUCopyPass *copy_pass = SDL_BeginGPUCopyPass(cmd);
+    if (copy_pass) {
+        SDL_GPUTextureTransferInfo src = {};
+        src.transfer_buffer = transfer;
+        src.offset = 0;
+        src.pixels_per_row = (Uint32)width;
+        src.rows_per_layer = (Uint32)height;
+        SDL_GPUTextureRegion dst = {};
+        dst.texture = gpu_texture;
+        dst.mip_level = 0;
+        dst.layer = 0;
+        dst.x = 0;
+        dst.y = 0;
+        dst.z = 0;
+        dst.w = (Uint32)width;
+        dst.h = (Uint32)height;
+        dst.d = 1;
+        SDL_UploadToGPUTexture(copy_pass, &src, &dst, false);
+        SDL_EndGPUCopyPass(copy_pass);
+    }
+    SDL_SubmitGPUCommandBuffer(cmd);
+
+    SDL_ReleaseGPUTransferBuffer(sr->gpu, transfer);
+    return true;
+}
+
 Agentite_Texture *agentite_texture_load(Agentite_SpriteRenderer *sr, const char *path)
 {
     if (!sr || !path) return NULL;
@@ -720,52 +782,12 @@ Agentite_Texture *agentite_texture_create(Agentite_SpriteRenderer *sr,
         return NULL;
     }
 
-    /* Upload pixel data */
-    SDL_GPUTransferBufferCreateInfo transfer_info = {};
-    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-    transfer_info.size = (Uint32)(width * height * 4);
-    transfer_info.props = 0;
-    SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(sr->gpu, &transfer_info);
-    if (!transfer) {
-        agentite_set_error_from_sdl("Sprite: Failed to create transfer buffer");
+    /* Upload pixel data using helper */
+    if (!upload_pixels_to_gpu(sr, texture->gpu_texture, width, height, pixels)) {
         SDL_ReleaseGPUTexture(sr->gpu, texture->gpu_texture);
         free(texture);
         return NULL;
     }
-
-    void *mapped = SDL_MapGPUTransferBuffer(sr->gpu, transfer, false);
-    if (mapped) {
-        memcpy(mapped, pixels, width * height * 4);
-        SDL_UnmapGPUTransferBuffer(sr->gpu, transfer);
-    }
-
-    /* Copy to texture */
-    SDL_GPUCommandBuffer *cmd = SDL_AcquireGPUCommandBuffer(sr->gpu);
-    if (cmd) {
-        SDL_GPUCopyPass *copy_pass = SDL_BeginGPUCopyPass(cmd);
-        if (copy_pass) {
-            SDL_GPUTextureTransferInfo src = {};
-            src.transfer_buffer = transfer;
-            src.offset = 0;
-            src.pixels_per_row = (Uint32)width;
-            src.rows_per_layer = (Uint32)height;
-            SDL_GPUTextureRegion dst = {};
-            dst.texture = texture->gpu_texture;
-            dst.mip_level = 0;
-            dst.layer = 0;
-            dst.x = 0;
-            dst.y = 0;
-            dst.z = 0;
-            dst.w = (Uint32)width;
-            dst.h = (Uint32)height;
-            dst.d = 1;
-            SDL_UploadToGPUTexture(copy_pass, &src, &dst, false);
-            SDL_EndGPUCopyPass(copy_pass);
-        }
-        SDL_SubmitGPUCommandBuffer(cmd);
-    }
-
-    SDL_ReleaseGPUTransferBuffer(sr->gpu, transfer);
 
     return texture;
 }
@@ -789,6 +811,69 @@ void agentite_texture_get_size(Agentite_Texture *texture, int *width, int *heigh
     }
     if (width) *width = texture->width;
     if (height) *height = texture->height;
+}
+
+bool agentite_texture_reload(Agentite_SpriteRenderer *sr,
+                             Agentite_Texture *texture,
+                             const char *path)
+{
+    if (!sr || !texture || !path) {
+        agentite_set_error("Sprite: Invalid parameters for texture reload");
+        return false;
+    }
+
+    /* Load new pixel data from disk */
+    int new_width, new_height, channels;
+    unsigned char *pixels = stbi_load(path, &new_width, &new_height, &channels, 4);
+    if (!pixels) {
+        agentite_set_error("Sprite: Failed to reload texture '%s': %s", path, stbi_failure_reason());
+        return false;
+    }
+
+    /* Check if dimensions changed */
+    bool dimensions_changed = (new_width != texture->width || new_height != texture->height);
+
+    /* If dimensions changed, recreate GPU texture */
+    if (dimensions_changed) {
+        /* Release old GPU texture */
+        SDL_ReleaseGPUTexture(sr->gpu, texture->gpu_texture);
+
+        /* Create new GPU texture with new dimensions */
+        SDL_GPUTextureCreateInfo tex_info = {};
+        tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+        tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+        tex_info.width = (Uint32)new_width;
+        tex_info.height = (Uint32)new_height;
+        tex_info.layer_count_or_depth = 1;
+        tex_info.num_levels = 1;
+        tex_info.sample_count = SDL_GPU_SAMPLECOUNT_1;
+        tex_info.props = 0;
+        texture->gpu_texture = SDL_CreateGPUTexture(sr->gpu, &tex_info);
+        if (!texture->gpu_texture) {
+            stbi_image_free(pixels);
+            agentite_set_error_from_sdl("Sprite: Failed to recreate GPU texture");
+            return false;
+        }
+
+        texture->width = new_width;
+        texture->height = new_height;
+    }
+
+    /* Upload new pixel data to GPU */
+    bool upload_ok = upload_pixels_to_gpu(sr, texture->gpu_texture,
+                                          new_width, new_height, pixels);
+
+    stbi_image_free(pixels);
+
+    if (!upload_ok) {
+        agentite_set_error("Sprite: Failed to upload reloaded texture data");
+        return false;
+    }
+
+    SDL_Log("Sprite: Reloaded texture '%s' (%dx%d)%s", path, new_width, new_height,
+            dimensions_changed ? " [dimensions changed]" : "");
+    return true;
 }
 
 /* ============================================================================

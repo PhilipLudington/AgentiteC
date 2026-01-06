@@ -100,6 +100,20 @@ void agentite_texture_destroy(Agentite_SpriteRenderer *sr, Agentite_Texture *tex
 /* Get texture dimensions */
 void agentite_texture_get_size(Agentite_Texture *texture, int *width, int *height);
 
+/**
+ * Reload texture from disk, updating GPU contents in-place.
+ * The texture pointer remains valid. If dimensions change, the GPU
+ * texture is recreated.
+ *
+ * @param sr      Sprite renderer
+ * @param texture Texture to reload (must not be NULL)
+ * @param path    File path to reload from
+ * @return true on success, false on failure (check agentite_get_last_error())
+ */
+bool agentite_texture_reload(Agentite_SpriteRenderer *sr,
+                             Agentite_Texture *texture,
+                             const char *path);
+
 /* ============================================================================
  * Sprite Functions
  * ============================================================================ */

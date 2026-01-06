@@ -240,9 +240,6 @@ static void generate_spot_shadow_map(Agentite_LightingSystem *ls,
                                      float dir_x, float dir_y,
                                      float outer_angle,
                                      float *shadow_distances);
-static bool upload_shadow_map(Agentite_LightingSystem *ls,
-                              SDL_GPUCommandBuffer *cmd,
-                              const float *shadow_distances);
 static bool upload_shadow_map_row(Agentite_LightingSystem *ls,
                                   SDL_GPUCommandBuffer *cmd,
                                   const float *shadow_distances,
@@ -1947,75 +1944,6 @@ static bool create_shadow_map_texture(Agentite_LightingSystem *ls)
     }
 
     SDL_Log("Lighting: Created shadow map atlas %dx%d", resolution, MAX_SHADOW_CASTING_LIGHTS);
-    return true;
-}
-
-/*
- * Upload shadow distances to the shadow map texture.
- * Uses a transfer buffer to copy CPU data to GPU texture.
- */
-static bool upload_shadow_map(Agentite_LightingSystem *ls,
-                              SDL_GPUCommandBuffer *cmd,
-                              const float *shadow_distances)
-{
-    if (!ls || !cmd || !shadow_distances) return false;
-
-    /* Create shadow map texture if needed */
-    if (!ls->shadow_map) {
-        if (!create_shadow_map_texture(ls)) {
-            return false;
-        }
-    }
-
-    int resolution = ls->shadow_map_resolution;
-    size_t data_size = (size_t)resolution * sizeof(float);
-
-    /* Create transfer buffer for upload */
-    SDL_GPUTransferBufferCreateInfo transfer_info = {};
-    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-    transfer_info.size = (Uint32)data_size;
-
-    SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(ls->gpu, &transfer_info);
-    if (!transfer) {
-        SDL_Log("Lighting: Failed to create shadow map transfer buffer");
-        return false;
-    }
-
-    /* Map and copy data */
-    void *mapped = SDL_MapGPUTransferBuffer(ls->gpu, transfer, false);
-    if (!mapped) {
-        SDL_ReleaseGPUTransferBuffer(ls->gpu, transfer);
-        return false;
-    }
-    memcpy(mapped, shadow_distances, data_size);
-    SDL_UnmapGPUTransferBuffer(ls->gpu, transfer);
-
-    /* Begin copy pass */
-    SDL_GPUCopyPass *copy_pass = SDL_BeginGPUCopyPass(cmd);
-    if (!copy_pass) {
-        SDL_ReleaseGPUTransferBuffer(ls->gpu, transfer);
-        return false;
-    }
-
-    /* Upload to texture */
-    SDL_GPUTextureTransferInfo src = {};
-    src.transfer_buffer = transfer;
-    src.offset = 0;
-    src.pixels_per_row = (Uint32)resolution;
-    src.rows_per_layer = 1;
-
-    SDL_GPUTextureRegion dst = {};
-    dst.texture = ls->shadow_map;
-    dst.w = (Uint32)resolution;
-    dst.h = 1;
-    dst.d = 1;
-
-    SDL_UploadToGPUTexture(copy_pass, &src, &dst, false);
-    SDL_EndGPUCopyPass(copy_pass);
-
-    /* Release transfer buffer */
-    SDL_ReleaseGPUTransferBuffer(ls->gpu, transfer);
-
     return true;
 }
 
