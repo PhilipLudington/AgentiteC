@@ -425,7 +425,6 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        agentite_sprite_end(app.sprites, NULL, NULL);
         agentite_end_frame(app.engine);
     }
 

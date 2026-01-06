@@ -8,10 +8,13 @@
  *   Agentite_Sprite sprite = agentite_sprite_create(tex, 0, 0, 64, 64);
  *
  *   // Each frame:
- *   agentite_sprite_begin(sr, cmd);
+ *   agentite_sprite_begin(sr, NULL);
  *   agentite_sprite_draw(sr, &sprite, 100.0f, 200.0f);
  *   agentite_sprite_draw_ex(sr, &sprite, 300.0f, 200.0f, 2.0f, 2.0f, 45.0f, 0.5f, 0.5f);
- *   agentite_sprite_end(sr, cmd, render_pass);
+ *   agentite_sprite_upload(sr, cmd);           // Before render pass (uses copy pass)
+ *   // ... begin render pass ...
+ *   agentite_sprite_render(sr, cmd, pass);     // During render pass
+ *   // ... end render pass ...
  *
  *   agentite_texture_destroy(sr, tex);
  *   agentite_sprite_shutdown(sr);

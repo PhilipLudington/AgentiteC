@@ -879,9 +879,6 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        /* End sprite batch (cleanup state) */
-        agentite_sprite_end(sprites, NULL, NULL);
-
         agentite_end_frame(engine);
     }
 

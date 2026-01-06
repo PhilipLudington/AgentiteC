@@ -45,12 +45,10 @@ agentite_sprite_upload(sprites, cmd);
 
 // 4. Render during pass
 if (agentite_begin_render_pass(engine, ...)) {
+    SDL_GPURenderPass *pass = agentite_get_render_pass(engine);
     agentite_sprite_render(sprites, cmd, pass);
     agentite_end_render_pass(engine);
 }
-
-// 5. End batch
-agentite_sprite_end(sprites, NULL, NULL);
 ```
 
 ### Loading Textures

@@ -409,7 +409,6 @@ int main(int argc, char *argv[]) {
 
                     agentite_end_render_pass(app.engine);
                 }
-                agentite_sprite_end(app.sprites, NULL, NULL);
             } else {
                 /* No postprocess - direct render to swapchain */
                 if (agentite_begin_render_pass(app.engine, 0.1f, 0.1f, 0.15f, 1.0f)) {
@@ -418,7 +417,6 @@ int main(int argc, char *argv[]) {
                     if (app.text) agentite_text_render(app.text, cmd, pass);
                     agentite_end_render_pass(app.engine);
                 }
-                agentite_sprite_end(app.sprites, NULL, NULL);
             }
         }
 

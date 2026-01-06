@@ -285,8 +285,6 @@ int main(int argc, char *argv[]) {
                 if (app.text) agentite_text_render(app.text, cmd, pass);
                 agentite_end_render_pass(app.engine);
             }
-
-            agentite_sprite_end(app.sprites, NULL, NULL);
         }
 
         agentite_end_frame(app.engine);

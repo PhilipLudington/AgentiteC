@@ -484,8 +484,6 @@ int main(int argc, char *argv[]) {
                 }
                 agentite_end_render_pass(engine);
             }
-
-            agentite_sprite_end(sprites, NULL, NULL);
         }
 
         agentite_end_frame(engine);
