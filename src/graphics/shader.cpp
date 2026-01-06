@@ -1777,11 +1777,41 @@ struct Params {
     float2 _pad;
 };
 
-/* Simple hash-based noise for dissolve pattern */
+/* Hash function for random values at grid points */
 float hash21(float2 p) {
     p = fract(p * float2(234.34, 435.345));
     p += dot(p, p + 34.23);
     return fract(p.x * p.y);
+}
+
+/* Value noise with smooth interpolation */
+float value_noise(float2 p) {
+    float2 i = floor(p);
+    float2 f = fract(p);
+
+    /* Smooth interpolation curve */
+    float2 u = f * f * (3.0 - 2.0 * f);
+
+    /* Sample 4 corners of the cell */
+    float a = hash21(i);
+    float b = hash21(i + float2(1.0, 0.0));
+    float c = hash21(i + float2(0.0, 1.0));
+    float d = hash21(i + float2(1.0, 1.0));
+
+    /* Bilinear interpolation */
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+/* Fractal Brownian Motion - layered noise for organic look */
+float fbm(float2 p) {
+    float value = 0.0;
+    float amplitude = 0.5;
+    for (int i = 0; i < 4; i++) {
+        value += amplitude * value_noise(p);
+        p *= 2.0;
+        amplitude *= 0.5;
+    }
+    return value;
 }
 
 fragment float4 dissolve_fragment(
@@ -1792,22 +1822,25 @@ fragment float4 dissolve_fragment(
 {
     float4 color = tex.sample(samp, in.texcoord);
 
-    /* Generate noise pattern based on UV coordinates */
-    float noise = hash21(in.texcoord * 50.0);
+    /* Generate smooth noise pattern - scale 8x for visible chunks */
+    float noise = fbm(in.texcoord * 8.0);
 
     /* Compare noise to progress threshold */
     float threshold = params.progress;
     float edge = params.edge_width;
-    if (edge <= 0.0) edge = 0.1;
+    if (edge <= 0.0) edge = 0.08;
 
     if (noise < threshold - edge) {
         /* Fully dissolved - transparent */
         discard_fragment();
     } else if (noise < threshold) {
-        /* Edge region - show bright edge color */
+        /* Edge region - show glowing edge */
         float t = (threshold - noise) / edge;
-        float3 edge_color = float3(1.0, 0.5, 0.0);  /* Orange/fire edge */
-        color.rgb = mix(color.rgb, edge_color, t);
+        /* Gradient from yellow to orange to red at the burning edge */
+        float3 edge_color = mix(float3(1.0, 0.8, 0.0), float3(1.0, 0.2, 0.0), t);
+        color.rgb = mix(color.rgb, edge_color, t * 0.8 + 0.2);
+        /* Add glow intensity */
+        color.rgb += edge_color * t * 0.3;
     }
     /* else: fully visible - return original color */
 
