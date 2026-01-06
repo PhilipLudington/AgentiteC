@@ -1,0 +1,15 @@
+[mod]
+id = "audio_mod"
+name = "Enhanced Audio"
+version = "1.5.0"
+author = "Sound Design Co"
+description = "Remastered sound effects and ambient audio"
+min_engine_version = "0.1.0"
+
+[dependencies]
+
+[conflicts]
+
+[assets]
+sounds = "sounds/"
+music = "music/"

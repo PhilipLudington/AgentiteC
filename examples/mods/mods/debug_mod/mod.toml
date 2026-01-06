@@ -1,0 +1,13 @@
+[mod]
+id = "debug_mod"
+name = "Dev Tools"
+version = "0.5.0"
+author = "Debug Team"
+description = "Developer console, cheats, and debugging utilities"
+min_engine_version = "0.1.0"
+
+[dependencies]
+
+[conflicts]
+
+[assets]

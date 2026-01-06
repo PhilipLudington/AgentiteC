@@ -1,0 +1,16 @@
+[mod]
+id = "content_mod"
+name = "Expansion Pack"
+version = "1.0.0"
+author = "Content Creators"
+description = "New levels, characters, and story content"
+min_engine_version = "0.1.0"
+
+[dependencies]
+graphics_mod = ">=2.0.0"
+
+[conflicts]
+
+[assets]
+levels = "levels/"
+characters = "characters/"

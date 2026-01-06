@@ -1,0 +1,16 @@
+[mod]
+id = "gameplay_mod"
+name = "Gameplay Overhaul"
+version = "3.0.0"
+author = "Game Mechanics Guild"
+description = "New mechanics, abilities, and progression systems"
+min_engine_version = "0.1.0"
+
+[dependencies]
+
+[conflicts]
+balance_mod = "*"
+
+[assets]
+data = "data/"
+scripts = "scripts/"

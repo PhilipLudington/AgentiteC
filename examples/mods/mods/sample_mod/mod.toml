@@ -1,0 +1,30 @@
+# Sample Mod - Demonstrates mod manifest format
+# Place this in: mods/sample_mod/mod.toml
+
+[mod]
+id = "sample_mod"
+name = "Sample Mod"
+version = "1.0.0"
+author = "Agentite Team"
+description = "A sample mod demonstrating the mod system features"
+min_engine_version = "0.1.0"
+
+# Dependencies - other mods required for this mod to work
+# Format: mod_id = "version_constraint"
+# Supported constraints: >=, <=, >, <, =, ^, ~
+[dependencies]
+# base_game = ">=1.0.0"  # Example: require base game version
+
+# Conflicts - mods that cannot be loaded alongside this one
+[conflicts]
+# other_texture_mod = "*"  # Example: conflicts with any version
+
+# Load order hints
+[load_order]
+# before = ["ui_mod"]   # Load this mod before 'ui_mod'
+# after = ["core_mod"]  # Load this mod after 'core_mod'
+
+# Asset directories (relative to mod root)
+# These define what asset categories the mod provides
+[assets]
+textures = "textures/"

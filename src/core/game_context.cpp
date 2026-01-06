@@ -144,6 +144,53 @@ Agentite_GameContext *agentite_game_context_create(const Agentite_GameContextCon
         }
     }
 
+    /* 10. Initialize hot reload system (optional) */
+    if (config->enable_hot_reload) {
+        /* Create file watcher */
+        Agentite_FileWatcherConfig watcher_config = AGENTITE_FILE_WATCHER_CONFIG_DEFAULT;
+        ctx->watcher = agentite_watch_create(&watcher_config);
+        if (!ctx->watcher) {
+            agentite_set_error("Failed to initialize file watcher");
+            goto error;
+        }
+
+        /* Add watch paths */
+        for (size_t i = 0; i < config->watch_path_count; i++) {
+            agentite_watch_add_path(ctx->watcher, config->watch_paths[i]);
+        }
+
+        /* Create hot reload manager */
+        Agentite_HotReloadConfig hr_config = AGENTITE_HOT_RELOAD_CONFIG_DEFAULT;
+        hr_config.watcher = ctx->watcher;
+        hr_config.sprites = ctx->sprites;
+        hr_config.audio = ctx->audio;
+        ctx->hotreload = agentite_hotreload_create(&hr_config);
+        if (!ctx->hotreload) {
+            agentite_set_error("Failed to initialize hot reload manager");
+            goto error;
+        }
+    }
+
+    /* 11. Initialize mod system (optional) */
+    if (config->enable_mods) {
+        Agentite_ModManagerConfig mod_config = AGENTITE_MOD_MANAGER_CONFIG_DEFAULT;
+        mod_config.hotreload = ctx->hotreload;
+        mod_config.allow_overrides = config->allow_mod_overrides;
+        ctx->mods = agentite_mod_manager_create(&mod_config);
+        if (!ctx->mods) {
+            agentite_set_error("Failed to initialize mod manager");
+            goto error;
+        }
+
+        /* Add mod search paths */
+        for (size_t i = 0; i < config->mod_path_count; i++) {
+            agentite_mod_add_search_path(ctx->mods, config->mod_paths[i]);
+        }
+
+        /* Scan for mods */
+        agentite_mod_scan(ctx->mods);
+    }
+
     return ctx;
 
 error:
@@ -155,6 +202,19 @@ void agentite_game_context_destroy(Agentite_GameContext *ctx) {
     if (!ctx) return;
 
     /* Cleanup in reverse initialization order */
+
+    /* Mod system */
+    if (ctx->mods) {
+        agentite_mod_manager_destroy(ctx->mods);
+    }
+
+    /* Hot reload system */
+    if (ctx->hotreload) {
+        agentite_hotreload_destroy(ctx->hotreload);
+    }
+    if (ctx->watcher) {
+        agentite_watch_destroy(ctx->watcher);
+    }
 
     /* Fonts */
     if (ctx->sdf_font && ctx->text) {
@@ -212,6 +272,11 @@ void agentite_game_context_begin_frame(Agentite_GameContext *ctx) {
 
     agentite_begin_frame(ctx->engine);
     agentite_input_begin_frame(ctx->input);
+
+    /* Update hot reload system */
+    if (ctx->hotreload) {
+        agentite_hotreload_update(ctx->hotreload);
+    }
 
     /* Begin UI frame (resets draw state for new frame) */
     if (ctx->ui) {

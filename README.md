@@ -65,6 +65,8 @@ Agentite is built around these core principles:
 - Modifier system
 - Construction and blueprints
 - Replay recording and playback
+- Hot reload for live asset updates
+- Mod system with dependencies and conflicts
 
 ### UI
 - Immediate-mode UI system (AUI)
@@ -203,6 +205,8 @@ make example-pathfinding  # A* pathfinding visualization
 make example-scene        # Scene loading and switching
 make example-prefab       # Prefab entity spawning
 make example-replay       # Replay recording and playback
+make example-hotreload    # Hot reload assets while running
+make example-mods         # Mod system for game modifications
 ```
 
 ### ECS & Tools

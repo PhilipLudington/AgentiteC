@@ -1,0 +1,15 @@
+[mod]
+id = "balance_mod"
+name = "Balance Tweaks"
+version = "0.9.5"
+author = "Community Balance Team"
+description = "Adjustments to game balance and difficulty"
+min_engine_version = "0.1.0"
+
+[dependencies]
+
+[conflicts]
+gameplay_mod = "*"
+
+[assets]
+data = "data/"

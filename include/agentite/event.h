@@ -92,6 +92,13 @@ typedef enum Agentite_EventType {
     AGENTITE_EVENT_UI_PANEL_OPENED,
     AGENTITE_EVENT_UI_PANEL_CLOSED,
 
+    /* Hot reload / Mod events (900-999) */
+    AGENTITE_EVENT_ASSET_RELOADED = 900,
+    AGENTITE_EVENT_ASSET_RELOAD_FAILED,
+    AGENTITE_EVENT_MOD_LOADED,
+    AGENTITE_EVENT_MOD_UNLOADED,
+    AGENTITE_EVENT_MOD_CONFLICT,
+
     /* Custom events (1000+) - User-defined events start here */
     AGENTITE_EVENT_CUSTOM = 1000,
 
@@ -181,6 +188,20 @@ typedef struct Agentite_Event {
                 bool bool_value;
             };
         } ui;
+
+        /* Asset reload events */
+        struct {
+            const char *path;       /* Path to reloaded asset */
+            int reload_type;        /* Agentite_ReloadType */
+            bool success;           /* True if reload succeeded */
+        } reload;
+
+        /* Mod events */
+        struct {
+            const char *mod_id;     /* Mod identifier */
+            const char *mod_name;   /* Mod display name */
+            int state;              /* Agentite_ModState */
+        } mod;
 
         /* Custom event data */
         struct {

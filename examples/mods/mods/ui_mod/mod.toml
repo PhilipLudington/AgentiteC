@@ -1,0 +1,15 @@
+[mod]
+id = "ui_mod"
+name = "Better UI"
+version = "1.2.0"
+author = "Interface Designers"
+description = "Cleaner menus, custom themes, and UI improvements"
+min_engine_version = "0.1.0"
+
+[dependencies]
+
+[conflicts]
+
+[assets]
+ui = "ui/"
+fonts = "fonts/"

@@ -12,6 +12,9 @@
 #include "agentite/tilemap.h"
 #include "agentite/pathfinding.h"
 #include "agentite/animation.h"
+#include "agentite/watch.h"
+#include "agentite/hotreload.h"
+#include "agentite/mod.h"
 
 /**
  * Carbon Game Context
@@ -69,6 +72,17 @@ struct Agentite_GameContextConfig {
     bool enable_ecs;                /* Initialize ECS world */
     bool enable_audio;              /* Initialize audio system */
     bool enable_ui;                 /* Initialize UI system */
+
+    /* Hot reload settings */
+    bool enable_hot_reload;         /* Initialize hot reload system */
+    const char **watch_paths;       /* Directories to watch for changes */
+    size_t watch_path_count;        /* Number of watch paths */
+
+    /* Mod settings */
+    bool enable_mods;               /* Initialize mod system */
+    const char **mod_paths;         /* Directories to scan for mods */
+    size_t mod_path_count;          /* Number of mod paths */
+    bool allow_mod_overrides;       /* Allow mods to override base assets */
 };
 
 /**
@@ -89,7 +103,14 @@ struct Agentite_GameContextConfig {
     .sdf_font_json = NULL, \
     .enable_ecs = true, \
     .enable_audio = true, \
-    .enable_ui = true \
+    .enable_ui = true, \
+    .enable_hot_reload = false, \
+    .watch_paths = NULL, \
+    .watch_path_count = 0, \
+    .enable_mods = false, \
+    .mod_paths = NULL, \
+    .mod_path_count = 0, \
+    .allow_mod_overrides = true \
 }
 
 /**
@@ -117,6 +138,13 @@ struct Agentite_GameContext {
     /* Fonts (may be NULL if paths not provided) */
     Agentite_Font *font;              /* Bitmap font for text rendering */
     Agentite_SDFFont *sdf_font;       /* SDF/MSDF font for sharp text */
+
+    /* Hot reload system (may be NULL if disabled) */
+    Agentite_FileWatcher *watcher;    /* File watcher */
+    Agentite_HotReloadManager *hotreload; /* Hot reload manager */
+
+    /* Mod system (may be NULL if disabled) */
+    Agentite_ModManager *mods;        /* Mod manager */
 
     /* Frame timing */
     float delta_time;               /* Time since last frame in seconds */

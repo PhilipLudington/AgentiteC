@@ -1,0 +1,15 @@
+[mod]
+id = "graphics_mod"
+name = "HD Graphics Pack"
+version = "2.1.0"
+author = "Visual Arts Team"
+description = "High-resolution textures and improved visual effects"
+min_engine_version = "0.1.0"
+
+[dependencies]
+
+[conflicts]
+
+[assets]
+textures = "textures/"
+shaders = "shaders/"
