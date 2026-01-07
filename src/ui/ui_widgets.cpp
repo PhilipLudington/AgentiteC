@@ -1835,7 +1835,7 @@ void aui_tooltip(AUI_Context *ctx, const char *text)
 
 AUI_MultiSelectState aui_multi_select_create(int capacity)
 {
-    AUI_MultiSelectState state = {0};
+    AUI_MultiSelectState state = {};
     state.capacity = capacity;
     state.selected_indices = (int *)calloc(capacity, sizeof(int));
     state.anchor_index = -1;
