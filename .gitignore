@@ -77,3 +77,4 @@ saves/
 .test-results.json
 .build-results.json
 .debug-build-results.json
+compile_commands.json
