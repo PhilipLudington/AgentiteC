@@ -47,20 +47,29 @@ static bool aui_widget_behavior(AUI_Context *ctx, AUI_Id id, AUI_Rect rect,
     /* Track this widget as the last processed (for tooltip association) */
     ctx->last_widget_id = id;
 
-    if (hovered) {
+    /* If a popup is open and the mouse is over the popup area,
+       block interaction with widgets behind the popup */
+    bool popup_blocking = false;
+    if (ctx->open_popup != AUI_ID_NONE && ctx->open_popup != id) {
+        if (aui_rect_contains(ctx->popup_rect, ctx->input.mouse_x, ctx->input.mouse_y)) {
+            popup_blocking = true;
+        }
+    }
+
+    if (hovered && !popup_blocking) {
         ctx->hot = id;
     }
 
     if (ctx->active == id) {
         if (ctx->input.mouse_released[0]) {
-            pressed = hovered;  /* Click = released while hovered */
+            pressed = hovered && !popup_blocking;  /* Click = released while hovered and not blocked */
             ctx->active = AUI_ID_NONE;
         }
-    } else if (hovered && ctx->input.mouse_pressed[0]) {
+    } else if (hovered && !popup_blocking && ctx->input.mouse_pressed[0]) {
         ctx->active = id;
     }
 
-    if (out_hovered) *out_hovered = hovered;
+    if (out_hovered) *out_hovered = hovered && !popup_blocking;
     if (out_held) *out_held = (ctx->active == id);
 
     return pressed;
