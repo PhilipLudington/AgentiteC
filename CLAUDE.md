@@ -6,8 +6,8 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 This project follows **Carbide** standards for safe, maintainable C/C++ code:
 
-- **[CARBIDE.md](CARBIDE.md)** - AI development guide with patterns and examples
-- **[STANDARDS.md](STANDARDS.md)** - Detailed coding rules and conventions
+- **[carbide/CARBIDE.md](carbide/CARBIDE.md)** - AI development guide with patterns and examples
+- **[carbide/STANDARDS.md](carbide/STANDARDS.md)** - Detailed coding rules and conventions
 
 **Quick Reference:**
 - Types: `PascalCase` with `Agentite_` prefix
@@ -347,7 +347,7 @@ if (!tex) {
 
 ## Conventions
 
-For general C/C++ coding standards (memory management, error handling, security), see [CARBIDE.md](CARBIDE.md) and [STANDARDS.md](STANDARDS.md).
+For general C/C++ coding standards (memory management, error handling, security), see [carbide/CARBIDE.md](carbide/CARBIDE.md) and [carbide/STANDARDS.md](carbide/STANDARDS.md).
 
 ### Agentite-Specific Naming
 

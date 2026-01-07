@@ -23,6 +23,8 @@ Detailed coding rules are automatically loaded from `.claude/rules/`:
 
 | Command | Purpose |
 |---------|---------|
+| `/carbide-install` | Install Carbide into an existing project |
+| `/carbide-update` | Update Carbide to the latest version |
 | `/carbide-review` | Review code against Carbide standards |
 | `/carbide-safety` | Security-focused review (CWE/OWASP) |
 | `/carbide-check` | Run validation tooling (build, lint, test) |
