@@ -774,6 +774,7 @@ static bool upload_pixels_to_gpu(Agentite_SpriteRenderer *sr,
 
 Agentite_Texture *agentite_texture_load(Agentite_SpriteRenderer *sr, const char *path)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!sr || !path) return NULL;
 
     /* Load image with stb_image */
@@ -864,7 +865,7 @@ void agentite_texture_destroy(Agentite_SpriteRenderer *sr, Agentite_Texture *tex
     free(texture);
 }
 
-void agentite_texture_get_size(Agentite_Texture *texture, int *width, int *height)
+void agentite_texture_get_size(const Agentite_Texture *texture, int *width, int *height)
 {
     if (!texture) {
         if (width) *width = 0;
@@ -1241,6 +1242,7 @@ void agentite_sprite_flush(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cm
 /* Upload sprite batch to GPU (call BEFORE render pass begins) */
 void agentite_sprite_upload(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!sr || !cmd || sr->sprite_count == 0) return;
 
     /* Upload vertex and index data */
@@ -1308,6 +1310,7 @@ static void sprite_render_segment(Agentite_SpriteRenderer *sr,
 void agentite_sprite_render(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
                           SDL_GPURenderPass *pass)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!sr || !cmd || !pass || sr->sprite_count == 0) return;
 
     static bool logged_render = false;
@@ -1388,7 +1391,7 @@ void agentite_sprite_set_camera(Agentite_SpriteRenderer *sr, Agentite_Camera *ca
 }
 
 /* Get current camera */
-Agentite_Camera *agentite_sprite_get_camera(Agentite_SpriteRenderer *sr)
+Agentite_Camera *agentite_sprite_get_camera(const Agentite_SpriteRenderer *sr)
 {
     return sr ? sr->camera : NULL;
 }
@@ -1494,7 +1497,7 @@ void agentite_sprite_end_render_to_texture(SDL_GPURenderPass *pass)
  * Vignette Post-Process Functions
  * ============================================================================ */
 
-bool agentite_sprite_has_vignette(Agentite_SpriteRenderer *sr)
+bool agentite_sprite_has_vignette(const Agentite_SpriteRenderer *sr)
 {
     return sr && sr->vignette_pipeline != NULL;
 }

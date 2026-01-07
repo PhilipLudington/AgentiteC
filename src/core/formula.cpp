@@ -880,7 +880,7 @@ bool agentite_formula_set_var(Agentite_FormulaContext *ctx, const char *name, do
 
     /* Add new */
     if (ctx->var_count >= AGENTITE_FORMULA_MAX_VARS) {
-        agentite_set_error("Maximum variables exceeded");
+        agentite_set_error("Formula: Maximum variables exceeded (%d/%d) when adding '%s'", ctx->var_count, AGENTITE_FORMULA_MAX_VARS, name);
         return false;
     }
 
@@ -966,7 +966,7 @@ bool agentite_formula_register_func(Agentite_FormulaContext *ctx, const char *na
     if (!ctx || !name || !func) return false;
 
     if (ctx->custom_func_count >= AGENTITE_FORMULA_MAX_CUSTOM_FUNCS) {
-        agentite_set_error("Maximum custom functions exceeded");
+        agentite_set_error("Formula: Maximum custom functions exceeded (%d/%d) when adding '%s'", ctx->custom_func_count, AGENTITE_FORMULA_MAX_CUSTOM_FUNCS, name);
         return false;
     }
 

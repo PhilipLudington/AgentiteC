@@ -369,7 +369,7 @@ int agentite_fleet_add(Agentite_FleetManager *fm, const Agentite_Fleet *fleet) {
     }
 
     if (id < 0) {
-        agentite_set_error("Maximum fleets reached");
+        agentite_set_error("Fleet: Maximum fleets reached (%d/%d)", fm->fleet_count, AGENTITE_FLEET_MAX);
         return AGENTITE_FLEET_INVALID_ID;
     }
 
@@ -457,7 +457,7 @@ bool agentite_fleet_add_units(
     const Agentite_UnitStats *stats = &g_unit_stats[unit_class];
     bool is_space = (stats->domain == AGENTITE_DOMAIN_SPACE);
     if (fleet->unit_count > 0 && fleet->is_space_fleet != is_space) {
-        agentite_set_error("Cannot mix space and ground units");
+        agentite_set_error("Fleet: Cannot mix space and ground units (fleet is %s)", fleet->is_space_fleet ? "space" : "ground");
         return false;
     }
 
@@ -466,7 +466,7 @@ bool agentite_fleet_add_units(
         fleet->units[group_idx].count += count;
     } else {
         if (fleet->unit_count >= AGENTITE_FLEET_MAX_UNIT_GROUPS) {
-            agentite_set_error("Maximum unit groups reached");
+            agentite_set_error("Fleet: Maximum unit groups reached (%d/%d)", fleet->unit_count, AGENTITE_FLEET_MAX_UNIT_GROUPS);
             return false;
         }
 

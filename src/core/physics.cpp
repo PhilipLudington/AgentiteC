@@ -227,7 +227,7 @@ Agentite_PhysicsBody *agentite_physics_body_create(
     }
 
     if (world->body_count >= world->max_bodies) {
-        agentite_set_error("Physics: Maximum bodies reached");
+        agentite_set_error("Physics: Maximum bodies reached (%d/%d)", world->body_count, world->max_bodies);
         return NULL;
     }
 

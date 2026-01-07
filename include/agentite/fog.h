@@ -157,7 +157,7 @@ void agentite_fog_set_source_radius(Agentite_FogOfWar *fog, Agentite_VisionSourc
  * @param out_radius Output radius (can be NULL)
  * @return true if source exists
  */
-bool agentite_fog_get_source(Agentite_FogOfWar *fog, Agentite_VisionSource source,
+bool agentite_fog_get_source(const Agentite_FogOfWar *fog, Agentite_VisionSource source,
                            int *out_x, int *out_y, int *out_radius);
 
 /**
@@ -175,7 +175,7 @@ void agentite_fog_clear_sources(Agentite_FogOfWar *fog);
  * @param fog Fog of war system
  * @return Number of sources
  */
-int agentite_fog_source_count(Agentite_FogOfWar *fog);
+int agentite_fog_source_count(const Agentite_FogOfWar *fog);
 
 /* ============================================================================
  * Visibility Updates
@@ -210,7 +210,7 @@ void agentite_fog_force_update(Agentite_FogOfWar *fog);
  * @param y Grid Y coordinate
  * @return Visibility state
  */
-Agentite_VisibilityState agentite_fog_get_state(Agentite_FogOfWar *fog, int x, int y);
+Agentite_VisibilityState agentite_fog_get_state(const Agentite_FogOfWar *fog, int x, int y);
 
 /**
  * @brief Check if a cell is currently visible
@@ -220,7 +220,7 @@ Agentite_VisibilityState agentite_fog_get_state(Agentite_FogOfWar *fog, int x, i
  * @param y Grid Y coordinate
  * @return true if visible
  */
-bool agentite_fog_is_visible(Agentite_FogOfWar *fog, int x, int y);
+bool agentite_fog_is_visible(const Agentite_FogOfWar *fog, int x, int y);
 
 /**
  * @brief Check if a cell has been explored (visible or previously seen)
@@ -230,7 +230,7 @@ bool agentite_fog_is_visible(Agentite_FogOfWar *fog, int x, int y);
  * @param y Grid Y coordinate
  * @return true if explored or visible
  */
-bool agentite_fog_is_explored(Agentite_FogOfWar *fog, int x, int y);
+bool agentite_fog_is_explored(const Agentite_FogOfWar *fog, int x, int y);
 
 /**
  * @brief Check if a cell is unexplored
@@ -240,7 +240,7 @@ bool agentite_fog_is_explored(Agentite_FogOfWar *fog, int x, int y);
  * @param y Grid Y coordinate
  * @return true if unexplored
  */
-bool agentite_fog_is_unexplored(Agentite_FogOfWar *fog, int x, int y);
+bool agentite_fog_is_unexplored(const Agentite_FogOfWar *fog, int x, int y);
 
 /**
  * @brief Get alpha value for rendering (0.0 = black, 1.0 = visible)
@@ -255,7 +255,7 @@ bool agentite_fog_is_unexplored(Agentite_FogOfWar *fog, int x, int y);
  * @param y Grid Y coordinate
  * @return Alpha value 0.0 to 1.0
  */
-float agentite_fog_get_alpha(Agentite_FogOfWar *fog, int x, int y);
+float agentite_fog_get_alpha(const Agentite_FogOfWar *fog, int x, int y);
 
 /**
  * @brief Set shroud (explored but not visible) alpha
@@ -271,7 +271,7 @@ void agentite_fog_set_shroud_alpha(Agentite_FogOfWar *fog, float alpha);
  * @param fog Fog of war system
  * @return Current shroud alpha
  */
-float agentite_fog_get_shroud_alpha(Agentite_FogOfWar *fog);
+float agentite_fog_get_shroud_alpha(const Agentite_FogOfWar *fog);
 
 /* ============================================================================
  * Region Queries
@@ -287,7 +287,7 @@ float agentite_fog_get_shroud_alpha(Agentite_FogOfWar *fog);
  * @param y2 Bottom Y (inclusive)
  * @return true if any cell is visible
  */
-bool agentite_fog_any_visible_in_rect(Agentite_FogOfWar *fog, int x1, int y1, int x2, int y2);
+bool agentite_fog_any_visible_in_rect(const Agentite_FogOfWar *fog, int x1, int y1, int x2, int y2);
 
 /**
  * @brief Check if all cells in a rectangle are visible
@@ -299,7 +299,7 @@ bool agentite_fog_any_visible_in_rect(Agentite_FogOfWar *fog, int x1, int y1, in
  * @param y2 Bottom Y (inclusive)
  * @return true if all cells are visible
  */
-bool agentite_fog_all_visible_in_rect(Agentite_FogOfWar *fog, int x1, int y1, int x2, int y2);
+bool agentite_fog_all_visible_in_rect(const Agentite_FogOfWar *fog, int x1, int y1, int x2, int y2);
 
 /**
  * @brief Count visible cells in a rectangle
@@ -311,7 +311,7 @@ bool agentite_fog_all_visible_in_rect(Agentite_FogOfWar *fog, int x1, int y1, in
  * @param y2 Bottom Y (inclusive)
  * @return Number of visible cells
  */
-int agentite_fog_count_visible_in_rect(Agentite_FogOfWar *fog, int x1, int y1, int x2, int y2);
+int agentite_fog_count_visible_in_rect(const Agentite_FogOfWar *fog, int x1, int y1, int x2, int y2);
 
 /* ============================================================================
  * Manual Exploration
@@ -373,7 +373,7 @@ void agentite_fog_set_exploration_callback(Agentite_FogOfWar *fog,
  * @param out_width Output width (can be NULL)
  * @param out_height Output height (can be NULL)
  */
-void agentite_fog_get_size(Agentite_FogOfWar *fog, int *out_width, int *out_height);
+void agentite_fog_get_size(const Agentite_FogOfWar *fog, int *out_width, int *out_height);
 
 /**
  * @brief Get exploration statistics
@@ -383,7 +383,7 @@ void agentite_fog_get_size(Agentite_FogOfWar *fog, int *out_width, int *out_heig
  * @param out_explored Output explored count (can be NULL)
  * @param out_visible Output visible count (can be NULL)
  */
-void agentite_fog_get_stats(Agentite_FogOfWar *fog,
+void agentite_fog_get_stats(const Agentite_FogOfWar *fog,
                           int *out_unexplored, int *out_explored, int *out_visible);
 
 /**
@@ -392,7 +392,7 @@ void agentite_fog_get_stats(Agentite_FogOfWar *fog,
  * @param fog Fog of war system
  * @return Percentage of map that is explored or visible
  */
-float agentite_fog_get_exploration_percent(Agentite_FogOfWar *fog);
+float agentite_fog_get_exploration_percent(const Agentite_FogOfWar *fog);
 
 /* ============================================================================
  * Line of Sight (Optional Extension)

@@ -6,19 +6,156 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+/*============================================================================
+ * Safe Memory Allocation Macros
+ *============================================================================
+ * These macros provide type-safe and overflow-safe memory allocation.
+ *
+ * Standard macros (silent on failure):
+ *   AGENTITE_ALLOC(type)              - Allocate single instance (zero-init)
+ *   AGENTITE_ALLOC_ARRAY(type, count) - Allocate array (overflow-safe, zero-init)
+ *   AGENTITE_MALLOC_ARRAY(type, count) - Malloc array (overflow-safe)
+ *   AGENTITE_REALLOC(ptr, type, count) - Realloc with overflow check
+ *
+ * Logging macros (log failures with file:line for debugging):
+ *   AGENTITE_ALLOC_LOG(type)              - Allocate + log on failure
+ *   AGENTITE_ALLOC_ARRAY_LOG(type, count) - Allocate array + log on failure
+ *   AGENTITE_MALLOC_ARRAY_LOG(type, count) - Malloc array + log on failure
+ *   AGENTITE_REALLOC_LOG(ptr, type, count) - Realloc + log on failure
+ *============================================================================*/
+
+/* Safe realloc that checks for integer overflow */
+static inline void *agentite_safe_realloc(void *ptr, size_t count, size_t size)
+{
+    /* Check for multiplication overflow */
+    if (size != 0 && count > SIZE_MAX / size) {
+        return NULL;  /* Overflow would occur */
+    }
+    return realloc(ptr, count * size);
+}
+
+/* Safe malloc that checks for integer overflow */
+static inline void *agentite_safe_malloc(size_t count, size_t size)
+{
+    /* Check for multiplication overflow */
+    if (size != 0 && count > SIZE_MAX / size) {
+        return NULL;  /* Overflow would occur */
+    }
+    return malloc(count * size);
+}
+
+/*============================================================================
+ * Logging Allocation Wrappers
+ *============================================================================
+ * These wrappers log allocation failures for debugging. Use the _LOG macros
+ * to get file/line information in failure messages.
+ *============================================================================*/
+
+/* Logging calloc wrapper */
+static inline void *agentite_calloc_log(size_t count, size_t size,
+                                        const char *file, int line)
+{
+    void *ptr = calloc(count, size);
+    if (!ptr && (count * size) > 0) {
+        SDL_Log("ALLOC FAILED: calloc(%zu, %zu) = %zu bytes at %s:%d",
+                count, size, count * size, file, line);
+    }
+    return ptr;
+}
+
+/* Logging malloc wrapper with overflow check */
+static inline void *agentite_malloc_log(size_t count, size_t size,
+                                        const char *file, int line)
+{
+    if (size != 0 && count > SIZE_MAX / size) {
+        SDL_Log("ALLOC FAILED: overflow in malloc(%zu * %zu) at %s:%d",
+                count, size, file, line);
+        return NULL;
+    }
+    void *ptr = malloc(count * size);
+    if (!ptr && (count * size) > 0) {
+        SDL_Log("ALLOC FAILED: malloc(%zu) at %s:%d", count * size, file, line);
+    }
+    return ptr;
+}
+
+/* Logging realloc wrapper with overflow check */
+static inline void *agentite_realloc_log(void *old_ptr, size_t count, size_t size,
+                                         const char *file, int line)
+{
+    if (size != 0 && count > SIZE_MAX / size) {
+        SDL_Log("ALLOC FAILED: overflow in realloc(%zu * %zu) at %s:%d",
+                count, size, file, line);
+        return NULL;
+    }
+    void *ptr = realloc(old_ptr, count * size);
+    if (!ptr && (count * size) > 0) {
+        SDL_Log("ALLOC FAILED: realloc(%zu) at %s:%d", count * size, file, line);
+    }
+    return ptr;
+}
+
+/* Logging allocation macros - use these for automatic file/line info */
+#define AGENTITE_ALLOC_LOG(type) \
+    (type*)agentite_calloc_log(1, sizeof(type), __FILE__, __LINE__)
+
+#define AGENTITE_ALLOC_ARRAY_LOG(type, count) \
+    (type*)agentite_calloc_log((count), sizeof(type), __FILE__, __LINE__)
+
+#define AGENTITE_MALLOC_ARRAY_LOG(type, count) \
+    (type*)agentite_malloc_log((count), sizeof(type), __FILE__, __LINE__)
+
+#define AGENTITE_REALLOC_LOG(ptr, type, count) \
+    (type*)agentite_realloc_log((ptr), (count), sizeof(type), __FILE__, __LINE__)
+
 // C++ compatibility for memory allocation
 #ifdef __cplusplus
 #define AGENTITE_ALLOC(type) (type*)calloc(1, sizeof(type))
 #define AGENTITE_ALLOC_ARRAY(type, count) (type*)calloc((count), sizeof(type))
-#define AGENTITE_REALLOC(ptr, type, count) (type*)realloc((ptr), (count) * sizeof(type))
+#define AGENTITE_REALLOC_SAFE(ptr, type, count) (type*)agentite_safe_realloc((ptr), (count), sizeof(type))
+#define AGENTITE_REALLOC(ptr, type, count) (type*)agentite_safe_realloc((ptr), (count), sizeof(type))
 #define AGENTITE_MALLOC(size) malloc(size)
+#define AGENTITE_MALLOC_ARRAY(type, count) (type*)agentite_safe_malloc((count), sizeof(type))
 #define AGENTITE_CALLOC(count, size) calloc((count), (size))
 #else
 #define AGENTITE_ALLOC(type) (type*)calloc(1, sizeof(type))
 #define AGENTITE_ALLOC_ARRAY(type, count) (type*)calloc((count), sizeof(type))
-#define AGENTITE_REALLOC(ptr, type, count) (type*)realloc((ptr), (count) * sizeof(type))
+#define AGENTITE_REALLOC_SAFE(ptr, type, count) (type*)agentite_safe_realloc((ptr), (count), sizeof(type))
+#define AGENTITE_REALLOC(ptr, type, count) (type*)agentite_safe_realloc((ptr), (count), sizeof(type))
 #define AGENTITE_MALLOC(size) malloc(size)
+#define AGENTITE_MALLOC_ARRAY(type, count) (type*)agentite_safe_malloc((count), sizeof(type))
 #define AGENTITE_CALLOC(count, size) calloc((count), (size))
+#endif
+
+/*============================================================================
+ * Thread Safety Assertions
+ *============================================================================
+ * These macros help catch threading errors in debug builds.
+ *
+ * AGENTITE_ASSERT_MAIN_THREAD() - Assert we're on the main thread
+ *
+ * Call agentite_set_main_thread() once at startup (done automatically by
+ * agentite_init). Then use AGENTITE_ASSERT_MAIN_THREAD() in functions that
+ * must only be called from the main thread (all SDL/GPU operations).
+ *============================================================================*/
+
+/* Thread ID tracking - implementation in engine.cpp */
+void agentite_set_main_thread(void);
+bool agentite_is_main_thread(void);
+
+#ifdef NDEBUG
+    /* Release build - no assertions */
+    #define AGENTITE_ASSERT_MAIN_THREAD() ((void)0)
+#else
+    /* Debug build - check thread */
+    #define AGENTITE_ASSERT_MAIN_THREAD() \
+        do { \
+            if (!agentite_is_main_thread()) { \
+                SDL_Log("FATAL: %s called from non-main thread at %s:%d", \
+                        __func__, __FILE__, __LINE__); \
+                SDL_TriggerBreakpoint(); \
+            } \
+        } while(0)
 #endif
 
 // Version info

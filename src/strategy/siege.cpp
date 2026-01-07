@@ -461,13 +461,13 @@ uint32_t agentite_siege_begin_ex(Agentite_SiegeManager *mgr,
     }
 
     if (!agentite_siege_can_begin(mgr, attacker_faction, target_location, attacking_force)) {
-        agentite_set_error("Cannot begin siege: requirements not met");
+        agentite_set_error("Siege: Cannot begin at location %d (faction %d, force %d)", target_location, attacker_faction, attacking_force);
         return AGENTITE_SIEGE_INVALID;
     }
 
     Agentite_Siege *siege = find_free_slot(mgr);
     if (!siege) {
-        agentite_set_error("No free siege slots available");
+        agentite_set_error("Siege: Maximum active sieges reached (limit: %d)", AGENTITE_SIEGE_MAX_INSTANCES);
         return AGENTITE_SIEGE_INVALID;
     }
 

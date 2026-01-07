@@ -83,10 +83,10 @@ Agentite_Tileset *agentite_tileset_create_ex(Agentite_Texture *texture,
 void agentite_tileset_destroy(Agentite_Tileset *tileset);
 
 /* Get tileset tile dimensions */
-void agentite_tileset_get_tile_size(Agentite_Tileset *tileset, int *width, int *height);
+void agentite_tileset_get_tile_size(const Agentite_Tileset *tileset, int *width, int *height);
 
 /* Get number of tiles in tileset */
-int agentite_tileset_get_tile_count(Agentite_Tileset *tileset);
+int agentite_tileset_get_tile_count(const Agentite_Tileset *tileset);
 
 /* ============================================================================
  * Tilemap Lifecycle Functions
@@ -100,10 +100,10 @@ Agentite_Tilemap *agentite_tilemap_create(Agentite_Tileset *tileset,
 void agentite_tilemap_destroy(Agentite_Tilemap *tilemap);
 
 /* Get tilemap dimensions in tiles */
-void agentite_tilemap_get_size(Agentite_Tilemap *tilemap, int *width, int *height);
+void agentite_tilemap_get_size(const Agentite_Tilemap *tilemap, int *width, int *height);
 
 /* Get tile dimensions in pixels */
-void agentite_tilemap_get_tile_size(Agentite_Tilemap *tilemap, int *width, int *height);
+void agentite_tilemap_get_tile_size(const Agentite_Tilemap *tilemap, int *width, int *height);
 
 /* ============================================================================
  * Layer Functions
@@ -120,19 +120,19 @@ Agentite_TileLayer *agentite_tilemap_get_layer_by_name(Agentite_Tilemap *tilemap
                                                    const char *name);
 
 /* Get layer count */
-int agentite_tilemap_get_layer_count(Agentite_Tilemap *tilemap);
+int agentite_tilemap_get_layer_count(const Agentite_Tilemap *tilemap);
 
 /* Set layer visibility */
 void agentite_tilemap_set_layer_visible(Agentite_Tilemap *tilemap, int layer, bool visible);
 
 /* Get layer visibility */
-bool agentite_tilemap_get_layer_visible(Agentite_Tilemap *tilemap, int layer);
+bool agentite_tilemap_get_layer_visible(const Agentite_Tilemap *tilemap, int layer);
 
 /* Set layer opacity (0.0 - 1.0) */
 void agentite_tilemap_set_layer_opacity(Agentite_Tilemap *tilemap, int layer, float opacity);
 
 /* Get layer opacity */
-float agentite_tilemap_get_layer_opacity(Agentite_Tilemap *tilemap, int layer);
+float agentite_tilemap_get_layer_opacity(const Agentite_Tilemap *tilemap, int layer);
 
 /* ============================================================================
  * Tile Access Functions
@@ -143,7 +143,7 @@ void agentite_tilemap_set_tile(Agentite_Tilemap *tilemap, int layer,
                              int x, int y, Agentite_TileID tile);
 
 /* Get tile at position (returns AGENTITE_TILE_EMPTY if out of bounds) */
-Agentite_TileID agentite_tilemap_get_tile(Agentite_Tilemap *tilemap, int layer,
+Agentite_TileID agentite_tilemap_get_tile(const Agentite_Tilemap *tilemap, int layer,
                                       int x, int y);
 
 /* Fill a rectangular region with a tile */
@@ -175,22 +175,22 @@ void agentite_tilemap_render_layer(Agentite_Tilemap *tilemap,
  * ============================================================================ */
 
 /* Convert world coordinates to tile coordinates */
-void agentite_tilemap_world_to_tile(Agentite_Tilemap *tilemap,
+void agentite_tilemap_world_to_tile(const Agentite_Tilemap *tilemap,
                                   float world_x, float world_y,
                                   int *tile_x, int *tile_y);
 
 /* Convert tile coordinates to world coordinates (top-left corner of tile) */
-void agentite_tilemap_tile_to_world(Agentite_Tilemap *tilemap,
+void agentite_tilemap_tile_to_world(const Agentite_Tilemap *tilemap,
                                   int tile_x, int tile_y,
                                   float *world_x, float *world_y);
 
 /* Get tile at world position */
-Agentite_TileID agentite_tilemap_get_tile_at_world(Agentite_Tilemap *tilemap,
+Agentite_TileID agentite_tilemap_get_tile_at_world(const Agentite_Tilemap *tilemap,
                                                int layer,
                                                float world_x, float world_y);
 
 /* Get tilemap bounds in world coordinates */
-void agentite_tilemap_get_world_bounds(Agentite_Tilemap *tilemap,
+void agentite_tilemap_get_world_bounds(const Agentite_Tilemap *tilemap,
                                      float *left, float *right,
                                      float *top, float *bottom);
 

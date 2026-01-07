@@ -193,7 +193,7 @@ int agentite_combat_add_combatant(
     AGENTITE_VALIDATE_PTR_RET(combatant, AGENTITE_COMBAT_INVALID_ID);
 
     if (combat->combatant_count >= AGENTITE_COMBAT_MAX_COMBATANTS) {
-        agentite_set_error("Maximum combatants reached");
+        agentite_set_error("Combat: Maximum combatants reached (%d/%d)", combat->combatant_count, AGENTITE_COMBAT_MAX_COMBATANTS);
         return AGENTITE_COMBAT_INVALID_ID;
     }
 
@@ -334,7 +334,7 @@ bool agentite_combat_queue_action(
     AGENTITE_VALIDATE_PTR_RET(action, false);
 
     if (combat->action_queue_count >= AGENTITE_COMBAT_MAX_ACTIONS) {
-        agentite_set_error("Action queue full");
+        agentite_set_error("Combat: Action queue full (%d/%d)", combat->action_queue_count, AGENTITE_COMBAT_MAX_ACTIONS);
         return false;
     }
 

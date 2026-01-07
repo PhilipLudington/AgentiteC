@@ -96,7 +96,7 @@ Agentite_Pathfinder *agentite_pathfinder_create(int width, int height);
 void agentite_pathfinder_destroy(Agentite_Pathfinder *pf);
 
 /* Get pathfinder grid dimensions */
-void agentite_pathfinder_get_size(Agentite_Pathfinder *pf, int *width, int *height);
+void agentite_pathfinder_get_size(const Agentite_Pathfinder *pf, int *width, int *height);
 
 /* ============================================================================
  * Grid Configuration
@@ -106,13 +106,13 @@ void agentite_pathfinder_get_size(Agentite_Pathfinder *pf, int *width, int *heig
 void agentite_pathfinder_set_walkable(Agentite_Pathfinder *pf, int x, int y, bool walkable);
 
 /* Get whether a tile is walkable */
-bool agentite_pathfinder_is_walkable(Agentite_Pathfinder *pf, int x, int y);
+bool agentite_pathfinder_is_walkable(const Agentite_Pathfinder *pf, int x, int y);
 
 /* Set movement cost for a tile (default: 1.0, higher = slower) */
 void agentite_pathfinder_set_cost(Agentite_Pathfinder *pf, int x, int y, float cost);
 
 /* Get movement cost for a tile */
-float agentite_pathfinder_get_cost(Agentite_Pathfinder *pf, int x, int y);
+float agentite_pathfinder_get_cost(const Agentite_Pathfinder *pf, int x, int y);
 
 /* Set a rectangular region as walkable/blocked */
 void agentite_pathfinder_fill_walkable(Agentite_Pathfinder *pf,
@@ -190,7 +190,7 @@ bool agentite_pathfinder_line_clear(Agentite_Pathfinder *pf,
 void agentite_path_destroy(Agentite_Path *path);
 
 /* Get point at index (returns NULL if out of bounds) */
-const Agentite_PathPoint *agentite_path_get_point(Agentite_Path *path, int index);
+const Agentite_PathPoint *agentite_path_get_point(const Agentite_Path *path, int index);
 
 /* Simplify path by removing redundant points on straight lines */
 Agentite_Path *agentite_path_simplify(Agentite_Path *path);

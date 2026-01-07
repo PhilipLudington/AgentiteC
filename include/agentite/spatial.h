@@ -150,7 +150,7 @@ bool agentite_spatial_move(Agentite_SpatialIndex *index,
  * @param y Grid Y coordinate
  * @return true if at least one entity is at this position
  */
-bool agentite_spatial_has(Agentite_SpatialIndex *index, int x, int y);
+bool agentite_spatial_has(const Agentite_SpatialIndex *index, int x, int y);
 
 /**
  * @brief Get the first entity at a position
@@ -160,7 +160,7 @@ bool agentite_spatial_has(Agentite_SpatialIndex *index, int x, int y);
  * @param y Grid Y coordinate
  * @return Entity ID or AGENTITE_SPATIAL_INVALID (0) if none
  */
-uint32_t agentite_spatial_query(Agentite_SpatialIndex *index, int x, int y);
+uint32_t agentite_spatial_query(const Agentite_SpatialIndex *index, int x, int y);
 
 /**
  * @brief Get all entities at a position
@@ -172,7 +172,7 @@ uint32_t agentite_spatial_query(Agentite_SpatialIndex *index, int x, int y);
  * @param max_entities Size of output array
  * @return Number of entities found
  */
-int agentite_spatial_query_all(Agentite_SpatialIndex *index, int x, int y,
+int agentite_spatial_query_all(const Agentite_SpatialIndex *index, int x, int y,
                              uint32_t *out_entities, int max_entities);
 
 /**
@@ -183,7 +183,7 @@ int agentite_spatial_query_all(Agentite_SpatialIndex *index, int x, int y,
  * @param y Grid Y coordinate
  * @return Number of entities at this cell
  */
-int agentite_spatial_count_at(Agentite_SpatialIndex *index, int x, int y);
+int agentite_spatial_count_at(const Agentite_SpatialIndex *index, int x, int y);
 
 /**
  * @brief Check if a specific entity exists at a position
@@ -194,7 +194,7 @@ int agentite_spatial_count_at(Agentite_SpatialIndex *index, int x, int y);
  * @param entity_id Entity ID to check for
  * @return true if entity is at this position
  */
-bool agentite_spatial_has_entity(Agentite_SpatialIndex *index, int x, int y, uint32_t entity_id);
+bool agentite_spatial_has_entity(const Agentite_SpatialIndex *index, int x, int y, uint32_t entity_id);
 
 /* ============================================================================
  * Region Queries
@@ -212,7 +212,7 @@ bool agentite_spatial_has_entity(Agentite_SpatialIndex *index, int x, int y, uin
  * @param max_results Size of output array
  * @return Number of entities found
  */
-int agentite_spatial_query_rect(Agentite_SpatialIndex *index,
+int agentite_spatial_query_rect(const Agentite_SpatialIndex *index,
                               int x1, int y1, int x2, int y2,
                               Agentite_SpatialQueryResult *out_results, int max_results);
 
@@ -229,7 +229,7 @@ int agentite_spatial_query_rect(Agentite_SpatialIndex *index,
  * @param max_results Size of output array
  * @return Number of entities found
  */
-int agentite_spatial_query_radius(Agentite_SpatialIndex *index,
+int agentite_spatial_query_radius(const Agentite_SpatialIndex *index,
                                 int center_x, int center_y, int radius,
                                 Agentite_SpatialQueryResult *out_results, int max_results);
 
@@ -246,7 +246,7 @@ int agentite_spatial_query_radius(Agentite_SpatialIndex *index,
  * @param max_results Size of output array
  * @return Number of entities found
  */
-int agentite_spatial_query_circle(Agentite_SpatialIndex *index,
+int agentite_spatial_query_circle(const Agentite_SpatialIndex *index,
                                 int center_x, int center_y, int radius,
                                 Agentite_SpatialQueryResult *out_results, int max_results);
 
@@ -307,7 +307,7 @@ void agentite_spatial_iter_next(Agentite_SpatialIterator *iter);
  * @param index Spatial index
  * @return Total entity count (including duplicates)
  */
-int agentite_spatial_total_count(Agentite_SpatialIndex *index);
+int agentite_spatial_total_count(const Agentite_SpatialIndex *index);
 
 /**
  * @brief Get number of occupied cells
@@ -315,7 +315,7 @@ int agentite_spatial_total_count(Agentite_SpatialIndex *index);
  * @param index Spatial index
  * @return Number of cells with at least one entity
  */
-int agentite_spatial_occupied_cells(Agentite_SpatialIndex *index);
+int agentite_spatial_occupied_cells(const Agentite_SpatialIndex *index);
 
 /**
  * @brief Get hash table load factor
@@ -323,7 +323,7 @@ int agentite_spatial_occupied_cells(Agentite_SpatialIndex *index);
  * @param index Spatial index
  * @return Load factor (0.0 to 1.0, higher = more collisions)
  */
-float agentite_spatial_load_factor(Agentite_SpatialIndex *index);
+float agentite_spatial_load_factor(const Agentite_SpatialIndex *index);
 
 #ifdef __cplusplus
 }

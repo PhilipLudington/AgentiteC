@@ -64,6 +64,7 @@ Agentite_Font *agentite_font_load_memory(Agentite_TextRenderer *tr,
                                       const void *data, int data_size,
                                       float size)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!tr || !data || data_size <= 0) return NULL;
 
     Agentite_Font *font = AGENTITE_ALLOC(Agentite_Font);
@@ -151,6 +152,7 @@ Agentite_Font *agentite_font_load_memory(Agentite_TextRenderer *tr,
 
 void agentite_font_destroy(Agentite_TextRenderer *tr, Agentite_Font *font)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!tr || !font) return;
 
     if (font->atlas_texture) {
@@ -160,22 +162,22 @@ void agentite_font_destroy(Agentite_TextRenderer *tr, Agentite_Font *font)
     free(font);
 }
 
-float agentite_font_get_size(Agentite_Font *font)
+float agentite_font_get_size(const Agentite_Font *font)
 {
     return font ? font->size : 0.0f;
 }
 
-float agentite_font_get_line_height(Agentite_Font *font)
+float agentite_font_get_line_height(const Agentite_Font *font)
 {
     return font ? font->line_height : 0.0f;
 }
 
-float agentite_font_get_ascent(Agentite_Font *font)
+float agentite_font_get_ascent(const Agentite_Font *font)
 {
     return font ? font->ascent : 0.0f;
 }
 
-float agentite_font_get_descent(Agentite_Font *font)
+float agentite_font_get_descent(const Agentite_Font *font)
 {
     return font ? font->descent : 0.0f;
 }
@@ -184,7 +186,7 @@ float agentite_font_get_descent(Agentite_Font *font)
  * Text Measurement
  * ============================================================================ */
 
-float agentite_text_measure(Agentite_Font *font, const char *text)
+float agentite_text_measure(const Agentite_Font *font, const char *text)
 {
     if (!font || !text) return 0.0f;
 
@@ -194,7 +196,7 @@ float agentite_text_measure(Agentite_Font *font, const char *text)
     while (*p) {
         unsigned char c = (unsigned char)*p;
         if (c >= FIRST_CHAR && c <= LAST_CHAR) {
-            GlyphInfo *g = &font->glyphs[c - FIRST_CHAR];
+            const GlyphInfo *g = &font->glyphs[c - FIRST_CHAR];
             width += g->advance_x;
         }
         p++;
@@ -203,7 +205,7 @@ float agentite_text_measure(Agentite_Font *font, const char *text)
     return width;
 }
 
-void agentite_text_measure_bounds(Agentite_Font *font, const char *text,
+void agentite_text_measure_bounds(const Agentite_Font *font, const char *text,
                                  float *out_width, float *out_height)
 {
     if (!font || !text) {

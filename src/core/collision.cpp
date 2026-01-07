@@ -421,7 +421,7 @@ static void compute_shape_aabb(const Agentite_CollisionShape *shape,
 
 Agentite_CollisionShape *agentite_collision_shape_circle(float radius) {
     if (radius <= 0.0f) {
-        agentite_set_error("Collision: Circle radius must be positive");
+        agentite_set_error("Collision: Circle radius must be positive (got %.2f)", radius);
         return NULL;
     }
 
@@ -438,7 +438,7 @@ Agentite_CollisionShape *agentite_collision_shape_circle(float radius) {
 
 Agentite_CollisionShape *agentite_collision_shape_aabb(float width, float height) {
     if (width <= 0.0f || height <= 0.0f) {
-        agentite_set_error("Collision: AABB dimensions must be positive");
+        agentite_set_error("Collision: AABB dimensions must be positive (got %.2fx%.2f)", width, height);
         return NULL;
     }
 
@@ -456,7 +456,7 @@ Agentite_CollisionShape *agentite_collision_shape_aabb(float width, float height
 
 Agentite_CollisionShape *agentite_collision_shape_obb(float width, float height) {
     if (width <= 0.0f || height <= 0.0f) {
-        agentite_set_error("Collision: OBB dimensions must be positive");
+        agentite_set_error("Collision: OBB dimensions must be positive (got %.2fx%.2f)", width, height);
         return NULL;
     }
 
@@ -476,7 +476,7 @@ Agentite_CollisionShape *agentite_collision_shape_capsule(
     float radius, float length, Agentite_CapsuleAxis axis)
 {
     if (radius <= 0.0f) {
-        agentite_set_error("Collision: Capsule radius must be positive");
+        agentite_set_error("Collision: Capsule radius must be positive (got %.2f)", radius);
         return NULL;
     }
 
@@ -497,7 +497,7 @@ Agentite_CollisionShape *agentite_collision_shape_polygon(
     const Agentite_CollisionVec2 *vertices, int count)
 {
     if (count < 3 || count > AGENTITE_COLLISION_MAX_POLYGON_VERTS) {
-        agentite_set_error("Collision: Polygon must have 3-%d vertices", AGENTITE_COLLISION_MAX_POLYGON_VERTS);
+        agentite_set_error("Collision: Polygon must have 3-%d vertices (got %d)", AGENTITE_COLLISION_MAX_POLYGON_VERTS, count);
         return NULL;
     }
 
@@ -661,7 +661,7 @@ Agentite_ColliderId agentite_collision_add(
     }
 
     if (world->count >= world->max_colliders) {
-        agentite_set_error("Collision: Maximum colliders reached");
+        agentite_set_error("Collision: Maximum colliders reached (%u/%u)", world->count, world->max_colliders);
         return AGENTITE_COLLIDER_INVALID;
     }
 

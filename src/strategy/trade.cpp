@@ -228,7 +228,7 @@ uint32_t agentite_trade_create_route_ex(Agentite_TradeSystem *trade,
 
     Agentite_TradeRoute *route = alloc_route(trade);
     if (!route) {
-        agentite_set_error("agentite_trade_create_route: max routes reached");
+        agentite_set_error("Trade: Maximum routes reached (limit: %d)", AGENTITE_TRADE_MAX_ROUTES);
         return AGENTITE_TRADE_INVALID;
     }
 
@@ -475,7 +475,7 @@ void agentite_trade_set_hub(Agentite_TradeSystem *trade, uint32_t location, bool
         if (!hub) {
             hub = alloc_hub(trade);
             if (!hub) {
-                agentite_set_error("agentite_trade_set_hub: max hubs reached");
+                agentite_set_error("Trade: Maximum hubs reached (%d/%d)", trade->hub_count, AGENTITE_TRADE_MAX_HUBS);
                 return;
             }
             trade->hub_count++;
@@ -499,7 +499,7 @@ void agentite_trade_set_hub_ex(Agentite_TradeSystem *trade, uint32_t location,
     if (!hub) {
         hub = alloc_hub(trade);
         if (!hub) {
-            agentite_set_error("agentite_trade_set_hub_ex: max hubs reached");
+            agentite_set_error("Trade: Maximum hubs reached (%d/%d)", trade->hub_count, AGENTITE_TRADE_MAX_HUBS);
             return;
         }
         trade->hub_count++;

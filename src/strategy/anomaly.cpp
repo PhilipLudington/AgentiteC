@@ -228,7 +228,7 @@ int agentite_anomaly_register_type(Agentite_AnomalyRegistry *registry,
     if (!registry || !def) return -1;
 
     if (registry->type_count >= AGENTITE_ANOMALY_MAX_TYPES) {
-        agentite_set_error("agentite_anomaly_register_type: max types reached");
+        agentite_set_error("Anomaly: Maximum types reached (%d/%d)", registry->type_count, AGENTITE_ANOMALY_MAX_TYPES);
         return -1;
     }
 
@@ -408,7 +408,7 @@ uint32_t agentite_anomaly_spawn_ex(Agentite_AnomalyManager *mgr,
     /* Allocate slot */
     Agentite_Anomaly *anomaly = alloc_anomaly(mgr);
     if (!anomaly) {
-        agentite_set_error("agentite_anomaly_spawn_ex: max anomalies reached");
+        agentite_set_error("Anomaly: Maximum anomalies reached (limit: %d)", AGENTITE_ANOMALY_MAX_INSTANCES);
         return AGENTITE_ANOMALY_INVALID;
     }
 

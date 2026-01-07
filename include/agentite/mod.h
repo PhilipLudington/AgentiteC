@@ -488,10 +488,10 @@ void agentite_mod_set_callback(Agentite_ModManager *manager,
 /**
  * Get a human-readable name for a mod state.
  *
- * @param state Mod state
- * @return Static string name
+ * @param state Mod state (accepts int to allow safe handling of invalid values)
+ * @return Static string name, or "UNKNOWN" for invalid states
  */
-const char *agentite_mod_state_name(Agentite_ModState state);
+const char *agentite_mod_state_name(int state);
 
 /**
  * Get the number of loaded mods.

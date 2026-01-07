@@ -360,7 +360,7 @@ Agentite_Physics2DBody *agentite_physics2d_body_create_dynamic(
     }
 
     if (mass <= 0) {
-        agentite_set_error("Mass must be positive");
+        agentite_set_error("Physics2D: Mass must be positive (got %.2f)", mass);
         return NULL;
     }
 

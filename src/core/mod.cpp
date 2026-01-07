@@ -418,7 +418,7 @@ void agentite_mod_remove_search_path(Agentite_ModManager *manager, const char *p
         if (strcmp(manager->search_paths[i], path) == 0) {
             /* Shift remaining paths */
             for (size_t j = i; j < manager->search_path_count - 1; j++) {
-                strcpy(manager->search_paths[j], manager->search_paths[j + 1]);
+                memcpy(manager->search_paths[j], manager->search_paths[j + 1], PATH_BUFFER_SIZE);
             }
             manager->search_path_count--;
             break;
@@ -1006,7 +1006,7 @@ void agentite_mod_set_callback(Agentite_ModManager *manager,
  * Utility
  * ============================================================================ */
 
-const char *agentite_mod_state_name(Agentite_ModState state)
+const char *agentite_mod_state_name(int state)
 {
     switch (state) {
         case AGENTITE_MOD_UNLOADED:   return "UNLOADED";

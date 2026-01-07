@@ -275,7 +275,7 @@ bool agentite_query_register_ex(Agentite_QuerySystem *sys,
 
     /* Check capacity */
     if (sys->query_count >= AGENTITE_QUERY_MAX_QUERIES) {
-        agentite_set_error("agentite_query_register: max queries reached");
+        agentite_set_error("Query: Maximum queries reached (%d/%d) when registering '%s'", sys->query_count, AGENTITE_QUERY_MAX_QUERIES, name);
         return false;
     }
 

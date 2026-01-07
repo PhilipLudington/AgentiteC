@@ -7,6 +7,8 @@
 
 #include "catch_amalgamated.hpp"
 #include "agentite/resource.h"
+#include <cstdint>
+#include <climits>
 
 /* ============================================================================
  * Initialization Tests
@@ -459,5 +461,218 @@ TEST_CASE("Resource edge cases", "[resource][edge]") {
 
         agentite_resource_tick(&r);
         REQUIRE(r.current == 130);  // 100 + 10 * 3
+    }
+}
+
+/* ============================================================================
+ * Overflow/Underflow Tests
+ * ============================================================================ */
+
+TEST_CASE("Resource overflow protection", "[resource][overflow]") {
+    SECTION("Add near INT_MAX doesn't overflow") {
+        Agentite_Resource r;
+        agentite_resource_init(&r, INT32_MAX - 100, 0, 0);  // Unlimited max
+
+        // Adding a reasonable amount should work
+        agentite_resource_add(&r, 50);
+        REQUIRE(r.current == INT32_MAX - 50);
+
+        // Adding more should not wrap around to negative
+        agentite_resource_add(&r, 100);
+        // Implementation should clamp or handle overflow
+        REQUIRE(r.current >= 0);  // At minimum, shouldn't be negative
+    }
+
+    SECTION("Add with large per_turn near INT_MAX") {
+        Agentite_Resource r;
+        agentite_resource_init(&r, INT32_MAX - 1000, 0, 500);  // Unlimited max
+
+        // Tick should not cause overflow
+        agentite_resource_tick(&r);
+        REQUIRE(r.current >= 0);  // Should not wrap to negative
+    }
+
+    SECTION("Add with very large modifier") {
+        Agentite_Resource r;
+        agentite_resource_init(&r, 1000000, 0, 1000000);
+
+        // Large modifier could cause overflow in multiplication
+        agentite_resource_set_modifier(&r, 1000.0f);
+        agentite_resource_tick(&r);
+
+        // Should either clamp or handle gracefully
+        REQUIRE(r.current >= 0);
+    }
+
+    SECTION("Maximum prevents overflow") {
+        Agentite_Resource r;
+        agentite_resource_init(&r, 1000, 2000, 100);
+
+        // Many ticks should never exceed maximum
+        for (int i = 0; i < 100; i++) {
+            agentite_resource_tick(&r);
+        }
+        REQUIRE(r.current == 2000);
+    }
+
+    SECTION("Set to INT_MAX") {
+        Agentite_Resource r;
+        agentite_resource_init(&r, 0, 0, 0);
+
+        agentite_resource_set(&r, INT32_MAX);
+        REQUIRE(r.current == INT32_MAX);
+    }
+
+    SECTION("Add to reach exactly INT_MAX") {
+        Agentite_Resource r;
+        agentite_resource_init(&r, 0, 0, 0);  // Unlimited max
+
+        agentite_resource_add(&r, INT32_MAX);
+        REQUIRE(r.current == INT32_MAX);
+    }
+}
+
+TEST_CASE("Resource underflow protection", "[resource][underflow]") {
+    SECTION("Spend more than current fails") {
+        Agentite_Resource r;
+        agentite_resource_init(&r, 100, 500, 10);
+
+        REQUIRE_FALSE(agentite_resource_spend(&r, 150));
+        REQUIRE(r.current == 100);  // Unchanged
+    }
+
+    SECTION("Negative add clamps to zero") {
+        Agentite_Resource r;
+        agentite_resource_init(&r, 100, 500, 10);
+
+        agentite_resource_add(&r, -1000);
+        REQUIRE(r.current == 0);  // Clamped, not negative
+    }
+
+    SECTION("Very negative add doesn't underflow") {
+        Agentite_Resource r;
+        agentite_resource_init(&r, 100, 500, 10);
+
+        agentite_resource_add(&r, INT32_MIN);
+        REQUIRE(r.current >= 0);  // Should not be negative
+    }
+
+    SECTION("Negative per_turn drains to zero") {
+        Agentite_Resource r;
+        agentite_resource_init(&r, 100, 500, -50);
+
+        agentite_resource_tick(&r);
+        REQUIRE(r.current == 50);
+
+        agentite_resource_tick(&r);
+        REQUIRE(r.current == 0);
+
+        // Another tick shouldn't go negative
+        agentite_resource_tick(&r);
+        REQUIRE(r.current == 0);
+    }
+
+    SECTION("Negative modifier drains to zero") {
+        Agentite_Resource r;
+        agentite_resource_init(&r, 100, 500, 10);
+        agentite_resource_set_modifier(&r, -5.0f);
+
+        agentite_resource_tick(&r);
+        REQUIRE(r.current == 50);  // 100 + (10 * -5) = 50
+
+        agentite_resource_tick(&r);
+        REQUIRE(r.current == 0);  // 50 + (-50) = 0, clamped
+    }
+
+    SECTION("Set negative value clamps to zero") {
+        Agentite_Resource r;
+        agentite_resource_init(&r, 100, 500, 10);
+
+        agentite_resource_set(&r, -500);
+        REQUIRE(r.current == 0);
+    }
+
+    SECTION("Set INT_MIN clamps to zero") {
+        Agentite_Resource r;
+        agentite_resource_init(&r, 100, 500, 10);
+
+        agentite_resource_set(&r, INT32_MIN);
+        REQUIRE(r.current == 0);
+    }
+}
+
+TEST_CASE("Resource boundary conditions", "[resource][boundary]") {
+    SECTION("Maximum of zero means unlimited") {
+        Agentite_Resource r;
+        agentite_resource_init(&r, 100, 0, 100);
+
+        // Should grow without limit
+        for (int i = 0; i < 100; i++) {
+            agentite_resource_tick(&r);
+        }
+        REQUIRE(r.current == 10100);  // 100 + 100*100
+    }
+
+    SECTION("Changing maximum clamps current") {
+        Agentite_Resource r;
+        agentite_resource_init(&r, 500, 1000, 10);
+
+        // Reduce maximum below current
+        agentite_resource_set_max(&r, 200);
+        REQUIRE(r.current == 200);  // Clamped to new max
+    }
+
+    SECTION("Changing maximum from unlimited to limited") {
+        Agentite_Resource r;
+        agentite_resource_init(&r, 1000, 0, 10);  // Unlimited
+
+        // Set a maximum
+        agentite_resource_set_max(&r, 500);
+        REQUIRE(r.current == 500);  // Clamped
+    }
+
+    SECTION("Spending exactly current succeeds") {
+        Agentite_Resource r;
+        agentite_resource_init(&r, 100, 500, 10);
+
+        REQUIRE(agentite_resource_spend(&r, 100));
+        REQUIRE(r.current == 0);
+    }
+
+    SECTION("Can afford exactly current") {
+        Agentite_Resource r;
+        agentite_resource_init(&r, 100, 500, 10);
+
+        REQUIRE(agentite_resource_can_afford(&r, 100));
+    }
+
+    SECTION("Preview tick doesn't modify state") {
+        Agentite_Resource r;
+        agentite_resource_init(&r, 100, 500, 10);
+
+        int original = r.current;
+        for (int i = 0; i < 100; i++) {
+            agentite_resource_preview_tick(&r);
+        }
+        REQUIRE(r.current == original);
+    }
+
+    SECTION("Negative per_turn with negative modifier") {
+        Agentite_Resource r;
+        agentite_resource_init(&r, 100, 500, -10);
+        agentite_resource_set_modifier(&r, -2.0f);
+
+        // -10 * -2 = +20
+        agentite_resource_tick(&r);
+        REQUIRE(r.current == 120);
+    }
+
+    SECTION("Zero per_turn with any modifier") {
+        Agentite_Resource r;
+        agentite_resource_init(&r, 100, 500, 0);
+        agentite_resource_set_modifier(&r, 1000.0f);
+
+        agentite_resource_tick(&r);
+        REQUIRE(r.current == 100);  // 0 * anything = 0
     }
 }

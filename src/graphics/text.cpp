@@ -661,6 +661,8 @@ static bool sdf_create_pipeline(Agentite_TextRenderer *tr, bool is_msdf)
 SDL_GPUTexture *text_create_font_atlas(Agentite_TextRenderer *tr,
                                         unsigned char *atlas_bitmap)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
+
     /* Create GPU texture for the atlas (single channel, but we upload as RGBA) */
     SDL_GPUTextureCreateInfo tex_info = {};
     tex_info.type = SDL_GPU_TEXTURETYPE_2D;
@@ -735,6 +737,7 @@ SDL_GPUTexture *text_create_font_atlas(Agentite_TextRenderer *tr,
 
 Agentite_TextRenderer *agentite_text_init(SDL_GPUDevice *gpu, SDL_Window *window)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!gpu || !window) return NULL;
 
     Agentite_TextRenderer *tr = AGENTITE_ALLOC(Agentite_TextRenderer);
@@ -830,6 +833,7 @@ Agentite_TextRenderer *agentite_text_init(SDL_GPUDevice *gpu, SDL_Window *window
 
 void agentite_text_shutdown(Agentite_TextRenderer *tr)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!tr) return;
 
     if (tr->pipeline) {

@@ -55,17 +55,26 @@ static void cmd_bind(Agentite_DebugSystem *debug, int argc, const char **argv, v
  * Internal Helpers
  * ============================================================================ */
 
-static void console_init(DebugConsole *console, int max_history, int max_output)
+static bool console_init(DebugConsole *console, int max_history, int max_output)
 {
     memset(console, 0, sizeof(*console));
 
     console->history_capacity = max_history;
     console->history = (char **)calloc((size_t)max_history, sizeof(char *));
+    if (!console->history) {
+        return false;
+    }
 
     console->output_capacity = max_output;
     console->output = (DebugOutputLine *)calloc((size_t)max_output, sizeof(DebugOutputLine));
+    if (!console->output) {
+        free(console->history);
+        console->history = NULL;
+        return false;
+    }
 
     console->history_index = -1;
+    return true;
 }
 
 static void console_deinit(DebugConsole *console)
@@ -173,9 +182,8 @@ Agentite_DebugSystem *agentite_debug_create(const Agentite_DebugConfig *config)
     debug->next_path_id = 1;
 
     /* Initialize console */
-    console_init(&debug->console, debug->config.console_max_history,
-                 debug->config.console_max_output);
-    if (!debug->console.history || !debug->console.output) {
+    if (!console_init(&debug->console, debug->config.console_max_history,
+                      debug->config.console_max_output)) {
         agentite_set_error("Failed to allocate console buffers");
         agentite_debug_destroy(debug);
         return NULL;

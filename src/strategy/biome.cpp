@@ -119,7 +119,7 @@ int agentite_biome_register(Agentite_BiomeSystem *system, const Agentite_BiomeDe
     AGENTITE_VALIDATE_PTR_RET(def, AGENTITE_BIOME_INVALID);
 
     if (system->count >= system->capacity) {
-        agentite_set_error("Biome system is full");
+        agentite_set_error("Biome: System is full (%d/%d)", system->count, system->capacity);
         return AGENTITE_BIOME_INVALID;
     }
 
@@ -354,7 +354,7 @@ Agentite_BiomeMap *agentite_biome_map_create(
     AGENTITE_VALIDATE_PTR_RET(system, NULL);
 
     if (width <= 0 || height <= 0) {
-        agentite_set_error("Invalid biome map dimensions");
+        agentite_set_error("Biome: Invalid map dimensions (%dx%d, expected positive values)", width, height);
         return NULL;
     }
 

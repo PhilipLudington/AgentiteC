@@ -26,7 +26,33 @@ struct Agentite_Engine {
     SDL_GPUTexture *swapchain_texture;  // Cached for multiple render passes
 };
 
+/* ============================================================================
+ * Thread Safety
+ * ============================================================================ */
+
+static SDL_ThreadID s_main_thread_id = 0;
+static bool s_main_thread_set = false;
+
+void agentite_set_main_thread(void) {
+    s_main_thread_id = SDL_GetCurrentThreadID();
+    s_main_thread_set = true;
+}
+
+bool agentite_is_main_thread(void) {
+    if (!s_main_thread_set) {
+        /* If not set yet, assume we're on the main thread (startup) */
+        return true;
+    }
+    return SDL_GetCurrentThreadID() == s_main_thread_id;
+}
+
+/* ============================================================================
+ * Engine Implementation
+ * ============================================================================ */
+
 Agentite_Engine *agentite_init(const Agentite_Config *config) {
+    /* Record main thread ID at startup */
+    agentite_set_main_thread();
     // Use default config if none provided
     Agentite_Config default_config = AGENTITE_DEFAULT_CONFIG;
     if (!config) {

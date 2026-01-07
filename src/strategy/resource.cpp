@@ -1,4 +1,5 @@
 #include "agentite/resource.h"
+#include <climits>
 
 void agentite_resource_init(Agentite_Resource *r, int initial, int maximum, int per_turn) {
     if (!r) return;
@@ -32,7 +33,22 @@ bool agentite_resource_spend(Agentite_Resource *r, int amount) {
 void agentite_resource_add(Agentite_Resource *r, int amount) {
     if (!r) return;
 
-    r->current += amount;
+    // Overflow-safe addition
+    if (amount > 0) {
+        // Check for positive overflow
+        if (r->current > INT_MAX - amount) {
+            r->current = INT_MAX;
+        } else {
+            r->current += amount;
+        }
+    } else if (amount < 0) {
+        // Check for negative overflow
+        if (r->current < INT_MIN - amount) {
+            r->current = INT_MIN;
+        } else {
+            r->current += amount;
+        }
+    }
 
     // Clamp to maximum if set
     if (r->maximum > 0 && r->current > r->maximum) {

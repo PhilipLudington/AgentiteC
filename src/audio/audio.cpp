@@ -77,8 +77,14 @@ static void audio_callback(void *userdata, SDL_AudioStream *stream, int addition
 
     // Ensure mix buffer is large enough
     if (samples_needed > audio->mix_buffer_size) {
-        audio->mix_buffer = (float*)realloc(audio->mix_buffer, samples_needed * sizeof(float));
-        audio->mix_buffer_size = samples_needed;
+        float *new_buffer = (float*)realloc(audio->mix_buffer, samples_needed * sizeof(float));
+        if (!new_buffer) {
+            // Keep using existing buffer at smaller size
+            samples_needed = audio->mix_buffer_size;
+        } else {
+            audio->mix_buffer = new_buffer;
+            audio->mix_buffer_size = samples_needed;
+        }
     }
 
     // Clear mix buffer
@@ -220,6 +226,12 @@ Agentite_Audio *agentite_audio_init(void) {
     // Allocate initial mix buffer
     audio->mix_buffer_size = 4096;
     audio->mix_buffer = (float*)malloc(audio->mix_buffer_size * sizeof(float));
+    if (!audio->mix_buffer) {
+        agentite_set_error("Audio: Failed to allocate mix buffer");
+        SDL_DestroyAudioStream(audio->stream);
+        free(audio);
+        return NULL;
+    }
 
     // Start playback
     SDL_ResumeAudioStreamDevice(audio->stream);
@@ -283,6 +295,10 @@ static bool convert_audio_to_device(Agentite_Audio *audio, Uint8 *src_data, Uint
     }
 
     *out_data = (uint8_t*)malloc(available);
+    if (!*out_data) {
+        SDL_DestroyAudioStream(conv);
+        return false;
+    }
     *out_length = SDL_GetAudioStreamData(conv, *out_data, available);
 
     SDL_DestroyAudioStream(conv);
@@ -506,7 +522,7 @@ void agentite_sound_set_loop(Agentite_Audio *audio, Agentite_SoundHandle handle,
     }
 }
 
-bool agentite_sound_is_playing(Agentite_Audio *audio, Agentite_SoundHandle handle) {
+bool agentite_sound_is_playing(const Agentite_Audio *audio, Agentite_SoundHandle handle) {
     if (!audio) return false;
     int ch = handle_to_channel(handle);
     if (ch >= 0) {
@@ -560,11 +576,11 @@ void agentite_music_set_volume(Agentite_Audio *audio, float volume) {
     audio->music_volume = clampf(volume, 0.0f, 1.0f);
 }
 
-bool agentite_music_is_playing(Agentite_Audio *audio) {
+bool agentite_music_is_playing(const Agentite_Audio *audio) {
     return audio && audio->music_playing && !audio->music_paused;
 }
 
-bool agentite_music_is_paused(Agentite_Audio *audio) {
+bool agentite_music_is_paused(const Agentite_Audio *audio) {
     return audio && audio->music_playing && audio->music_paused;
 }
 
@@ -573,7 +589,7 @@ void agentite_audio_set_master_volume(Agentite_Audio *audio, float volume) {
     audio->master_volume = clampf(volume, 0.0f, 1.0f);
 }
 
-float agentite_audio_get_master_volume(Agentite_Audio *audio) {
+float agentite_audio_get_master_volume(const Agentite_Audio *audio) {
     return audio ? audio->master_volume : 0.0f;
 }
 
@@ -582,7 +598,7 @@ void agentite_audio_set_sound_volume(Agentite_Audio *audio, float volume) {
     audio->sound_volume = clampf(volume, 0.0f, 1.0f);
 }
 
-float agentite_audio_get_sound_volume(Agentite_Audio *audio) {
+float agentite_audio_get_sound_volume(const Agentite_Audio *audio) {
     return audio ? audio->sound_volume : 0.0f;
 }
 
@@ -591,7 +607,7 @@ void agentite_audio_set_music_volume(Agentite_Audio *audio, float volume) {
     audio->global_music_volume = clampf(volume, 0.0f, 1.0f);
 }
 
-float agentite_audio_get_music_volume(Agentite_Audio *audio) {
+float agentite_audio_get_music_volume(const Agentite_Audio *audio) {
     return audio ? audio->global_music_volume : 0.0f;
 }
 

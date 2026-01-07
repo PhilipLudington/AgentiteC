@@ -85,6 +85,7 @@ void msdf_edge_coloring_simple(MSDF_Shape *shape, double angle_threshold, uint64
 
         /* Find corners in this contour */
         int *corners = (int *)malloc(contour->edge_count * sizeof(int));
+        if (!corners) continue;  /* Skip this contour on allocation failure */
         int corner_count = 0;
 
         for (int i = 0; i < contour->edge_count; i++) {

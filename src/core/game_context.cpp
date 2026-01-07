@@ -4,6 +4,68 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* ============================================================================
+ * Internal Helper Functions
+ * ============================================================================ */
+
+/* Initialize hot reload subsystem */
+static bool init_hot_reload(Agentite_GameContext *ctx,
+                            const Agentite_GameContextConfig *config)
+{
+    /* Create file watcher */
+    Agentite_FileWatcherConfig watcher_config = AGENTITE_FILE_WATCHER_CONFIG_DEFAULT;
+    ctx->watcher = agentite_watch_create(&watcher_config);
+    if (!ctx->watcher) {
+        agentite_set_error("Failed to initialize file watcher");
+        return false;
+    }
+
+    /* Add watch paths */
+    for (size_t i = 0; i < config->watch_path_count; i++) {
+        agentite_watch_add_path(ctx->watcher, config->watch_paths[i]);
+    }
+
+    /* Create hot reload manager */
+    Agentite_HotReloadConfig hr_config = AGENTITE_HOT_RELOAD_CONFIG_DEFAULT;
+    hr_config.watcher = ctx->watcher;
+    hr_config.sprites = ctx->sprites;
+    hr_config.audio = ctx->audio;
+    ctx->hotreload = agentite_hotreload_create(&hr_config);
+    if (!ctx->hotreload) {
+        agentite_set_error("Failed to initialize hot reload manager");
+        return false;
+    }
+
+    return true;
+}
+
+/* Initialize mod system */
+static bool init_mod_system(Agentite_GameContext *ctx,
+                            const Agentite_GameContextConfig *config)
+{
+    Agentite_ModManagerConfig mod_config = AGENTITE_MOD_MANAGER_CONFIG_DEFAULT;
+    mod_config.hotreload = ctx->hotreload;
+    mod_config.allow_overrides = config->allow_mod_overrides;
+    ctx->mods = agentite_mod_manager_create(&mod_config);
+    if (!ctx->mods) {
+        agentite_set_error("Failed to initialize mod manager");
+        return false;
+    }
+
+    /* Add mod search paths */
+    for (size_t i = 0; i < config->mod_path_count; i++) {
+        agentite_mod_add_search_path(ctx->mods, config->mod_paths[i]);
+    }
+
+    /* Scan for mods */
+    agentite_mod_scan(ctx->mods);
+    return true;
+}
+
+/* ============================================================================
+ * Public API
+ * ============================================================================ */
+
 Agentite_GameContext *agentite_game_context_create(const Agentite_GameContextConfig *config) {
     /* Use default config if none provided */
     Agentite_GameContextConfig default_config = AGENTITE_GAME_CONTEXT_DEFAULT;
@@ -146,49 +208,16 @@ Agentite_GameContext *agentite_game_context_create(const Agentite_GameContextCon
 
     /* 10. Initialize hot reload system (optional) */
     if (config->enable_hot_reload) {
-        /* Create file watcher */
-        Agentite_FileWatcherConfig watcher_config = AGENTITE_FILE_WATCHER_CONFIG_DEFAULT;
-        ctx->watcher = agentite_watch_create(&watcher_config);
-        if (!ctx->watcher) {
-            agentite_set_error("Failed to initialize file watcher");
-            goto error;
-        }
-
-        /* Add watch paths */
-        for (size_t i = 0; i < config->watch_path_count; i++) {
-            agentite_watch_add_path(ctx->watcher, config->watch_paths[i]);
-        }
-
-        /* Create hot reload manager */
-        Agentite_HotReloadConfig hr_config = AGENTITE_HOT_RELOAD_CONFIG_DEFAULT;
-        hr_config.watcher = ctx->watcher;
-        hr_config.sprites = ctx->sprites;
-        hr_config.audio = ctx->audio;
-        ctx->hotreload = agentite_hotreload_create(&hr_config);
-        if (!ctx->hotreload) {
-            agentite_set_error("Failed to initialize hot reload manager");
+        if (!init_hot_reload(ctx, config)) {
             goto error;
         }
     }
 
     /* 11. Initialize mod system (optional) */
     if (config->enable_mods) {
-        Agentite_ModManagerConfig mod_config = AGENTITE_MOD_MANAGER_CONFIG_DEFAULT;
-        mod_config.hotreload = ctx->hotreload;
-        mod_config.allow_overrides = config->allow_mod_overrides;
-        ctx->mods = agentite_mod_manager_create(&mod_config);
-        if (!ctx->mods) {
-            agentite_set_error("Failed to initialize mod manager");
+        if (!init_mod_system(ctx, config)) {
             goto error;
         }
-
-        /* Add mod search paths */
-        for (size_t i = 0; i < config->mod_path_count; i++) {
-            agentite_mod_add_search_path(ctx->mods, config->mod_paths[i]);
-        }
-
-        /* Scan for mods */
-        agentite_mod_scan(ctx->mods);
     }
 
     return ctx;

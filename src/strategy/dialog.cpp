@@ -325,7 +325,7 @@ bool agentite_dialog_queue_message_ex(Agentite_DialogSystem *dialog,
     AGENTITE_VALIDATE_PTR_RET(text, false);
 
     if (dialog->count >= dialog->capacity) {
-        agentite_set_error("Dialog: Message queue full");
+        agentite_set_error("Dialog: Message queue full (%d/%d)", dialog->count, dialog->capacity);
         return false;
     }
 
@@ -384,7 +384,7 @@ bool agentite_dialog_insert_front(Agentite_DialogSystem *dialog,
     AGENTITE_VALIDATE_PTR_RET(text, false);
 
     if (dialog->count >= dialog->capacity) {
-        agentite_set_error("Dialog: Message queue full");
+        agentite_set_error("Dialog: Message queue full (%d/%d)", dialog->count, dialog->capacity);
         return false;
     }
 

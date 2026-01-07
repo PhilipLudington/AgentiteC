@@ -112,6 +112,35 @@ static Agentite_SpatialBucket *find_bucket(Agentite_SpatialIndex *index, int x, 
 }
 
 /**
+ * @brief Find bucket at position (const version for queries, never creates)
+ */
+static const Agentite_SpatialBucket *find_bucket_const(const Agentite_SpatialIndex *index, int x, int y) {
+    uint32_t hash = hash_coords(x, y);
+    int start = hash % index->capacity;
+    int i = start;
+
+    do {
+        const Agentite_SpatialBucket *bucket = &index->buckets[i];
+
+        /* Empty bucket */
+        if (bucket->x == -1 && bucket->count == 0) {
+            return NULL;
+        }
+
+        /* Found matching bucket */
+        if (bucket->x == x && bucket->y == y) {
+            return bucket;
+        }
+
+        /* Linear probing */
+        i = (i + 1) % index->capacity;
+    } while (i != start);
+
+    /* Table is full */
+    return NULL;
+}
+
+/**
  * @brief Grow the hash table when load factor is too high
  */
 static bool grow_table(Agentite_SpatialIndex *index) {
@@ -282,17 +311,17 @@ bool agentite_spatial_move(Agentite_SpatialIndex *index,
  * Query Operations
  * ========================================================================= */
 
-bool agentite_spatial_has(Agentite_SpatialIndex *index, int x, int y) {
+bool agentite_spatial_has(const Agentite_SpatialIndex *index, int x, int y) {
     AGENTITE_VALIDATE_PTR_RET(index, false);
 
-    Agentite_SpatialBucket *bucket = find_bucket(index, x, y, false);
+    const Agentite_SpatialBucket *bucket = find_bucket_const(index, x, y);
     return bucket && bucket->count > 0;
 }
 
-uint32_t agentite_spatial_query(Agentite_SpatialIndex *index, int x, int y) {
+uint32_t agentite_spatial_query(const Agentite_SpatialIndex *index, int x, int y) {
     AGENTITE_VALIDATE_PTR_RET(index, AGENTITE_SPATIAL_INVALID);
 
-    Agentite_SpatialBucket *bucket = find_bucket(index, x, y, false);
+    const Agentite_SpatialBucket *bucket = find_bucket_const(index, x, y);
     if (!bucket || bucket->count == 0) {
         return AGENTITE_SPATIAL_INVALID;
     }
@@ -300,13 +329,13 @@ uint32_t agentite_spatial_query(Agentite_SpatialIndex *index, int x, int y) {
     return bucket->entities[0];
 }
 
-int agentite_spatial_query_all(Agentite_SpatialIndex *index, int x, int y,
+int agentite_spatial_query_all(const Agentite_SpatialIndex *index, int x, int y,
                              uint32_t *out_entities, int max_entities) {
     AGENTITE_VALIDATE_PTR_RET(index, 0);
     AGENTITE_VALIDATE_PTR_RET(out_entities, 0);
     if (max_entities <= 0) return 0;
 
-    Agentite_SpatialBucket *bucket = find_bucket(index, x, y, false);
+    const Agentite_SpatialBucket *bucket = find_bucket_const(index, x, y);
     if (!bucket || bucket->count == 0) {
         return 0;
     }
@@ -318,18 +347,18 @@ int agentite_spatial_query_all(Agentite_SpatialIndex *index, int x, int y,
     return count;
 }
 
-int agentite_spatial_count_at(Agentite_SpatialIndex *index, int x, int y) {
+int agentite_spatial_count_at(const Agentite_SpatialIndex *index, int x, int y) {
     AGENTITE_VALIDATE_PTR_RET(index, 0);
 
-    Agentite_SpatialBucket *bucket = find_bucket(index, x, y, false);
+    const Agentite_SpatialBucket *bucket = find_bucket_const(index, x, y);
     return bucket ? bucket->count : 0;
 }
 
-bool agentite_spatial_has_entity(Agentite_SpatialIndex *index, int x, int y, uint32_t entity_id) {
+bool agentite_spatial_has_entity(const Agentite_SpatialIndex *index, int x, int y, uint32_t entity_id) {
     AGENTITE_VALIDATE_PTR_RET(index, false);
     if (entity_id == AGENTITE_SPATIAL_INVALID) return false;
 
-    Agentite_SpatialBucket *bucket = find_bucket(index, x, y, false);
+    const Agentite_SpatialBucket *bucket = find_bucket_const(index, x, y);
     if (!bucket || bucket->count == 0) {
         return false;
     }
@@ -347,7 +376,7 @@ bool agentite_spatial_has_entity(Agentite_SpatialIndex *index, int x, int y, uin
  * Region Queries
  * ========================================================================= */
 
-int agentite_spatial_query_rect(Agentite_SpatialIndex *index,
+int agentite_spatial_query_rect(const Agentite_SpatialIndex *index,
                               int x1, int y1, int x2, int y2,
                               Agentite_SpatialQueryResult *out_results, int max_results) {
     AGENTITE_VALIDATE_PTR_RET(index, 0);
@@ -362,7 +391,7 @@ int agentite_spatial_query_rect(Agentite_SpatialIndex *index,
 
     for (int y = y1; y <= y2 && count < max_results; y++) {
         for (int x = x1; x <= x2 && count < max_results; x++) {
-            Agentite_SpatialBucket *bucket = find_bucket(index, x, y, false);
+            const Agentite_SpatialBucket *bucket = find_bucket_const(index, x, y);
             if (bucket && bucket->count > 0) {
                 for (int i = 0; i < bucket->count && count < max_results; i++) {
                     out_results[count].entity_id = bucket->entities[i];
@@ -377,7 +406,7 @@ int agentite_spatial_query_rect(Agentite_SpatialIndex *index,
     return count;
 }
 
-int agentite_spatial_query_radius(Agentite_SpatialIndex *index,
+int agentite_spatial_query_radius(const Agentite_SpatialIndex *index,
                                 int center_x, int center_y, int radius,
                                 Agentite_SpatialQueryResult *out_results, int max_results) {
     if (radius < 0) radius = 0;
@@ -388,7 +417,7 @@ int agentite_spatial_query_radius(Agentite_SpatialIndex *index,
                                      out_results, max_results);
 }
 
-int agentite_spatial_query_circle(Agentite_SpatialIndex *index,
+int agentite_spatial_query_circle(const Agentite_SpatialIndex *index,
                                 int center_x, int center_y, int radius,
                                 Agentite_SpatialQueryResult *out_results, int max_results) {
     AGENTITE_VALIDATE_PTR_RET(index, 0);
@@ -404,7 +433,7 @@ int agentite_spatial_query_circle(Agentite_SpatialIndex *index,
             int dy = y - center_y;
             if (dx * dx + dy * dy > radius_sq) continue;
 
-            Agentite_SpatialBucket *bucket = find_bucket(index, x, y, false);
+            const Agentite_SpatialBucket *bucket = find_bucket_const(index, x, y);
             if (bucket && bucket->count > 0) {
                 for (int i = 0; i < bucket->count && count < max_results; i++) {
                     out_results[count].entity_id = bucket->entities[i];
@@ -468,12 +497,12 @@ void agentite_spatial_iter_next(Agentite_SpatialIterator *iter) {
  * Statistics
  * ========================================================================= */
 
-int agentite_spatial_total_count(Agentite_SpatialIndex *index) {
+int agentite_spatial_total_count(const Agentite_SpatialIndex *index) {
     AGENTITE_VALIDATE_PTR_RET(index, 0);
     return index->total_entities;
 }
 
-int agentite_spatial_occupied_cells(Agentite_SpatialIndex *index) {
+int agentite_spatial_occupied_cells(const Agentite_SpatialIndex *index) {
     AGENTITE_VALIDATE_PTR_RET(index, 0);
 
     /* Count non-empty buckets */
@@ -486,7 +515,7 @@ int agentite_spatial_occupied_cells(Agentite_SpatialIndex *index) {
     return count;
 }
 
-float agentite_spatial_load_factor(Agentite_SpatialIndex *index) {
+float agentite_spatial_load_factor(const Agentite_SpatialIndex *index) {
     AGENTITE_VALIDATE_PTR_RET(index, 0.0f);
     return (float)index->occupied / (float)index->capacity;
 }

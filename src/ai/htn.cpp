@@ -430,7 +430,7 @@ int agentite_htn_register_primitive(Agentite_HTNDomain *domain, const char *name
 
     Agentite_HTNTask *task = alloc_task(domain);
     if (!task) {
-        agentite_set_error("agentite_htn_register_primitive: max tasks reached");
+        agentite_set_error("HTN: Maximum tasks reached (%d/%d) when adding '%s'", domain->task_count, AGENTITE_HTN_MAX_TASKS, name);
         return -1;
     }
 
@@ -497,7 +497,7 @@ int agentite_htn_register_compound(Agentite_HTNDomain *domain, const char *name)
 
     Agentite_HTNTask *task = alloc_task(domain);
     if (!task) {
-        agentite_set_error("agentite_htn_register_compound: max tasks reached");
+        agentite_set_error("HTN: Maximum tasks reached (%d/%d) when adding '%s'", domain->task_count, AGENTITE_HTN_MAX_TASKS, name);
         return -1;
     }
 
@@ -531,7 +531,7 @@ int agentite_htn_add_method(Agentite_HTNDomain *domain, const char *compound_nam
     }
 
     if (task->method_count >= AGENTITE_HTN_MAX_METHODS) {
-        agentite_set_error("agentite_htn_add_method: max methods reached for '%s'", compound_name);
+        agentite_set_error("HTN: Maximum methods reached (%d/%d) for compound task '%s'", task->method_count, AGENTITE_HTN_MAX_METHODS, compound_name);
         return -1;
     }
 

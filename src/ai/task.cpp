@@ -56,7 +56,7 @@ static int add_task(Agentite_TaskQueue *queue, Agentite_TaskType type,
     AGENTITE_VALIDATE_PTR_RET(queue, -1);
 
     if (queue->count >= queue->capacity) {
-        agentite_set_error("agentite_task_queue: queue is full");
+        agentite_set_error("Task: Queue is full (%d/%d)", queue->count, queue->capacity);
         return -1;
     }
 
@@ -492,7 +492,7 @@ int agentite_task_queue_insert_front(Agentite_TaskQueue *queue,
     AGENTITE_VALIDATE_PTR_RET(queue, -1);
 
     if (queue->count >= queue->capacity) {
-        agentite_set_error("agentite_task_queue_insert_front: queue is full");
+        agentite_set_error("Task: Queue is full (%d/%d)", queue->count, queue->capacity);
         return -1;
     }
 

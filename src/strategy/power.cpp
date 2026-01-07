@@ -322,7 +322,7 @@ static int add_pole_internal(Agentite_PowerSystem *ps, int x, int y, int radius,
     }
 
     if (id < 0) {
-        agentite_set_error("Maximum poles reached");
+        agentite_set_error("Power: Maximum poles reached (%d/%d)", ps->pole_count, AGENTITE_POWER_MAX_POLES);
         return AGENTITE_POWER_INVALID_ID;
     }
 
@@ -425,7 +425,7 @@ int agentite_power_add_producer(Agentite_PowerSystem *ps, int x, int y, int prod
     }
 
     if (id < 0) {
-        agentite_set_error("Maximum producers reached");
+        agentite_set_error("Power: Maximum producers reached (%d/%d)", ps->producer_count, AGENTITE_POWER_MAX_NODES);
         return AGENTITE_POWER_INVALID_ID;
     }
 
@@ -515,7 +515,7 @@ int agentite_power_add_consumer(Agentite_PowerSystem *ps, int x, int y, int cons
     }
 
     if (id < 0) {
-        agentite_set_error("Maximum consumers reached");
+        agentite_set_error("Power: Maximum consumers reached (%d/%d)", ps->consumer_count, AGENTITE_POWER_MAX_NODES);
         return AGENTITE_POWER_INVALID_ID;
     }
 

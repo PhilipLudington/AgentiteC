@@ -275,13 +275,13 @@ int agentite_strategy_add_option(Agentite_StrategyCoordinator *coord,
     if (!coord || !name || !curve) return -1;
 
     if (coord->option_count >= AGENTITE_STRATEGY_MAX_OPTIONS) {
-        agentite_set_error("Maximum strategy options reached");
+        agentite_set_error("Strategy: Maximum options reached (%d/%d) when adding '%s'", coord->option_count, AGENTITE_STRATEGY_MAX_OPTIONS, name);
         return -1;
     }
 
     /* Check for duplicate name */
     if (agentite_strategy_find_option(coord, name) >= 0) {
-        agentite_set_error("Option '%s' already exists", name);
+        agentite_set_error("Strategy: Option '%s' already exists", name);
         return -1;
     }
 

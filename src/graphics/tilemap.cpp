@@ -129,14 +129,14 @@ void agentite_tileset_destroy(Agentite_Tileset *tileset)
     free(tileset);
 }
 
-void agentite_tileset_get_tile_size(Agentite_Tileset *tileset, int *width, int *height)
+void agentite_tileset_get_tile_size(const Agentite_Tileset *tileset, int *width, int *height)
 {
     if (!tileset) return;
     if (width) *width = tileset->tile_width;
     if (height) *height = tileset->tile_height;
 }
 
-int agentite_tileset_get_tile_count(Agentite_Tileset *tileset)
+int agentite_tileset_get_tile_count(const Agentite_Tileset *tileset)
 {
     return tileset ? tileset->tile_count : 0;
 }
@@ -183,6 +183,14 @@ static void layer_destroy(Agentite_TileLayer *layer)
 }
 
 static Agentite_TileChunk *layer_get_chunk(Agentite_TileLayer *layer, int cx, int cy)
+{
+    if (!layer || cx < 0 || cy < 0 || cx >= layer->chunks_x || cy >= layer->chunks_y) {
+        return NULL;
+    }
+    return layer->chunks[cy * layer->chunks_x + cx];
+}
+
+static const Agentite_TileChunk *layer_get_chunk_const(const Agentite_TileLayer *layer, int cx, int cy)
 {
     if (!layer || cx < 0 || cy < 0 || cx >= layer->chunks_x || cy >= layer->chunks_y) {
         return NULL;
@@ -240,14 +248,14 @@ void agentite_tilemap_destroy(Agentite_Tilemap *tilemap)
     free(tilemap);
 }
 
-void agentite_tilemap_get_size(Agentite_Tilemap *tilemap, int *width, int *height)
+void agentite_tilemap_get_size(const Agentite_Tilemap *tilemap, int *width, int *height)
 {
     if (!tilemap) return;
     if (width) *width = tilemap->width;
     if (height) *height = tilemap->height;
 }
 
-void agentite_tilemap_get_tile_size(Agentite_Tilemap *tilemap, int *width, int *height)
+void agentite_tilemap_get_tile_size(const Agentite_Tilemap *tilemap, int *width, int *height)
 {
     if (!tilemap) return;
     if (width) *width = tilemap->tile_width;
@@ -282,6 +290,15 @@ Agentite_TileLayer *agentite_tilemap_get_layer(Agentite_Tilemap *tilemap, int in
     return tilemap->layers[index];
 }
 
+/* Internal const helper for getters */
+static const Agentite_TileLayer *tilemap_get_layer_const(const Agentite_Tilemap *tilemap, int index)
+{
+    if (!tilemap || index < 0 || index >= tilemap->layer_count) {
+        return NULL;
+    }
+    return tilemap->layers[index];
+}
+
 Agentite_TileLayer *agentite_tilemap_get_layer_by_name(Agentite_Tilemap *tilemap,
                                                    const char *name)
 {
@@ -295,7 +312,7 @@ Agentite_TileLayer *agentite_tilemap_get_layer_by_name(Agentite_Tilemap *tilemap
     return NULL;
 }
 
-int agentite_tilemap_get_layer_count(Agentite_Tilemap *tilemap)
+int agentite_tilemap_get_layer_count(const Agentite_Tilemap *tilemap)
 {
     return tilemap ? tilemap->layer_count : 0;
 }
@@ -306,9 +323,9 @@ void agentite_tilemap_set_layer_visible(Agentite_Tilemap *tilemap, int layer, bo
     if (l) l->visible = visible;
 }
 
-bool agentite_tilemap_get_layer_visible(Agentite_Tilemap *tilemap, int layer)
+bool agentite_tilemap_get_layer_visible(const Agentite_Tilemap *tilemap, int layer)
 {
-    Agentite_TileLayer *l = agentite_tilemap_get_layer(tilemap, layer);
+    const Agentite_TileLayer *l = tilemap_get_layer_const(tilemap, layer);
     return l ? l->visible : false;
 }
 
@@ -322,9 +339,9 @@ void agentite_tilemap_set_layer_opacity(Agentite_Tilemap *tilemap, int layer, fl
     }
 }
 
-float agentite_tilemap_get_layer_opacity(Agentite_Tilemap *tilemap, int layer)
+float agentite_tilemap_get_layer_opacity(const Agentite_Tilemap *tilemap, int layer)
 {
-    Agentite_TileLayer *l = agentite_tilemap_get_layer(tilemap, layer);
+    const Agentite_TileLayer *l = tilemap_get_layer_const(tilemap, layer);
     return l ? l->opacity : 0.0f;
 }
 
@@ -364,14 +381,14 @@ void agentite_tilemap_set_tile(Agentite_Tilemap *tilemap, int layer,
     chunk->tiles[idx] = tile;
 }
 
-Agentite_TileID agentite_tilemap_get_tile(Agentite_Tilemap *tilemap, int layer,
+Agentite_TileID agentite_tilemap_get_tile(const Agentite_Tilemap *tilemap, int layer,
                                       int x, int y)
 {
     if (!tilemap || x < 0 || y < 0 || x >= tilemap->width || y >= tilemap->height) {
         return AGENTITE_TILE_EMPTY;
     }
 
-    Agentite_TileLayer *l = agentite_tilemap_get_layer(tilemap, layer);
+    const Agentite_TileLayer *l = tilemap_get_layer_const(tilemap, layer);
     if (!l) return AGENTITE_TILE_EMPTY;
 
     int cx = x / AGENTITE_TILEMAP_CHUNK_SIZE;
@@ -379,7 +396,7 @@ Agentite_TileID agentite_tilemap_get_tile(Agentite_Tilemap *tilemap, int layer,
     int lx = x % AGENTITE_TILEMAP_CHUNK_SIZE;
     int ly = y % AGENTITE_TILEMAP_CHUNK_SIZE;
 
-    Agentite_TileChunk *chunk = layer_get_chunk(l, cx, cy);
+    const Agentite_TileChunk *chunk = layer_get_chunk_const(l, cx, cy);
     if (!chunk) return AGENTITE_TILE_EMPTY;
 
     return chunk->tiles[ly * AGENTITE_TILEMAP_CHUNK_SIZE + lx];
@@ -517,7 +534,7 @@ void agentite_tilemap_render(Agentite_Tilemap *tilemap,
  * Coordinate Conversion
  * ============================================================================ */
 
-void agentite_tilemap_world_to_tile(Agentite_Tilemap *tilemap,
+void agentite_tilemap_world_to_tile(const Agentite_Tilemap *tilemap,
                                   float world_x, float world_y,
                                   int *tile_x, int *tile_y)
 {
@@ -527,7 +544,7 @@ void agentite_tilemap_world_to_tile(Agentite_Tilemap *tilemap,
     if (tile_y) *tile_y = (int)floorf(world_y / tilemap->tile_height);
 }
 
-void agentite_tilemap_tile_to_world(Agentite_Tilemap *tilemap,
+void agentite_tilemap_tile_to_world(const Agentite_Tilemap *tilemap,
                                   int tile_x, int tile_y,
                                   float *world_x, float *world_y)
 {
@@ -537,7 +554,7 @@ void agentite_tilemap_tile_to_world(Agentite_Tilemap *tilemap,
     if (world_y) *world_y = (float)(tile_y * tilemap->tile_height);
 }
 
-Agentite_TileID agentite_tilemap_get_tile_at_world(Agentite_Tilemap *tilemap,
+Agentite_TileID agentite_tilemap_get_tile_at_world(const Agentite_Tilemap *tilemap,
                                                int layer,
                                                float world_x, float world_y)
 {
@@ -548,7 +565,7 @@ Agentite_TileID agentite_tilemap_get_tile_at_world(Agentite_Tilemap *tilemap,
     return agentite_tilemap_get_tile(tilemap, layer, tx, ty);
 }
 
-void agentite_tilemap_get_world_bounds(Agentite_Tilemap *tilemap,
+void agentite_tilemap_get_world_bounds(const Agentite_Tilemap *tilemap,
                                      float *left, float *right,
                                      float *top, float *bottom)
 {

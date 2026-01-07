@@ -54,16 +54,16 @@ void agentite_camera_set_viewport(Agentite_Camera *cam, float w, float h);
  * ============================================================================ */
 
 /* Get camera position */
-void agentite_camera_get_position(Agentite_Camera *cam, float *x, float *y);
+void agentite_camera_get_position(const Agentite_Camera *cam, float *x, float *y);
 
 /* Get zoom level */
-float agentite_camera_get_zoom(Agentite_Camera *cam);
+float agentite_camera_get_zoom(const Agentite_Camera *cam);
 
 /* Get rotation in degrees */
-float agentite_camera_get_rotation(Agentite_Camera *cam);
+float agentite_camera_get_rotation(const Agentite_Camera *cam);
 
 /* Get viewport dimensions */
-void agentite_camera_get_viewport(Agentite_Camera *cam, float *w, float *h);
+void agentite_camera_get_viewport(const Agentite_Camera *cam, float *w, float *h);
 
 /* ============================================================================
  * Matrix Access (for sprite renderer)
@@ -90,7 +90,7 @@ void agentite_camera_world_to_screen(Agentite_Camera *cam,
                                    float *screen_x, float *screen_y);
 
 /* Get visible world bounds (AABB) */
-void agentite_camera_get_bounds(Agentite_Camera *cam,
+void agentite_camera_get_bounds(const Agentite_Camera *cam,
                               float *left, float *right,
                               float *top, float *bottom);
 

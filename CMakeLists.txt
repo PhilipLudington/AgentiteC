@@ -298,6 +298,7 @@ if(AGENTITE_BUILD_TESTS)
         tests/strategy/*.cpp
         tests/ai/*.cpp
         tests/graphics/*.cpp
+        tests/security/*.cpp
     )
 
     add_executable(test_runner

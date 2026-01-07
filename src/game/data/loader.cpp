@@ -102,6 +102,11 @@ static bool parse_array(JsonParser *p, JsonArray **out) {
     (*out)->capacity = 8;
     (*out)->items = (JsonValue*)malloc(sizeof(JsonValue) * (*out)->capacity);
     (*out)->count = 0;
+    if (!(*out)->items) {
+        free(*out);
+        *out = NULL;
+        return false;
+    }
 
     if (peek(p) == ']') {
         p->pos++;
@@ -110,8 +115,11 @@ static bool parse_array(JsonParser *p, JsonArray **out) {
 
     while (1) {
         if ((*out)->count >= (*out)->capacity) {
-            (*out)->capacity *= 2;
-            (*out)->items = (JsonValue*)realloc((*out)->items, sizeof(JsonValue) * (*out)->capacity);
+            size_t new_capacity = (*out)->capacity * 2;
+            JsonValue *new_items = (JsonValue*)realloc((*out)->items, sizeof(JsonValue) * new_capacity);
+            if (!new_items) return false;
+            (*out)->items = new_items;
+            (*out)->capacity = new_capacity;
         }
 
         if (!parse_value(p, &(*out)->items[(*out)->count])) return false;
@@ -139,6 +147,13 @@ static bool parse_object(JsonParser *p, JsonObject **out) {
     (*out)->keys = (char**)malloc(sizeof(char*) * (*out)->capacity);
     (*out)->values = (JsonValue*)malloc(sizeof(JsonValue) * (*out)->capacity);
     (*out)->count = 0;
+    if (!(*out)->keys || !(*out)->values) {
+        free((*out)->keys);
+        free((*out)->values);
+        free(*out);
+        *out = NULL;
+        return false;
+    }
 
     if (peek(p) == '}') {
         p->pos++;
@@ -147,9 +162,18 @@ static bool parse_object(JsonParser *p, JsonObject **out) {
 
     while (1) {
         if ((*out)->count >= (*out)->capacity) {
-            (*out)->capacity *= 2;
-            (*out)->keys = (char**)realloc((*out)->keys, sizeof(char*) * (*out)->capacity);
-            (*out)->values = (JsonValue*)realloc((*out)->values, sizeof(JsonValue) * (*out)->capacity);
+            size_t new_capacity = (*out)->capacity * 2;
+            char **new_keys = (char**)realloc((*out)->keys, sizeof(char*) * new_capacity);
+            JsonValue *new_values = (JsonValue*)realloc((*out)->values, sizeof(JsonValue) * new_capacity);
+            if (!new_keys || !new_values) {
+                /* On partial failure, keep old pointers if one succeeded */
+                if (new_keys) (*out)->keys = new_keys;
+                if (new_values) (*out)->values = new_values;
+                return false;
+            }
+            (*out)->keys = new_keys;
+            (*out)->values = new_values;
+            (*out)->capacity = new_capacity;
         }
 
         if (!parse_string(p, &(*out)->keys[(*out)->count])) return false;
@@ -351,6 +375,10 @@ bool game_load_level(const char *path, LevelData *out_level) {
     if (tiles && tiles->type == JSON_ARRAY) {
         int count = json_array_length(tiles);
         out_level->tiles = (int*)malloc(sizeof(int) * count);
+        if (!out_level->tiles) {
+            json_free(&root);
+            return false;
+        }
         for (int i = 0; i < count; i++) {
             out_level->tiles[i] = json_get_int(json_array_get(tiles, i), 0);
         }
@@ -361,6 +389,12 @@ bool game_load_level(const char *path, LevelData *out_level) {
     if (spawns && spawns->type == JSON_ARRAY) {
         out_level->spawn_count = json_array_length(spawns);
         out_level->spawns = (EntitySpawnData*)malloc(sizeof(EntitySpawnData) * out_level->spawn_count);
+        if (!out_level->spawns) {
+            free(out_level->tiles);
+            out_level->tiles = NULL;
+            json_free(&root);
+            return false;
+        }
 
         for (int i = 0; i < out_level->spawn_count; i++) {
             JsonValue *spawn = json_array_get(spawns, i);

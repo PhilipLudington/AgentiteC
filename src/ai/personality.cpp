@@ -246,7 +246,7 @@ void agentite_ai_register_evaluator(Agentite_AISystem *ai,
     if (!ai || !evaluator) return;
 
     if (ai->evaluator_count >= AGENTITE_AI_MAX_EVALUATORS) {
-        agentite_set_error("agentite_ai_register_evaluator: max evaluators reached");
+        agentite_set_error("AI: Maximum evaluators reached (%d/%d) for type %d", ai->evaluator_count, AGENTITE_AI_MAX_EVALUATORS, (int)type);
         return;
     }
 

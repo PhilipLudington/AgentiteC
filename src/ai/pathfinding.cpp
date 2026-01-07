@@ -165,12 +165,12 @@ static bool heap_is_empty(BinaryHeap *heap)
  * Internal Helpers
  * ============================================================================ */
 
-static inline int grid_index(Agentite_Pathfinder *pf, int x, int y)
+static inline int grid_index(const Agentite_Pathfinder *pf, int x, int y)
 {
     return y * pf->width + x;
 }
 
-static inline bool in_bounds(Agentite_Pathfinder *pf, int x, int y)
+static inline bool in_bounds(const Agentite_Pathfinder *pf, int x, int y)
 {
     return x >= 0 && x < pf->width && y >= 0 && y < pf->height;
 }
@@ -297,7 +297,7 @@ void agentite_pathfinder_destroy(Agentite_Pathfinder *pf)
     free(pf);
 }
 
-void agentite_pathfinder_get_size(Agentite_Pathfinder *pf, int *width, int *height)
+void agentite_pathfinder_get_size(const Agentite_Pathfinder *pf, int *width, int *height)
 {
     if (!pf) return;
     if (width) *width = pf->width;
@@ -314,7 +314,7 @@ void agentite_pathfinder_set_walkable(Agentite_Pathfinder *pf, int x, int y, boo
     pf->grid[grid_index(pf, x, y)].walkable = walkable;
 }
 
-bool agentite_pathfinder_is_walkable(Agentite_Pathfinder *pf, int x, int y)
+bool agentite_pathfinder_is_walkable(const Agentite_Pathfinder *pf, int x, int y)
 {
     if (!pf || !in_bounds(pf, x, y)) return false;
     return pf->grid[grid_index(pf, x, y)].walkable;
@@ -327,7 +327,7 @@ void agentite_pathfinder_set_cost(Agentite_Pathfinder *pf, int x, int y, float c
     pf->grid[grid_index(pf, x, y)].cost = cost;
 }
 
-float agentite_pathfinder_get_cost(Agentite_Pathfinder *pf, int x, int y)
+float agentite_pathfinder_get_cost(const Agentite_Pathfinder *pf, int x, int y)
 {
     if (!pf || !in_bounds(pf, x, y)) return FLT_MAX;
     return pf->grid[grid_index(pf, x, y)].cost;
@@ -670,7 +670,7 @@ void agentite_path_destroy(Agentite_Path *path)
     free(path);
 }
 
-const Agentite_PathPoint *agentite_path_get_point(Agentite_Path *path, int index)
+const Agentite_PathPoint *agentite_path_get_point(const Agentite_Path *path, int index)
 {
     if (!path || index < 0 || index >= path->length) return NULL;
     return &path->points[index];

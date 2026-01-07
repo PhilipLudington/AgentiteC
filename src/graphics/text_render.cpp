@@ -164,6 +164,7 @@ void agentite_text_draw_ex(Agentite_TextRenderer *tr, Agentite_Font *font,
 
 void agentite_text_upload(Agentite_TextRenderer *tr, SDL_GPUCommandBuffer *cmd)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!tr || !cmd || tr->queued_batch_count == 0 || tr->vertex_count == 0) return;
 
     /* Upload vertex and index data */
@@ -215,6 +216,7 @@ void agentite_text_upload(Agentite_TextRenderer *tr, SDL_GPUCommandBuffer *cmd)
 void agentite_text_render(Agentite_TextRenderer *tr, SDL_GPUCommandBuffer *cmd,
                         SDL_GPURenderPass *pass)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!tr || !cmd || !pass || tr->queued_batch_count == 0) return;
 
     /* Build vertex uniforms once (shared by all batches) */

@@ -890,7 +890,7 @@ float *agentite_noise_heightmap_create(const Agentite_Noise *noise,
                                        int width, int height,
                                        const Agentite_HeightmapConfig *config) {
     if (!noise || width <= 0 || height <= 0) {
-        agentite_set_error("noise: invalid heightmap parameters");
+        agentite_set_error("Noise: Invalid heightmap dimensions (%dx%d, expected positive values)", width, height);
         return NULL;
     }
 
@@ -1051,7 +1051,8 @@ int *agentite_noise_tilemap_create(const Agentite_Noise *noise,
                                    int width, int height,
                                    const Agentite_NoiseTilemapConfig *config) {
     if (!noise || !config || width <= 0 || height <= 0 || config->tile_types < 2) {
-        agentite_set_error("noise: invalid tilemap parameters");
+        agentite_set_error("Noise: Invalid tilemap parameters (%dx%d with %d tile types, expected positive dimensions and >= 2 types)",
+                          width, height, config ? config->tile_types : 0);
         return NULL;
     }
 

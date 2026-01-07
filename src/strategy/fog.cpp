@@ -60,11 +60,11 @@ static inline int clamp_coord(int v, int min_val, int max_val) {
     return v;
 }
 
-static inline int get_index(Agentite_FogOfWar *fog, int x, int y) {
+static inline int get_index(const Agentite_FogOfWar *fog, int x, int y) {
     return y * fog->width + x;
 }
 
-static inline bool in_bounds(Agentite_FogOfWar *fog, int x, int y) {
+static inline bool in_bounds(const Agentite_FogOfWar *fog, int x, int y) {
     return x >= 0 && x < fog->width && y >= 0 && y < fog->height;
 }
 
@@ -76,6 +76,15 @@ static Agentite_VisionSourceData *find_source(Agentite_FogOfWar *fog, Agentite_V
         return NULL;
     }
     Agentite_VisionSourceData *source = &fog->sources[id - 1];
+    return source->active ? source : NULL;
+}
+
+/* Const version for query functions */
+static const Agentite_VisionSourceData *find_source_const(const Agentite_FogOfWar *fog, Agentite_VisionSource id) {
+    if (id == AGENTITE_VISION_SOURCE_INVALID || id > (uint32_t)fog->source_capacity) {
+        return NULL;
+    }
+    const Agentite_VisionSourceData *source = &fog->sources[id - 1];
     return source->active ? source : NULL;
 }
 
@@ -168,7 +177,7 @@ static void apply_source_visibility(Agentite_FogOfWar *fog, Agentite_VisionSourc
 
 Agentite_FogOfWar *agentite_fog_create(int width, int height) {
     if (width <= 0 || height <= 0) {
-        agentite_set_error("Fog: Invalid dimensions %dx%d", width, height);
+        agentite_set_error("Fog: Invalid dimensions (%dx%d, expected positive values)", width, height);
         return NULL;
     }
 
@@ -319,11 +328,11 @@ void agentite_fog_set_source_radius(Agentite_FogOfWar *fog, Agentite_VisionSourc
     }
 }
 
-bool agentite_fog_get_source(Agentite_FogOfWar *fog, Agentite_VisionSource source,
+bool agentite_fog_get_source(const Agentite_FogOfWar *fog, Agentite_VisionSource source,
                            int *out_x, int *out_y, int *out_radius) {
     AGENTITE_VALIDATE_PTR_RET(fog, false);
 
-    Agentite_VisionSourceData *s = find_source(fog, source);
+    const Agentite_VisionSourceData *s = find_source_const(fog, source);
     if (!s) return false;
 
     if (out_x) *out_x = s->x;
@@ -346,7 +355,7 @@ void agentite_fog_clear_sources(Agentite_FogOfWar *fog) {
     memset(fog->visibility, 0, grid_size);
 }
 
-int agentite_fog_source_count(Agentite_FogOfWar *fog) {
+int agentite_fog_source_count(const Agentite_FogOfWar *fog) {
     AGENTITE_VALIDATE_PTR_RET(fog, 0);
     return fog->source_count;
 }
@@ -383,7 +392,7 @@ void agentite_fog_force_update(Agentite_FogOfWar *fog) {
  * Visibility Queries
  * ========================================================================= */
 
-Agentite_VisibilityState agentite_fog_get_state(Agentite_FogOfWar *fog, int x, int y) {
+Agentite_VisibilityState agentite_fog_get_state(const Agentite_FogOfWar *fog, int x, int y) {
     AGENTITE_VALIDATE_PTR_RET(fog, AGENTITE_VIS_UNEXPLORED);
 
     if (!in_bounds(fog, x, y)) {
@@ -401,14 +410,14 @@ Agentite_VisibilityState agentite_fog_get_state(Agentite_FogOfWar *fog, int x, i
     }
 }
 
-bool agentite_fog_is_visible(Agentite_FogOfWar *fog, int x, int y) {
+bool agentite_fog_is_visible(const Agentite_FogOfWar *fog, int x, int y) {
     AGENTITE_VALIDATE_PTR_RET(fog, false);
 
     if (!in_bounds(fog, x, y)) return false;
     return fog->visibility[get_index(fog, x, y)] > 0;
 }
 
-bool agentite_fog_is_explored(Agentite_FogOfWar *fog, int x, int y) {
+bool agentite_fog_is_explored(const Agentite_FogOfWar *fog, int x, int y) {
     AGENTITE_VALIDATE_PTR_RET(fog, false);
 
     if (!in_bounds(fog, x, y)) return false;
@@ -416,7 +425,7 @@ bool agentite_fog_is_explored(Agentite_FogOfWar *fog, int x, int y) {
     return fog->exploration[idx] > 0 || fog->visibility[idx] > 0;
 }
 
-bool agentite_fog_is_unexplored(Agentite_FogOfWar *fog, int x, int y) {
+bool agentite_fog_is_unexplored(const Agentite_FogOfWar *fog, int x, int y) {
     AGENTITE_VALIDATE_PTR_RET(fog, true);
 
     if (!in_bounds(fog, x, y)) return true;
@@ -424,7 +433,7 @@ bool agentite_fog_is_unexplored(Agentite_FogOfWar *fog, int x, int y) {
     return fog->exploration[idx] == 0 && fog->visibility[idx] == 0;
 }
 
-float agentite_fog_get_alpha(Agentite_FogOfWar *fog, int x, int y) {
+float agentite_fog_get_alpha(const Agentite_FogOfWar *fog, int x, int y) {
     AGENTITE_VALIDATE_PTR_RET(fog, 0.0f);
 
     Agentite_VisibilityState state = agentite_fog_get_state(fog, x, y);
@@ -447,7 +456,7 @@ void agentite_fog_set_shroud_alpha(Agentite_FogOfWar *fog, float alpha) {
     fog->shroud_alpha = alpha;
 }
 
-float agentite_fog_get_shroud_alpha(Agentite_FogOfWar *fog) {
+float agentite_fog_get_shroud_alpha(const Agentite_FogOfWar *fog) {
     AGENTITE_VALIDATE_PTR_RET(fog, 0.5f);
     return fog->shroud_alpha;
 }
@@ -456,7 +465,7 @@ float agentite_fog_get_shroud_alpha(Agentite_FogOfWar *fog) {
  * Region Queries
  * ========================================================================= */
 
-bool agentite_fog_any_visible_in_rect(Agentite_FogOfWar *fog, int x1, int y1, int x2, int y2) {
+bool agentite_fog_any_visible_in_rect(const Agentite_FogOfWar *fog, int x1, int y1, int x2, int y2) {
     AGENTITE_VALIDATE_PTR_RET(fog, false);
 
     /* Normalize and clamp coordinates */
@@ -477,7 +486,7 @@ bool agentite_fog_any_visible_in_rect(Agentite_FogOfWar *fog, int x1, int y1, in
     return false;
 }
 
-bool agentite_fog_all_visible_in_rect(Agentite_FogOfWar *fog, int x1, int y1, int x2, int y2) {
+bool agentite_fog_all_visible_in_rect(const Agentite_FogOfWar *fog, int x1, int y1, int x2, int y2) {
     AGENTITE_VALIDATE_PTR_RET(fog, false);
 
     /* Normalize and clamp coordinates */
@@ -498,7 +507,7 @@ bool agentite_fog_all_visible_in_rect(Agentite_FogOfWar *fog, int x1, int y1, in
     return true;
 }
 
-int agentite_fog_count_visible_in_rect(Agentite_FogOfWar *fog, int x1, int y1, int x2, int y2) {
+int agentite_fog_count_visible_in_rect(const Agentite_FogOfWar *fog, int x1, int y1, int x2, int y2) {
     AGENTITE_VALIDATE_PTR_RET(fog, 0);
 
     /* Normalize and clamp coordinates */
@@ -595,7 +604,7 @@ void agentite_fog_set_exploration_callback(Agentite_FogOfWar *fog,
  * Statistics
  * ========================================================================= */
 
-void agentite_fog_get_size(Agentite_FogOfWar *fog, int *out_width, int *out_height) {
+void agentite_fog_get_size(const Agentite_FogOfWar *fog, int *out_width, int *out_height) {
     if (!fog) {
         if (out_width) *out_width = 0;
         if (out_height) *out_height = 0;
@@ -606,7 +615,7 @@ void agentite_fog_get_size(Agentite_FogOfWar *fog, int *out_width, int *out_heig
     if (out_height) *out_height = fog->height;
 }
 
-void agentite_fog_get_stats(Agentite_FogOfWar *fog,
+void agentite_fog_get_stats(const Agentite_FogOfWar *fog,
                           int *out_unexplored, int *out_explored, int *out_visible) {
     if (!fog) {
         if (out_unexplored) *out_unexplored = 0;
@@ -635,7 +644,7 @@ void agentite_fog_get_stats(Agentite_FogOfWar *fog,
     if (out_visible) *out_visible = visible;
 }
 
-float agentite_fog_get_exploration_percent(Agentite_FogOfWar *fog) {
+float agentite_fog_get_exploration_percent(const Agentite_FogOfWar *fog) {
     AGENTITE_VALIDATE_PTR_RET(fog, 0.0f);
 
     int total = fog->width * fog->height;

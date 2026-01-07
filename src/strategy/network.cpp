@@ -214,8 +214,8 @@ static void build_groups(Agentite_NetworkSystem *network) {
                 /* Grow groups array */
                 int new_cap = network->group_capacity * 2;
                 if (new_cap < 16) new_cap = 16;
-                Agentite_NetworkGroup *new_groups = (Agentite_NetworkGroup*)realloc(network->groups,
-                                                           new_cap * sizeof(Agentite_NetworkGroup));
+                Agentite_NetworkGroup *new_groups = AGENTITE_REALLOC(network->groups,
+                                                           Agentite_NetworkGroup, new_cap);
                 if (!new_groups) continue;
                 network->groups = new_groups;
                 network->group_capacity = new_cap;
@@ -309,7 +309,7 @@ uint32_t agentite_network_add_node(Agentite_NetworkSystem *network, int x, int y
         NetworkNodeInternal *new_nodes = (NetworkNodeInternal*)realloc(network->nodes,
                                                   new_cap * sizeof(NetworkNodeInternal));
         if (!new_nodes) {
-            agentite_set_error("Network: Failed to grow node array");
+            agentite_set_error("Network: Failed to grow node array (%d to %d nodes)", network->capacity, new_cap);
             return AGENTITE_NETWORK_INVALID;
         }
 
@@ -323,7 +323,7 @@ uint32_t agentite_network_add_node(Agentite_NetworkSystem *network, int x, int y
 
     int slot = find_empty_slot(network);
     if (slot < 0) {
-        agentite_set_error("Network: No empty slot");
+        agentite_set_error("Network: No empty slot (%d/%d nodes)", network->count, network->capacity);
         return AGENTITE_NETWORK_INVALID;
     }
 

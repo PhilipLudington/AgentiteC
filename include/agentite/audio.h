@@ -40,7 +40,7 @@ void agentite_sound_stop(Agentite_Audio *audio, Agentite_SoundHandle handle);
 void agentite_sound_set_volume(Agentite_Audio *audio, Agentite_SoundHandle handle, float volume);
 void agentite_sound_set_pan(Agentite_Audio *audio, Agentite_SoundHandle handle, float pan);
 void agentite_sound_set_loop(Agentite_Audio *audio, Agentite_SoundHandle handle, bool loop);
-bool agentite_sound_is_playing(Agentite_Audio *audio, Agentite_SoundHandle handle);
+bool agentite_sound_is_playing(const Agentite_Audio *audio, Agentite_SoundHandle handle);
 
 // Stop all playing sounds
 void agentite_sound_stop_all(Agentite_Audio *audio);
@@ -52,18 +52,18 @@ void agentite_music_stop(Agentite_Audio *audio);
 void agentite_music_pause(Agentite_Audio *audio);
 void agentite_music_resume(Agentite_Audio *audio);
 void agentite_music_set_volume(Agentite_Audio *audio, float volume);
-bool agentite_music_is_playing(Agentite_Audio *audio);
-bool agentite_music_is_paused(Agentite_Audio *audio);
+bool agentite_music_is_playing(const Agentite_Audio *audio);
+bool agentite_music_is_paused(const Agentite_Audio *audio);
 
 // Master volume control (0.0 to 1.0)
 void agentite_audio_set_master_volume(Agentite_Audio *audio, float volume);
-float agentite_audio_get_master_volume(Agentite_Audio *audio);
+float agentite_audio_get_master_volume(const Agentite_Audio *audio);
 
 // Separate volume controls for sounds and music
 void agentite_audio_set_sound_volume(Agentite_Audio *audio, float volume);
-float agentite_audio_get_sound_volume(Agentite_Audio *audio);
+float agentite_audio_get_sound_volume(const Agentite_Audio *audio);
 void agentite_audio_set_music_volume(Agentite_Audio *audio, float volume);
-float agentite_audio_get_music_volume(Agentite_Audio *audio);
+float agentite_audio_get_music_volume(const Agentite_Audio *audio);
 
 // Update (call once per frame for streaming music)
 void agentite_audio_update(Agentite_Audio *audio);

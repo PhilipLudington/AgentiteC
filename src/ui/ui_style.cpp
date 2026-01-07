@@ -1012,11 +1012,9 @@ const char *aui_truncate_text_ellipsis(AUI_Context *ctx, const char *text,
 
     /* Build truncated string */
     if (fit > 0) {
-        strncpy(s_ellipsis_buffer, text, fit);
-        s_ellipsis_buffer[fit] = '\0';
-        strcat(s_ellipsis_buffer, "...");
+        snprintf(s_ellipsis_buffer, sizeof(s_ellipsis_buffer), "%.*s...", (int)fit, text);
     } else {
-        strcpy(s_ellipsis_buffer, "...");
+        snprintf(s_ellipsis_buffer, sizeof(s_ellipsis_buffer), "...");
     }
 
     return s_ellipsis_buffer;

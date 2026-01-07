@@ -123,7 +123,7 @@ uint32_t agentite_construction_add_ghost_ex(
     AGENTITE_VALIDATE_PTR_RET(queue, AGENTITE_GHOST_INVALID);
 
     if (queue->count >= queue->capacity) {
-        agentite_set_error("Construction queue is full");
+        agentite_set_error("Construction: Queue is full (%d/%d)", queue->count, queue->capacity);
         return AGENTITE_GHOST_INVALID;
     }
 
@@ -137,7 +137,7 @@ uint32_t agentite_construction_add_ghost_ex(
     }
 
     if (slot_idx < 0) {
-        agentite_set_error("No available slot in construction queue");
+        agentite_set_error("Construction: No available slot in queue (%d/%d)", queue->count, queue->capacity);
         return AGENTITE_GHOST_INVALID;
     }
 

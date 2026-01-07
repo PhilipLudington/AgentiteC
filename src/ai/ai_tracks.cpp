@@ -104,7 +104,7 @@ static Agentite_AITrackBudget *get_or_create_budget(AITrack *track, int32_t reso
 
     /* Find free slot */
     if (track->budget_count >= AGENTITE_AI_TRACKS_MAX_BUDGETS) {
-        agentite_set_error("agentite_ai_tracks: max budgets per track reached");
+        agentite_set_error("AI Tracks: Maximum budgets per track reached (%d/%d)", track->budget_count, AGENTITE_AI_TRACKS_MAX_BUDGETS);
         return NULL;
     }
 
@@ -240,7 +240,7 @@ int agentite_ai_tracks_register_ex(Agentite_AITrackSystem *tracks,
     }
 
     if (slot < 0) {
-        agentite_set_error("agentite_ai_tracks_register: max tracks reached");
+        agentite_set_error("AI Tracks: Maximum tracks reached (%d/%d) when registering '%s'", tracks->track_count, AGENTITE_AI_TRACKS_MAX, name);
         return -1;
     }
 

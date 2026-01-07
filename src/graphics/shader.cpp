@@ -534,7 +534,7 @@ bool agentite_uniform_update(Agentite_UniformBuffer *ub,
 {
     if (!ub || !data) return false;
     if (offset + size > ub->size) {
-        agentite_set_error("Shader: Uniform update exceeds buffer size");
+        agentite_set_error("Shader: Uniform update exceeds buffer size (offset %zu + size %zu > buffer %zu)", offset, size, ub->size);
         return false;
     }
 

@@ -89,7 +89,7 @@ int agentite_recipe_register(Agentite_RecipeRegistry *registry, const Agentite_R
     AGENTITE_VALIDATE_PTR_RET(def, -1);
 
     if (registry->count >= registry->capacity) {
-        agentite_set_error("Recipe registry is full");
+        agentite_set_error("Crafting: Recipe registry is full (%d/%d)", registry->count, registry->capacity);
         return -1;
     }
 
@@ -397,7 +397,7 @@ bool agentite_crafter_queue(Agentite_Crafter *crafter, const char *id, int quant
     AGENTITE_VALIDATE_STRING_RET(id, false);
 
     if (crafter->queue_count >= AGENTITE_CRAFTER_MAX_QUEUE) {
-        agentite_set_error("Craft queue is full");
+        agentite_set_error("Crafting: Queue is full (%d/%d)", crafter->queue_count, AGENTITE_CRAFTER_MAX_QUEUE);
         return false;
     }
 

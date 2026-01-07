@@ -291,6 +291,7 @@ Agentite_SDFFont *agentite_sdf_font_load(Agentite_TextRenderer *tr,
                                       const char *atlas_path,
                                       const char *metrics_path)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!tr || !atlas_path || !metrics_path) return NULL;
 
     /* Read JSON metrics file */
@@ -487,6 +488,7 @@ Agentite_SDFFont *agentite_sdf_font_load(Agentite_TextRenderer *tr,
 
 void agentite_sdf_font_destroy(Agentite_TextRenderer *tr, Agentite_SDFFont *font)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!tr || !font) return;
 
     if (font->atlas_texture) {
@@ -506,6 +508,7 @@ Agentite_SDFFont *agentite_sdf_font_generate(Agentite_TextRenderer *tr,
                                           const char *ttf_path,
                                           const Agentite_SDFFontGenConfig *config)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!tr || !ttf_path) return NULL;
 
     /* Use defaults if no config provided */
@@ -796,27 +799,27 @@ Agentite_SDFFont *agentite_sdf_font_generate(Agentite_TextRenderer *tr,
     return font;
 }
 
-Agentite_SDFFontType agentite_sdf_font_get_type(Agentite_SDFFont *font)
+Agentite_SDFFontType agentite_sdf_font_get_type(const Agentite_SDFFont *font)
 {
     return font ? font->type : AGENTITE_SDF_TYPE_SDF;
 }
 
-float agentite_sdf_font_get_size(Agentite_SDFFont *font)
+float agentite_sdf_font_get_size(const Agentite_SDFFont *font)
 {
     return font ? font->font_size : 0.0f;
 }
 
-float agentite_sdf_font_get_line_height(Agentite_SDFFont *font)
+float agentite_sdf_font_get_line_height(const Agentite_SDFFont *font)
 {
     return font ? font->line_height * font->font_size : 0.0f;
 }
 
-float agentite_sdf_font_get_ascent(Agentite_SDFFont *font)
+float agentite_sdf_font_get_ascent(const Agentite_SDFFont *font)
 {
     return font ? font->ascender * font->font_size : 0.0f;
 }
 
-float agentite_sdf_font_get_descent(Agentite_SDFFont *font)
+float agentite_sdf_font_get_descent(const Agentite_SDFFont *font)
 {
     return font ? font->descender * font->font_size : 0.0f;
 }
@@ -827,6 +830,17 @@ float agentite_sdf_font_get_descent(Agentite_SDFFont *font)
 
 /* Find glyph by codepoint */
 SDFGlyphInfo *text_sdf_find_glyph(Agentite_SDFFont *font, uint32_t codepoint)
+{
+    for (int i = 0; i < font->glyph_count; i++) {
+        if (font->glyphs[i].codepoint == codepoint) {
+            return &font->glyphs[i];
+        }
+    }
+    return NULL;
+}
+
+/* Find glyph by codepoint (const version for measurement functions) */
+static const SDFGlyphInfo *text_sdf_find_glyph_const(const Agentite_SDFFont *font, uint32_t codepoint)
 {
     for (int i = 0; i < font->glyph_count; i++) {
         if (font->glyphs[i].codepoint == codepoint) {
@@ -1023,7 +1037,7 @@ void agentite_sdf_text_set_weight(Agentite_TextRenderer *tr, float weight)
  * SDF Text Measurement
  * ============================================================================ */
 
-float agentite_sdf_text_measure(Agentite_SDFFont *font, const char *text, float scale)
+float agentite_sdf_text_measure(const Agentite_SDFFont *font, const char *text, float scale)
 {
     if (!font || !text) return 0.0f;
 
@@ -1033,7 +1047,7 @@ float agentite_sdf_text_measure(Agentite_SDFFont *font, const char *text, float 
 
     while (*p) {
         unsigned char c = (unsigned char)*p;
-        SDFGlyphInfo *glyph = text_sdf_find_glyph(font, c);
+        const SDFGlyphInfo *glyph = text_sdf_find_glyph_const(font, c);
         if (glyph) {
             width += glyph->advance * px_size;
         }
@@ -1043,7 +1057,7 @@ float agentite_sdf_text_measure(Agentite_SDFFont *font, const char *text, float 
     return width;
 }
 
-void agentite_sdf_text_measure_bounds(Agentite_SDFFont *font, const char *text, float scale,
+void agentite_sdf_text_measure_bounds(const Agentite_SDFFont *font, const char *text, float scale,
                                      float *out_width, float *out_height)
 {
     if (!font || !text) {

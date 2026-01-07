@@ -121,7 +121,7 @@ Agentite_Texture *agentite_texture_create(Agentite_SpriteRenderer *sr,
 void agentite_texture_destroy(Agentite_SpriteRenderer *sr, Agentite_Texture *texture);
 
 /* Get texture dimensions */
-void agentite_texture_get_size(Agentite_Texture *texture, int *width, int *height);
+void agentite_texture_get_size(const Agentite_Texture *texture, int *width, int *height);
 
 /**
  * Set texture scale mode.
@@ -239,7 +239,7 @@ typedef struct Agentite_Camera Agentite_Camera;
 void agentite_sprite_set_camera(Agentite_SpriteRenderer *sr, Agentite_Camera *camera);
 
 /* Get current camera */
-Agentite_Camera *agentite_sprite_get_camera(Agentite_SpriteRenderer *sr);
+Agentite_Camera *agentite_sprite_get_camera(const Agentite_SpriteRenderer *sr);
 
 /* ============================================================================
  * Render-to-Texture Functions
@@ -272,7 +272,7 @@ void agentite_sprite_end_render_to_texture(SDL_GPURenderPass *pass);
  * ============================================================================ */
 
 /* Check if vignette pipeline is available */
-bool agentite_sprite_has_vignette(Agentite_SpriteRenderer *sr);
+bool agentite_sprite_has_vignette(const Agentite_SpriteRenderer *sr);
 
 /* Render scene texture with vignette effect applied */
 void agentite_sprite_render_vignette(Agentite_SpriteRenderer *sr,

@@ -120,20 +120,20 @@ Agentite_Font *agentite_font_load_memory(Agentite_TextRenderer *tr,
 void agentite_font_destroy(Agentite_TextRenderer *tr, Agentite_Font *font);
 
 /* Get font metrics */
-float agentite_font_get_size(Agentite_Font *font);
-float agentite_font_get_line_height(Agentite_Font *font);
-float agentite_font_get_ascent(Agentite_Font *font);
-float agentite_font_get_descent(Agentite_Font *font);
+float agentite_font_get_size(const Agentite_Font *font);
+float agentite_font_get_line_height(const Agentite_Font *font);
+float agentite_font_get_ascent(const Agentite_Font *font);
+float agentite_font_get_descent(const Agentite_Font *font);
 
 /* ============================================================================
  * Text Measurement
  * ============================================================================ */
 
 /* Measure text dimensions (returns width) */
-float agentite_text_measure(Agentite_Font *font, const char *text);
+float agentite_text_measure(const Agentite_Font *font, const char *text);
 
 /* Measure text bounds (full rectangle) */
-void agentite_text_measure_bounds(Agentite_Font *font, const char *text,
+void agentite_text_measure_bounds(const Agentite_Font *font, const char *text,
                                  float *out_width, float *out_height);
 
 /* ============================================================================
@@ -240,13 +240,13 @@ Agentite_SDFFont *agentite_sdf_font_generate(Agentite_TextRenderer *tr,
 void agentite_sdf_font_destroy(Agentite_TextRenderer *tr, Agentite_SDFFont *font);
 
 /* Get SDF font type (SDF or MSDF) */
-Agentite_SDFFontType agentite_sdf_font_get_type(Agentite_SDFFont *font);
+Agentite_SDFFontType agentite_sdf_font_get_type(const Agentite_SDFFont *font);
 
 /* Get SDF font metrics */
-float agentite_sdf_font_get_size(Agentite_SDFFont *font);
-float agentite_sdf_font_get_line_height(Agentite_SDFFont *font);
-float agentite_sdf_font_get_ascent(Agentite_SDFFont *font);
-float agentite_sdf_font_get_descent(Agentite_SDFFont *font);
+float agentite_sdf_font_get_size(const Agentite_SDFFont *font);
+float agentite_sdf_font_get_line_height(const Agentite_SDFFont *font);
+float agentite_sdf_font_get_ascent(const Agentite_SDFFont *font);
+float agentite_sdf_font_get_descent(const Agentite_SDFFont *font);
 
 /* ============================================================================
  * SDF Text Drawing
@@ -310,10 +310,10 @@ void agentite_sdf_text_set_weight(Agentite_TextRenderer *tr, float weight);
  * ============================================================================ */
 
 /* Measure SDF text width at given scale */
-float agentite_sdf_text_measure(Agentite_SDFFont *font, const char *text, float scale);
+float agentite_sdf_text_measure(const Agentite_SDFFont *font, const char *text, float scale);
 
 /* Measure SDF text bounds at given scale */
-void agentite_sdf_text_measure_bounds(Agentite_SDFFont *font, const char *text, float scale,
+void agentite_sdf_text_measure_bounds(const Agentite_SDFFont *font, const char *text, float scale,
                                      float *out_width, float *out_height);
 
 #ifdef __cplusplus

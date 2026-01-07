@@ -286,9 +286,11 @@ static void aui_richtext_parse_internal(AUI_RichText *rt, const char *bbcode)
     /* Allocate buffers if needed */
     if (!rt->plain) {
         rt->plain = (char *)malloc(MAX_PLAIN_TEXT);
+        if (!rt->plain) return;
     }
     if (!rt->bbcode) {
         rt->bbcode = (char *)malloc(MAX_BBCODE_TEXT);
+        if (!rt->bbcode) return;
     }
 
     /* Copy bbcode */
@@ -451,6 +453,10 @@ AUI_RichText *aui_richtext_create(const char *plain_text)
             rt->plain_len = MAX_PLAIN_TEXT - 1;
         }
         rt->plain = (char *)malloc(rt->plain_len + 1);
+        if (!rt->plain) {
+            free(rt);
+            return NULL;
+        }
         memcpy(rt->plain, plain_text, rt->plain_len);
         rt->plain[rt->plain_len] = '\0';
     }

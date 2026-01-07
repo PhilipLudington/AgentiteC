@@ -155,26 +155,26 @@ void agentite_camera_set_viewport(Agentite_Camera *cam, float w, float h)
  * Getters
  * ============================================================================ */
 
-void agentite_camera_get_position(Agentite_Camera *cam, float *x, float *y)
+void agentite_camera_get_position(const Agentite_Camera *cam, float *x, float *y)
 {
     if (!cam) return;
     if (x) *x = cam->x;
     if (y) *y = cam->y;
 }
 
-float agentite_camera_get_zoom(Agentite_Camera *cam)
+float agentite_camera_get_zoom(const Agentite_Camera *cam)
 {
     return cam ? cam->zoom : 1.0f;
 }
 
-float agentite_camera_get_rotation(Agentite_Camera *cam)
+float agentite_camera_get_rotation(const Agentite_Camera *cam)
 {
     if (!cam) return 0.0f;
     /* Convert back to degrees */
     return cam->rotation / 0.01745329251994329576923690768489f;
 }
 
-void agentite_camera_get_viewport(Agentite_Camera *cam, float *w, float *h)
+void agentite_camera_get_viewport(const Agentite_Camera *cam, float *w, float *h)
 {
     if (!cam) return;
     if (w) *w = cam->viewport_w;
@@ -248,7 +248,7 @@ void agentite_camera_world_to_screen(Agentite_Camera *cam,
     if (screen_y) *screen_y = (1.0f - ndc_pos[1]) * 0.5f * cam->viewport_h;
 }
 
-void agentite_camera_get_bounds(Agentite_Camera *cam,
+void agentite_camera_get_bounds(const Agentite_Camera *cam,
                               float *left, float *right,
                               float *top, float *bottom)
 {

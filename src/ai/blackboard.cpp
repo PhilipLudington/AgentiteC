@@ -108,7 +108,7 @@ static BBEntry *get_or_create_entry(Agentite_Blackboard *bb, const char *key) {
         }
     }
 
-    agentite_set_error("agentite_blackboard: max entries reached");
+    agentite_set_error("Blackboard: Maximum entries reached (%d/%d)", bb->entry_count, AGENTITE_BB_MAX_ENTRIES);
     return NULL;
 }
 
@@ -560,7 +560,7 @@ bool agentite_blackboard_reserve_ex(Agentite_Blackboard *bb, const char *resourc
 
     /* Create new reservation */
     if (bb->reservation_count >= AGENTITE_BB_MAX_RESERVATIONS) {
-        agentite_set_error("agentite_blackboard_reserve: max reservations reached");
+        agentite_set_error("Blackboard: Maximum reservations reached (%d/%d) for '%s'", bb->reservation_count, AGENTITE_BB_MAX_RESERVATIONS, resource);
         return false;
     }
 
@@ -678,7 +678,7 @@ void agentite_blackboard_publish_plan_ex(Agentite_Blackboard *bb, const char *ow
 
     /* Create new plan */
     if (bb->plan_count >= AGENTITE_BB_MAX_PLANS) {
-        agentite_set_error("agentite_blackboard_publish_plan: max plans reached");
+        agentite_set_error("Blackboard: Maximum plans reached (%d/%d) for owner '%s'", bb->plan_count, AGENTITE_BB_MAX_PLANS, owner);
         return;
     }
 
@@ -862,7 +862,7 @@ uint32_t agentite_blackboard_subscribe(Agentite_Blackboard *bb, const char *key,
         }
     }
 
-    agentite_set_error("agentite_blackboard_subscribe: max subscriptions reached");
+    agentite_set_error("Blackboard: Maximum subscriptions reached (%d)", AGENTITE_BB_MAX_SUBSCRIPTIONS);
     return 0;
 }
 
