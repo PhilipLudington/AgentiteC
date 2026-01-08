@@ -222,6 +222,9 @@ void aui_dialog_manager_render(AUI_DialogManager *dm, AUI_Context *ctx)
 {
     if (!dm || !ctx) return;
 
+    /* Set dialog layer for z-ordering (renders on top of viewport content) */
+    aui_push_layer(ctx, AUI_LAYER_DIALOG);
+
     /* Draw modal overlay if any modal dialog is open */
     bool has_modal = false;
     for (int i = 0; i < dm->dialog_count; i++) {
@@ -413,12 +416,22 @@ void aui_dialog_manager_render(AUI_DialogManager *dm, AUI_Context *ctx)
             aui_draw_text(ctx, n->message, nx + 12, ny + (nh - 16) / 2, text_color);
         }
     }
+
+    /* Restore previous layer */
+    aui_pop_layer(ctx);
 }
 
 bool aui_dialog_manager_process_event(AUI_DialogManager *dm, AUI_Context *ctx,
                                        const SDL_Event *event)
 {
     if (!dm || !ctx || !event) return false;
+
+    /* Ensure dialog layout is computed before hit testing.
+     * This is needed because dialogs may be created during event processing
+     * (e.g., File > Open triggers confirm dialog), after the frame's update. */
+    if (dm->dialog_root) {
+        aui_scene_layout(ctx, dm->dialog_root);
+    }
 
     /* Context menu takes priority */
     if (dm->context_menu.active) {
@@ -1128,6 +1141,15 @@ void aui_dialogs_render(AUI_Context *ctx)
     if (dm) {
         aui_dialog_manager_render(dm, ctx);
     }
+}
+
+bool aui_dialogs_has_modal(AUI_Context *ctx)
+{
+    AUI_DialogManager *dm = aui_get_dialog_manager(ctx);
+    if (dm) {
+        return aui_dialog_manager_has_modal(dm);
+    }
+    return false;
 }
 
 /* ============================================================================

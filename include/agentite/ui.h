@@ -217,6 +217,17 @@ typedef struct AUI_DrawCmd {
 #define AUI_MAX_DRAW_CMDS 4096
 #define AUI_DEFAULT_LAYER 0
 
+/* Standard layer constants for z-ordering.
+ * Lower values render first (back), higher values render on top (front).
+ * Custom layers can use any integer value. */
+typedef enum AUI_Layer {
+    AUI_LAYER_BACKGROUND = 0,      /* Background elements */
+    AUI_LAYER_CONTENT = 100,       /* Main content (viewport entities, etc.) */
+    AUI_LAYER_OVERLAY = 200,       /* Overlays (selection boxes, gizmos) */
+    AUI_LAYER_DIALOG = 300,        /* Modal dialogs */
+    AUI_LAYER_POPUP = 400,         /* Popups, context menus, tooltips */
+} AUI_Layer;
+
 /* Table sort specification (forward declared for use in context) */
 typedef struct AUI_TableSortSpec {
     int column_index;
@@ -538,6 +549,14 @@ void aui_upload(AUI_Context *ctx, SDL_GPUCommandBuffer *cmd);
 /* Render UI (call DURING render pass) */
 void aui_render(AUI_Context *ctx, SDL_GPUCommandBuffer *cmd,
                 SDL_GPURenderPass *pass);
+
+/* Render UI commands within a layer range (inclusive).
+ * Use this for split rendering: content first, then external overlays, then dialogs.
+ * Example: aui_render_layer_range(ctx, cmd, pass, 0, AUI_LAYER_OVERLAY - 1)
+ *          then render gizmos
+ *          then aui_render_layer_range(ctx, cmd, pass, AUI_LAYER_DIALOG, INT_MAX) */
+void aui_render_layer_range(AUI_Context *ctx, SDL_GPUCommandBuffer *cmd,
+                            SDL_GPURenderPass *pass, int min_layer, int max_layer);
 
 /* Process SDL event (returns true if consumed) */
 bool aui_process_event(AUI_Context *ctx, const SDL_Event *event);

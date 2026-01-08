@@ -1412,6 +1412,99 @@ void aui_render(AUI_Context *ctx, SDL_GPUCommandBuffer *cmd, SDL_GPURenderPass *
     }
 }
 
+void aui_render_layer_range(AUI_Context *ctx, SDL_GPUCommandBuffer *cmd,
+                            SDL_GPURenderPass *pass, int min_layer, int max_layer)
+{
+    if (!ctx || !cmd || !pass) return;
+    if (ctx->draw_cmd_count == 0) return;
+    if (!ctx->pipeline) return;
+
+    /* Sort draw commands by layer, then by type, then by texture */
+    qsort(ctx->draw_cmds, ctx->draw_cmd_count, sizeof(AUI_DrawCmd), aui_draw_cmd_compare);
+
+    /* Bind vertex buffer (shared by all pipelines) */
+    SDL_GPUBufferBinding vb_binding = {};
+    vb_binding.buffer = ctx->vertex_buffer;
+    vb_binding.offset = 0;
+    SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
+
+    /* Bind index buffer (shared by all pipelines) */
+    SDL_GPUBufferBinding ib_binding = {};
+    ib_binding.buffer = ctx->index_buffer;
+    ib_binding.offset = 0;
+    SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
+
+    /* Track current state */
+    SDL_GPUGraphicsPipeline *current_pipeline = NULL;
+    SDL_GPUTexture *current_texture = NULL;
+
+    /* Render each draw command within the layer range */
+    for (uint32_t i = 0; i < ctx->draw_cmd_count; i++) {
+        AUI_DrawCmd *draw_cmd = &ctx->draw_cmds[i];
+
+        /* Skip commands outside the layer range */
+        if (draw_cmd->layer < min_layer || draw_cmd->layer > max_layer) {
+            continue;
+        }
+
+        /* Select pipeline based on command type */
+        SDL_GPUGraphicsPipeline *pipeline;
+        switch (draw_cmd->type) {
+            case AUI_DRAW_CMD_SDF_TEXT:
+                pipeline = ctx->sdf_pipeline;
+                break;
+            case AUI_DRAW_CMD_MSDF_TEXT:
+                pipeline = ctx->msdf_pipeline;
+                break;
+            case AUI_DRAW_CMD_SOLID:
+            case AUI_DRAW_CMD_BITMAP_TEXT:
+            default:
+                pipeline = ctx->pipeline;
+                break;
+        }
+
+        if (!pipeline) {
+            pipeline = ctx->pipeline;  /* Fallback to bitmap pipeline */
+        }
+
+        /* Bind pipeline if changed */
+        if (pipeline != current_pipeline) {
+            SDL_BindGPUGraphicsPipeline(pass, pipeline);
+            current_pipeline = pipeline;
+        }
+
+        /* Push uniforms */
+        float uniforms[4] = {
+            (float)ctx->width,
+            (float)ctx->height,
+            draw_cmd->sdf_distance_range,
+            draw_cmd->sdf_scale
+        };
+        SDL_PushGPUVertexUniformData(cmd, 0, uniforms, sizeof(uniforms));
+
+        /* SDF/MSDF shaders also need fragment uniforms */
+        if (draw_cmd->type == AUI_DRAW_CMD_SDF_TEXT ||
+            draw_cmd->type == AUI_DRAW_CMD_MSDF_TEXT) {
+            SDL_PushGPUFragmentUniformData(cmd, 0, uniforms, sizeof(uniforms));
+        }
+
+        /* Bind texture if changed */
+        if (draw_cmd->texture != current_texture) {
+            SDL_GPUTextureSamplerBinding tex_binding = {};
+            tex_binding.texture = draw_cmd->texture;
+            tex_binding.sampler = ctx->sampler;
+            SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
+            current_texture = draw_cmd->texture;
+        }
+
+        /* Draw this command */
+        if (draw_cmd->index_count > 0 && draw_cmd->texture) {
+            SDL_DrawGPUIndexedPrimitives(pass, draw_cmd->index_count, 1,
+                                          draw_cmd->index_offset, 0, 0);
+        }
+    }
+}
+
 /* ============================================================================
  * Bezier Curve Drawing
  * ============================================================================ */

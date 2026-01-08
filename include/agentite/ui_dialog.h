@@ -446,6 +446,9 @@ bool aui_dialogs_process_event(AUI_Context *ctx, const SDL_Event *event);
 /* Render dialogs and notifications (call each frame after UI) */
 void aui_dialogs_render(AUI_Context *ctx);
 
+/* Check if any modal dialog is currently active */
+bool aui_dialogs_has_modal(AUI_Context *ctx);
+
 #ifdef __cplusplus
 }
 #endif
