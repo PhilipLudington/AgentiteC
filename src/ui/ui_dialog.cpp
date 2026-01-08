@@ -61,6 +61,7 @@ typedef struct AUI_Notification {
 } AUI_Notification;
 
 struct AUI_DialogManager {
+    AUI_Node *dialog_root;  /* Root node for all dialogs - enables proper layout */
     AUI_DialogEntry dialogs[MAX_DIALOGS];
     int dialog_count;
 
@@ -100,6 +101,11 @@ void aui_dialog_manager_destroy(AUI_DialogManager *dm)
         }
     }
 
+    /* Destroy dialog root */
+    if (dm->dialog_root) {
+        aui_node_destroy(dm->dialog_root);
+    }
+
     if (dm->tweens) {
         aui_tween_manager_destroy(dm->tweens);
     }
@@ -122,6 +128,15 @@ static uint32_t aui_notification_color(AUI_NotificationType type)
     }
 }
 
+static AUI_Node *ensure_dialog_root(AUI_Context *ctx, AUI_DialogManager *dm)
+{
+    if (!dm->dialog_root) {
+        dm->dialog_root = aui_node_create(ctx, AUI_NODE_CONTROL, "dialog_root");
+        aui_node_set_anchor_preset(dm->dialog_root, AUI_ANCHOR_FULL_RECT);
+    }
+    return dm->dialog_root;
+}
+
 /* ============================================================================
  * Dialog Update and Render
  * ============================================================================ */
@@ -129,6 +144,11 @@ static uint32_t aui_notification_color(AUI_NotificationType type)
 void aui_dialog_manager_update(AUI_DialogManager *dm, AUI_Context *ctx, float dt)
 {
     if (!dm || !ctx) return;
+
+    /* Update dialog root layout - ensures all dialog global_rects are computed */
+    if (dm->dialog_root) {
+        aui_scene_layout(ctx, dm->dialog_root);
+    }
 
     /* Update tweens */
     if (dm->tweens) {
@@ -174,6 +194,10 @@ void aui_dialog_manager_update(AUI_DialogManager *dm, AUI_Context *ctx, float dt
             if (entry->close_timer >= 0.2f) {
                 /* Destroy and remove */
                 if (entry->node) {
+                    /* Detach from root before destroy */
+                    if (entry->node->parent) {
+                        aui_node_remove_child(entry->node->parent, entry->node);
+                    }
                     aui_node_destroy(entry->node);
                 }
                 entry->active = false;
@@ -216,8 +240,7 @@ void aui_dialog_manager_render(AUI_DialogManager *dm, AUI_Context *ctx)
         AUI_DialogEntry *entry = &dm->dialogs[i];
         if (!entry->active || !entry->node) continue;
 
-        /* Layout dialog before rendering */
-        aui_scene_layout(ctx, entry->node);
+        /* Layout already computed in update - just render */
         aui_scene_render(ctx, entry->node);
     }
 
@@ -680,6 +703,10 @@ AUI_Node *aui_dialog_create(AUI_Context *ctx, const AUI_DialogConfig *config)
         return NULL;
     }
     entry->node = panel;
+
+    /* Attach to dialog root for proper layout computation */
+    ensure_dialog_root(ctx, dm);
+    aui_node_add_child(dm->dialog_root, panel);
 
     /* Position dialog */
     if (config->center_on_screen) {
