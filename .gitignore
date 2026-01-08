@@ -78,3 +78,6 @@ saves/
 .build-results.json
 .debug-build-results.json
 compile_commands.json
+
+# Doxygen generated documentation
+docs/api/

@@ -191,14 +191,14 @@ Based on the comprehensive code quality assessment (Overall Score: 8.2/10), this
 
 ### 9. Improve API Documentation
 
-**Status:** IN PROGRESS
+**Status:** COMPLETED
 **Severity:** LOW
 
 **Tasks:**
 - [x] Add Doxygen-style comments to public headers in `include/agentite/`
 - [x] Document function parameters, return values, and ownership
 - [x] Add usage examples in header comments
-- [ ] Generate documentation with Doxygen
+- [x] Generate documentation with Doxygen
 - [x] Priority headers:
   - [x] `include/agentite/sprite.h`
   - [x] `include/agentite/ecs.h`
@@ -215,6 +215,9 @@ Based on the comprehensive code quality assessment (Overall Score: 8.2/10), this
 - Added @code examples for key functions
 - Organized headers with @defgroup for logical grouping
 - Added @brief summaries for all types and functions
+- Created `Doxyfile` configuration in project root
+- Generated HTML documentation to `docs/api/html/` (537 pages)
+- Run `doxygen` in project root to regenerate docs
 
 ---
 
@@ -312,8 +315,8 @@ Files with raw allocations that could be converted:
 |----------|-------------|-----------|---------|-------------|------------|
 | High     | 4 items     | 4         | 0       | 0           | 100%       |
 | Medium   | 4 items     | 2         | 2       | 0           | 100%       |
-| Low      | 5 items     | 2         | 0       | 1           | 60%        |
-| **Total**| **13 items**| **8**     | **2**   | **1**       | **85%**    |
+| Low      | 5 items     | 3         | 0       | 0           | 60%        |
+| **Total**| **13 items**| **9**     | **2**   | **0**       | **85%**    |
 
 ### Recent Changes (Session)
 - **Task 1 (strcpy)**: COMPLETED - Already using safe functions
@@ -324,7 +327,7 @@ Files with raw allocations that could be converted:
 - **Task 6 (thread assertions)**: COMPLETED - Added AGENTITE_ASSERT_MAIN_THREAD() to all SDL/GPU functions in sprite, texture, text, font, audio, and input systems
 - **Task 7 (CI static analysis)**: SKIPPED - CI costs; use `make check` and `make safety` locally
 - **Task 8 (sanitizer testing)**: SKIPPED - CI costs; use `make test-asan` locally
-- **Task 9 (documentation)**: IN PROGRESS - Added Doxygen comments to sprite.h, ecs.h, input.h, audio.h (priority headers done)
+- **Task 9 (documentation)**: COMPLETED - Doxygen comments + generated HTML docs to docs/api/html/ (537 pages)
 - **Task 12 (integration tests)**: COMPLETED - Added 7 integration tests covering ECS, turn+resource, tech, spatial, fog, pathfinding, and full game loop. Total tests: 434 → 441
 - **Task 13 (allocation macros)**: PARTIAL - Fixed containers.cpp:171, audited codebase (100+ remaining occurrences for future work)
 
