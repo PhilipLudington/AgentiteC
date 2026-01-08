@@ -54,9 +54,12 @@ struct Agentite_Audio {
     float sound_volume;
     float global_music_volume;
 
-    // Mixing buffer
+    // Mixing buffer (pre-allocated to avoid reallocation in callback)
     float *mix_buffer;
     int mix_buffer_size;
+
+    // Flag to track if we've warned about buffer overflow
+    bool buffer_overflow_warned;
 };
 
 // Helper: clamp float to 0-1
@@ -75,16 +78,15 @@ static void audio_callback(void *userdata, SDL_AudioStream *stream, int addition
 
     int samples_needed = additional_amount / sizeof(float);
 
-    // Ensure mix buffer is large enough
+    // Clamp to pre-allocated buffer size to avoid reallocation in callback
+    // (reallocation during audio callback can cause glitches)
     if (samples_needed > audio->mix_buffer_size) {
-        float *new_buffer = (float*)realloc(audio->mix_buffer, samples_needed * sizeof(float));
-        if (!new_buffer) {
-            // Keep using existing buffer at smaller size
-            samples_needed = audio->mix_buffer_size;
-        } else {
-            audio->mix_buffer = new_buffer;
-            audio->mix_buffer_size = samples_needed;
+        if (!audio->buffer_overflow_warned) {
+            SDL_Log("Audio: Requested %d samples exceeds pre-allocated buffer (%d), clamping",
+                    samples_needed, audio->mix_buffer_size);
+            audio->buffer_overflow_warned = true;
         }
+        samples_needed = audio->mix_buffer_size;
     }
 
     // Clear mix buffer
@@ -223,9 +225,10 @@ Agentite_Audio *agentite_audio_init(void) {
     SDL_GetAudioStreamFormat(audio->stream, NULL, &audio->device_spec);
     SDL_GetAudioDeviceFormat(SDL_GetAudioStreamDevice(audio->stream), &audio->device_spec, &sample_frames);
 
-    // Allocate initial mix buffer
-    audio->mix_buffer_size = 4096;
+    // Pre-allocate mix buffer large enough to avoid reallocation in callback
+    audio->mix_buffer_size = AGENTITE_AUDIO_MAX_MIX_SAMPLES;
     audio->mix_buffer = (float*)malloc(audio->mix_buffer_size * sizeof(float));
+    audio->buffer_overflow_warned = false;
     if (!audio->mix_buffer) {
         agentite_set_error("Audio: Failed to allocate mix buffer");
         SDL_DestroyAudioStream(audio->stream);

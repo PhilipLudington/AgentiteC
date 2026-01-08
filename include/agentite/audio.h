@@ -17,6 +17,10 @@ typedef int Agentite_SoundHandle;
 // Maximum simultaneous sound channels
 #define AGENTITE_AUDIO_MAX_CHANNELS 32
 
+// Maximum mix buffer size in samples (pre-allocated to avoid reallocation in callback)
+// 16384 samples = ~170ms at 48kHz stereo
+#define AGENTITE_AUDIO_MAX_MIX_SAMPLES 16384
+
 // Audio system initialization/shutdown
 Agentite_Audio *agentite_audio_init(void);
 void agentite_audio_shutdown(Agentite_Audio *audio);
