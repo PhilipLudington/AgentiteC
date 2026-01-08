@@ -385,6 +385,8 @@ TEST_SRCS := $(wildcard $(TESTS_DIR)/core/*.cpp) \
              $(wildcard $(TESTS_DIR)/ai/*.cpp) \
              $(wildcard $(TESTS_DIR)/graphics/*.cpp) \
              $(wildcard $(TESTS_DIR)/ecs/*.cpp) \
+             $(wildcard $(TESTS_DIR)/audio/*.cpp) \
+             $(wildcard $(TESTS_DIR)/ui/*.cpp) \
              $(wildcard $(TESTS_DIR)/scene/*.cpp) \
              $(wildcard $(TESTS_DIR)/security/*.cpp)
 

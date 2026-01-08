@@ -602,3 +602,344 @@ TEST_CASE("Utility functions", "[formula][utility]") {
         agentite_formula_destroy(ctx);
     }
 }
+
+/* ============================================================================
+ * Additional Edge Case Tests
+ * ============================================================================ */
+
+TEST_CASE("Division by zero edge cases", "[formula][edge][division]") {
+    Agentite_FormulaContext *ctx = agentite_formula_create();
+
+    SECTION("Direct division by zero") {
+        double result = agentite_formula_eval(ctx, "10 / 0");
+        REQUIRE(agentite_formula_is_nan(result));
+        REQUIRE(agentite_formula_has_error(ctx));
+    }
+
+    SECTION("Division by zero with variables") {
+        agentite_formula_set_var(ctx, "x", 10.0);
+        agentite_formula_set_var(ctx, "y", 0.0);
+        double result = agentite_formula_eval(ctx, "x / y");
+        REQUIRE(agentite_formula_is_nan(result));
+        REQUIRE(agentite_formula_has_error(ctx));
+    }
+
+    SECTION("Division by zero in complex expression") {
+        double result = agentite_formula_eval(ctx, "5 + 10 / 0 + 3");
+        REQUIRE(agentite_formula_is_nan(result));
+        REQUIRE(agentite_formula_has_error(ctx));
+    }
+
+    SECTION("Modulo by zero") {
+        double result = agentite_formula_eval(ctx, "10 % 0");
+        REQUIRE(agentite_formula_is_nan(result));
+        REQUIRE(agentite_formula_has_error(ctx));
+    }
+
+    SECTION("Division by very small number (not zero)") {
+        double result = agentite_formula_eval(ctx, "1 / 0.000001");
+        // Should succeed - small but non-zero
+        REQUIRE_FALSE(agentite_formula_is_nan(result));
+        REQUIRE(result > 0.0);
+    }
+
+    agentite_formula_destroy(ctx);
+}
+
+TEST_CASE("Invalid expression edge cases", "[formula][edge][invalid]") {
+    Agentite_FormulaContext *ctx = agentite_formula_create();
+
+    SECTION("Empty expression") {
+        double result = agentite_formula_eval(ctx, "");
+        REQUIRE(agentite_formula_is_nan(result));
+        REQUIRE(agentite_formula_has_error(ctx));
+    }
+
+    SECTION("Whitespace only") {
+        double result = agentite_formula_eval(ctx, "   ");
+        REQUIRE(agentite_formula_is_nan(result));
+        REQUIRE(agentite_formula_has_error(ctx));
+    }
+
+    SECTION("Incomplete operator") {
+        double result = agentite_formula_eval(ctx, "5 +");
+        REQUIRE(agentite_formula_is_nan(result));
+        REQUIRE(agentite_formula_has_error(ctx));
+    }
+
+    SECTION("Leading operator (not unary)") {
+        double result = agentite_formula_eval(ctx, "* 5");
+        REQUIRE(agentite_formula_is_nan(result));
+        REQUIRE(agentite_formula_has_error(ctx));
+    }
+
+    SECTION("Multiple consecutive operators") {
+        double result = agentite_formula_eval(ctx, "5 ** 3");
+        // ** might be valid as power or invalid depending on impl
+        // At minimum should not crash
+    }
+
+    SECTION("Unbalanced parentheses - missing close") {
+        double result = agentite_formula_eval(ctx, "(5 + 3");
+        REQUIRE(agentite_formula_is_nan(result));
+        REQUIRE(agentite_formula_has_error(ctx));
+    }
+
+    SECTION("Unbalanced parentheses - missing open") {
+        double result = agentite_formula_eval(ctx, "5 + 3)");
+        REQUIRE(agentite_formula_is_nan(result));
+        REQUIRE(agentite_formula_has_error(ctx));
+    }
+
+    SECTION("Unbalanced parentheses - multiple") {
+        double result = agentite_formula_eval(ctx, "((5 + 3)");
+        REQUIRE(agentite_formula_is_nan(result));
+        REQUIRE(agentite_formula_has_error(ctx));
+    }
+
+    SECTION("Empty parentheses") {
+        double result = agentite_formula_eval(ctx, "5 + ()");
+        REQUIRE(agentite_formula_is_nan(result));
+        REQUIRE(agentite_formula_has_error(ctx));
+    }
+
+    SECTION("Function with missing arguments") {
+        double result = agentite_formula_eval(ctx, "min()");
+        REQUIRE(agentite_formula_is_nan(result));
+        REQUIRE(agentite_formula_has_error(ctx));
+    }
+
+    SECTION("Function with too few arguments") {
+        double result = agentite_formula_eval(ctx, "clamp(5)");  // needs 3 args
+        REQUIRE(agentite_formula_is_nan(result));
+        REQUIRE(agentite_formula_has_error(ctx));
+    }
+
+    agentite_formula_destroy(ctx);
+}
+
+TEST_CASE("Numeric edge cases", "[formula][edge][numeric]") {
+    Agentite_FormulaContext *ctx = agentite_formula_create();
+
+    SECTION("Very large number") {
+        double result = agentite_formula_eval(ctx, "999999999999999999");
+        REQUIRE_FALSE(agentite_formula_is_nan(result));
+        REQUIRE(result > 0.0);
+    }
+
+    SECTION("Very small number") {
+        double result = agentite_formula_eval(ctx, "0.000000000001");
+        REQUIRE_FALSE(agentite_formula_is_nan(result));
+        REQUIRE(result > 0.0);
+        REQUIRE(result < 0.00001);
+    }
+
+    SECTION("Negative zero") {
+        double result = agentite_formula_eval(ctx, "-0");
+        REQUIRE(result == 0.0);
+    }
+
+    SECTION("Scientific notation (if supported)") {
+        // Note: may or may not be supported
+        double result = agentite_formula_eval(ctx, "1e10");
+        // At minimum should not crash
+    }
+
+    SECTION("Large exponent") {
+        double result = agentite_formula_eval(ctx, "2 ^ 100");
+        REQUIRE_FALSE(agentite_formula_is_nan(result));
+        REQUIRE(result > 0.0);
+    }
+
+    SECTION("Negative base with fractional exponent") {
+        double result = agentite_formula_eval(ctx, "(-8) ^ 0.5");
+        // sqrt of negative - should be NaN or handled
+        // At minimum should not crash
+    }
+
+    SECTION("Zero to zero power") {
+        double result = agentite_formula_eval(ctx, "0 ^ 0");
+        // Mathematically undefined, but often defined as 1
+        // At minimum should not crash
+    }
+
+    SECTION("Negative exponent") {
+        double result = agentite_formula_eval(ctx, "2 ^ -2");
+        REQUIRE(result == Catch::Approx(0.25).margin(0.001));
+    }
+
+    agentite_formula_destroy(ctx);
+}
+
+TEST_CASE("Function edge cases", "[formula][edge][functions]") {
+    Agentite_FormulaContext *ctx = agentite_formula_create();
+
+    SECTION("sqrt of negative number") {
+        double result = agentite_formula_eval(ctx, "sqrt(-1)");
+        // Should be NaN
+        REQUIRE(agentite_formula_is_nan(result));
+    }
+
+    SECTION("log of zero") {
+        double result = agentite_formula_eval(ctx, "log(0)");
+        // log(0) is -infinity or error
+        // At minimum should not crash
+    }
+
+    SECTION("log of negative number") {
+        double result = agentite_formula_eval(ctx, "log(-1)");
+        // Should be NaN
+        REQUIRE(agentite_formula_is_nan(result));
+    }
+
+    SECTION("clamp with invalid range") {
+        double result = agentite_formula_eval(ctx, "clamp(5, 10, 0)");  // min > max
+        // Behavior is implementation-defined, but should not crash
+    }
+
+    SECTION("min with many arguments") {
+        double result = agentite_formula_eval(ctx, "min(5, 3, 8, 1, 9, 2, 7)");
+        REQUIRE(result == 1.0);
+    }
+
+    SECTION("max with many arguments") {
+        double result = agentite_formula_eval(ctx, "max(5, 3, 8, 1, 9, 2, 7)");
+        REQUIRE(result == 9.0);
+    }
+
+    SECTION("lerp at boundaries") {
+        REQUIRE(agentite_formula_eval(ctx, "lerp(0, 100, 0)") == 0.0);
+        REQUIRE(agentite_formula_eval(ctx, "lerp(0, 100, 1)") == 100.0);
+    }
+
+    SECTION("lerp beyond boundaries") {
+        double result = agentite_formula_eval(ctx, "lerp(0, 100, 1.5)");
+        REQUIRE(result == 150.0);  // Extrapolation
+
+        result = agentite_formula_eval(ctx, "lerp(0, 100, -0.5)");
+        REQUIRE(result == -50.0);  // Extrapolation
+    }
+
+    agentite_formula_destroy(ctx);
+}
+
+TEST_CASE("Variable edge cases", "[formula][edge][variables]") {
+    Agentite_FormulaContext *ctx = agentite_formula_create();
+
+    SECTION("Variable with special characters in name") {
+        // Should either work or gracefully fail
+        bool success = agentite_formula_set_var(ctx, "my_var", 10.0);
+        // Underscores typically allowed
+        if (success) {
+            REQUIRE(agentite_formula_get_var(ctx, "my_var") == 10.0);
+        }
+    }
+
+    SECTION("Very long variable name") {
+        char long_name[256];
+        memset(long_name, 'a', 255);
+        long_name[255] = '\0';
+
+        bool success = agentite_formula_set_var(ctx, long_name, 42.0);
+        // May truncate or reject - should not crash
+    }
+
+    SECTION("Empty variable name") {
+        bool success = agentite_formula_set_var(ctx, "", 10.0);
+        // Should fail gracefully
+    }
+
+    SECTION("NULL variable name") {
+        bool success = agentite_formula_set_var(ctx, nullptr, 10.0);
+        REQUIRE_FALSE(success);
+    }
+
+    SECTION("Get variable that shadows function name") {
+        // Set variable with same name as function
+        agentite_formula_set_var(ctx, "min", 999.0);
+        double result = agentite_formula_eval(ctx, "min");
+        // Variable should take precedence in simple lookup
+    }
+
+    SECTION("NaN value in variable") {
+        agentite_formula_set_var(ctx, "nan_var", std::nan(""));
+        double result = agentite_formula_eval(ctx, "nan_var + 1");
+        REQUIRE(agentite_formula_is_nan(result));
+    }
+
+    SECTION("Infinity value in variable") {
+        agentite_formula_set_var(ctx, "inf_var", HUGE_VAL);
+        double result = agentite_formula_eval(ctx, "inf_var + 1");
+        // inf + 1 = inf
+        REQUIRE(std::isinf(result));
+    }
+
+    agentite_formula_destroy(ctx);
+}
+
+TEST_CASE("NULL safety edge cases", "[formula][edge][null]") {
+    SECTION("Create and destroy NULL context") {
+        agentite_formula_destroy(nullptr);
+        // Should not crash
+    }
+
+    SECTION("Eval with NULL context") {
+        double result = agentite_formula_eval(nullptr, "1 + 2");
+        REQUIRE(agentite_formula_is_nan(result));
+    }
+
+    SECTION("Eval with NULL expression") {
+        Agentite_FormulaContext *ctx = agentite_formula_create();
+        double result = agentite_formula_eval(ctx, nullptr);
+        REQUIRE(agentite_formula_is_nan(result));
+        agentite_formula_destroy(ctx);
+    }
+
+    SECTION("Compile with NULL context") {
+        Agentite_Formula *f = agentite_formula_compile(nullptr, "1 + 2");
+        REQUIRE(f == nullptr);
+    }
+
+    SECTION("Compile with NULL expression") {
+        Agentite_FormulaContext *ctx = agentite_formula_create();
+        Agentite_Formula *f = agentite_formula_compile(ctx, nullptr);
+        REQUIRE(f == nullptr);
+        agentite_formula_destroy(ctx);
+    }
+
+    SECTION("Free NULL formula") {
+        agentite_formula_free(nullptr);
+        // Should not crash
+    }
+
+    SECTION("Exec with NULL formula") {
+        Agentite_FormulaContext *ctx = agentite_formula_create();
+        double result = agentite_formula_exec(nullptr, ctx);
+        REQUIRE(agentite_formula_is_nan(result));
+        agentite_formula_destroy(ctx);
+    }
+
+    SECTION("Exec with NULL context") {
+        Agentite_FormulaContext *ctx = agentite_formula_create();
+        Agentite_Formula *f = agentite_formula_compile(ctx, "1 + 2");
+        double result = agentite_formula_exec(f, nullptr);
+        // May return NaN or use compiled constants
+        agentite_formula_free(f);
+        agentite_formula_destroy(ctx);
+    }
+
+    SECTION("Has error with NULL context") {
+        bool has_error = agentite_formula_has_error(nullptr);
+        REQUIRE_FALSE(has_error);
+    }
+
+    SECTION("Get error with NULL context") {
+        const char *error = agentite_formula_get_error(nullptr);
+        REQUIRE((error == nullptr || strlen(error) == 0));
+    }
+
+    SECTION("Valid check with NULL context") {
+        bool valid = agentite_formula_valid(nullptr, "1 + 2");
+        REQUIRE_FALSE(valid);
+    }
+}
