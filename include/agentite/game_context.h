@@ -15,6 +15,7 @@
 #include "agentite/watch.h"
 #include "agentite/hotreload.h"
 #include "agentite/mod.h"
+#include "agentite/profiler.h"
 
 /**
  * Carbon Game Context
@@ -83,12 +84,22 @@ struct Agentite_GameContextConfig {
     const char **mod_paths;         /* Directories to scan for mods */
     size_t mod_path_count;          /* Number of mod paths */
     bool allow_mod_overrides;       /* Allow mods to override base assets */
+
+    /* Profiling settings */
+    bool enable_profiler;           /* Initialize profiler (default: true in debug) */
+    bool profiler_track_memory;     /* Track memory allocations */
 };
 
 /**
  * Default configuration with sensible defaults.
  * Enables all systems with 1280x720 window.
  */
+#ifdef NDEBUG
+#define AGENTITE_PROFILER_DEFAULT_ENABLED false
+#else
+#define AGENTITE_PROFILER_DEFAULT_ENABLED true
+#endif
+
 #define AGENTITE_GAME_CONTEXT_DEFAULT { \
     .window_title = "Carbon Game", \
     .window_width = 1280, \
@@ -110,7 +121,9 @@ struct Agentite_GameContextConfig {
     .enable_mods = false, \
     .mod_paths = NULL, \
     .mod_path_count = 0, \
-    .allow_mod_overrides = true \
+    .allow_mod_overrides = true, \
+    .enable_profiler = AGENTITE_PROFILER_DEFAULT_ENABLED, \
+    .profiler_track_memory = false \
 }
 
 /**
@@ -145,6 +158,9 @@ struct Agentite_GameContext {
 
     /* Mod system (may be NULL if disabled) */
     Agentite_ModManager *mods;        /* Mod manager */
+
+    /* Profiler (may be NULL if disabled) */
+    Agentite_Profiler *profiler;      /* Performance profiler */
 
     /* Frame timing */
     float delta_time;               /* Time since last frame in seconds */

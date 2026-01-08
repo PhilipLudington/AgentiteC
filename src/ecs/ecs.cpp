@@ -1,10 +1,12 @@
 #include "agentite/agentite.h"
 #include "agentite/ecs.h"
+#include "agentite/profiler.h"
 #include <stdlib.h>
 #include <stdio.h>
 
 struct Agentite_World {
     ecs_world_t *world;
+    Agentite_Profiler *profiler;  /* Optional profiler for performance tracking */
 };
 
 // Component IDs (populated during registration)
@@ -60,7 +62,20 @@ ecs_world_t *agentite_ecs_get_world(Agentite_World *world) {
 
 bool agentite_ecs_progress(Agentite_World *world, float delta_time) {
     if (!world || !world->world) return false;
-    return ecs_progress(world->world, delta_time);
+
+    /* Profile ECS system iteration if profiler is set */
+    if (world->profiler) {
+        agentite_profiler_begin_scope(world->profiler, "ecs_progress");
+    }
+
+    bool result = ecs_progress(world->world, delta_time);
+
+    /* End profiling scope */
+    if (world->profiler) {
+        agentite_profiler_end_scope(world->profiler);
+    }
+
+    return result;
 }
 
 ecs_entity_t agentite_ecs_entity_new(Agentite_World *world) {
@@ -98,4 +113,10 @@ void agentite_ecs_register_components(Agentite_World *world) {
     ECS_COMPONENT_DEFINE(w, C_Active);
     ECS_COMPONENT_DEFINE(w, C_Health);
     ECS_COMPONENT_DEFINE(w, C_RenderLayer);
+}
+
+void agentite_ecs_set_profiler(Agentite_World *world, Agentite_Profiler *profiler) {
+    if (world) {
+        world->profiler = profiler;
+    }
 }

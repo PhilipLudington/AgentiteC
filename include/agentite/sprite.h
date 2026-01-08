@@ -608,6 +608,32 @@ Agentite_Camera *agentite_sprite_get_camera(const Agentite_SpriteRenderer *sr);
 
 /** @} */ /* end of sprite_camera */
 
+/** @defgroup sprite_profiler Profiler Integration
+ *
+ * Optional profiler integration for performance monitoring.
+ *
+ * @{
+ */
+
+/* Forward declaration */
+struct Agentite_Profiler;
+
+/**
+ * @brief Set profiler for sprite renderer performance tracking.
+ *
+ * When a profiler is set, the sprite renderer will report:
+ * - "sprite_upload" scope: Time spent uploading vertex data to GPU
+ * - "sprite_render" scope: Time spent in render pass
+ * - Draw call and batch counts
+ *
+ * @param sr       Sprite renderer (must not be NULL)
+ * @param profiler Profiler instance, or NULL to disable profiling
+ */
+void agentite_sprite_set_profiler(Agentite_SpriteRenderer *sr,
+                                  struct Agentite_Profiler *profiler);
+
+/** @} */ /* end of sprite_profiler */
+
 /** @defgroup sprite_rtt Render-to-Texture Functions
  *
  * These functions enable rendering sprites to a texture instead of the screen,

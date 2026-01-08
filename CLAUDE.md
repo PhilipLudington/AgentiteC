@@ -401,6 +401,64 @@ void* load_thread(void* arg) {
 tex = agentite_texture_create_from_data(sr, image_data, w, h);
 ```
 
+### Performance Profiling
+
+The engine includes a built-in profiler for performance analysis. When using `GameContext`, the profiler is automatically enabled in debug builds.
+
+**Automatic Profiling (via GameContext):**
+```c
+Agentite_GameContextConfig cfg = AGENTITE_GAME_CONTEXT_DEFAULT;
+cfg.enable_profiler = true;  // Default: true in debug, false in release
+cfg.profiler_track_memory = true;  // Optional memory tracking
+
+Agentite_GameContext *ctx = agentite_game_context_create(&cfg);
+
+// Frame timing is automatic with begin_frame/end_frame
+// Get stats any time:
+const Agentite_ProfilerStats *stats = agentite_profiler_get_stats(ctx->profiler);
+printf("Frame: %.2f ms, FPS: %.0f\n", stats->frame_time_ms, stats->fps);
+```
+
+**Profiled Scopes (automatically tracked):**
+- `sprite_upload` - GPU data upload time
+- `sprite_render` - Sprite rendering time
+- `ecs_progress` - ECS system iteration time
+- `pathfinding` - A* pathfinding time
+- `formula_eval` - Formula evaluation time
+
+**Manual Scope Profiling:**
+```c
+// C-style
+agentite_profiler_begin_scope(profiler, "my_operation");
+// ... work ...
+agentite_profiler_end_scope(profiler);
+
+// C++ RAII style
+{
+    AGENTITE_PROFILE_SCOPE(ctx->profiler, "my_operation");
+    // ... automatically ends when scope exits ...
+}
+```
+
+**Standalone Profiler Usage:**
+```c
+Agentite_ProfilerConfig cfg = AGENTITE_PROFILER_DEFAULT;
+cfg.track_memory = true;
+Agentite_Profiler *profiler = agentite_profiler_create(&cfg);
+
+// Connect to subsystems
+agentite_sprite_set_profiler(sprites, profiler);
+agentite_ecs_set_profiler(ecs, profiler);
+agentite_pathfinder_set_profiler(pathfinder, profiler);
+agentite_formula_set_profiler(formula_ctx, profiler);
+
+// Export results
+agentite_profiler_export_json(profiler, "profile.json");
+agentite_profiler_export_csv(profiler, "profile.csv");
+
+agentite_profiler_destroy(profiler);
+```
+
 ## Common Pitfalls
 
 ### Rendering Order

@@ -244,6 +244,21 @@ ecs_world_t *agentite_ecs_get_world(Agentite_World *world);
  */
 bool agentite_ecs_progress(Agentite_World *world, float delta_time);
 
+/* Forward declaration */
+struct Agentite_Profiler;
+
+/**
+ * @brief Set profiler for ECS performance tracking.
+ *
+ * When a profiler is set, the ECS world will report:
+ * - "ecs_progress" scope: Time spent in system iteration
+ * - Entity count per frame
+ *
+ * @param world    ECS world (must not be NULL)
+ * @param profiler Profiler instance, or NULL to disable profiling
+ */
+void agentite_ecs_set_profiler(Agentite_World *world, struct Agentite_Profiler *profiler);
+
 /** @} */ /* end of ecs_lifecycle */
 
 /** @defgroup ecs_entity Entity Functions

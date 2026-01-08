@@ -7,6 +7,7 @@
 #include "agentite/camera.h"
 #include "agentite/error.h"
 #include "agentite/path.h"
+#include "agentite/profiler.h"
 #include <cglm/cglm.h>
 #include <stdlib.h>
 #include <string.h>
@@ -196,6 +197,9 @@ struct Agentite_SpriteRenderer {
 
     /* Camera (optional - NULL = screen-space mode) */
     Agentite_Camera *camera;
+
+    /* Optional profiler for performance tracking */
+    Agentite_Profiler *profiler;
 };
 
 /* ============================================================================
@@ -1265,6 +1269,11 @@ void agentite_sprite_upload(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *c
     AGENTITE_ASSERT_MAIN_THREAD();
     if (!sr || !cmd || sr->sprite_count == 0) return;
 
+    /* Profile this scope if profiler is set */
+    if (sr->profiler) {
+        agentite_profiler_begin_scope(sr->profiler, "sprite_upload");
+    }
+
     /* Upload vertex and index data */
     SDL_GPUTransferBufferCreateInfo transfer_info = {};
     transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
@@ -1309,6 +1318,11 @@ void agentite_sprite_upload(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *c
     }
 
     SDL_ReleaseGPUTransferBuffer(sr->gpu, transfer);
+
+    /* End profiling scope */
+    if (sr->profiler) {
+        agentite_profiler_end_scope(sr->profiler);
+    }
 }
 
 /* Internal: Render a single batch segment with specific texture and index range */
@@ -1332,6 +1346,11 @@ void agentite_sprite_render(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *c
 {
     AGENTITE_ASSERT_MAIN_THREAD();
     if (!sr || !cmd || !pass || sr->sprite_count == 0) return;
+
+    /* Profile this scope if profiler is set */
+    if (sr->profiler) {
+        agentite_profiler_begin_scope(sr->profiler, "sprite_render");
+    }
 
     static bool logged_render = false;
     if (!logged_render) {
@@ -1400,6 +1419,13 @@ void agentite_sprite_render(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *c
                                   final_indices);
         }
     }
+
+    /* Report render stats and end profiling scope */
+    if (sr->profiler) {
+        agentite_profiler_report_batch(sr->profiler, sr->vertex_count, sr->index_count);
+        agentite_profiler_report_draw_call(sr->profiler);
+        agentite_profiler_end_scope(sr->profiler);
+    }
 }
 
 /* Set camera for sprite rendering (NULL for screen-space mode) */
@@ -1414,6 +1440,14 @@ void agentite_sprite_set_camera(Agentite_SpriteRenderer *sr, Agentite_Camera *ca
 Agentite_Camera *agentite_sprite_get_camera(const Agentite_SpriteRenderer *sr)
 {
     return sr ? sr->camera : NULL;
+}
+
+/* Set profiler for performance tracking */
+void agentite_sprite_set_profiler(Agentite_SpriteRenderer *sr, Agentite_Profiler *profiler)
+{
+    if (sr) {
+        sr->profiler = profiler;
+    }
 }
 
 /* ============================================================================

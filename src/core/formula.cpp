@@ -1,5 +1,6 @@
 #include "agentite/agentite.h"
 #include "agentite/formula.h"
+#include "agentite/profiler.h"
 #include "agentite/error.h"
 #include <stdlib.h>
 #include <string.h>
@@ -33,6 +34,7 @@ struct Agentite_FormulaContext {
     FormulaCustomFunc custom_funcs[AGENTITE_FORMULA_MAX_CUSTOM_FUNCS];
     int custom_func_count;
     char error[AGENTITE_FORMULA_ERROR_LEN];
+    Agentite_Profiler *profiler;  /* Optional profiler for performance tracking */
 };
 
 /* Token types for lexer */
@@ -843,6 +845,12 @@ void agentite_formula_destroy(Agentite_FormulaContext *ctx) {
     free(ctx);
 }
 
+void agentite_formula_set_profiler(Agentite_FormulaContext *ctx, Agentite_Profiler *profiler) {
+    if (ctx) {
+        ctx->profiler = profiler;
+    }
+}
+
 Agentite_FormulaContext *agentite_formula_clone(const Agentite_FormulaContext *ctx) {
     if (!ctx) return NULL;
 
@@ -1022,6 +1030,11 @@ double agentite_formula_eval(Agentite_FormulaContext *ctx, const char *expressio
         return NAN;
     }
 
+    /* Profile formula evaluation if profiler is set */
+    if (ctx->profiler) {
+        agentite_profiler_begin_scope(ctx->profiler, "formula_eval");
+    }
+
     ctx->error[0] = '\0';
 
     Parser p = {
@@ -1032,16 +1045,27 @@ double agentite_formula_eval(Agentite_FormulaContext *ctx, const char *expressio
     };
 
     next_token(&p);
-    if (p.has_error) return NAN;
+    if (p.has_error) {
+        if (ctx->profiler) {
+            agentite_profiler_end_scope(ctx->profiler);
+        }
+        return NAN;
+    }
 
     double result = parse_expression(&p);
 
     if (!p.has_error && p.current.type != TOK_EOF) {
         snprintf(ctx->error, AGENTITE_FORMULA_ERROR_LEN,
                  "Unexpected content after expression at position %zu", p.pos);
+        if (ctx->profiler) {
+            agentite_profiler_end_scope(ctx->profiler);
+        }
         return NAN;
     }
 
+    if (ctx->profiler) {
+        agentite_profiler_end_scope(ctx->profiler);
+    }
     return result;
 }
 

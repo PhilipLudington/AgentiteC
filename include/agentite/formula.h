@@ -99,6 +99,24 @@ void agentite_formula_destroy(Agentite_FormulaContext *ctx);
  */
 Agentite_FormulaContext *agentite_formula_clone(const Agentite_FormulaContext *ctx);
 
+/* Forward declaration */
+struct Agentite_Profiler;
+
+/**
+ * Set profiler for formula evaluation performance tracking.
+ *
+ * When a profiler is set, formula evaluation will report:
+ * - "formula_eval" scope: Time spent in expression evaluation
+ *
+ * Note: Formula evaluation is typically fast, so profiling may add
+ * measurable overhead for very simple expressions.
+ *
+ * @param ctx      Formula context (must not be NULL)
+ * @param profiler Profiler instance, or NULL to disable profiling
+ */
+void agentite_formula_set_profiler(Agentite_FormulaContext *ctx,
+                                   struct Agentite_Profiler *profiler);
+
 /*============================================================================
  * Variable Management
  *============================================================================*/

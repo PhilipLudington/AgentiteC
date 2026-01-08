@@ -6,6 +6,7 @@
 
 #include "agentite/agentite.h"
 #include "agentite/pathfinding.h"
+#include "agentite/profiler.h"
 #include "agentite/tilemap.h"
 #include <stdlib.h>
 #include <string.h>
@@ -55,6 +56,7 @@ struct Agentite_Pathfinder {
     BinaryHeap open_list;   /* Priority queue for A* */
     int width;
     int height;
+    Agentite_Profiler *profiler;  /* Optional profiler for performance tracking */
 };
 
 /* Direction offsets for neighbors (8-directional) */
@@ -304,6 +306,13 @@ void agentite_pathfinder_get_size(const Agentite_Pathfinder *pf, int *width, int
     if (height) *height = pf->height;
 }
 
+void agentite_pathfinder_set_profiler(Agentite_Pathfinder *pf, Agentite_Profiler *profiler)
+{
+    if (pf) {
+        pf->profiler = profiler;
+    }
+}
+
 /* ============================================================================
  * Grid Configuration
  * ============================================================================ */
@@ -466,59 +475,68 @@ Agentite_Path *agentite_pathfinder_find_ex(Agentite_Pathfinder *pf,
 {
     if (!pf) return NULL;
 
+    /* Profile pathfinding if profiler is set */
+    if (pf->profiler) {
+        agentite_profiler_begin_scope(pf->profiler, "pathfinding");
+    }
+
+    Agentite_Path *result = NULL;
+
     /* Bounds check */
     if (!in_bounds(pf, start_x, start_y) || !in_bounds(pf, end_x, end_y)) {
-        return NULL;
+        goto cleanup;
     }
 
     /* Check start and end are walkable */
     if (!pf->grid[grid_index(pf, start_x, start_y)].walkable ||
         !pf->grid[grid_index(pf, end_x, end_y)].walkable) {
-        return NULL;
+        goto cleanup;
     }
 
     /* Same tile - trivial path */
     if (start_x == end_x && start_y == end_y) {
-        Agentite_Path *path = (Agentite_Path*)malloc(sizeof(Agentite_Path));
-        if (!path) return NULL;
-        path->points = (Agentite_PathPoint*)malloc(sizeof(Agentite_PathPoint));
-        if (!path->points) {
-            free(path);
-            return NULL;
+        result = (Agentite_Path*)malloc(sizeof(Agentite_Path));
+        if (!result) goto cleanup;
+        result->points = (Agentite_PathPoint*)malloc(sizeof(Agentite_PathPoint));
+        if (!result->points) {
+            free(result);
+            result = NULL;
+            goto cleanup;
         }
-        path->points[0].x = start_x;
-        path->points[0].y = start_y;
-        path->length = 1;
-        path->total_cost = 0.0f;
-        return path;
+        result->points[0].x = start_x;
+        result->points[0].y = start_y;
+        result->length = 1;
+        result->total_cost = 0.0f;
+        goto cleanup;
     }
 
-    /* Use default options if none provided */
-    Agentite_PathOptions opts = AGENTITE_PATH_OPTIONS_DEFAULT;
-    if (options) opts = *options;
+    {
+        /* Use default options if none provided */
+        Agentite_PathOptions opts = AGENTITE_PATH_OPTIONS_DEFAULT;
+        if (options) opts = *options;
 
-    /* Reset node state */
-    int total = pf->width * pf->height;
-    memset(pf->nodes, 0, total * sizeof(PathNode));
-    for (int i = 0; i < total; i++) {
-        pf->nodes[i].parent_x = -1;
-        pf->nodes[i].parent_y = -1;
-        pf->nodes[i].g_cost = FLT_MAX;
-    }
+        /* Reset node state */
+        int total = pf->width * pf->height;
+        memset(pf->nodes, 0, total * sizeof(PathNode));
+        for (int i = 0; i < total; i++) {
+            pf->nodes[i].parent_x = -1;
+            pf->nodes[i].parent_y = -1;
+            pf->nodes[i].g_cost = FLT_MAX;
+        }
 
-    /* Clear and initialize open list */
-    heap_clear(&pf->open_list);
+        /* Clear and initialize open list */
+        heap_clear(&pf->open_list);
 
-    /* Add start node */
-    int start_idx = grid_index(pf, start_x, start_y);
-    pf->nodes[start_idx].g_cost = 0.0f;
-    pf->nodes[start_idx].f_cost = heuristic(start_x, start_y, end_x, end_y,
-                                             opts.allow_diagonal);
-    pf->nodes[start_idx].flags = NODE_FLAG_OPEN;
-    heap_push(&pf->open_list, start_x, start_y, pf->nodes[start_idx].f_cost);
+        /* Add start node */
+        int start_idx = grid_index(pf, start_x, start_y);
+        pf->nodes[start_idx].g_cost = 0.0f;
+        pf->nodes[start_idx].f_cost = heuristic(start_x, start_y, end_x, end_y,
+                                                 opts.allow_diagonal);
+        pf->nodes[start_idx].flags = NODE_FLAG_OPEN;
+        heap_push(&pf->open_list, start_x, start_y, pf->nodes[start_idx].f_cost);
 
-    int iterations = 0;
-    int max_iter = opts.max_iterations > 0 ? opts.max_iterations : total;
+        int iterations = 0;
+        int max_iter = opts.max_iterations > 0 ? opts.max_iterations : total;
 
     while (!heap_is_empty(&pf->open_list) && iterations < max_iter) {
         iterations++;
@@ -538,7 +556,8 @@ Agentite_Path *agentite_pathfinder_find_ex(Agentite_Pathfinder *pf,
 
         /* Found goal? */
         if (curr_x == end_x && curr_y == end_y) {
-            return reconstruct_path(pf, start_x, start_y, end_x, end_y);
+            result = reconstruct_path(pf, start_x, start_y, end_x, end_y);
+            goto cleanup;
         }
 
         /* Check neighbors - always iterate all 8 directions, skip diagonals if disabled
@@ -599,8 +618,15 @@ Agentite_Path *agentite_pathfinder_find_ex(Agentite_Pathfinder *pf,
         }
     }
 
-    /* No path found */
-    return NULL;
+    }  /* end of inner scope for variable declarations */
+
+    /* No path found - result is already NULL */
+
+cleanup:
+    if (pf->profiler) {
+        agentite_profiler_end_scope(pf->profiler);
+    }
+    return result;
 }
 
 Agentite_Path *agentite_pathfinder_find(Agentite_Pathfinder *pf,

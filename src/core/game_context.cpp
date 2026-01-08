@@ -1,5 +1,6 @@
 #include "agentite/agentite.h"
 #include "agentite/game_context.h"
+#include "agentite/profiler.h"
 #include "agentite/error.h"
 #include <stdlib.h>
 #include <string.h>
@@ -220,6 +221,25 @@ Agentite_GameContext *agentite_game_context_create(const Agentite_GameContextCon
         }
     }
 
+    /* 12. Initialize profiler (optional) */
+    if (config->enable_profiler) {
+        Agentite_ProfilerConfig profiler_config = AGENTITE_PROFILER_DEFAULT;
+        profiler_config.track_memory = config->profiler_track_memory;
+        ctx->profiler = agentite_profiler_create(&profiler_config);
+        if (!ctx->profiler) {
+            SDL_Log("Warning: Could not create profiler");
+            /* Profiler failure is not fatal - just log and continue */
+        } else {
+            /* Connect profiler to subsystems for detailed tracking */
+            if (ctx->sprites) {
+                agentite_sprite_set_profiler(ctx->sprites, ctx->profiler);
+            }
+            if (ctx->ecs) {
+                agentite_ecs_set_profiler(ctx->ecs, ctx->profiler);
+            }
+        }
+    }
+
     return ctx;
 
 error:
@@ -231,6 +251,11 @@ void agentite_game_context_destroy(Agentite_GameContext *ctx) {
     if (!ctx) return;
 
     /* Cleanup in reverse initialization order */
+
+    /* Profiler */
+    if (ctx->profiler) {
+        agentite_profiler_destroy(ctx->profiler);
+    }
 
     /* Mod system */
     if (ctx->mods) {
@@ -298,6 +323,11 @@ void agentite_game_context_destroy(Agentite_GameContext *ctx) {
 
 void agentite_game_context_begin_frame(Agentite_GameContext *ctx) {
     if (!ctx || !ctx->engine) return;
+
+    /* Begin profiler frame */
+    if (ctx->profiler) {
+        agentite_profiler_begin_frame(ctx->profiler);
+    }
 
     agentite_begin_frame(ctx->engine);
     agentite_input_begin_frame(ctx->input);
@@ -379,6 +409,11 @@ void agentite_game_context_end_frame(Agentite_GameContext *ctx) {
     }
 
     agentite_end_frame(ctx->engine);
+
+    /* End profiler frame */
+    if (ctx->profiler) {
+        agentite_profiler_end_frame(ctx->profiler);
+    }
 }
 
 SDL_GPUCommandBuffer *agentite_game_context_begin_render(Agentite_GameContext *ctx) {

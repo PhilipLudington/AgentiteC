@@ -98,6 +98,21 @@ void agentite_pathfinder_destroy(Agentite_Pathfinder *pf);
 /* Get pathfinder grid dimensions */
 void agentite_pathfinder_get_size(const Agentite_Pathfinder *pf, int *width, int *height);
 
+/* Forward declaration */
+struct Agentite_Profiler;
+
+/**
+ * Set profiler for pathfinding performance tracking.
+ *
+ * When a profiler is set, pathfinding operations will report:
+ * - "pathfinding" scope: Time spent in A* algorithm
+ *
+ * @param pf       Pathfinder instance (must not be NULL)
+ * @param profiler Profiler instance, or NULL to disable profiling
+ */
+void agentite_pathfinder_set_profiler(Agentite_Pathfinder *pf,
+                                      struct Agentite_Profiler *profiler);
+
 /* ============================================================================
  * Grid Configuration
  * ============================================================================ */
