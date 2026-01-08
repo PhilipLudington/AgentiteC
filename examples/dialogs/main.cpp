@@ -64,6 +64,41 @@ static void on_folder_selected(const char *path, void *userdata) {
     }
 }
 
+/* ============================================================================
+ * Editor-style "Open with Unsaved Changes" scenario
+ * This tests chained dialogs: confirm dialog -> file dialog
+ * ============================================================================ */
+static bool s_is_dirty = false;
+static AUI_Context *s_ui_context = NULL;
+
+static AUI_FileFilter s_scene_filters[] = {
+    {"Scene Files", "scene;json"},
+    {"All Files", "*"},
+};
+
+static void on_open_file_result(const char *path, void *userdata) {
+    (void)userdata;
+    if (path) {
+        SDL_Log("Scene opened: %s", path);
+        s_is_dirty = false;  /* Reset dirty after opening */
+    } else {
+        SDL_Log("Open canceled");
+    }
+}
+
+static void on_unsaved_changes_result(bool confirmed, void *userdata) {
+    (void)userdata;
+    SDL_Log("Unsaved changes dialog: %s", confirmed ? "Yes (save first)" : "No (discard)");
+
+    /* Regardless of save choice, proceed to open file dialog */
+    /* In a real app, "Yes" would save first, "No" would just open */
+    if (s_ui_context) {
+        aui_file_dialog_open(s_ui_context, "Open Scene",
+                              NULL, s_scene_filters, 2,
+                              on_open_file_result, NULL);
+    }
+}
+
 /* Context menu callbacks */
 static void on_menu_cut(void *userdata) {
     (void)userdata;
@@ -120,6 +155,9 @@ int main(int argc, char *argv[]) {
 
     float dpi_scale = agentite_get_dpi_scale(engine);
     aui_set_dpi_scale(ui, dpi_scale);
+
+    /* Store UI context for chained dialog callbacks */
+    s_ui_context = ui;
 
     Agentite_Input *input = agentite_input_init();
 
@@ -186,7 +224,7 @@ int main(int argc, char *argv[]) {
         aui_begin_frame(ui, dt);
 
         /* Main panel with dialog buttons */
-        if (aui_begin_panel(ui, "Dialog Examples", 50, 50, 350, 500,
+        if (aui_begin_panel(ui, "Dialog Examples", 50, 50, 350, 620,
                            AUI_PANEL_TITLE_BAR | AUI_PANEL_BORDER)) {
 
             aui_label(ui, "Message Dialogs");
@@ -241,6 +279,34 @@ int main(int argc, char *argv[]) {
             if (aui_button(ui, "Select Folder...")) {
                 aui_file_dialog_folder(ui, "Select Project Folder",
                     NULL, on_folder_selected, NULL);
+            }
+
+            aui_spacing(ui, 15);
+            aui_label(ui, "Editor Scenario (Chained Dialogs)");
+            aui_separator(ui);
+
+            /* Show dirty state */
+            char dirty_label[64];
+            snprintf(dirty_label, sizeof(dirty_label), "Scene dirty: %s",
+                     s_is_dirty ? "YES" : "no");
+            aui_label(ui, dirty_label);
+
+            if (aui_button(ui, "Make Scene Dirty")) {
+                s_is_dirty = true;
+                SDL_Log("Scene marked as dirty");
+            }
+
+            if (aui_button(ui, "Open Scene... (tests fix)")) {
+                if (s_is_dirty) {
+                    /* Show confirm dialog first, then file dialog in callback */
+                    aui_dialog_confirm(ui, "Unsaved Changes",
+                        "Save changes before opening another scene?",
+                        on_unsaved_changes_result, NULL);
+                } else {
+                    /* No unsaved changes, go straight to file dialog */
+                    aui_file_dialog_open(ui, "Open Scene",
+                        NULL, s_scene_filters, 2, on_open_file_result, NULL);
+                }
             }
 
             aui_end_panel(ui);
