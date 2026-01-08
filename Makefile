@@ -388,7 +388,8 @@ TEST_SRCS := $(wildcard $(TESTS_DIR)/core/*.cpp) \
              $(wildcard $(TESTS_DIR)/audio/*.cpp) \
              $(wildcard $(TESTS_DIR)/ui/*.cpp) \
              $(wildcard $(TESTS_DIR)/scene/*.cpp) \
-             $(wildcard $(TESTS_DIR)/security/*.cpp)
+             $(wildcard $(TESTS_DIR)/security/*.cpp) \
+             $(wildcard $(TESTS_DIR)/integration/*.cpp)
 
 # Test objects (engine + test files + catch2)
 TEST_OBJS := $(patsubst $(TESTS_DIR)/%.cpp,$(BUILD_DIR)/tests/%.o,$(TEST_SRCS)) \
@@ -462,6 +463,7 @@ asan-dirs:
 	@mkdir -p $(ASAN_BUILD_DIR)/tests/ecs
 	@mkdir -p $(ASAN_BUILD_DIR)/tests/scene
 	@mkdir -p $(ASAN_BUILD_DIR)/tests/security
+	@mkdir -p $(ASAN_BUILD_DIR)/tests/integration
 
 # Compile engine sources with sanitizers
 $(ASAN_BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
@@ -553,6 +555,7 @@ cov-dirs:
 	@mkdir -p $(COV_BUILD_DIR)/tests/ecs
 	@mkdir -p $(COV_BUILD_DIR)/tests/scene
 	@mkdir -p $(COV_BUILD_DIR)/tests/security
+	@mkdir -p $(COV_BUILD_DIR)/tests/integration
 
 # Compile engine sources with coverage
 $(COV_BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp

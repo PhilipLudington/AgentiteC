@@ -1,4 +1,5 @@
 #include "agentite/containers.h"
+#include "agentite/agentite.h"
 #include <SDL3/SDL.h>
 #include <time.h>
 
@@ -168,7 +169,7 @@ void agentite_shuffle(void *array, size_t count, size_t element_size) {
     unsigned char *arr = (unsigned char *)array;
 
     /* Allocate temporary buffer for swapping */
-    unsigned char *temp = (unsigned char*)malloc(element_size);
+    unsigned char *temp = AGENTITE_MALLOC_ARRAY(unsigned char, element_size);
     if (!temp) {
         return;  /* Can't shuffle without temp buffer */
     }
