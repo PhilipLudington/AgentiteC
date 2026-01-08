@@ -112,28 +112,22 @@ Based on the comprehensive code quality assessment (Overall Score: 8.2/10), this
 
 ### 5. Document Lock Ordering in Async Loader
 
-**Status:** Not Started
+**Status:** COMPLETED
 **Severity:** MEDIUM
 **Location:** `src/core/async.cpp`
 
-**Tasks:**
-- [ ] Add lock ordering documentation at top of async.cpp
-- [ ] Verify all lock acquisitions follow documented order
-- [ ] Add comments at each lock acquisition explaining order
+**Resolution:**
+- [x] Added comprehensive lock ordering documentation block at top of async.cpp
+- [x] Verified all lock acquisitions follow documented order (locks acquired sequentially, not nested)
+- [x] Added "Lock order: N" comments at each SDL_LockMutex call
+- [x] Documented thread responsibilities (worker vs main thread)
+- [x] Added comments to streaming regions section explaining independence from queue locks
 
-**Documentation to Add:**
-```c
-/*
- * LOCK ORDERING (to prevent deadlocks):
- * 1. work_mutex
- * 2. loaded_mutex
- * 3. complete_mutex
- * 4. region_mutex
- *
- * Always acquire locks in this order. Never hold a higher-numbered
- * lock while acquiring a lower-numbered one.
- */
-```
+**Lock Order Established:**
+1. `work_mutex` - Protects work queue and task pool allocation
+2. `loaded_mutex` - Protects loaded queue (I/O complete, awaiting GPU)
+3. `complete_mutex` - Protects complete queue (awaiting callback)
+4. `region_mutex` - Protects streaming regions (independent of queue ops)
 
 ---
 
@@ -285,15 +279,16 @@ ubsan: $(TARGET)
 | Priority | Total Tasks | Completed | Percentage |
 |----------|-------------|-----------|------------|
 | High     | 4 items     | 4         | 100%       |
-| Medium   | 4 items     | 0         | 0%         |
+| Medium   | 4 items     | 1         | 25%        |
 | Low      | 5 items     | 0         | 0%         |
-| **Total**| **13 items**| **4**     | **31%**    |
+| **Total**| **13 items**| **5**     | **38%**    |
 
 ### Recent Changes (Session)
 - **Task 1 (strcpy)**: COMPLETED - Already using safe functions
 - **Task 2 (audio)**: COMPLETED - Pre-allocated buffer, removed realloc from callback
 - **Task 3 (path)**: COMPLETED - Path validation added to all file loading functions and tests created
 - **Task 4 (coverage)**: COMPLETED - Added 124 new tests across audio, UI, ECS, turn, and tech systems. Extended formula tests with edge cases. Total tests: 310 → 434
+- **Task 5 (lock ordering)**: COMPLETED - Added comprehensive lock ordering documentation and comments to async.cpp
 
 ---
 

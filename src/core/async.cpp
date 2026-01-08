@@ -21,6 +21,33 @@
 #include "stb_image.h"
 
 /* ============================================================================
+ * Lock Ordering (DEADLOCK PREVENTION)
+ * ============================================================================
+ *
+ * This module uses multiple mutexes to protect different data structures.
+ * To prevent deadlocks, locks MUST be acquired in the following order:
+ *
+ *   1. work_mutex     - Protects work queue and task pool allocation
+ *   2. loaded_mutex   - Protects loaded queue (I/O complete, awaiting GPU)
+ *   3. complete_mutex - Protects complete queue (awaiting callback)
+ *   4. region_mutex   - Protects streaming regions
+ *
+ * Rules:
+ * - Never hold a higher-numbered lock while acquiring a lower-numbered one
+ * - Prefer acquiring and releasing locks independently (no nesting)
+ * - Current implementation acquires locks sequentially, not nested
+ * - If nested locks become necessary, follow this ordering strictly
+ *
+ * Data flow (shows lock transitions, not nesting):
+ *   work_mutex (dequeue) -> loaded_mutex (enqueue) -> complete_mutex (enqueue)
+ *
+ * Thread responsibilities:
+ * - Worker threads: work_mutex -> loaded_mutex (sequential, not held together)
+ * - Main thread: loaded_mutex -> complete_mutex (sequential, not held together)
+ * - Region ops: region_mutex only (independent of queue operations)
+ */
+
+/* ============================================================================
  * Constants
  * ============================================================================ */
 
@@ -176,9 +203,9 @@ static LoadTask *find_task_by_id(Agentite_AsyncLoader *loader, uint32_t id) {
     return NULL;
 }
 
-/* Allocate a task slot */
+/* Allocate a task slot (Lock #1: work_mutex) */
 static LoadTask *allocate_task(Agentite_AsyncLoader *loader) {
-    SDL_LockMutex(loader->work_mutex);
+    SDL_LockMutex(loader->work_mutex);  /* Lock order: 1 */
 
     /* Find free slot */
     for (size_t i = 0; i < loader->task_pool_capacity; i++) {
@@ -241,9 +268,9 @@ static void free_task(LoadTask *task) {
     task->state.store(TASK_STATE_FREE);
 }
 
-/* Add task to work queue */
+/* Add task to work queue (Lock #1: work_mutex) */
 static void enqueue_work(Agentite_AsyncLoader *loader, LoadTask *task) {
-    SDL_LockMutex(loader->work_mutex);
+    SDL_LockMutex(loader->work_mutex);  /* Lock order: 1 */
 
     task->next = NULL;
     task->prev = loader->work_queue_tail;
@@ -260,9 +287,10 @@ static void enqueue_work(Agentite_AsyncLoader *loader, LoadTask *task) {
     SDL_UnlockMutex(loader->work_mutex);
 }
 
-/* Remove task from work queue and return it (called by worker threads) */
+/* Remove task from work queue and return it (called by worker threads)
+ * Lock #1: work_mutex - released before calling enqueue_loaded/enqueue_complete */
 static LoadTask *dequeue_work(Agentite_AsyncLoader *loader) {
-    SDL_LockMutex(loader->work_mutex);
+    SDL_LockMutex(loader->work_mutex);  /* Lock order: 1 */
 
     while (!loader->work_queue_head && !loader->shutdown.load()) {
         SDL_WaitCondition(loader->work_cond, loader->work_mutex);
@@ -290,9 +318,10 @@ static LoadTask *dequeue_work(Agentite_AsyncLoader *loader) {
     return task;
 }
 
-/* Add task to loaded queue (I/O complete, waiting for main thread) */
+/* Add task to loaded queue (I/O complete, waiting for main thread)
+ * Lock #2: loaded_mutex - called after work_mutex is released */
 static void enqueue_loaded(Agentite_AsyncLoader *loader, LoadTask *task) {
-    SDL_LockMutex(loader->loaded_mutex);
+    SDL_LockMutex(loader->loaded_mutex);  /* Lock order: 2 */
 
     task->next = NULL;
     task->prev = loader->loaded_queue_tail;
@@ -308,9 +337,10 @@ static void enqueue_loaded(Agentite_AsyncLoader *loader, LoadTask *task) {
     SDL_UnlockMutex(loader->loaded_mutex);
 }
 
-/* Dequeue from loaded queue (called on main thread) */
+/* Dequeue from loaded queue (called on main thread)
+ * Lock #2: loaded_mutex - released before calling enqueue_complete */
 static LoadTask *dequeue_loaded(Agentite_AsyncLoader *loader) {
-    SDL_LockMutex(loader->loaded_mutex);
+    SDL_LockMutex(loader->loaded_mutex);  /* Lock order: 2 */
 
     LoadTask *task = loader->loaded_queue_head;
     if (task) {
@@ -328,9 +358,10 @@ static LoadTask *dequeue_loaded(Agentite_AsyncLoader *loader) {
     return task;
 }
 
-/* Add task to complete queue */
+/* Add task to complete queue (Lock #3: complete_mutex)
+ * Called after loaded_mutex is released on main thread */
 static void enqueue_complete(Agentite_AsyncLoader *loader, LoadTask *task) {
-    SDL_LockMutex(loader->complete_mutex);
+    SDL_LockMutex(loader->complete_mutex);  /* Lock order: 3 */
 
     task->next = NULL;
     task->prev = loader->complete_queue_tail;
@@ -347,9 +378,9 @@ static void enqueue_complete(Agentite_AsyncLoader *loader, LoadTask *task) {
     SDL_UnlockMutex(loader->complete_mutex);
 }
 
-/* Dequeue from complete queue */
+/* Dequeue from complete queue (Lock #3: complete_mutex) */
 static LoadTask *dequeue_complete(Agentite_AsyncLoader *loader) {
-    SDL_LockMutex(loader->complete_mutex);
+    SDL_LockMutex(loader->complete_mutex);  /* Lock order: 3 */
 
     LoadTask *task = loader->complete_queue_head;
     if (task) {
@@ -699,9 +730,10 @@ Agentite_AsyncLoader *agentite_async_loader_create(const Agentite_AsyncLoaderCon
 void agentite_async_loader_destroy(Agentite_AsyncLoader *loader) {
     if (!loader) return;
 
-    /* Signal shutdown while holding mutex to prevent race with worker wait */
+    /* Signal shutdown while holding mutex to prevent race with worker wait
+     * Lock #1: work_mutex - held briefly just for shutdown signal */
     if (loader->work_mutex) {
-        SDL_LockMutex(loader->work_mutex);
+        SDL_LockMutex(loader->work_mutex);  /* Lock order: 1 */
         loader->shutdown.store(true);
         if (loader->work_cond) {
             SDL_BroadcastCondition(loader->work_cond);
@@ -1113,6 +1145,9 @@ bool agentite_async_wait_all(
 
 /* ============================================================================
  * Public API - Streaming Regions
+ *
+ * All region operations use Lock #4 (region_mutex) only.
+ * Region operations are independent of queue operations.
  * ============================================================================ */
 
 Agentite_StreamRegion agentite_stream_region_create(
@@ -1121,7 +1156,7 @@ Agentite_StreamRegion agentite_stream_region_create(
 {
     if (!loader) return AGENTITE_INVALID_STREAM_REGION;
 
-    SDL_LockMutex(loader->region_mutex);
+    SDL_LockMutex(loader->region_mutex);  /* Lock order: 4 */
 
     /* Find free slot */
     for (size_t i = 0; i < MAX_REGIONS; i++) {
