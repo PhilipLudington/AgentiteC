@@ -162,41 +162,28 @@ Based on the comprehensive code quality assessment (Overall Score: 8.2/10), this
 
 ### 7. Integrate Static Analysis in CI
 
-**Status:** Not Started
+**Status:** SKIPPED
 **Severity:** MEDIUM
 
-**Tasks:**
-- [ ] Create `.github/workflows/static-analysis.yml` (or equivalent CI config)
-- [ ] Run `make check` (clang-tidy) on every PR
-- [ ] Run `make safety` on every PR
-- [ ] Fail build on new warnings
-- [ ] Document expected warnings in `.clang-tidy` config
+**Reason:** GitHub Actions incurs costs for private repos.
+
+**Local alternatives:**
+- Run `make check` locally before committing
+- Run `make safety` for security review
 
 ---
 
 ### 8. Add Regular Sanitizer Testing
 
-**Status:** Not Started
+**Status:** SKIPPED (CI portion)
 **Severity:** MEDIUM
 
-**Tasks:**
-- [ ] Add `make asan` target for AddressSanitizer build
-- [ ] Add `make ubsan` target for UndefinedBehaviorSanitizer build
-- [ ] Add `make lsan` target for LeakSanitizer build (or combined with asan)
-- [ ] Create `scripts/run-sanitizers.sh` wrapper
-- [ ] Add sanitizer runs to CI pipeline
-- [ ] Fix any issues found by sanitizers
+**Reason:** GitHub Actions incurs costs for private repos.
 
-**Makefile additions:**
-```makefile
-asan: CFLAGS += -fsanitize=address -fno-omit-frame-pointer
-asan: LDFLAGS += -fsanitize=address
-asan: $(TARGET)
-
-ubsan: CFLAGS += -fsanitize=undefined
-ubsan: LDFLAGS += -fsanitize=undefined
-ubsan: $(TARGET)
-```
+**Already available locally:**
+- `make test-asan` - Run tests with AddressSanitizer + UndefinedBehaviorSanitizer
+- `make test-asan-verbose` - Same with detailed output
+- `scripts/run-sanitizers.sh` - Wrapper script with platform-specific options
 
 ---
 
@@ -284,12 +271,12 @@ ubsan: $(TARGET)
 
 ## Progress Tracking
 
-| Priority | Total Tasks | Completed | Percentage |
-|----------|-------------|-----------|------------|
-| High     | 4 items     | 4         | 100%       |
-| Medium   | 4 items     | 2         | 50%        |
-| Low      | 5 items     | 0         | 0%         |
-| **Total**| **13 items**| **6**     | **46%**    |
+| Priority | Total Tasks | Completed | Skipped | Percentage |
+|----------|-------------|-----------|---------|------------|
+| High     | 4 items     | 4         | 0       | 100%       |
+| Medium   | 4 items     | 2         | 2       | 100%       |
+| Low      | 5 items     | 0         | 0       | 0%         |
+| **Total**| **13 items**| **6**     | **2**   | **62%**    |
 
 ### Recent Changes (Session)
 - **Task 1 (strcpy)**: COMPLETED - Already using safe functions
@@ -298,6 +285,8 @@ ubsan: $(TARGET)
 - **Task 4 (coverage)**: COMPLETED - Added 124 new tests across audio, UI, ECS, turn, and tech systems. Extended formula tests with edge cases. Total tests: 310 → 434
 - **Task 5 (lock ordering)**: COMPLETED - Added comprehensive lock ordering documentation and comments to async.cpp
 - **Task 6 (thread assertions)**: COMPLETED - Added AGENTITE_ASSERT_MAIN_THREAD() to all SDL/GPU functions in sprite, texture, text, font, audio, and input systems
+- **Task 7 (CI static analysis)**: SKIPPED - CI costs; use `make check` and `make safety` locally
+- **Task 8 (sanitizer testing)**: SKIPPED - CI costs; use `make test-asan` locally
 
 ---
 
