@@ -8,6 +8,7 @@
  * to generate the function implementations in this compilation unit */
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "text_internal.h"
+#include "agentite/path.h"
 
 /* ============================================================================
  * Font Functions
@@ -16,6 +17,12 @@
 Agentite_Font *agentite_font_load(Agentite_TextRenderer *tr, const char *path, float size)
 {
     if (!tr || !path) return NULL;
+
+    /* Validate path to prevent directory traversal attacks */
+    if (!agentite_path_is_safe(path)) {
+        agentite_set_error("Text: Invalid path (directory traversal rejected): '%s'", path);
+        return NULL;
+    }
 
     /* Read TTF file */
     SDL_IOStream *file = SDL_IOFromFile(path, "rb");

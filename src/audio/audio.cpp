@@ -1,6 +1,7 @@
 #include "agentite/agentite.h"
 #include "agentite/audio.h"
 #include "agentite/error.h"
+#include "agentite/path.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -311,6 +312,12 @@ static bool convert_audio_to_device(Agentite_Audio *audio, Uint8 *src_data, Uint
 Agentite_Sound *agentite_sound_load(Agentite_Audio *audio, const char *filepath) {
     if (!audio || !filepath) return NULL;
 
+    // Validate path to prevent directory traversal attacks
+    if (!agentite_path_is_safe(filepath)) {
+        agentite_set_error("Audio: Invalid path (directory traversal rejected): '%s'", filepath);
+        return NULL;
+    }
+
     // Load WAV file
     SDL_AudioSpec spec;
     Uint8 *wav_data = NULL;
@@ -400,6 +407,12 @@ void agentite_sound_destroy(Agentite_Audio *audio, Agentite_Sound *sound) {
 
 Agentite_Music *agentite_music_load(Agentite_Audio *audio, const char *filepath) {
     if (!audio || !filepath) return NULL;
+
+    // Validate path to prevent directory traversal attacks
+    if (!agentite_path_is_safe(filepath)) {
+        agentite_set_error("Audio: Invalid path (directory traversal rejected): '%s'", filepath);
+        return NULL;
+    }
 
     // Load WAV file for music (same as sound for now)
     SDL_AudioSpec spec;

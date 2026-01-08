@@ -6,6 +6,7 @@
 #include "agentite/sprite.h"
 #include "agentite/camera.h"
 #include "agentite/error.h"
+#include "agentite/path.h"
 #include <cglm/cglm.h>
 #include <stdlib.h>
 #include <string.h>
@@ -777,6 +778,12 @@ Agentite_Texture *agentite_texture_load(Agentite_SpriteRenderer *sr, const char 
     AGENTITE_ASSERT_MAIN_THREAD();
     if (!sr || !path) return NULL;
 
+    /* Validate path to prevent directory traversal attacks */
+    if (!agentite_path_is_safe(path)) {
+        agentite_set_error("Sprite: Invalid path (directory traversal rejected): '%s'", path);
+        return NULL;
+    }
+
     /* Load image with stb_image */
     int width, height, channels;
     unsigned char *pixels = stbi_load(path, &width, &height, &channels, 4);  /* Force RGBA */
@@ -906,6 +913,12 @@ bool agentite_texture_reload(Agentite_SpriteRenderer *sr,
 {
     if (!sr || !texture || !path) {
         agentite_set_error("Sprite: Invalid parameters for texture reload");
+        return false;
+    }
+
+    /* Validate path to prevent directory traversal attacks */
+    if (!agentite_path_is_safe(path)) {
+        agentite_set_error("Sprite: Invalid path (directory traversal rejected): '%s'", path);
         return false;
     }
 
