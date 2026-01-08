@@ -557,6 +557,7 @@ static SDL_GPUSampler *get_sampler_for_texture(Agentite_SpriteRenderer *sr,
 
 Agentite_SpriteRenderer *agentite_sprite_init(SDL_GPUDevice *gpu, SDL_Window *window)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!gpu || !window) return NULL;
 
     Agentite_SpriteRenderer *sr = (Agentite_SpriteRenderer*)calloc(1, sizeof(Agentite_SpriteRenderer));
@@ -659,6 +660,7 @@ Agentite_SpriteRenderer *agentite_sprite_init(SDL_GPUDevice *gpu, SDL_Window *wi
 
 void agentite_sprite_shutdown(Agentite_SpriteRenderer *sr)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!sr) return;
 
     if (sr->pipeline) {
@@ -805,6 +807,7 @@ Agentite_Texture *agentite_texture_load(Agentite_SpriteRenderer *sr, const char 
 Agentite_Texture *agentite_texture_load_memory(Agentite_SpriteRenderer *sr,
                                            const void *data, int size)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!sr || !data || size <= 0) return NULL;
 
     int width, height, channels;
@@ -824,6 +827,7 @@ Agentite_Texture *agentite_texture_create(Agentite_SpriteRenderer *sr,
                                       int width, int height,
                                       const void *pixels)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!sr || width <= 0 || height <= 0 || !pixels) return NULL;
 
     Agentite_Texture *texture = (Agentite_Texture*)calloc(1, sizeof(Agentite_Texture));
@@ -864,6 +868,7 @@ Agentite_Texture *agentite_texture_create(Agentite_SpriteRenderer *sr,
 
 void agentite_texture_destroy(Agentite_SpriteRenderer *sr, Agentite_Texture *texture)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!sr || !texture) return;
 
     if (texture->gpu_texture) {
@@ -911,6 +916,7 @@ bool agentite_texture_reload(Agentite_SpriteRenderer *sr,
                              Agentite_Texture *texture,
                              const char *path)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!sr || !texture || !path) {
         agentite_set_error("Sprite: Invalid parameters for texture reload");
         return false;
@@ -1199,6 +1205,7 @@ void agentite_sprite_draw_full(Agentite_SpriteRenderer *sr, const Agentite_Sprit
 void agentite_sprite_flush(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd,
                          SDL_GPURenderPass *pass)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!sr || !cmd || !pass || sr->sprite_count == 0) return;
     if (!sr->current_texture) return;
 
@@ -1416,6 +1423,7 @@ Agentite_Camera *agentite_sprite_get_camera(const Agentite_SpriteRenderer *sr)
 Agentite_Texture *agentite_texture_create_render_target(Agentite_SpriteRenderer *sr,
                                                      int width, int height)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!sr || width <= 0 || height <= 0) return NULL;
 
     Agentite_Texture *texture = (Agentite_Texture *)calloc(1, sizeof(Agentite_Texture));
@@ -1454,6 +1462,7 @@ SDL_GPURenderPass *agentite_sprite_begin_render_to_texture(Agentite_SpriteRender
                                                           float clear_r, float clear_g,
                                                           float clear_b, float clear_a)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!sr || !target || !cmd) return NULL;
 
     SDL_GPUColorTargetInfo color_target = {};
@@ -1501,6 +1510,7 @@ void agentite_sprite_render_to_texture(Agentite_SpriteRenderer *sr,
 
 void agentite_sprite_end_render_to_texture(SDL_GPURenderPass *pass)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (pass) {
         SDL_EndGPURenderPass(pass);
     }
@@ -1520,6 +1530,7 @@ void agentite_sprite_render_vignette(Agentite_SpriteRenderer *sr,
                                     SDL_GPURenderPass *pass,
                                     Agentite_Texture *scene_texture)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!sr || !cmd || !pass || !scene_texture || !sr->vignette_pipeline) return;
 
     /* Bind vignette pipeline */
@@ -1602,6 +1613,7 @@ void agentite_sprite_prepare_fullscreen_quad(Agentite_SpriteRenderer *sr)
 
 void agentite_sprite_upload_fullscreen_quad(Agentite_SpriteRenderer *sr, SDL_GPUCommandBuffer *cmd)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!sr || !cmd) return;
 
     /* Upload vertex data for fullscreen quad */

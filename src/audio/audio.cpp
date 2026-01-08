@@ -191,6 +191,7 @@ static void audio_callback(void *userdata, SDL_AudioStream *stream, int addition
 }
 
 Agentite_Audio *agentite_audio_init(void) {
+    AGENTITE_ASSERT_MAIN_THREAD();
     Agentite_Audio *audio = AGENTITE_ALLOC(Agentite_Audio);
     if (!audio) return NULL;
 
@@ -247,6 +248,7 @@ Agentite_Audio *agentite_audio_init(void) {
 }
 
 void agentite_audio_shutdown(Agentite_Audio *audio) {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!audio) return;
 
     // Stop all sounds
@@ -310,6 +312,7 @@ static bool convert_audio_to_device(Agentite_Audio *audio, Uint8 *src_data, Uint
 }
 
 Agentite_Sound *agentite_sound_load(Agentite_Audio *audio, const char *filepath) {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!audio || !filepath) return NULL;
 
     // Validate path to prevent directory traversal attacks
@@ -354,6 +357,7 @@ Agentite_Sound *agentite_sound_load(Agentite_Audio *audio, const char *filepath)
 }
 
 Agentite_Sound *agentite_sound_load_wav_memory(Agentite_Audio *audio, const void *data, size_t size) {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!audio || !data || size == 0) return NULL;
 
     SDL_IOStream *io = SDL_IOFromConstMem(data, size);
@@ -391,6 +395,7 @@ Agentite_Sound *agentite_sound_load_wav_memory(Agentite_Audio *audio, const void
 }
 
 void agentite_sound_destroy(Agentite_Audio *audio, Agentite_Sound *sound) {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!audio || !sound) return;
 
     // Stop any channels using this sound
@@ -406,6 +411,7 @@ void agentite_sound_destroy(Agentite_Audio *audio, Agentite_Sound *sound) {
 }
 
 Agentite_Music *agentite_music_load(Agentite_Audio *audio, const char *filepath) {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!audio || !filepath) return NULL;
 
     // Validate path to prevent directory traversal attacks
@@ -454,6 +460,7 @@ Agentite_Music *agentite_music_load(Agentite_Audio *audio, const char *filepath)
 }
 
 void agentite_music_destroy(Agentite_Audio *audio, Agentite_Music *music) {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!audio || !music) return;
 
     // Stop if currently playing

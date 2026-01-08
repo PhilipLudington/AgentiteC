@@ -16,6 +16,7 @@
 
 Agentite_Font *agentite_font_load(Agentite_TextRenderer *tr, const char *path, float size)
 {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!tr || !path) return NULL;
 
     /* Validate path to prevent directory traversal attacks */

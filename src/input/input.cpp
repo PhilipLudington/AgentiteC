@@ -40,6 +40,7 @@ static float clampf(float val, float min, float max) {
 }
 
 Agentite_Input *agentite_input_init(void) {
+    AGENTITE_ASSERT_MAIN_THREAD();
     Agentite_Input *input = AGENTITE_ALLOC(Agentite_Input);
     if (!input) return NULL;
 
@@ -78,6 +79,7 @@ Agentite_Input *agentite_input_init(void) {
 }
 
 void agentite_input_shutdown(Agentite_Input *input) {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!input) return;
 
     /* Close all gamepads */
@@ -124,6 +126,7 @@ void agentite_input_begin_frame(Agentite_Input *input) {
 }
 
 bool agentite_input_process_event(Agentite_Input *input, const SDL_Event *event) {
+    AGENTITE_ASSERT_MAIN_THREAD();
     if (!input || !event) return false;
 
     /* Log event if debugging is enabled */
