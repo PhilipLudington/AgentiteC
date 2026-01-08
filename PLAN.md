@@ -191,19 +191,30 @@ Based on the comprehensive code quality assessment (Overall Score: 8.2/10), this
 
 ### 9. Improve API Documentation
 
-**Status:** Not Started
+**Status:** IN PROGRESS
 **Severity:** LOW
 
 **Tasks:**
-- [ ] Add Doxygen-style comments to public headers in `include/agentite/`
-- [ ] Document function parameters, return values, and ownership
-- [ ] Add usage examples in header comments
+- [x] Add Doxygen-style comments to public headers in `include/agentite/`
+- [x] Document function parameters, return values, and ownership
+- [x] Add usage examples in header comments
 - [ ] Generate documentation with Doxygen
-- [ ] Priority headers:
-  - [ ] `include/agentite/sprite.h`
-  - [ ] `include/agentite/ecs.h`
-  - [ ] `include/agentite/input.h`
-  - [ ] `include/agentite/audio.h`
+- [x] Priority headers:
+  - [x] `include/agentite/sprite.h`
+  - [x] `include/agentite/ecs.h`
+  - [x] `include/agentite/input.h`
+  - [x] `include/agentite/audio.h`
+
+**Changes Made:**
+- Added comprehensive Doxygen-style comments to sprite.h, ecs.h, input.h, audio.h
+- Documented all function parameters with @param
+- Added @return annotations for all return values
+- Added @ownership annotations for memory management
+- Added @note for thread safety requirements
+- Added @warning for common pitfalls
+- Added @code examples for key functions
+- Organized headers with @defgroup for logical grouping
+- Added @brief summaries for all types and functions
 
 ---
 
@@ -271,12 +282,12 @@ Based on the comprehensive code quality assessment (Overall Score: 8.2/10), this
 
 ## Progress Tracking
 
-| Priority | Total Tasks | Completed | Skipped | Percentage |
-|----------|-------------|-----------|---------|------------|
-| High     | 4 items     | 4         | 0       | 100%       |
-| Medium   | 4 items     | 2         | 2       | 100%       |
-| Low      | 5 items     | 0         | 0       | 0%         |
-| **Total**| **13 items**| **6**     | **2**   | **62%**    |
+| Priority | Total Tasks | Completed | Skipped | In Progress | Percentage |
+|----------|-------------|-----------|---------|-------------|------------|
+| High     | 4 items     | 4         | 0       | 0           | 100%       |
+| Medium   | 4 items     | 2         | 2       | 0           | 100%       |
+| Low      | 5 items     | 0         | 0       | 1           | 20%        |
+| **Total**| **13 items**| **6**     | **2**   | **1**       | **69%**    |
 
 ### Recent Changes (Session)
 - **Task 1 (strcpy)**: COMPLETED - Already using safe functions
@@ -287,6 +298,7 @@ Based on the comprehensive code quality assessment (Overall Score: 8.2/10), this
 - **Task 6 (thread assertions)**: COMPLETED - Added AGENTITE_ASSERT_MAIN_THREAD() to all SDL/GPU functions in sprite, texture, text, font, audio, and input systems
 - **Task 7 (CI static analysis)**: SKIPPED - CI costs; use `make check` and `make safety` locally
 - **Task 8 (sanitizer testing)**: SKIPPED - CI costs; use `make test-asan` locally
+- **Task 9 (documentation)**: IN PROGRESS - Added Doxygen comments to sprite.h, ecs.h, input.h, audio.h (priority headers done)
 
 ---
 
