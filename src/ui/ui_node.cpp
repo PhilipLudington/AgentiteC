@@ -2071,6 +2071,9 @@ bool aui_scene_process_event(AUI_Context *ctx, AUI_Node *root, const SDL_Event *
 
                         AUI_TreeItem *clicked_item = find_item_at_y(hit->tree.root_items, 0);
                         if (clicked_item) {
+                            /* Check for double-click (activation) */
+                            bool is_double_click = (event->button.clicks >= 2);
+
                             /* Deselect previous */
                             if (hit->tree.selected_item && !hit->tree.multi_select) {
                                 hit->tree.selected_item->selected = false;
@@ -2081,6 +2084,11 @@ bool aui_scene_process_event(AUI_Context *ctx, AUI_Node *root, const SDL_Event *
                             hit->tree.selected_item = clicked_item;
 
                             aui_node_emit_simple(hit, AUI_SIGNAL_ITEM_SELECTED);
+
+                            /* Emit activation signal on double-click */
+                            if (is_double_click) {
+                                aui_node_emit_simple(hit, AUI_SIGNAL_ITEM_ACTIVATED);
+                            }
                         }
                     }
 
