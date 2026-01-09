@@ -72,11 +72,11 @@ typedef struct Agentite_Texture Agentite_Texture;
  * Controls how textures are filtered when scaled up or down during rendering.
  * Set via agentite_texture_set_scale_mode().
  */
-typedef enum Agentite_ScaleMode {
+typedef enum Agentite_TextureScaleMode {
     AGENTITE_SCALEMODE_NEAREST,   /**< Nearest-neighbor filtering (crisp pixels, good for pixel art) */
     AGENTITE_SCALEMODE_LINEAR,    /**< Bilinear filtering (smooth edges, good for photos/HD art) */
     AGENTITE_SCALEMODE_PIXELART   /**< Pixel-art mode (nearest + integer scaling hints) */
-} Agentite_ScaleMode;
+} Agentite_TextureScaleMode;
 
 /**
  * @brief Texture address mode for UV coordinates outside [0,1].
@@ -295,7 +295,7 @@ void agentite_texture_get_size(const Agentite_Texture *texture, int *width, int 
  *
  * @note Default is AGENTITE_SCALEMODE_NEAREST for pixel-art friendly rendering.
  */
-void agentite_texture_set_scale_mode(Agentite_Texture *texture, Agentite_ScaleMode mode);
+void agentite_texture_set_scale_mode(Agentite_Texture *texture, Agentite_TextureScaleMode mode);
 
 /**
  * @brief Get texture scale mode.
@@ -303,7 +303,7 @@ void agentite_texture_set_scale_mode(Agentite_Texture *texture, Agentite_ScaleMo
  * @param texture Texture to query (must not be NULL)
  * @return Current scale mode
  */
-Agentite_ScaleMode agentite_texture_get_scale_mode(const Agentite_Texture *texture);
+Agentite_TextureScaleMode agentite_texture_get_scale_mode(const Agentite_Texture *texture);
 
 /**
  * @brief Set texture address mode (wrapping).

@@ -152,7 +152,7 @@ struct Agentite_Texture {
     SDL_GPUTexture *gpu_texture;
     int width;
     int height;
-    Agentite_ScaleMode scale_mode;
+    Agentite_TextureScaleMode scale_mode;
     Agentite_TextureAddressMode address_mode;
 };
 
@@ -892,14 +892,14 @@ void agentite_texture_get_size(const Agentite_Texture *texture, int *width, int 
     if (height) *height = texture->height;
 }
 
-void agentite_texture_set_scale_mode(Agentite_Texture *texture, Agentite_ScaleMode mode)
+void agentite_texture_set_scale_mode(Agentite_Texture *texture, Agentite_TextureScaleMode mode)
 {
     if (texture) {
         texture->scale_mode = mode;
     }
 }
 
-Agentite_ScaleMode agentite_texture_get_scale_mode(const Agentite_Texture *texture)
+Agentite_TextureScaleMode agentite_texture_get_scale_mode(const Agentite_Texture *texture)
 {
     return texture ? texture->scale_mode : AGENTITE_SCALEMODE_NEAREST;
 }

@@ -205,7 +205,7 @@ TEST_CASE("Texture NULL safety for getters", "[sprite][texture][null]") {
 
     SECTION("agentite_texture_get_scale_mode with NULL texture") {
         // Should return a safe default or handle NULL
-        Agentite_ScaleMode mode = agentite_texture_get_scale_mode(nullptr);
+        Agentite_TextureScaleMode mode = agentite_texture_get_scale_mode(nullptr);
         // Verify it doesn't crash and returns something (likely NEAREST or 0)
         REQUIRE(static_cast<int>(mode) >= 0);
         REQUIRE(static_cast<int>(mode) <= 2);
