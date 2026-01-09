@@ -561,19 +561,16 @@ bool msdf_atlas_get_glyph(const MSDF_Atlas *atlas, uint32_t codepoint,
             out_info->plane_top = g->plane_top;
 
             /* Atlas UV coordinates (normalized 0-1)
-             * The atlas bitmap is stored Y-down (row 0 is top), same as SDL_GPU textures.
-             * So no Y-flip is needed - just convert pixel coords to normalized UVs.
-             * atlas_bottom/top naming follows msdf convention where bottom < top in Y value,
-             * but in our Y-down coords, atlas_bottom is the TOP edge (lower v) and
-             * atlas_top is the BOTTOM edge (higher v). */
+             * The rendering code in text_sdf.cpp expects Y-flipped coordinates
+             * (msdf-atlas-gen yOrigin=bottom convention), so we flip Y here. */
             float inv_w = 1.0f / atlas->atlas_width;
             float inv_h = 1.0f / atlas->atlas_height;
 
             out_info->atlas_left = g->atlas_x * inv_w;
             out_info->atlas_right = (g->atlas_x + g->atlas_w) * inv_w;
-            /* Y-down coords: atlas_y is top of glyph, atlas_y + atlas_h is bottom */
-            out_info->atlas_bottom = g->atlas_y * inv_h;  /* Top edge in texture (lower v) */
-            out_info->atlas_top = (g->atlas_y + g->atlas_h) * inv_h;  /* Bottom edge in texture (higher v) */
+            /* Convert Y-down (screen) to Y-up (msdf-atlas-gen yOrigin=bottom) */
+            out_info->atlas_bottom = (atlas->atlas_height - (g->atlas_y + g->atlas_h)) * inv_h;
+            out_info->atlas_top = (atlas->atlas_height - g->atlas_y) * inv_h;
 
             return true;
         }
