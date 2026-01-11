@@ -1848,7 +1848,6 @@ bool aui_scene_process_event(AUI_Context *ctx, AUI_Node *root, const SDL_Event *
                 float content_h = scroll->scroll.content_height;
                 float visible_h = scroll->global_rect.h;
                 float max_scroll = content_h - visible_h;
-                float scrollbar_w = ctx->theme.scrollbar_width;
 
                 /* Calculate thumb position and size */
                 float visible_ratio = visible_h / content_h;
