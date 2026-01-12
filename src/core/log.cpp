@@ -11,6 +11,19 @@ static Agentite_LogLevel current_level = AGENTITE_LOG_LEVEL_INFO;
 static bool console_output = true;
 static bool initialized = false;
 
+/* Callback registration */
+#define MAX_LOG_CALLBACKS 8
+
+struct LogCallbackEntry {
+    Agentite_LogCallback callback;
+    void *userdata;
+    uint32_t handle;
+    bool active;
+};
+
+static LogCallbackEntry s_callbacks[MAX_LOG_CALLBACKS] = {0};
+static uint32_t s_next_callback_handle = 1;
+
 /* Level names for output (padded to 7 chars for alignment) */
 static const char *level_names[] = {
     "ERROR  ",
@@ -171,6 +184,13 @@ void agentite_log_v(Agentite_LogLevel level, const char *subsystem, const char *
                 break;
         }
     }
+
+    /* Notify registered callbacks */
+    for (int i = 0; i < MAX_LOG_CALLBACKS; i++) {
+        if (s_callbacks[i].active && s_callbacks[i].callback) {
+            s_callbacks[i].callback(level, subsystem_padded, message, s_callbacks[i].userdata);
+        }
+    }
 }
 
 void agentite_log_error(const char *subsystem, const char *fmt, ...) {
@@ -209,4 +229,35 @@ void agentite_log_flush(void) {
 
 const char *agentite_log_get_path(void) {
     return initialized ? log_path : NULL;
+}
+
+uint32_t agentite_log_add_callback(Agentite_LogCallback callback, void *userdata) {
+    if (!callback) return 0;
+
+    for (int i = 0; i < MAX_LOG_CALLBACKS; i++) {
+        if (!s_callbacks[i].active) {
+            s_callbacks[i].callback = callback;
+            s_callbacks[i].userdata = userdata;
+            s_callbacks[i].handle = s_next_callback_handle++;
+            s_callbacks[i].active = true;
+            return s_callbacks[i].handle;
+        }
+    }
+
+    /* No slots available */
+    return 0;
+}
+
+void agentite_log_remove_callback(uint32_t handle) {
+    if (handle == 0) return;
+
+    for (int i = 0; i < MAX_LOG_CALLBACKS; i++) {
+        if (s_callbacks[i].active && s_callbacks[i].handle == handle) {
+            s_callbacks[i].callback = NULL;
+            s_callbacks[i].userdata = NULL;
+            s_callbacks[i].handle = 0;
+            s_callbacks[i].active = false;
+            return;
+        }
+    }
 }

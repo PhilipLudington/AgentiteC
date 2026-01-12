@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdarg.h>
+#include <stdint.h>
 
 /**
  * Carbon Logging System
@@ -165,5 +166,40 @@ void agentite_log_flush(void);
  * @return Path to log file, or NULL if not initialized
  */
 const char *agentite_log_get_path(void);
+
+/**
+ * Callback type for log messages.
+ * Called synchronously from the logging thread for each message.
+ *
+ * @param level     Log level of the message
+ * @param subsystem Subsystem that generated the message
+ * @param message   The formatted log message
+ * @param userdata  User data passed during registration
+ */
+typedef void (*Agentite_LogCallback)(
+    Agentite_LogLevel level,
+    const char *subsystem,
+    const char *message,
+    void *userdata
+);
+
+/**
+ * Register a log callback to receive log messages.
+ * Multiple callbacks can be registered (up to 8).
+ * NOT thread-safe - call from main thread only.
+ *
+ * @param callback Function to call on each log message
+ * @param userdata User data passed to callback (may be NULL)
+ * @return Handle for unregistering (0 on failure)
+ */
+uint32_t agentite_log_add_callback(Agentite_LogCallback callback, void *userdata);
+
+/**
+ * Remove a previously registered callback.
+ * NOT thread-safe - call from main thread only.
+ *
+ * @param handle Handle returned from agentite_log_add_callback
+ */
+void agentite_log_remove_callback(uint32_t handle);
 
 #endif /* AGENTITE_LOG_H */
