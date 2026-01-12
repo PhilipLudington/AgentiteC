@@ -1975,7 +1975,12 @@ bool aui_scene_process_event(AUI_Context *ctx, AUI_Node *root, const SDL_Event *
                 aui_node_emit_simple(s_pressed_node, AUI_SIGNAL_RELEASED);
 
                 if (hit == s_pressed_node) {
-                    aui_node_emit_simple(hit, AUI_SIGNAL_CLICKED);
+                    /* Emit appropriate click signal based on button */
+                    if (event->button.button == SDL_BUTTON_RIGHT) {
+                        aui_node_emit_simple(hit, AUI_SIGNAL_RIGHT_CLICKED);
+                    } else {
+                        aui_node_emit_simple(hit, AUI_SIGNAL_CLICKED);
+                    }
 
                     /* Handle checkbox toggle */
                     if (hit->type == AUI_NODE_CHECKBOX) {
