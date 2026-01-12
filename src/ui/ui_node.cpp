@@ -1398,8 +1398,9 @@ static bool aui_node_is_layout_container(AUI_Node *node)
         case AUI_NODE_HBOX:
         case AUI_NODE_GRID:
         case AUI_NODE_CENTER:
-        case AUI_NODE_PANEL:  /* Panels offset children for title bar */
-        case AUI_NODE_SCROLL: /* Scroll manages children to allow overflow */
+        case AUI_NODE_PANEL:    /* Panels offset children for title bar */
+        case AUI_NODE_SCROLL:   /* Scroll manages children to allow overflow */
+        case AUI_NODE_SPLITTER: /* Splitter positions children based on split ratio */
             return true;
         default:
             return false;
@@ -1547,9 +1548,15 @@ static void aui_node_layout_children(AUI_Context *ctx, AUI_Node *node)
                     };
 
                     first->global_rect = first_rect;
-                    first->rect = first_rect;
+                    first->rect.x = 0;
+                    first->rect.y = 0;
+                    first->rect.w = first_rect.w;
+                    first->rect.h = first_rect.h;
                     second->global_rect = second_rect;
-                    second->rect = second_rect;
+                    second->rect.x = 0;
+                    second->rect.y = 0;
+                    second->rect.w = second_rect.w;
+                    second->rect.h = second_rect.h;
                 } else {
                     /* Top/bottom split */
                     total_size = node->global_rect.h - splitter_w;
@@ -1580,9 +1587,15 @@ static void aui_node_layout_children(AUI_Context *ctx, AUI_Node *node)
                     };
 
                     first->global_rect = first_rect;
-                    first->rect = first_rect;
+                    first->rect.x = 0;
+                    first->rect.y = 0;
+                    first->rect.w = first_rect.w;
+                    first->rect.h = first_rect.h;
                     second->global_rect = second_rect;
-                    second->rect = second_rect;
+                    second->rect.x = 0;
+                    second->rect.y = 0;
+                    second->rect.w = second_rect.w;
+                    second->rect.h = second_rect.h;
                 }
             }
             return;
@@ -2139,6 +2152,12 @@ bool aui_scene_process_event(AUI_Context *ctx, AUI_Node *root, const SDL_Event *
                         }
                     }
                 }
+
+                /* Reset splitter dragging state before clearing pressed node */
+                if (s_pressed_node->type == AUI_NODE_SPLITTER) {
+                    s_pressed_node->splitter.dragging = false;
+                }
+
                 s_pressed_node = NULL;
             }
         }
@@ -2241,12 +2260,6 @@ bool aui_scene_process_event(AUI_Context *ctx, AUI_Node *root, const SDL_Event *
                 sig.float_change.new_value = new_ratio;
                 aui_node_emit(splitter, AUI_SIGNAL_VALUE_CHANGED, &sig);
             }
-        }
-
-        /* Stop splitter dragging on mouse up */
-        if (event->type == SDL_EVENT_MOUSE_BUTTON_UP && s_pressed_node &&
-            s_pressed_node->type == AUI_NODE_SPLITTER) {
-            s_pressed_node->splitter.dragging = false;
         }
 
         /* Tree drag-to-reorder: Start potential drag on mouse down */
