@@ -96,9 +96,11 @@ Agentite_Engine *agentite_init(const Agentite_Config *config) {
         return NULL;
     }
 
-    // Create GPU device - SDL3 will pick the best backend (Metal on macOS, Vulkan/D3D12 elsewhere)
+    // Create GPU device - SDL3 will pick the best backend (Metal on macOS, Vulkan elsewhere)
+    // Note: We only support SPIRV and MSL shaders currently, so don't request DXIL/DXBC
+    // which would cause D3D12 to be selected on Windows without compatible shaders
     engine->gpu_device = SDL_CreateGPUDevice(
-        SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_MSL | SDL_GPU_SHADERFORMAT_DXIL,
+        SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_MSL,
         true,  // debug mode
         NULL   // let SDL pick the best driver
     );
