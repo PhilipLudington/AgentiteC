@@ -12,6 +12,7 @@
 #endif
 #include <windows.h>
 #include <sys/stat.h>
+#include <cstdio>
 
 /* ============================================================================
  * Platform-Specific Types

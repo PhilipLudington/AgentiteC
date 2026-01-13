@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <stdio.h>
 
 /* Forward declarations from other UI modules */
 extern void aui_state_clear(AUI_Context *ctx);
