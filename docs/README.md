@@ -1,4 +1,4 @@
-# Agentite Engine Documentation
+# AgentiteC Engine Documentation
 
 ## API Reference
 

@@ -1,4 +1,4 @@
-# Agentite Engine - CMake Build System
+# AgentiteC Engine - CMake Build System
 # Supports macOS, Linux, and Windows
 #
 # Usage:
@@ -453,7 +453,7 @@ install(FILES
 #============================================================================
 
 message(STATUS "")
-message(STATUS "Agentite ${PROJECT_VERSION} Configuration:")
+message(STATUS "AgentiteC ${PROJECT_VERSION} Configuration:")
 message(STATUS "  Build type:      ${CMAKE_BUILD_TYPE}")
 message(STATUS "  C compiler:      ${CMAKE_C_COMPILER}")
 message(STATUS "  C++ compiler:    ${CMAKE_CXX_COMPILER}")

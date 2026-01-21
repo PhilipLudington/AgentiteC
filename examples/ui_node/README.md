@@ -1,6 +1,6 @@
 # Retained-Mode UI Node System Demo
 
-This example demonstrates Agentite's Godot-inspired hybrid UI system, which provides a retained-mode scene tree on top of the immediate-mode UI.
+This example demonstrates AgentiteC's Godot-inspired hybrid UI system, which provides a retained-mode scene tree on top of the immediate-mode UI.
 
 ## Features Demonstrated
 

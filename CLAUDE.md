@@ -25,7 +25,7 @@ This project follows **Carbide** standards for safe, maintainable C/C++ code:
 
 ## Project Overview
 
-Agentite is a C-based game engine targeting strategy games and AI agent development. Uses SDL3 with SDL_GPU for cross-platform rendering (Metal on macOS, Vulkan on Linux, D3D12/Vulkan on Windows).
+AgentiteC is a C-based game engine targeting strategy games and AI agent development. Uses SDL3 with SDL_GPU for cross-platform rendering (Metal on macOS, Vulkan on Linux, D3D12/Vulkan on Windows).
 
 **Status:** Experimental - all systems are under active development.
 
@@ -349,7 +349,7 @@ if (!tex) {
 
 For general C/C++ coding standards (memory management, error handling, security), see [carbide/CARBIDE.md](carbide/CARBIDE.md) and [carbide/STANDARDS.md](carbide/STANDARDS.md).
 
-### Agentite-Specific Naming
+### AgentiteC-Specific Naming
 
 | Prefix/Suffix | Usage | Example |
 |---------------|-------|---------|
@@ -363,7 +363,7 @@ For general C/C++ coding standards (memory management, error handling, security)
 - Static variables: `s_` prefix
 - Constants: `k_` prefix or `SCREAMING_CASE`
 
-### Agentite Lifetime Rules
+### AgentiteC Lifetime Rules
 
 - Textures must outlive sprites/tilemaps using them
 - Renderers must outlive their resources (textures, fonts)

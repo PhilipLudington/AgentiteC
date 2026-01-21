@@ -1,6 +1,6 @@
 # Third-Party Licenses
 
-Agentite uses the following third-party libraries. We are grateful to their authors for making them available.
+AgentiteC uses the following third-party libraries. We are grateful to their authors for making them available.
 
 ## SDL3
 

@@ -1,6 +1,6 @@
 # ECS Custom System Example
 
-Deep dive into the Entity Component System (Flecs) patterns used in Agentite.
+Deep dive into the Entity Component System (Flecs) patterns used in AgentiteC.
 
 ## Features Shown
 

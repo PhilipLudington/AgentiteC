@@ -1,6 +1,6 @@
-# Agentite Engine Systems Reference
+# AgentiteC Engine Systems Reference
 
-This document describes the Carbon engine systems, their dependencies, and how they interact.
+This document describes the AgentiteC engine systems, their dependencies, and how they interact.
 
 ## System Overview
 

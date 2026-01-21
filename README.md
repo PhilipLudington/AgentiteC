@@ -1,4 +1,4 @@
-# Agentite
+# AgentiteC
 
 A C game engine designed for AI agents and agentic game development.
 
@@ -6,7 +6,7 @@ A C game engine designed for AI agents and agentic game development.
 
 ## Design Philosophy
 
-Agentite is built around these core principles:
+AgentiteC is built around these core principles:
 
 - **AI/Agent-First**: Designed from the ground up for use by AI agents and in agentic workflows. Clear, predictable APIs that AI can reason about and use effectively.
 
@@ -255,7 +255,7 @@ See [CLAUDE.md](CLAUDE.md) for development guidance when working with AI assista
 
 ## Third-Party Libraries
 
-Agentite uses the following libraries (see [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for full license texts):
+AgentiteC uses the following libraries (see [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for full license texts):
 
 | Library | Purpose | License |
 |---------|---------|---------|
@@ -277,4 +277,4 @@ Copyright (c) 2025 Philip Ludington
 
 ---
 
-*Agentite is developed with assistance from [Claude Code](https://claude.ai/code).*
+*AgentiteC is developed with assistance from [Claude Code](https://claude.ai/code).*

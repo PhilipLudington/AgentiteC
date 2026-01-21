@@ -177,4 +177,4 @@ MIT License - see `LICENSE` for details.
 
 ## Acknowledgments
 
-Carbide was inspired by patterns from the [Agentite](https://github.com/example/agentite) game engine and developed collaboratively with Claude Code.
+Carbide was inspired by patterns from the [AgentiteC](https://github.com/example/agentite) game engine and developed collaboratively with Claude Code.

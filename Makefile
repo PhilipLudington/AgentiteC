@@ -1,4 +1,4 @@
-# Agentite Engine - Cross-platform Makefile
+# AgentiteC Engine - Cross-platform Makefile
 # Supports macOS, Linux, and Windows (via MinGW)
 
 # Project settings
@@ -737,7 +737,7 @@ info:
 
 # List available targets
 help:
-	@echo "Agentite Engine Build Targets:"
+	@echo "AgentiteC Engine Build Targets:"
 	@echo ""
 	@echo "  make              - Build main game (uses game template)"
 	@echo "  make run          - Build and run main game"

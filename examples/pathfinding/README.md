@@ -1,6 +1,6 @@
 # Pathfinding Example
 
-Demonstrates the A* pathfinding system in Agentite.
+Demonstrates the A* pathfinding system in AgentiteC.
 
 ## Features Shown
 
